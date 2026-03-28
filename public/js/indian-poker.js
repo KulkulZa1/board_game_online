@@ -141,8 +141,12 @@ window.IndianPoker = (function () {
       </div>
     `;
 
-    // 전역 액션 핸들러 (onclick 인라인용)
+    // 전역 액션 핸들러 (onclick 인라인용) — 1.5초 debounce
+    let _ipLastActionTime = 0;
     window._ipAction = function(action) {
+      const now = Date.now();
+      if (now - _ipLastActionTime < 1500) return;
+      _ipLastActionTime = now;
       if (_onAction) _onAction({ action });
     };
   }
