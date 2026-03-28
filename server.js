@@ -183,7 +183,7 @@ function log(msg) {
   console.log(`[${ts}] ${msg}`);
 }
 
-function createRoomState(hostColor, timeControl, hostToken, gameType) {
+function createRoomState(hostColor, timeControl, hostToken, gameType, boardSize) {
   const minutes = timeControl.minutes;
   const ms = minutes ? minutes * 60 * 1000 : null;
   const base = {
@@ -194,6 +194,7 @@ function createRoomState(hostColor, timeControl, hostToken, gameType) {
     guestColor: hostColor === 'white' ? 'black' : 'white',
     timeControl,
     gameType,
+    boardSize: boardSize || null,
     status: 'waiting',
     moves: [],
     timers: {
@@ -218,13 +219,18 @@ function createRoomState(hostColor, timeControl, hostToken, gameType) {
     base.fen   = new Chess().fen();
     base.pgn   = '';
   } else if (gameType === 'omok') {
-    base.board       = Array(15).fill(null).map(() => Array(15).fill(null));
+    const sz = (boardSize && boardSize.size) || 15;
+    base.boardSize   = { size: sz };
+    base.board       = Array(sz).fill(null).map(() => Array(sz).fill(null));
     base.currentTurn = 'black'; // 흑 선공
     base.lastMove    = null;
   } else if (gameType === 'connect4') {
-    base.board       = Array(6).fill(null).map(() => Array(7).fill(null));
+    const rows = (boardSize && boardSize.rows) || 6;
+    const cols = (boardSize && boardSize.cols) || 7;
+    base.boardSize   = { rows, cols };
+    base.board       = Array(rows).fill(null).map(() => Array(cols).fill(null));
     base.currentTurn = 'white'; // host(white)가 항상 red, guest(black)가 항상 yellow
-    base.colHeights  = Array(7).fill(0);
+    base.colHeights  = Array(cols).fill(0);
     base.lastMove    = null;
   } else if (gameType === 'othello') {
     base.board = Array(8).fill(null).map(() => Array(8).fill(null));
@@ -376,6 +382,7 @@ function startGame(room) {
 
   io.to(room.id).emit('game:start', {
     gameType:    room.gameType,
+    boardSize:   room.boardSize  || null,
     fen:         room.fen   || null,
     board:       room.board || null,
     currentTurn: room.currentTurn || null,
@@ -441,7 +448,7 @@ io.on('connection', (socket) => {
   log(`소켓 연결 — id=${socket.id.slice(0,8)} ip=${clientIp}`);
 
   // --- Room: Create ---
-  socket.on('room:create', ({ hostColor, timeControl, gameType }) => {
+  socket.on('room:create', ({ hostColor, timeControl, gameType, boardSize }) => {
     // Rate limit: 1분 내 5회
     if (!rateCheck(socket.id, 'create', 5, 60 * 1000)) {
       socket.emit('room:error', { code: 'RATE_LIMIT', message: '요청이 너무 많습니다. 잠시 후 다시 시도하세요.' });
@@ -467,6 +474,20 @@ io.on('connection', (socket) => {
       timeControl.minutes = null;
     }
 
+    // 보드 크기 검증
+    let validatedBoardSize = null;
+    if (gameType === 'omok') {
+      const sz = boardSize && Number(boardSize.size);
+      validatedBoardSize = { size: [13, 15, 17, 19].includes(sz) ? sz : 15 };
+    } else if (gameType === 'connect4') {
+      const rows = boardSize && Number(boardSize.rows);
+      const cols = boardSize && Number(boardSize.cols);
+      validatedBoardSize = {
+        rows: (Number.isInteger(rows) && rows >= 4 && rows <= 9)  ? rows : 6,
+        cols: (Number.isInteger(cols) && cols >= 4 && cols <= 10) ? cols : 7,
+      };
+    }
+
     // 방 개수 제한 (개인 PC 보호)
     if (rooms.size >= 20) {
       socket.emit('room:error', { code: 'SERVER_FULL', message: '서버가 가득 찼습니다. 잠시 후 다시 시도하세요.' });
@@ -476,7 +497,7 @@ io.on('connection', (socket) => {
     const roomId    = uuidv4();
     const hostToken = uuidv4();
 
-    const room = createRoomState(hostColor, timeControl, hostToken, gameType);
+    const room = createRoomState(hostColor, timeControl, hostToken, gameType, validatedBoardSize);
     room.id = roomId;
     rooms.set(roomId, room);
     tokenMap.set(hostToken, { roomId, role: 'host' });
@@ -597,6 +618,7 @@ io.on('connection', (socket) => {
       timeControl: room.timeControl,
       chat:        room.chat,
       winner:      room.winner,
+      boardSize:   room.boardSize   || null,
       colHeights:  room.colHeights  || null,
       mustJump:    room.mustJump    || null,
       validMoves:  room.gameType === 'checkers' && room.board && room.currentTurn
@@ -1009,7 +1031,8 @@ function handleChessMove(socket, room, role, { from, to, promotion }) {
 // ========== Omok Move Handler ==========
 function handleOmokMove(socket, room, role, { row, col }) {
   if (!Number.isInteger(row) || !Number.isInteger(col)) return;
-  if (row < 0 || row > 14 || col < 0 || col > 14) return;
+  const omokSize = (room.boardSize && room.boardSize.size) || 15;
+  if (row < 0 || row >= omokSize || col < 0 || col >= omokSize) return;
 
   const yourColor = getRoleColor(room, role);
 
@@ -1047,8 +1070,8 @@ function handleOmokMove(socket, room, role, { row, col }) {
   });
 
   // 승리 체크 (렌주룰: 정확히 5개)
-  if (checkOmokWin(room.board, row, col, yourColor)) {
-    const winCells = getWinCells(room.board, row, col, yourColor);
+  if (checkOmokWin(room.board, row, col, yourColor, omokSize)) {
+    const winCells = getWinCells(room.board, row, col, yourColor, omokSize);
     endGame(room, yourColor, 'five-in-a-row', { winCells });
     return;
   }
@@ -1059,18 +1082,19 @@ function handleOmokMove(socket, room, role, { row, col }) {
   }
 }
 
-function checkOmokWin(board, row, col, color) {
+function checkOmokWin(board, row, col, color, size) {
+  const sz = size || 15;
   const directions = [[0, 1], [1, 0], [1, 1], [1, -1]];
   for (const [dr, dc] of directions) {
     let count = 1;
     for (let i = 1; i <= 4; i++) {
       const r = row + dr * i, c = col + dc * i;
-      if (r < 0 || r > 14 || c < 0 || c > 14 || board[r][c] !== color) break;
+      if (r < 0 || r >= sz || c < 0 || c >= sz || board[r][c] !== color) break;
       count++;
     }
     for (let i = 1; i <= 4; i++) {
       const r = row - dr * i, c = col - dc * i;
-      if (r < 0 || r > 14 || c < 0 || c > 14 || board[r][c] !== color) break;
+      if (r < 0 || r >= sz || c < 0 || c >= sz || board[r][c] !== color) break;
       count++;
     }
     // 렌주룰: 정확히 5개만 승리 (6목 이상은 불계)
@@ -1079,18 +1103,19 @@ function checkOmokWin(board, row, col, color) {
   return false;
 }
 
-function getWinCells(board, row, col, color) {
+function getWinCells(board, row, col, color, size) {
+  const sz = size || board.length || 15;
   const directions = [[0, 1], [1, 0], [1, 1], [1, -1]];
   for (const [dr, dc] of directions) {
     const cells = [{ row, col }];
     for (let i = 1; i <= 4; i++) {
       const r = row + dr * i, c = col + dc * i;
-      if (r < 0 || r > 14 || c < 0 || c > 14 || board[r][c] !== color) break;
+      if (r < 0 || r >= sz || c < 0 || c >= sz || board[r][c] !== color) break;
       cells.push({ row: r, col: c });
     }
     for (let i = 1; i <= 4; i++) {
       const r = row - dr * i, c = col - dc * i;
-      if (r < 0 || r > 14 || c < 0 || c > 14 || board[r][c] !== color) break;
+      if (r < 0 || r >= sz || c < 0 || c >= sz || board[r][c] !== color) break;
       cells.push({ row: r, col: c });
     }
     if (cells.length === 5) return cells;
@@ -1113,13 +1138,16 @@ function resetForRematch(room) {
     room.fen    = room.chess.fen();
     room.pgn    = '';
   } else if (room.gameType === 'omok') {
-    room.board       = Array(15).fill(null).map(() => Array(15).fill(null));
+    const sz = (room.boardSize && room.boardSize.size) || 15;
+    room.board       = Array(sz).fill(null).map(() => Array(sz).fill(null));
     room.currentTurn = 'black';
     room.lastMove    = null;
   } else if (room.gameType === 'connect4') {
-    room.board       = Array(6).fill(null).map(() => Array(7).fill(null));
+    const rows = (room.boardSize && room.boardSize.rows) || 6;
+    const cols = (room.boardSize && room.boardSize.cols) || 7;
+    room.board       = Array(rows).fill(null).map(() => Array(cols).fill(null));
     room.currentTurn = 'white';
-    room.colHeights  = Array(7).fill(0);
+    room.colHeights  = Array(cols).fill(0);
     room.lastMove    = null;
   } else if (room.gameType === 'othello') {
     room.board = Array(8).fill(null).map(() => Array(8).fill(null));
@@ -1189,15 +1217,17 @@ function initCheckersBoard() {
 
 // ========== Connect4 Move Handler ==========
 function handleConnect4Move(socket, room, role, { col }) {
-  if (!Number.isInteger(col) || col < 0 || col > 6) return;
+  const c4rows = (room.boardSize && room.boardSize.rows) || 6;
+  const c4cols = (room.boardSize && room.boardSize.cols) || 7;
+  if (!Number.isInteger(col) || col < 0 || col >= c4cols) return;
   const yourColor = getRoleColor(room, role);
   if (room.currentTurn !== yourColor) return;
-  if (room.colHeights[col] >= 6) {
+  if (room.colHeights[col] >= c4rows) {
     socket.emit('game:move:invalid', { reason: '이미 꽉 찬 열입니다.' });
     return;
   }
 
-  const row = 5 - room.colHeights[col];
+  const row = c4rows - 1 - room.colHeights[col];
   room.board[row][col] = yourColor; // 'white'=red, 'black'=yellow (display mapping in frontend)
   room.colHeights[col]++;
   room.lastMove = { row, col };
@@ -1218,29 +1248,31 @@ function handleConnect4Move(socket, room, role, { col }) {
     turn:  nextColor
   });
 
-  if (checkConnect4Win(room.board, row, col, yourColor)) {
-    const winCells = getConnect4WinCells(room.board, row, col, yourColor);
+  if (checkConnect4Win(room.board, row, col, yourColor, c4rows, c4cols)) {
+    const winCells = getConnect4WinCells(room.board, row, col, yourColor, c4rows, c4cols);
     endGame(room, yourColor, 'four-in-a-row', { winCells });
     return;
   }
 
-  if (room.colHeights.every(h => h >= 6)) {
+  if (room.colHeights.every(h => h >= c4rows)) {
     endGame(room, 'draw', 'board-full');
   }
 }
 
-function checkConnect4Win(board, row, col, color) {
+function checkConnect4Win(board, row, col, color, rows, cols) {
+  const maxR = (rows || 6) - 1;
+  const maxC = (cols || 7) - 1;
   const directions = [[0,1],[1,0],[1,1],[1,-1]];
   for (const [dr, dc] of directions) {
     let count = 1;
     for (let i = 1; i <= 3; i++) {
       const r = row + dr*i, c = col + dc*i;
-      if (r < 0 || r > 5 || c < 0 || c > 6 || board[r][c] !== color) break;
+      if (r < 0 || r > maxR || c < 0 || c > maxC || board[r][c] !== color) break;
       count++;
     }
     for (let i = 1; i <= 3; i++) {
       const r = row - dr*i, c = col - dc*i;
-      if (r < 0 || r > 5 || c < 0 || c > 6 || board[r][c] !== color) break;
+      if (r < 0 || r > maxR || c < 0 || c > maxC || board[r][c] !== color) break;
       count++;
     }
     if (count >= 4) return true;
@@ -1248,18 +1280,20 @@ function checkConnect4Win(board, row, col, color) {
   return false;
 }
 
-function getConnect4WinCells(board, row, col, color) {
+function getConnect4WinCells(board, row, col, color, rows, cols) {
+  const maxR = (rows || 6) - 1;
+  const maxC = (cols || 7) - 1;
   const directions = [[0,1],[1,0],[1,1],[1,-1]];
   for (const [dr, dc] of directions) {
     const cells = [{ row, col }];
     for (let i = 1; i <= 3; i++) {
       const r = row + dr*i, c = col + dc*i;
-      if (r < 0 || r > 5 || c < 0 || c > 6 || board[r][c] !== color) break;
+      if (r < 0 || r > maxR || c < 0 || c > maxC || board[r][c] !== color) break;
       cells.push({ row: r, col: c });
     }
     for (let i = 1; i <= 3; i++) {
       const r = row - dr*i, c = col - dc*i;
-      if (r < 0 || r > 5 || c < 0 || c > 6 || board[r][c] !== color) break;
+      if (r < 0 || r > maxR || c < 0 || c > maxC || board[r][c] !== color) break;
       cells.push({ row: r, col: c });
     }
     if (cells.length >= 4) return cells;

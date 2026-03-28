@@ -1,14 +1,14 @@
 // connect4-board.js — 사목 보드 렌더러 (window.Connect4Board IIFE)
 window.Connect4Board = (function () {
-  const ROWS = 6;
-  const COLS = 7;
+  let _rows = 6;
+  let _cols = 7;
 
   let _board      = null; // 2D array [row][col] = 'white'|'black'|null
   let _myColor    = null; // 'white'(=red) | 'black'(=yellow)
   let _myTurn     = false;
   let _onMove     = null; // callback({ col })
   let _spectatorMode = false;
-  let _colHeights = null; // [0..6] 각 열의 쌓인 돌 수
+  let _colHeights = null; // 각 열의 쌓인 돌 수
 
   const container = document.getElementById('connect4board');
 
@@ -19,13 +19,15 @@ window.Connect4Board = (function () {
 
   // ========== Public API ==========
 
-  function init({ board, myColor, onMove, spectatorMode, colHeights }) {
+  function init({ board, myColor, onMove, spectatorMode, colHeights, boardSize }) {
+    if (boardSize) { _rows = boardSize.rows || 6; _cols = boardSize.cols || 7; }
+    else if (board && board.length) { _rows = board.length; _cols = board[0] ? board[0].length : 7; }
     _board         = board || _emptyBoard();
     _myColor       = myColor;
     _onMove        = onMove;
     _spectatorMode = spectatorMode || false;
     _myTurn        = false;
-    _colHeights    = colHeights || Array(COLS).fill(0);
+    _colHeights    = colHeights || Array(_cols).fill(0);
     _render();
   }
 
@@ -63,7 +65,7 @@ window.Connect4Board = (function () {
   // ========== Rendering ==========
 
   function _emptyBoard() {
-    return Array(ROWS).fill(null).map(() => Array(COLS).fill(null));
+    return Array(_rows).fill(null).map(() => Array(_cols).fill(null));
   }
 
   function _render() {
@@ -73,7 +75,8 @@ window.Connect4Board = (function () {
     // 열 버튼 (위에 화살표)
     const arrowRow = document.createElement('div');
     arrowRow.className = 'c4-arrows';
-    for (let col = 0; col < COLS; col++) {
+    arrowRow.style.gridTemplateColumns = `repeat(${_cols}, 1fr)`;
+    for (let col = 0; col < _cols; col++) {
       const arrow = document.createElement('button');
       arrow.className = 'c4-arrow-btn';
       arrow.textContent = '▼';
@@ -86,8 +89,9 @@ window.Connect4Board = (function () {
     // 보드 격자
     const grid = document.createElement('div');
     grid.className = 'c4-board';
-    for (let row = 0; row < ROWS; row++) {
-      for (let col = 0; col < COLS; col++) {
+    grid.style.gridTemplateColumns = `repeat(${_cols}, 1fr)`;
+    for (let row = 0; row < _rows; row++) {
+      for (let col = 0; col < _cols; col++) {
         const cell = document.createElement('div');
         cell.className = 'c4-cell';
         cell.dataset.row = row;
@@ -112,7 +116,7 @@ window.Connect4Board = (function () {
   function _updateCursor() {
     container.classList.toggle('c4-my-turn', _myTurn);
     container.querySelectorAll('.c4-arrow-btn').forEach((btn, col) => {
-      const full = _colHeights && _colHeights[col] >= ROWS;
+      const full = _colHeights && _colHeights[col] >= _rows;
       btn.disabled = !_myTurn || full;
       btn.classList.toggle('c4-arrow-disabled', full);
     });
@@ -122,7 +126,7 @@ window.Connect4Board = (function () {
 
   function _onColClick(col) {
     if (!_myTurn) return;
-    if (_colHeights && _colHeights[col] >= ROWS) return;
+    if (_colHeights && _colHeights[col] >= _rows) return;
     _onMove && _onMove({ col });
   }
 

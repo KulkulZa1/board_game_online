@@ -190,28 +190,11 @@ const GAME_RULES = {
     Chat.init({ role: myRole, socket });
     Chat.loadHistory(state.chat || []);
 
-    if (gameType === 'chess') {
-      chess = new Chess();
-      if (state.fen) chess.load(state.fen);
-      Board.init({ chess, orientation: myColor, myColor, onMove: handleMyMove });
-      ActiveBoard = Board;
-    } else if (gameType === 'omok') {
-      OmokBoard.init({ board: state.board || _emptyOmokBoard(), myColor, onMove: handleMyMove });
-      ActiveBoard = OmokBoard;
-    } else if (gameType === 'connect4') {
-      Connect4Board.init({ board: state.board, myColor, onMove: handleMyMove, colHeights: state.colHeights });
-      ActiveBoard = Connect4Board;
-    } else if (gameType === 'othello') {
-      const validMoves = computeOthelloValidMoves(state.board, myColor);
-      OthelloBoard.init({ board: state.board, myColor, onMove: handleMyMove, validMoves });
-      ActiveBoard = OthelloBoard;
-    } else if (gameType === 'indianpoker') {
-      IndianPoker.init({ myRole, onAction: handleIPAction });
-      ActiveBoard = IndianPoker;
-    } else if (gameType === 'checkers') {
-      const validMoves = state.validMoves || getAllCheckersValidMovesClient(state.board, myColor);
-      CheckersBoard.init({ board: state.board, myColor, onMove: handleMyMove, validMoves, mustJump: state.mustJump });
-      ActiveBoard = CheckersBoard;
+    if (GameHandlers[gameType]) {
+      const handleAction = gameType === 'indianpoker' ? handleIPAction : handleMyMove;
+      const init = GameHandlers[gameType].initBoard(state, myColor, handleAction, myRole);
+      ActiveBoard = init.board;
+      if (init.chess !== undefined) chess = init.chess;
     }
 
     // 플레이어 전용 컨트롤 표시
@@ -222,12 +205,10 @@ const GAME_RULES = {
 
     if (state.status === 'active') {
       gameStatus = 'active';
-      if (gameType === 'chess') {
-        ActiveBoard.setMyTurn(chess.turn() === myColor[0]);
-      } else if (gameType === 'indianpoker') {
-        // 인디언 포커는 indianpoker:dealt 이벤트로 배팅 차례 제어
-      } else {
-        ActiveBoard.setMyTurn(state.currentTurn === myColor);
+      if (gameType !== 'indianpoker' && ActiveBoard && GameHandlers[gameType]) {
+        const handler = GameHandlers[gameType];
+        const myTurn  = handler.getMyTurn ? handler.getMyTurn(state, myColor) : (state.currentTurn === myColor);
+        ActiveBoard.setMyTurn(myTurn);
       }
       updateTurnIndicator(state.currentTurn || (state.timers && state.timers.activeColor));
       Timer.update(state.timers, myColor, isUnlimited);
@@ -258,25 +239,12 @@ const GAME_RULES = {
   }
 
   socket.on('game:move:made', ({ move, fen, board, timers, turn, validMoves, colHeights, mustJump, scores, pass }) => {
-    if (gameType === 'chess') {
-      chess.load(fen);
-      Board.updateAfterMove(fen, move);
-      if (typeof Sound !== 'undefined' && !chess.in_check()) {
-        Sound.play(move.captured ? 'capture' : 'move');
+    if (GameHandlers[gameType]) {
+      if (gameType === 'othello') {
+        GameHandlers.othello.onMoveMade({ board, move, validMoves, pass }, showToastMsg);
+      } else {
+        GameHandlers[gameType].onMoveMade({ move, fen, board, colHeights, validMoves, mustJump });
       }
-    } else if (gameType === 'omok') {
-      OmokBoard.updateAfterMove(board, move);
-      if (typeof Sound !== 'undefined') Sound.play('move');
-    } else if (gameType === 'connect4') {
-      Connect4Board.updateAfterMove(board, move, colHeights);
-      if (typeof Sound !== 'undefined') Sound.play('move');
-    } else if (gameType === 'othello') {
-      OthelloBoard.updateAfterMove(board, move, validMoves);
-      if (typeof Sound !== 'undefined') Sound.play('move');
-      if (pass) showToastMsg('상대방이 패스했습니다. 계속 두세요.');
-    } else if (gameType === 'checkers') {
-      CheckersBoard.updateAfterMove(board, move, validMoves, mustJump);
-      if (typeof Sound !== 'undefined') Sound.play(move.captured ? 'capture' : 'move');
     }
 
     if (gameType !== 'indianpoker') appendMoveToList(move);
@@ -567,65 +535,10 @@ const GAME_RULES = {
     Chat.init({ role: 'spectator', socket });
     Chat.loadHistory(state.chat || []);
 
-    if (gameType === 'chess') {
-      chess = new Chess();
-      if (state.fen) chess.load(state.fen);
-      Board.init({
-        chess,
-        orientation:   spectatorOrientation,
-        myColor:       spectatorOrientation,
-        onMove:        handleSpectatorHintMove,
-        spectatorMode: true,
-      });
-      Board.setMyTurn(false);
-      ActiveBoard = Board;
-    } else if (gameType === 'omok') {
-      OmokBoard.init({
-        board:         state.board || _emptyOmokBoard(),
-        myColor:       'black',
-        onMove:        handleSpectatorHintMove,
-        spectatorMode: true,
-      });
-      OmokBoard.setMyTurn(false);
-      ActiveBoard = OmokBoard;
-    } else if (gameType === 'connect4') {
-      Connect4Board.init({
-        board:         state.board,
-        myColor:       'white',
-        onMove:        handleSpectatorHintMove,
-        spectatorMode: true,
-        colHeights:    state.colHeights,
-      });
-      Connect4Board.setMyTurn(false);
-      ActiveBoard = Connect4Board;
-    } else if (gameType === 'othello') {
-      OthelloBoard.init({
-        board:         state.board,
-        myColor:       'black',
-        onMove:        handleSpectatorHintMove,
-        spectatorMode: true,
-      });
-      OthelloBoard.setMyTurn(false);
-      ActiveBoard = OthelloBoard;
-    } else if (gameType === 'indianpoker') {
-      IndianPoker.init({ myRole: 'spectator', onAction: () => {} });
-      // 관전자에게 두 카드 모두 공개
-      if (state.hands && state.hands.host && state.hands.guest) {
-        // 관전자 모드: showDeal 사용하여 양쪽 카드 표시
-        IndianPoker.showDeal({ opponentCard: state.hands.guest, pot: state.pot || 0, chips: state.chips || {}, ante: 5, roundNum: 1 });
-      }
-      ActiveBoard = IndianPoker;
-    } else if (gameType === 'checkers') {
-      CheckersBoard.init({
-        board:         state.board,
-        myColor:       'white',
-        onMove:        handleSpectatorHintMove,
-        spectatorMode: true,
-        validMoves:    [],
-        mustJump:      state.mustJump,
-      });
-      CheckersBoard.setMyTurn(false);
-      ActiveBoard = CheckersBoard;
+    if (GameHandlers[gameType]) {
+      const init = GameHandlers[gameType].initSpectatorBoard(state, spectatorOrientation, handleSpectatorHintMove);
+      ActiveBoard = init.board;
+      if (init.chess !== undefined) chess = init.chess;
     }
 
     // 플레이어 바
@@ -784,10 +697,6 @@ const GAME_RULES = {
   });
 
   // ========== Helpers ==========
-  function _emptyOmokBoard() {
-    return Array(15).fill(null).map(() => Array(15).fill(null));
-  }
-
   function setupPlayerBars() {
     const myColorLabel  = myColor === 'white' ? '백' : '흑';
     const oppColor      = myColor === 'white' ? 'black' : 'white';
@@ -947,32 +856,11 @@ const GAME_RULES = {
   function initGame(state) {
     gameStatus = 'active';
 
-    if (gameType === 'chess') {
-      chess = new Chess();
-      Board.init({ chess, orientation: myColor, myColor, onMove: handleMyMove });
-      Board.setMyTurn(myColor === 'white');
-      ActiveBoard = Board;
-    } else if (gameType === 'omok') {
-      OmokBoard.init({ board: _emptyOmokBoard(), myColor, onMove: handleMyMove });
-      OmokBoard.setMyTurn(myColor === 'black');
-      ActiveBoard = OmokBoard;
-    } else if (gameType === 'connect4') {
-      Connect4Board.init({ board: state.board, myColor, onMove: handleMyMove, colHeights: state.colHeights });
-      Connect4Board.setMyTurn(myColor === 'white'); // host(white)=red 선공
-      ActiveBoard = Connect4Board;
-    } else if (gameType === 'othello') {
-      const validMoves = computeOthelloValidMoves(state.board, myColor);
-      OthelloBoard.init({ board: state.board, myColor, onMove: handleMyMove, validMoves });
-      OthelloBoard.setMyTurn(myColor === 'black');
-      ActiveBoard = OthelloBoard;
-    } else if (gameType === 'indianpoker') {
-      IndianPoker.init({ myRole, onAction: handleIPAction });
-      ActiveBoard = IndianPoker;
-      // 첫 라운드 딜은 서버에서 indianpoker:dealt 이벤트로 수신
-    } else if (gameType === 'checkers') {
-      CheckersBoard.init({ board: state.board, myColor, onMove: handleMyMove, validMoves: state.validMoves || [], mustJump: state.mustJump });
-      CheckersBoard.setMyTurn(myColor === (state.currentTurn || 'white'));
-      ActiveBoard = CheckersBoard;
+    if (GameHandlers[gameType]) {
+      const handleAction = gameType === 'indianpoker' ? handleIPAction : handleMyMove;
+      const init = GameHandlers[gameType].initGame(state, myColor, handleAction, myRole);
+      ActiveBoard = init.board;
+      if (init.chess !== undefined) chess = init.chess;
     }
 
     const activeTurn = state.currentTurn || (state.timers && state.timers.activeColor);
@@ -1005,224 +893,20 @@ const GAME_RULES = {
     if (ActiveBoard && ActiveBoard.showShowdown) ActiveBoard.showShowdown(data);
   });
 
-  // ========== Client-side helpers for board games ==========
-  function computeOthelloValidMoves(board, color) {
-    if (!board) return [];
-    const opp = color === 'white' ? 'black' : 'white';
-    const dirs = [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]];
-    const moves = [];
-    for (let row = 0; row < 8; row++) {
-      for (let col = 0; col < 8; col++) {
-        if (board[row][col] !== null) continue;
-        let valid = false;
-        for (const [dr, dc] of dirs) {
-          let r = row+dr, c = col+dc, cnt = 0;
-          while (r>=0&&r<8&&c>=0&&c<8&&board[r][c]===opp) { r+=dr; c+=dc; cnt++; }
-          if (cnt > 0 && r>=0&&r<8&&c>=0&&c<8&&board[r][c]===color) { valid=true; break; }
-        }
-        if (valid) moves.push({ row, col });
-      }
-    }
-    return moves;
-  }
-
-  function getAllCheckersValidMovesClient(board, color) {
-    if (!board) return [];
-    // 간단 버전: 서버에서 validMoves 받아오면 그걸 씀
-    return [];
-  }
-
   // =========================================================
-  // ========== 솔로 모드 (vs AI) ==========
+  // ========== 솔로 모드 (vs AI) — game-connect4.js에 위임 ==========
   // =========================================================
   if (isSoloMode) {
-    // 솔로 모드 전용 상태
-    let soloBoard      = [];
-    let soloColHeights = [0, 0, 0, 0, 0, 0, 0];
-    let soloTurn       = 'white';    // white(선공) = 사목에서 빨강
-    const aiColor      = soloColor === 'white' ? 'black' : 'white';
-    const playerColor  = soloColor;
-    let soloGameOver   = false;
-    let aiThinking     = false;
-
-    // 6×7 빈 보드 생성
-    function makeSoloBoard() {
-      return Array.from({ length: 6 }, () => Array(7).fill(null));
-    }
-
-    // 솔로 모드 초기화
-    function initSoloGame() {
-      soloBoard      = makeSoloBoard();
-      soloColHeights = [0, 0, 0, 0, 0, 0, 0];
-      soloTurn       = 'white';
-      soloGameOver   = false;
-      aiThinking     = false;
-
-      gameStatus = 'active';
-      gameType   = 'connect4';
-
-      // 보드 영역 표시
-      switchBoardArea('connect4');
-
-      // Connect4Board 초기화 (기존 컴포넌트 재사용)
-      Connect4Board.init({
-        board:      soloBoard,
-        myColor:    playerColor,
-        onMove:     handleSoloPlayerMove,
-        colHeights: soloColHeights,
-      });
-
-      // 플레이어 턴 여부 결정
-      const myTurnFirst = playerColor === 'white';
-      Connect4Board.setMyTurn(myTurnFirst);
-
-      // UI 설정
-      connectingOverlay.style.display    = 'none';
-      spectatorJoinOverlay.style.display = 'none';
-
-      const colorLabel = playerColor === 'white' ? '빨강 (선공)' : '노랑 (후공)';
-      myLabel.textContent  = `나 (${colorLabel})`;
-      oppLabel.textContent = 'AI 봇';
-      myDot.className      = 'player-color-dot ' + playerColor;
-      oppDot.className     = 'player-color-dot ' + aiColor;
-
-      // 솔로 모드: 기권 = 재시작, 무승부 버튼 숨김
-      document.getElementById('resign-btn').style.display = '';
-      document.getElementById('draw-btn').style.display   = 'none';
-      document.getElementById('leave-btn').style.display  = '';
-
-      ActiveBoard = Connect4Board;
-      updateTurnIndicator(soloTurn);
-
-      // AI가 선공이면 먼저 두게
-      if (playerColor !== 'white') {
-        setTimeout(soloAIMove, 600);
-      }
-    }
-
-    // 플레이어 이동 처리
-    function handleSoloPlayerMove({ col }) {
-      if (soloGameOver || aiThinking) return;
-      if (soloTurn !== playerColor) return;
-      if (soloColHeights[col] >= 6) return;
-
-      applySoloMove(col, playerColor);
-
-      // 승리/무승부 확인
-      if (AIConnect4.checkWin(soloBoard, playerColor)) {
-        endSoloGame(playerColor, 'four-in-a-row');
-        return;
-      }
-      if (soloColHeights.every(h => h >= 6)) {
-        endSoloGame('draw', 'board-full');
-        return;
-      }
-
-      // AI 차례
-      soloTurn = aiColor;
-      updateTurnIndicator(soloTurn);
-      Connect4Board.setMyTurn(false);
-      aiThinking = true;
-
-      setTimeout(soloAIMove, 400 + Math.random() * 300);
-    }
-
-    // AI 이동 처리
-    function soloAIMove() {
-      if (soloGameOver) return;
-
-      const col = AIConnect4.getBestMove(soloBoard, soloColHeights, aiColor, playerColor);
-      applySoloMove(col, aiColor);
-      aiThinking = false;
-
-      if (AIConnect4.checkWin(soloBoard, aiColor)) {
-        endSoloGame(aiColor, 'four-in-a-row');
-        return;
-      }
-      if (soloColHeights.every(h => h >= 6)) {
-        endSoloGame('draw', 'board-full');
-        return;
-      }
-
-      soloTurn = playerColor;
-      updateTurnIndicator(soloTurn);
-      Connect4Board.setMyTurn(true);
-    }
-
-    // 보드에 돌 놓기 + UI 갱신
-    function applySoloMove(col, color) {
-      const row = 6 - 1 - soloColHeights[col];
-      soloBoard[row][col] = color;
-      soloColHeights[col]++;
-
-      // Connect4Board.updateAfterMove로 UI 갱신
-      const moveRecord = { col, color };
-      Connect4Board.updateAfterMove(soloBoard, moveRecord, soloColHeights);
-
-      if (typeof Sound !== 'undefined') Sound.play('move');
-    }
-
-    // 게임 종료
-    function endSoloGame(winner, reason) {
-      soloGameOver = true;
-      gameStatus   = 'finished';
-      Connect4Board.setMyTurn(false);
-
-      // 이긴 칸 하이라이트
-      if (winner !== 'draw') {
-        const winCells = getSoloWinCells(soloBoard, winner);
-        if (winCells.length) Connect4Board.highlightWin(winCells);
-      }
-
-      // 통계 저장
-      if (typeof Stats !== 'undefined') {
-        const result = winner === playerColor ? 'win' : winner === 'draw' ? 'draw' : 'loss';
-        Stats.record('connect4', result);
-      }
-
-      // 사운드
-      if (typeof Sound !== 'undefined') {
-        if (winner === 'draw')          Sound.play('draw');
-        else if (winner === playerColor) Sound.play('win');
-        else                             Sound.play('lose');
-      }
-
-      showGameOver(winner, reason);
-
-      // 재대국 버튼 → 페이지 재로드
-      document.getElementById('rematch-btn').textContent = '다시하기';
-      document.getElementById('rematch-btn').onclick = () => location.reload();
-    }
-
-    // 이긴 칸 좌표 계산
-    function getSoloWinCells(board, color) {
-      const dirs = [[0,1],[1,0],[1,1],[1,-1]];
-      for (const [dr, dc] of dirs) {
-        for (let r = 0; r < 6; r++) {
-          for (let c = 0; c < 7; c++) {
-            if (board[r][c] !== color) continue;
-            const cells = [[r, c]];
-            for (let i = 1; i < 4; i++) {
-              const nr = r + dr*i, nc = c + dc*i;
-              if (nr < 0 || nr >= 6 || nc < 0 || nc >= 7 || board[nr][nc] !== color) break;
-              cells.push([nr, nc]);
-            }
-            if (cells.length === 4) return cells.map(([rr, cc]) => ({ row: rr, col: cc }));
-          }
-        }
-      }
-      return [];
-    }
-
-    // 솔로 모드 기권 처리 (기존 resign-btn 재사용)
-    document.getElementById('resign-btn').onclick = () => {
-      if (soloGameOver) return;
-      if (!confirm('게임을 포기하고 다시 시작하시겠습니까?')) return;
-      endSoloGame(aiColor, 'resign');
-    };
-
-    // 솔로 모드 시작
-    initSoloGame();
+    GameHandlers.connect4.startSolo(soloColor, {
+      switchBoardArea,
+      updateTurnIndicator,
+      showGameOver,
+      setActiveBoard:  (b) => { ActiveBoard = b; },
+      setGameStatus:   (s) => { gameStatus  = s; },
+      connectingOverlay,
+      spectatorJoinOverlay,
+      myLabel, oppLabel, myDot, oppDot,
+    });
   }
   // =========================================================
 })();

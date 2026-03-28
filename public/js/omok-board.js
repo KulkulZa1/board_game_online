@@ -1,6 +1,6 @@
 // omok-board.js — 오목 보드 렌더러 (window.OmokBoard IIFE)
 window.OmokBoard = (function () {
-  const SIZE = 15; // 15×15
+  let _size = 15; // 동적 크기 (13|15|17|19)
 
   let _board       = null; // 2D array [row][col] = 'black'|'white'|null
   let _myColor     = null; // 'black' | 'white'
@@ -15,7 +15,9 @@ window.OmokBoard = (function () {
 
   // ========== Public API ==========
 
-  function init({ board, myColor, onMove, spectatorMode }) {
+  function init({ board, myColor, onMove, spectatorMode, boardSize }) {
+    if (boardSize && boardSize.size) _size = boardSize.size;
+    else if (board && board.length) _size = board.length;
     _board        = board || _emptyBoard();
     _myColor      = myColor;
     _onMove       = onMove;
@@ -77,15 +79,15 @@ window.OmokBoard = (function () {
   // ========== Rendering ==========
 
   function _emptyBoard() {
-    return Array(SIZE).fill(null).map(() => Array(SIZE).fill(null));
+    return Array(_size).fill(null).map(() => Array(_size).fill(null));
   }
 
   function _render() {
     container.innerHTML = '';
     container.className = 'omok-grid';
 
-    for (let row = 0; row < SIZE; row++) {
-      for (let col = 0; col < SIZE; col++) {
+    for (let row = 0; row < _size; row++) {
+      for (let col = 0; col < _size; col++) {
         const cell = document.createElement('div');
         cell.className   = 'omok-cell';
         cell.dataset.row = row;
@@ -119,9 +121,9 @@ window.OmokBoard = (function () {
 
   function _getEdgeClass(row, col) {
     const top    = row === 0;
-    const bottom = row === SIZE - 1;
+    const bottom = row === _size - 1;
     const left   = col === 0;
-    const right  = col === SIZE - 1;
+    const right  = col === _size - 1;
     if (top && left)     return 'omok-corner-tl';
     if (top && right)    return 'omok-corner-tr';
     if (bottom && left)  return 'omok-corner-bl';
@@ -134,7 +136,8 @@ window.OmokBoard = (function () {
   }
 
   function _isStarPoint(row, col) {
-    const stars = [3, 7, 11];
+    const starMap = { 13: [3, 6, 9], 15: [3, 7, 11], 17: [3, 8, 13], 19: [3, 9, 15] };
+    const stars = starMap[_size] || [3, Math.floor(_size / 2), _size - 4];
     return stars.includes(row) && stars.includes(col);
   }
 
@@ -192,7 +195,7 @@ window.OmokBoard = (function () {
 
     if (_selected) {
       const colLetter = String.fromCharCode(65 + _selected.col);
-      const rowLabel  = SIZE - _selected.row;
+      const rowLabel  = _size - _selected.row;
       label.textContent  = `제안: ${colLetter}${rowLabel} — 전송 버튼을 누르세요`;
       cancel.style.display = '';
     } else {

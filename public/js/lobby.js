@@ -1,3 +1,12 @@
+// 전역 토스트 (게스트 프로필 등 inline onclick에서 사용)
+window.showToast = function(msg) {
+  const toast = document.getElementById('copy-toast');
+  if (!toast) return;
+  toast.textContent = msg;
+  toast.classList.add('show');
+  setTimeout(() => toast.classList.remove('show'), 2500);
+};
+
 // ========== 게임 규칙 데이터 ==========
 const GAME_RULES = {
   chess: {
@@ -82,8 +91,42 @@ document.addEventListener('keydown', function(e) {
   if (e.key === 'Escape') {
     window.closeRules();
     window.closeStatsModal();
+    window.closeGuestProfile();
   }
 });
+
+// ========== 게스트 프로필 모달 ==========
+window.showGuestProfile = function() {
+  if (typeof Guest === 'undefined') return;
+  const input = document.getElementById('guest-name-input');
+  if (input) input.value = Guest.getName();
+  const modal = document.getElementById('guest-modal');
+  if (modal) modal.style.display = 'flex';
+};
+
+window.closeGuestProfile = function() {
+  const modal = document.getElementById('guest-modal');
+  if (modal) modal.style.display = 'none';
+};
+
+window.saveGuestName = function() {
+  if (typeof Guest === 'undefined') return;
+  const input = document.getElementById('guest-name-input');
+  if (!input) return;
+  Guest.setName(input.value);
+  const label = document.getElementById('guest-name-label');
+  if (label) label.textContent = Guest.getName();
+  window.closeGuestProfile();
+  showToast('닉네임이 저장되었습니다.');
+};
+
+// 로드 시 게스트 이름 표시
+(function() {
+  if (typeof Guest !== 'undefined') {
+    const label = document.getElementById('guest-name-label');
+    if (label) label.textContent = Guest.getName();
+  }
+})();
 
 // ========== 개인 전적 모달 ==========
 window.showStatsModal = function() {
@@ -200,11 +243,12 @@ window.confirmResetStats = function() {
   const gameFromUrl   = params.get('game'); // 'chess' | 'omok'
 
   // State
-  let selectedGame    = null;  // 'chess' | 'omok'
-  let selectedColor   = 'white';
-  let selectedMinutes = 10;
-  let isCustomTime    = false;
-  let currentRoomId   = null;
+  let selectedGame      = null;  // 'chess' | 'omok'
+  let selectedColor     = 'white';
+  let selectedMinutes   = 10;
+  let isCustomTime      = false;
+  let currentRoomId     = null;
+  let selectedBoardSize = null; // { size } for omok | { rows, cols } for connect4
 
   // DOM
   const gameSelectSection = document.getElementById('game-select-section');
@@ -322,14 +366,16 @@ window.confirmResetStats = function() {
       checkers:    '체커 방 만들기',
     };
     document.getElementById('create-title').textContent = titleMap[gameType] || '방 만들기';
+    updateBoardSizePicker(gameType);
     showCreateSection();
   };
 
   window.backToGameSelect = function () {
-    selectedGame    = null;
-    selectedColor   = 'white';
-    selectedMinutes = 10;
-    isCustomTime    = false;
+    selectedGame      = null;
+    selectedColor     = 'white';
+    selectedMinutes   = 10;
+    isCustomTime      = false;
+    selectedBoardSize = null;
     // color-section 다시 표시 (connect4·indianpoker 선택 후 숨겨진 상태 복원)
     const colorSection = document.getElementById('color-section');
     if (colorSection) colorSection.style.display = '';
@@ -341,6 +387,53 @@ window.confirmResetStats = function() {
     if (customTimeInput) customTimeInput.style.display = 'none';
     history.pushState({}, '', '/');
     showGameSelectSection();
+  };
+
+  function updateBoardSizePicker(gameType) {
+    const group = document.getElementById('board-size-group');
+    if (!group) return;
+
+    if (gameType === 'omok') {
+      selectedBoardSize = { size: 15 };
+      group.style.display = '';
+      group.innerHTML = `
+        <label class="create-label">보드 크기</label>
+        <div class="board-size-btns">
+          ${[13,15,17,19].map(s =>
+            `<button class="size-btn${s===15?' active':''}" data-size="${s}" onclick="window._setBoardSizeOmok(${s})">${s}×${s}</button>`
+          ).join('')}
+        </div>`;
+    } else if (gameType === 'connect4') {
+      selectedBoardSize = { rows: 6, cols: 7 };
+      const presets = [{rows:5,cols:4},{rows:6,cols:7},{rows:7,cols:8},{rows:8,cols:9}];
+      group.style.display = '';
+      group.innerHTML = `
+        <label class="create-label">보드 크기</label>
+        <div class="board-size-btns">
+          ${presets.map(p =>
+            `<button class="size-btn${p.rows===6&&p.cols===7?' active':''}" data-rows="${p.rows}" data-cols="${p.cols}"
+              onclick="window._setBoardSizeC4(${p.rows},${p.cols})">${p.rows}행×${p.cols}열</button>`
+          ).join('')}
+        </div>`;
+    } else {
+      selectedBoardSize = null;
+      group.style.display = 'none';
+      group.innerHTML = '';
+    }
+  }
+
+  window._setBoardSizeOmok = function (size) {
+    selectedBoardSize = { size };
+    document.querySelectorAll('#board-size-group .size-btn').forEach(b => {
+      b.classList.toggle('active', Number(b.dataset.size) === size);
+    });
+  };
+
+  window._setBoardSizeC4 = function (rows, cols) {
+    selectedBoardSize = { rows, cols };
+    document.querySelectorAll('#board-size-group .size-btn').forEach(b => {
+      b.classList.toggle('active', Number(b.dataset.rows) === rows && Number(b.dataset.cols) === cols);
+    });
   };
 
   function updateColorPickerLabels(gameType) {
@@ -417,9 +510,10 @@ window.confirmResetStats = function() {
     };
 
     socket.emit('room:create', {
-      hostColor: selectedColor,
+      hostColor:  selectedColor,
       timeControl,
-      gameType: selectedGame
+      gameType:   selectedGame,
+      boardSize:  selectedBoardSize || undefined,
     });
   });
 
