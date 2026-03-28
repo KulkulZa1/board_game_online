@@ -173,6 +173,8 @@ window.closeStatsModal = function() {
 
 // ========== 혼자하기 (vs AI) ==========
 window.startSolo = function(gameType) {
+  const origBack = window.backToGameSelect; // 현재 backToGameSelect 캡처 (IIFE 내 정의된 것)
+
   // 색상 선택 화면 표시 (기존 create-section 재활용)
   const gameSelectSection = document.getElementById('game-select-section');
   const createSection     = document.getElementById('create-section');
@@ -197,11 +199,23 @@ window.startSolo = function(gameType) {
     if (g.id !== 'color-section') g.style.display = 'none';
   });
 
-  // 색상 버튼 라벨 - 사목 기준
-  document.getElementById('icon-white').textContent = '🔴';
-  document.getElementById('label-white').textContent = '빨강 (선공)';
-  document.getElementById('icon-black').textContent = '🟡';
-  document.getElementById('label-black').textContent = '노랑 (후공)';
+  // 색상 버튼 라벨 - 게임별 설정
+  const soloColorMeta = {
+    chess:       { iconW:'♔', labelW:'백 (선공)', iconB:'♚', labelB:'흑 (후공)' },
+    omok:        { iconW:'○', labelW:'백 (후공)', iconB:'⬤', labelB:'흑 (선공)' },
+    connect4:    { iconW:'🔴', labelW:'빨강 (선공)', iconB:'🟡', labelB:'노랑 (후공)' },
+    othello:     { iconW:'○', labelW:'백 (후공)', iconB:'⬤', labelB:'흑 (선공)' },
+    indianpoker: { iconW:'🎴', labelW:'플레이어', iconB:'🤖', labelB:'AI 봇' },
+    checkers:    { iconW:'🔴', labelW:'빨강 (선공)', iconB:'⚫', labelB:'검정 (후공)' },
+  };
+  const cm = soloColorMeta[gameType] || soloColorMeta.chess;
+  document.getElementById('icon-white').textContent  = cm.iconW;
+  document.getElementById('label-white').textContent = cm.labelW;
+  document.getElementById('icon-black').textContent  = cm.iconB;
+  document.getElementById('label-black').textContent = cm.labelB;
+  // 인디언 포커는 색상 선택 불필요 (항상 플레이어 역할 고정)
+  const soloColorSection = document.getElementById('color-section');
+  if (soloColorSection) soloColorSection.style.display = gameType === 'indianpoker' ? 'none' : '';
 
   // "방 만들기" → "시작"
   createBtn.textContent = '시작';
@@ -219,16 +233,17 @@ window.startSolo = function(gameType) {
   // 뒤로 버튼 처리 복원
   window.backToGameSelect = function() {
     document.querySelectorAll('.form-group').forEach(g => { g.style.display = ''; });
+    // color-section 다시 표시
+    const cs = document.getElementById('color-section');
+    if (cs) cs.style.display = '';
     createBtn.textContent = '방 만들기';
     createBtn.onclick = null;
-    window.backToGameSelect = _origBackToGameSelect;
+    window.backToGameSelect = origBack;
     createSection.style.display     = 'none';
     gameSelectSection.style.display = '';
   };
 };
 
-// 원본 backToGameSelect 참조 보존 (lobby.js IIFE 내에서 정의된 것을 가져옴)
-let _origBackToGameSelect = window.backToGameSelect;
 
 window.confirmResetStats = function() {
   if (!confirm('모든 전적 기록을 초기화하시겠습니까?')) return;

@@ -85,6 +85,14 @@ window.OmokBoard = (function () {
   function _render() {
     container.innerHTML = '';
     container.className = 'omok-grid';
+    // 보드 크기에 따라 열 수 동적 설정
+    container.style.gridTemplateColumns = `repeat(${_size}, 36px)`;
+    // 격자선 간격도 보드 크기에 맞게 동적 설정
+    const gaps = _size - 1;
+    container.style.backgroundImage = [
+      `repeating-linear-gradient(0deg,transparent,transparent calc(100% / ${gaps} - 1px),#8b6c34 calc(100% / ${gaps} - 1px),#8b6c34 calc(100% / ${gaps}))`,
+      `repeating-linear-gradient(90deg,transparent,transparent calc(100% / ${gaps} - 1px),#8b6c34 calc(100% / ${gaps} - 1px),#8b6c34 calc(100% / ${gaps}))`
+    ].join(',');
 
     for (let row = 0; row < _size; row++) {
       for (let col = 0; col < _size; col++) {

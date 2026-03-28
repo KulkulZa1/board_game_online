@@ -2,7 +2,7 @@
 // 네트워크 우선 전략: 항상 최신 서버 상태 필요 (Socket.io 실시간)
 // 정적 자산만 캐시하고 API/Socket 요청은 네트워크 직접 사용
 
-const CACHE_NAME = 'boardgame-v1';
+const CACHE_NAME = 'boardgame-v2';
 const STATIC_ASSETS = [
   '/',
   '/index.html',

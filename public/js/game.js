@@ -897,16 +897,19 @@ const GAME_RULES = {
   // ========== 솔로 모드 (vs AI) — game-connect4.js에 위임 ==========
   // =========================================================
   if (isSoloMode) {
-    GameHandlers.connect4.startSolo(soloColor, {
-      switchBoardArea,
-      updateTurnIndicator,
-      showGameOver,
-      setActiveBoard:  (b) => { ActiveBoard = b; },
-      setGameStatus:   (s) => { gameStatus  = s; },
-      connectingOverlay,
-      spectatorJoinOverlay,
-      myLabel, oppLabel, myDot, oppDot,
-    });
+    const handler = GameHandlers[gameType];
+    if (handler && typeof handler.startSolo === 'function') {
+      handler.startSolo(soloColor, {
+        switchBoardArea,
+        updateTurnIndicator,
+        showGameOver,
+        setActiveBoard:  (b) => { ActiveBoard = b; },
+        setGameStatus:   (s) => { gameStatus  = s; },
+        connectingOverlay,
+        spectatorJoinOverlay,
+        myLabel, oppLabel, myDot, oppDot,
+      });
+    }
   }
   // =========================================================
 })();
