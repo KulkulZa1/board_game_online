@@ -1,0 +1,9 @@
+node_modules/
+.shutdown-key
+.env
+*.key
+*.keystore
+cloudflared.exe
+error/
+.claude/
+*.ps1

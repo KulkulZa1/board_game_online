@@ -1,0 +1,44 @@
+{
+  "name": "보드게임 온라인",
+  "short_name": "보드게임",
+  "description": "체스·오목·사목·오셀로·인디언포커·체커 — 친구와 실시간 1대1 대국",
+  "start_url": "/?source=pwa",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#1a1a2e",
+  "theme_color": "#4a9eff",
+  "lang": "ko",
+  "categories": ["games"],
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-512-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/icons/screenshot-lobby.png",
+      "sizes": "1080x1920",
+      "type": "image/png",
+      "label": "로비 화면"
+    },
+    {
+      "src": "/icons/screenshot-game.png",
+      "sizes": "1080x1920",
+      "type": "image/png",
+      "label": "게임 화면"
+    }
+  ]
+}

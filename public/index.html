@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>보드게임 온라인</title>
+  <!-- PWA -->
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#4a9eff">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="보드게임">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+  <link rel="stylesheet" href="css/lobby.css">
+</head>
+<body>
+  <div class="lobby-container">
+    <div class="logo">
+      <span class="logo-piece" id="logo-piece">🎮</span>
+      <h1 id="logo-title">게임 플랫폼</h1>
+    </div>
+
+    <!-- 게임 선택 허브 -->
+    <section id="game-select-section">
+      <p class="subtitle" style="text-align:center;margin-bottom:20px;">플레이할 게임을 선택하세요</p>
+      <div class="game-cards">
+        <div class="game-card" id="card-chess" onclick="selectGame('chess')">
+          <div class="game-card-icon">♟</div>
+          <div class="game-card-name">체스</div>
+          <div class="game-card-desc">전략 2인 게임<br>8×8 격자판</div>
+          <button class="btn-play">플레이</button>
+        </div>
+        <div class="game-card" id="card-omok" onclick="selectGame('omok')">
+          <div class="game-card-icon">⬤</div>
+          <div class="game-card-name">오목</div>
+          <div class="game-card-desc">렌주룰 5목<br>15×15 격자판</div>
+          <button class="btn-play">플레이</button>
+        </div>
+        <div class="game-card" id="card-connect4" onclick="selectGame('connect4')">
+          <div class="game-card-icon">🔴</div>
+          <div class="game-card-name">사목</div>
+          <div class="game-card-desc">4개 연결 승리<br>7×6 낙하 보드</div>
+          <button class="btn-play">플레이</button>
+        </div>
+        <div class="game-card" id="card-othello" onclick="selectGame('othello')">
+          <div class="game-card-icon">⬜</div>
+          <div class="game-card-name">오셀로</div>
+          <div class="game-card-desc">돌 뒤집기 전략<br>8×8 격자판</div>
+          <button class="btn-play">플레이</button>
+        </div>
+        <div class="game-card" id="card-indianpoker" onclick="selectGame('indianpoker')">
+          <div class="game-card-icon">🃏</div>
+          <div class="game-card-name">인디언 포커</div>
+          <div class="game-card-desc">상대 카드로<br>심리 배팅</div>
+          <button class="btn-play">플레이</button>
+        </div>
+        <div class="game-card" id="card-checkers" onclick="selectGame('checkers')">
+          <div class="game-card-icon">🔴</div>
+          <div class="game-card-name">체커</div>
+          <div class="game-card-desc">점프 이동·킹<br>8×8 격자판</div>
+          <button class="btn-play">플레이</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 방 생성 폼 -->
+    <section id="create-section" style="display:none;">
+      <div class="card">
+        <div class="back-row">
+          <button class="btn-back" onclick="backToGameSelect()">← 뒤로</button>
+          <h2 id="create-title">새 게임 만들기</h2>
+        </div>
+
+        <div class="form-group" id="color-section">
+          <label id="color-label">내 색상 선택</label>
+          <div class="color-picker">
+            <button class="color-btn active" data-color="white" id="btn-white">
+              <span class="piece-icon" id="icon-white">♔</span>
+              <span id="label-white">백 (선공)</span>
+            </button>
+            <button class="color-btn" data-color="black" id="btn-black">
+              <span class="piece-icon" id="icon-black">♚</span>
+              <span id="label-black">흑 (후공)</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>제한 시간</label>
+          <div class="time-picker">
+            <button class="time-btn active" data-minutes="10">10분</button>
+            <button class="time-btn" data-minutes="30">30분</button>
+            <button class="time-btn" data-minutes="0">무제한</button>
+            <button class="time-btn" data-minutes="custom">직접 설정</button>
+          </div>
+          <div id="custom-time-input" style="display:none; margin-top:12px;">
+            <input type="number" id="custom-minutes" min="1" max="180" value="15" placeholder="분">
+            <span class="input-suffix">분</span>
+          </div>
+        </div>
+
+        <button class="btn-primary" id="create-btn">방 만들기</button>
+      </div>
+    </section>
+
+    <!-- 대기실 -->
+    <section id="waiting-section" style="display:none;">
+      <div class="card">
+        <h2>친구를 초대하세요</h2>
+        <p class="subtitle">아래 링크를 카카오톡으로 전달하세요</p>
+
+        <div class="share-link-box">
+          <span id="share-link-text"></span>
+          <button class="btn-icon" id="copy-btn" title="복사">📋</button>
+        </div>
+
+        <div class="share-buttons">
+          <button class="btn-kakao" id="kakao-btn">
+            <img src="https://developers.kakao.com/assets/img/about/logos/kakaolink/kakaolink_btn_medium.png" alt="카카오" width="20">
+            카카오톡으로 공유
+          </button>
+          <button class="btn-secondary" id="copy-link-btn">링크 복사</button>
+        </div>
+
+        <div class="waiting-indicator">
+          <div class="spinner"></div>
+          <p>상대방을 기다리는 중...</p>
+        </div>
+
+        <div class="game-info-preview" id="game-info-preview"></div>
+      </div>
+    </section>
+
+    <!-- 참가 폼 (게스트용) -->
+    <section id="join-section" style="display:none;">
+      <div class="card">
+        <h2>게임 참가</h2>
+        <p class="subtitle" id="join-info">친구의 게임에 참가합니다</p>
+        <div id="join-loading" style="display:none;">
+          <div class="spinner"></div>
+          <p>연결 중...</p>
+        </div>
+        <button class="btn-primary" id="join-btn">참가하기</button>
+      </div>
+    </section>
+
+    <!-- 에러 -->
+    <section id="error-section" style="display:none;">
+      <div class="card error-card">
+        <h2>⚠️ 오류</h2>
+        <p id="error-msg"></p>
+        <button class="btn-secondary" onclick="location.href='/'">처음으로</button>
+      </div>
+    </section>
+  </div>
+
+  <div id="copy-toast" class="toast">링크가 복사되었습니다!</div>
+
+  <script src="https://developers.kakao.com/sdk/js/kakao.min.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="js/lobby.js"></script>
+  <!-- Service Worker 등록 -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').catch(() => {});
+      });
+    }
+  </script>
+</body>
+</html>

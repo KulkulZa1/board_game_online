@@ -1,0 +1,826 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>게임 플랫폼 — 서버 관리</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: #0f1117;
+      color: #c8d0de;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 32px 16px;
+    }
+
+    /* ── 헤더 ───────────────────────────────── */
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+    .header h1 {
+      font-size: 1.6rem;
+      font-weight: 700;
+      color: #f0c040;
+      letter-spacing: 0.02em;
+    }
+    .status-badge {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: #1a1f2e;
+      border: 1px solid #2a3040;
+      border-radius: 20px;
+      padding: 4px 12px;
+      font-size: 0.8rem;
+    }
+    .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: #888;
+      transition: background 0.3s;
+    }
+    .dot.online  { background: #4caf50; box-shadow: 0 0 6px #4caf5088; }
+    .dot.offline { background: #f44336; box-shadow: 0 0 6px #f4433688; }
+
+    .uptime-bar {
+      color: #8892a4;
+      font-size: 0.85rem;
+      margin-bottom: 28px;
+    }
+
+    /* ── 카드 그리드 ─────────────────────────── */
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+      width: 100%;
+      max-width: 560px;
+      margin-bottom: 16px;
+    }
+    @media (min-width: 500px) {
+      .cards { grid-template-columns: repeat(4, 1fr); }
+    }
+
+    .card {
+      background: #1a1f2e;
+      border: 1px solid #2a3040;
+      border-radius: 12px;
+      padding: 20px 16px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      user-select: none;
+    }
+    .card:hover        { border-color: #f0c04066; background: #1e2436; }
+    .card.active-card  { border-color: #f0c040;   background: #1e2436; }
+    .card-label {
+      font-size: 0.72rem;
+      color: #8892a4;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 10px;
+    }
+    .card-value {
+      font-size: 2rem;
+      font-weight: 700;
+      color: #f0c040;
+      line-height: 1;
+    }
+    .card-hint {
+      font-size: 0.65rem;
+      color: #4a5568;
+      margin-top: 6px;
+    }
+
+    /* ── 상세 목록 패널 ───────────────────────── */
+    .detail-panel {
+      width: 100%;
+      max-width: 560px;
+      margin-bottom: 20px;
+      display: none;
+    }
+    .detail-panel.visible { display: block; }
+
+    .detail-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+    .detail-title {
+      font-size: 0.78rem;
+      color: #8892a4;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    .detail-close {
+      background: none;
+      border: none;
+      color: #8892a4;
+      cursor: pointer;
+      font-size: 1rem;
+      line-height: 1;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+    .detail-close:hover { color: #c8d0de; background: #2a3040; }
+
+    .detail-empty {
+      background: #1a1f2e;
+      border: 1px solid #2a3040;
+      border-radius: 10px;
+      padding: 20px;
+      text-align: center;
+      color: #4a5568;
+      font-size: 0.88rem;
+    }
+
+    .room-card {
+      background: #1a1f2e;
+      border: 1px solid #2a3040;
+      border-radius: 10px;
+      padding: 14px 16px;
+      margin-bottom: 10px;
+      font-size: 0.85rem;
+    }
+    .room-card:last-child { margin-bottom: 0; }
+
+    .room-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+    .room-id {
+      font-family: monospace;
+      color: #f0c040;
+      font-size: 0.88rem;
+      font-weight: 600;
+    }
+    .room-badge {
+      font-size: 0.7rem;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-weight: 600;
+    }
+    .badge-active   { background: #1a3a2a; color: #4caf50; border: 1px solid #4caf5044; }
+    .badge-waiting  { background: #2a2a1a; color: #f0c040; border: 1px solid #f0c04044; }
+    .badge-finished { background: #2a1a2a; color: #9c7bb5; border: 1px solid #9c7bb544; }
+
+    .room-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px 16px;
+    }
+    .room-row {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+    }
+    .room-key {
+      color: #4a5568;
+      font-size: 0.72rem;
+      min-width: 60px;
+      flex-shrink: 0;
+    }
+    .room-val {
+      color: #c8d0de;
+      font-size: 0.82rem;
+      word-break: break-all;
+    }
+    .room-val.mono { font-family: monospace; font-size: 0.78rem; color: #58c4f5; }
+    .room-val.conn { color: #4caf50; }
+    .room-val.disc { color: #888; }
+
+    .timer-bar {
+      margin-top: 10px;
+      display: flex;
+      gap: 8px;
+    }
+    .timer-chip {
+      flex: 1;
+      background: #0f1117;
+      border: 1px solid #2a3040;
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-size: 0.8rem;
+      text-align: center;
+    }
+    .timer-chip.active-timer { border-color: #f0c04066; }
+    .timer-chip-label { color: #4a5568; font-size: 0.65rem; margin-bottom: 2px; }
+    .timer-chip-val   { color: #f0c040; font-weight: 600; }
+
+    .domain-row {
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid #2a3040;
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+    }
+
+    /* ── 미니 체스판 ─────────────────────────── */
+    .mini-board-wrap {
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid #2a3040;
+    }
+    .mini-board-label {
+      font-size: 0.65rem;
+      color: #4a5568;
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    .mini-board {
+      display: grid;
+      grid-template-columns: repeat(8, 1fr);
+      grid-template-rows: repeat(8, 1fr);
+      width: 100%;
+      max-width: 200px;
+      aspect-ratio: 1;
+      border: 1px solid #3a4050;
+      border-radius: 3px;
+      overflow: hidden;
+      font-size: 10px;
+    }
+    .mini-cell { display: flex; align-items: center; justify-content: center; }
+    .mini-cell.ml { background: #f0d9b5; }
+    .mini-cell.md { background: #b58863; }
+    .mini-cell.mh { background: rgba(240,192,64,0.45); }  /* 마지막 수 하이라이트 */
+    .mini-piece-w { color: #fff;    text-shadow: 0 0 2px #000; font-size: 11px; line-height: 1; }
+    .mini-piece-b { color: #1a1a1a; text-shadow: 0 0 1px rgba(255,255,255,0.4); font-size: 11px; line-height: 1; }
+
+    /* ── 강제 종료 버튼 ──────────────────────── */
+    .btn-terminate {
+      margin-top: 10px;
+      padding: 7px 14px;
+      border-radius: 6px;
+      background: rgba(192,57,43,0.15);
+      color: #e05555;
+      border: 1px solid rgba(192,57,43,0.3);
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .btn-terminate:hover { background: rgba(192,57,43,0.3); }
+
+    /* ── 터널 URL 박스 ───────────────────────── */
+    .tunnel-box {
+      width: 100%;
+      max-width: 560px;
+      background: #1a1f2e;
+      border: 1px solid #2a3040;
+      border-radius: 12px;
+      padding: 16px 20px;
+      margin-bottom: 24px;
+      display: none;
+    }
+    .tunnel-box.visible { display: block; }
+    .tunnel-label {
+      font-size: 0.72rem;
+      color: #8892a4;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 8px;
+    }
+    .tunnel-url {
+      font-size: 0.95rem;
+      color: #58c4f5;
+      word-break: break-all;
+      cursor: pointer;
+    }
+    .tunnel-url:hover { text-decoration: underline; }
+    .tunnel-copy-hint {
+      font-size: 0.72rem;
+      color: #8892a4;
+      margin-top: 4px;
+    }
+
+    /* ── 액션 버튼 ───────────────────────────── */
+    .actions {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      justify-content: center;
+      width: 100%;
+      max-width: 560px;
+      margin-bottom: 32px;
+    }
+    .btn {
+      flex: 1;
+      min-width: 140px;
+      padding: 12px 20px;
+      border-radius: 8px;
+      border: none;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.15s, transform 0.1s;
+      text-decoration: none;
+      text-align: center;
+    }
+    .btn:hover   { opacity: 0.85; }
+    .btn:active  { transform: scale(0.97); }
+    .btn-lobby   { background: #f0c040; color: #1a1a2e; }
+    .btn-stop    { background: #c0392b; color: #fff; }
+    .btn-stop:disabled { background: #555; cursor: not-allowed; opacity: 0.6; }
+
+    /* ── 오프라인 메시지 ─────────────────────── */
+    .offline-msg {
+      display: none;
+      text-align: center;
+      color: #8892a4;
+      font-size: 0.9rem;
+      margin-top: 16px;
+    }
+    .offline-msg.visible { display: block; }
+
+    /* ── 푸터 ───────────────────────────────── */
+    footer {
+      color: #4a5568;
+      font-size: 0.78rem;
+      text-align: center;
+      margin-top: auto;
+      padding-top: 24px;
+    }
+
+    /* ── 토스트 ─────────────────────────────── */
+    #toast {
+      position: fixed;
+      bottom: 24px; left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      background: #333; color: #fff;
+      padding: 10px 22px; border-radius: 20px;
+      font-size: 0.88rem; opacity: 0;
+      transition: opacity 0.25s, transform 0.25s;
+      pointer-events: none; white-space: nowrap;
+      z-index: 9999;
+    }
+    #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <h1>♟ 서버 관리</h1>
+    <div class="status-badge">
+      <div class="dot" id="dot"></div>
+      <span id="status-text">확인 중...</span>
+    </div>
+  </div>
+  <div class="uptime-bar" id="uptime-bar">업타임: --</div>
+
+  <div class="cards">
+    <div class="card" id="card-active"  onclick="toggleDetail('active')">
+      <div class="card-label">진행 중</div>
+      <div class="card-value" id="v-active">-</div>
+      <div class="card-hint">클릭하여 목록</div>
+    </div>
+    <div class="card" id="card-waiting" onclick="toggleDetail('waiting')">
+      <div class="card-label">대기 방</div>
+      <div class="card-value" id="v-waiting">-</div>
+      <div class="card-hint">클릭하여 목록</div>
+    </div>
+    <div class="card" id="card-players" onclick="toggleDetail('players')">
+      <div class="card-label">접속 중</div>
+      <div class="card-value" id="v-players">-</div>
+      <div class="card-hint">클릭하여 목록</div>
+    </div>
+    <div class="card" id="card-total"   onclick="toggleDetail('total')">
+      <div class="card-label">전체 방</div>
+      <div class="card-value" id="v-total">-</div>
+      <div class="card-hint">클릭하여 목록</div>
+    </div>
+  </div>
+
+  <!-- 상세 목록 패널 -->
+  <div class="detail-panel" id="detail-panel">
+    <div class="detail-header">
+      <span class="detail-title" id="detail-title">목록</span>
+      <button class="detail-close" onclick="closeDetail()">✕</button>
+    </div>
+    <div id="detail-body"></div>
+  </div>
+
+  <div class="tunnel-box" id="tunnel-box">
+    <div class="tunnel-label">외부 공개 주소 (카카오톡으로 공유)</div>
+    <div class="tunnel-url" id="tunnel-url" onclick="copyTunnel()"></div>
+    <div class="tunnel-copy-hint">클릭하여 복사</div>
+  </div>
+
+  <div class="actions">
+    <a href="/" class="btn btn-lobby">🎮 게임 로비</a>
+    <button class="btn btn-stop" id="stop-btn" disabled onclick="confirmStop()">
+      ⏹ 서버 종료
+    </button>
+  </div>
+
+  <div class="offline-msg" id="offline-msg">
+    서버에 연결할 수 없습니다.<br>
+    서버가 실행 중인지 확인하세요.
+  </div>
+
+  <footer>체스 온라인 · localhost 접속 시 종료 버튼 활성화</footer>
+  <div id="toast"></div>
+
+<script>
+  let shutdownKey  = null;
+  let pollTimer    = null;
+  let lastRoomList = [];
+  let activeFilter = null;   // 현재 열린 상세 패널 종류
+
+  // ── 유틸 ──────────────────────────────────────────────────────────
+  function fmtUptime(sec) {
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    const s = sec % 60;
+    return [h, m, s].map(n => String(n).padStart(2, '0')).join(':');
+  }
+
+  function fmtTimer(sec) {
+    if (sec === null || sec === undefined) return '무제한';
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return m + ':' + String(s).padStart(2, '0');
+  }
+
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2500);
+  }
+
+  // ── 상세 패널 ─────────────────────────────────────────────────────
+  const FILTER_META = {
+    active:  { label: '진행 중인 게임',  fn: r => r.status === 'active'  },
+    waiting: { label: '대기 중인 방',    fn: r => r.status === 'waiting' },
+    players: { label: '접속 중인 플레이어', fn: r =>
+                 r.players.host.connected || r.players.guest.connected },
+    total:   { label: '전체 방 목록',   fn: () => true },
+  };
+
+  function toggleDetail(type) {
+    const cards = document.querySelectorAll('.card');
+    if (activeFilter === type) {
+      // 같은 카드 다시 클릭 → 닫기
+      closeDetail();
+      return;
+    }
+    activeFilter = type;
+    cards.forEach(c => c.classList.remove('active-card'));
+    document.getElementById('card-' + type).classList.add('active-card');
+    renderDetail();
+    document.getElementById('detail-panel').classList.add('visible');
+  }
+
+  function closeDetail() {
+    activeFilter = null;
+    document.querySelectorAll('.card').forEach(c => c.classList.remove('active-card'));
+    document.getElementById('detail-panel').classList.remove('visible');
+  }
+
+  function renderDetail() {
+    if (!activeFilter) return;
+    const meta    = FILTER_META[activeFilter];
+    const rooms   = lastRoomList.filter(meta.fn);
+    const title   = document.getElementById('detail-title');
+    const body    = document.getElementById('detail-body');
+
+    title.textContent = meta.label + ' (' + rooms.length + ')';
+
+    if (rooms.length === 0) {
+      body.innerHTML = '<div class="detail-empty">해당하는 방이 없습니다.</div>';
+      return;
+    }
+
+    // 접속 중 필터일 때는 플레이어 뷰, 나머지는 방 뷰
+    if (activeFilter === 'players') {
+      body.innerHTML = renderPlayersView(rooms);
+    } else {
+      body.innerHTML = rooms.map(renderRoomCard).join('');
+    }
+  }
+
+  // ── FEN 파서 & 미니 체스판 ────────────────────────────────────────
+  const MINI_UNICODE = {
+    wK:'♔',wQ:'♕',wR:'♖',wB:'♗',wN:'♘',wP:'♙',
+    bK:'♚',bQ:'♛',bR:'♜',bB:'♝',bN:'♞',bP:'♟'
+  };
+
+  function renderMiniBoardHtml(fen, lastMove) {
+    if (!fen) return '';
+    const parts    = fen.split(' ');
+    const rows     = parts[0].split('/');
+    const cells    = [];
+
+    // 마지막 수 하이라이트 대상
+    const hilite   = new Set(lastMove ? [lastMove.from, lastMove.to] : []);
+    const FILES    = ['a','b','c','d','e','f','g','h'];
+
+    for (let r = 0; r < 8; r++) {
+      let col = 0;
+      const row = [];
+      for (const ch of rows[r]) {
+        if (/\d/.test(ch)) {
+          for (let k = 0; k < parseInt(ch); k++) row.push(null);
+        } else {
+          const color = ch === ch.toUpperCase() ? 'w' : 'b';
+          row.push({ color, type: ch.toUpperCase() });
+        }
+      }
+      // pad
+      while (row.length < 8) row.push(null);
+      for (let f = 0; f < 8; f++) {
+        const sq      = FILES[f] + (8 - r);
+        const isLight = (f + (8 - r - 1)) % 2 === 1;
+        const isHi    = hilite.has(sq);
+        const cls     = isHi ? 'mini-cell mh' : (isLight ? 'mini-cell ml' : 'mini-cell md');
+        const p       = row[f];
+        let inner     = '';
+        if (p) {
+          const key   = p.color + p.type;
+          const pCls  = p.color === 'w' ? 'mini-piece-w' : 'mini-piece-b';
+          inner       = `<span class="${pCls}">${MINI_UNICODE[key] || ''}</span>`;
+        }
+        cells.push(`<div class="${cls}">${inner}</div>`);
+      }
+    }
+    return `<div class="mini-board">${cells.join('')}</div>`;
+  }
+
+  function renderRoomCard(r) {
+    const badgeCls  = r.status === 'active'   ? 'badge-active'
+                    : r.status === 'finished'  ? 'badge-finished'
+                    :                            'badge-waiting';
+    const badgeTxt  = r.status === 'active'   ? '진행 중'
+                    : r.status === 'finished'  ? '종료됨'
+                    :                            '대기 중';
+    const hostConn  = r.players.host.connected;
+    const guestConn = r.players.guest.connected;
+
+    const hostSock  = r.players.host.socketId
+      ? '<span class="room-val mono">' + r.players.host.socketId.slice(0, 10) + '…</span>'
+      : '<span class="room-val disc">미연결</span>';
+    const guestSock = r.players.guest.socketId
+      ? '<span class="room-val mono">' + r.players.guest.socketId.slice(0, 10) + '…</span>'
+      : '<span class="room-val disc">미연결</span>';
+
+    const hostConnEl  = hostConn
+      ? '<span class="room-val conn">● 연결됨</span>'
+      : '<span class="room-val disc">○ 끊김</span>';
+    const guestConnEl = guestConn
+      ? '<span class="room-val conn">● 연결됨</span>'
+      : '<span class="room-val disc">○ 끊김</span>';
+
+    // Timer section
+    let timerHtml = '';
+    if (r.timers && r.status === 'active') {
+      const wActive = r.timers.activeColor === 'white';
+      const bActive = r.timers.activeColor === 'black';
+      timerHtml = `
+        <div class="timer-bar">
+          <div class="timer-chip ${wActive ? 'active-timer' : ''}">
+            <div class="timer-chip-label">백 ♔ ${wActive ? '▶' : ''}</div>
+            <div class="timer-chip-val">${fmtTimer(r.timers.white)}</div>
+          </div>
+          <div class="timer-chip ${bActive ? 'active-timer' : ''}">
+            <div class="timer-chip-label">흑 ♚ ${bActive ? '▶' : ''}</div>
+            <div class="timer-chip-val">${fmtTimer(r.timers.black)}</div>
+          </div>
+        </div>`;
+    }
+
+    // 미니 보드 (진행 중인 게임에만 표시)
+    let miniBoardHtml = '';
+    if (r.status === 'active') {
+      if (r.gameType === 'omok') {
+        miniBoardHtml = `
+          <div class="mini-board-wrap">
+            <div class="mini-board-label">오목 15×15 (${r.moveCount}수)</div>
+            <div style="color:#8892a4;font-size:0.75rem;text-align:center;padding:8px 0;">⬤ ${r.lastMove || '진행 중'}</div>
+          </div>`;
+      } else if (r.fen) {
+        miniBoardHtml = `
+          <div class="mini-board-wrap">
+            <div class="mini-board-label">현재 국면 (${r.moveCount}수)</div>
+            ${renderMiniBoardHtml(r.fen, null)}
+          </div>`;
+      }
+    }
+
+    // 강제 종료 버튼 (진행 중인 게임 + localhost 에서만)
+    let terminateHtml = '';
+    if (r.status === 'active' && shutdownKey) {
+      terminateHtml = `<button class="btn-terminate" onclick="terminateRoom('${r.id}', '${r.shortId}')">⚡ 강제 종료</button>`;
+    }
+
+    // 참가 링크
+    const baseUrl = window.location.origin;
+    const domainLink = (r.status !== 'finished')
+      ? `<a href="${baseUrl}/?room=${r.id}" target="_blank" style="color:#58c4f5;word-break:break-all;font-size:0.78rem">${baseUrl}/?room=${r.shortId}…</a>`
+      : '<span style="color:#4a5568">-</span>';
+
+    // 관전자 수
+    const specBadge = r.spectatorCount > 0
+      ? `<span style="color:#b07fe8;font-size:0.7rem;margin-left:4px">👁 ${r.spectatorCount}</span>`
+      : '';
+
+    // 게임 타입 뱃지
+    const gameIcon = r.gameType === 'omok' ? '⬤ 오목' : '♟ 체스';
+
+    return `
+      <div class="room-card">
+        <div class="room-top">
+          <span class="room-id">#${r.shortId}${specBadge}</span>
+          <span style="font-size:0.7rem;color:#8892a4;margin-right:auto;padding-left:6px">${gameIcon}</span>
+          <span class="room-badge ${badgeCls}">${badgeTxt}</span>
+        </div>
+        <div class="room-grid">
+          <div class="room-row">
+            <span class="room-key">호스트</span>
+            ${hostSock}
+          </div>
+          <div class="room-row">
+            <span class="room-key">게스트</span>
+            ${guestSock}
+          </div>
+          <div class="room-row">
+            <span class="room-key">호스트 색</span>
+            <span class="room-val">${r.hostColor === 'white' ? '♔ 백' : '♚ 흑'}</span>
+          </div>
+          <div class="room-row">
+            <span class="room-key">수 기록</span>
+            <span class="room-val">${r.moveCount}수${r.lastMove ? ' (' + r.lastMove + ')' : ''}</span>
+          </div>
+          <div class="room-row">
+            <span class="room-key">호스트 상태</span>
+            ${hostConnEl}
+          </div>
+          <div class="room-row">
+            <span class="room-key">게스트 상태</span>
+            ${guestConnEl}
+          </div>
+        </div>
+        ${timerHtml}
+        ${miniBoardHtml}
+        <div class="domain-row">
+          <span class="room-key" style="min-width:52px">참가 링크</span>
+          ${domainLink}
+        </div>
+        ${terminateHtml}
+      </div>`;
+  }
+
+  function renderPlayersView(rooms) {
+    // Flat list of connected players across filtered rooms
+    const players = [];
+    rooms.forEach(r => {
+      if (r.players.host.connected) {
+        players.push({ role: '호스트 ♔', color: r.hostColor, socketId: r.players.host.socketId, ip: r.players.host.ip, roomShort: r.shortId, status: r.status });
+      }
+      if (r.players.guest.connected) {
+        players.push({ role: '게스트 ♚', color: r.hostColor === 'white' ? 'black' : 'white', socketId: r.players.guest.socketId, ip: r.players.guest.ip, roomShort: r.shortId, status: r.status });
+      }
+    });
+
+    if (players.length === 0) return '<div class="detail-empty">접속 중인 플레이어가 없습니다.</div>';
+
+    return players.map(p => `
+      <div class="room-card">
+        <div class="room-top">
+          <span class="room-id">${p.role}</span>
+          <span class="room-badge ${p.status === 'active' ? 'badge-active' : p.status === 'finished' ? 'badge-finished' : 'badge-waiting'}">#${p.roomShort}</span>
+        </div>
+        <div class="room-grid">
+          <div class="room-row">
+            <span class="room-key">소켓 ID</span>
+            <span class="room-val mono">${p.socketId ? p.socketId.slice(0, 14) + '…' : '-'}</span>
+          </div>
+          <div class="room-row">
+            <span class="room-key">색상</span>
+            <span class="room-val">${p.color === 'white' ? '♔ 백' : '♚ 흑'}</span>
+          </div>
+          <div class="room-row" style="grid-column:1/-1">
+            <span class="room-key">IP</span>
+            <span class="room-val mono">${p.ip || '-'}</span>
+          </div>
+        </div>
+      </div>`).join('');
+  }
+
+  // ── 온라인 / 오프라인 ─────────────────────────────────────────────
+  function setOnline(data) {
+    document.getElementById('dot').className           = 'dot online';
+    document.getElementById('status-text').textContent = '온라인';
+    document.getElementById('uptime-bar').textContent  = '업타임: ' + fmtUptime(data.uptime);
+    document.getElementById('v-active').textContent    = data.rooms.active;
+    document.getElementById('v-waiting').textContent   = data.rooms.waiting;
+    document.getElementById('v-players').textContent   = data.players.connected;
+    document.getElementById('v-total').textContent     = data.rooms.total;
+
+    lastRoomList = data.roomList || [];
+
+    // 패널이 열려 있으면 실시간 갱신
+    if (activeFilter) renderDetail();
+
+    if (data.tunnelUrl) {
+      document.getElementById('tunnel-url').textContent = data.tunnelUrl;
+      document.getElementById('tunnel-box').classList.add('visible');
+    } else {
+      document.getElementById('tunnel-box').classList.remove('visible');
+    }
+
+    if (data.shutdownKey) {
+      shutdownKey = data.shutdownKey;
+      document.getElementById('stop-btn').disabled = false;
+    }
+
+    document.getElementById('offline-msg').classList.remove('visible');
+  }
+
+  function setOffline() {
+    document.getElementById('dot').className           = 'dot offline';
+    document.getElementById('status-text').textContent = '오프라인';
+    document.getElementById('uptime-bar').textContent  = '업타임: --';
+    ['v-active','v-waiting','v-players','v-total'].forEach(id => {
+      document.getElementById(id).textContent = '-';
+    });
+    document.getElementById('stop-btn').disabled = true;
+    document.getElementById('offline-msg').classList.add('visible');
+    lastRoomList = [];
+    if (activeFilter) renderDetail();
+  }
+
+  // ── 폴링 ─────────────────────────────────────────────────────────
+  async function poll() {
+    try {
+      const res  = await fetch('/api/status', { cache: 'no-store' });
+      const data = await res.json();
+      setOnline(data);
+    } catch {
+      setOffline();
+    }
+  }
+
+  // ── 서버 종료 ─────────────────────────────────────────────────────
+  async function confirmStop() {
+    if (!shutdownKey) return;
+    if (!confirm('서버를 종료하시겠습니까?\n진행 중인 모든 게임이 종료됩니다.')) return;
+
+    document.getElementById('stop-btn').disabled    = true;
+    document.getElementById('stop-btn').textContent = '종료 중...';
+    try {
+      await fetch('/admin/shutdown', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: shutdownKey }),
+      });
+      showToast('서버가 종료됩니다.');
+      setTimeout(setOffline, 1500);
+    } catch {
+      showToast('종료 요청 실패. stop.bat을 실행하세요.');
+      document.getElementById('stop-btn').disabled    = false;
+      document.getElementById('stop-btn').textContent = '⏹ 서버 종료';
+    }
+  }
+
+  function copyTunnel() {
+    const url = document.getElementById('tunnel-url').textContent;
+    if (!url) return;
+    navigator.clipboard.writeText(url).then(() => showToast('주소가 복사되었습니다.'));
+  }
+
+  // ── 게임 강제 종료 ─────────────────────────────────────────────────
+  async function terminateRoom(roomId, shortId) {
+    if (!shutdownKey) { showToast('localhost 접속 시에만 강제 종료가 가능합니다.'); return; }
+    if (!confirm(`방 #${shortId}의 게임을 강제 종료하시겠습니까?\n무승부(관리자)로 처리됩니다.`)) return;
+    try {
+      const res = await fetch('/admin/terminate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: shutdownKey, roomId }),
+      });
+      const data = await res.json();
+      showToast(res.ok ? `방 #${shortId} 강제 종료 완료` : (data.error || '종료 실패'));
+    } catch {
+      showToast('서버 오류. 다시 시도하세요.');
+    }
+  }
+
+  // 즉시 폴링 후 3초 간격 반복
+  poll();
+  pollTimer = setInterval(poll, 3000);
+</script>
+</body>
+</html>
