@@ -19,6 +19,7 @@
     <div class="logo">
       <span class="logo-piece" id="logo-piece">🎮</span>
       <h1 id="logo-title">게임 플랫폼</h1>
+      <button class="btn-my-stats" onclick="showStatsModal()" title="내 전적 보기">📊</button>
     </div>
 
     <!-- 게임 선택 허브 -->
@@ -29,37 +30,55 @@
           <div class="game-card-icon">♟</div>
           <div class="game-card-name">체스</div>
           <div class="game-card-desc">전략 2인 게임<br>8×8 격자판</div>
-          <button class="btn-play">플레이</button>
+          <div class="card-actions">
+            <button class="btn-rules" onclick="showRules('chess');event.stopPropagation()">📋 규칙</button>
+            <button class="btn-play">플레이</button>
+          </div>
         </div>
         <div class="game-card" id="card-omok" onclick="selectGame('omok')">
           <div class="game-card-icon">⬤</div>
           <div class="game-card-name">오목</div>
           <div class="game-card-desc">렌주룰 5목<br>15×15 격자판</div>
-          <button class="btn-play">플레이</button>
+          <div class="card-actions">
+            <button class="btn-rules" onclick="showRules('omok');event.stopPropagation()">📋 규칙</button>
+            <button class="btn-play">플레이</button>
+          </div>
         </div>
         <div class="game-card" id="card-connect4" onclick="selectGame('connect4')">
           <div class="game-card-icon">🔴</div>
           <div class="game-card-name">사목</div>
           <div class="game-card-desc">4개 연결 승리<br>7×6 낙하 보드</div>
-          <button class="btn-play">플레이</button>
+          <div class="card-actions">
+            <button class="btn-rules" onclick="showRules('connect4');event.stopPropagation()">📋 규칙</button>
+            <button class="btn-play">플레이</button>
+          </div>
         </div>
         <div class="game-card" id="card-othello" onclick="selectGame('othello')">
           <div class="game-card-icon">⬜</div>
           <div class="game-card-name">오셀로</div>
           <div class="game-card-desc">돌 뒤집기 전략<br>8×8 격자판</div>
-          <button class="btn-play">플레이</button>
+          <div class="card-actions">
+            <button class="btn-rules" onclick="showRules('othello');event.stopPropagation()">📋 규칙</button>
+            <button class="btn-play">플레이</button>
+          </div>
         </div>
         <div class="game-card" id="card-indianpoker" onclick="selectGame('indianpoker')">
           <div class="game-card-icon">🃏</div>
           <div class="game-card-name">인디언 포커</div>
           <div class="game-card-desc">상대 카드로<br>심리 배팅</div>
-          <button class="btn-play">플레이</button>
+          <div class="card-actions">
+            <button class="btn-rules" onclick="showRules('indianpoker');event.stopPropagation()">📋 규칙</button>
+            <button class="btn-play">플레이</button>
+          </div>
         </div>
         <div class="game-card" id="card-checkers" onclick="selectGame('checkers')">
           <div class="game-card-icon">🔴</div>
           <div class="game-card-name">체커</div>
           <div class="game-card-desc">점프 이동·킹<br>8×8 격자판</div>
-          <button class="btn-play">플레이</button>
+          <div class="card-actions">
+            <button class="btn-rules" onclick="showRules('checkers');event.stopPropagation()">📋 규칙</button>
+            <button class="btn-play">플레이</button>
+          </div>
         </div>
       </div>
     </section>
@@ -108,7 +127,7 @@
     <section id="waiting-section" style="display:none;">
       <div class="card">
         <h2>친구를 초대하세요</h2>
-        <p class="subtitle">아래 링크를 카카오톡으로 전달하세요</p>
+        <p class="subtitle">링크를 공유하면 게임이 시작됩니다</p>
 
         <div class="share-link-box">
           <span id="share-link-text"></span>
@@ -118,9 +137,18 @@
         <div class="share-buttons">
           <button class="btn-kakao" id="kakao-btn">
             <img src="https://developers.kakao.com/assets/img/about/logos/kakaolink/kakaolink_btn_medium.png" alt="카카오" width="20">
-            카카오톡으로 공유
+            카카오톡
           </button>
-          <button class="btn-secondary" id="copy-link-btn">링크 복사</button>
+          <button class="btn-share btn-line" id="line-btn">
+            <span class="share-icon">💬</span>LINE
+          </button>
+          <button class="btn-share btn-telegram" id="telegram-btn">
+            <span class="share-icon">✈️</span>Telegram
+          </button>
+          <button class="btn-share btn-webshare" id="webshare-btn" style="display:none">
+            <span class="share-icon">📤</span>공유하기
+          </button>
+          <button class="btn-secondary" id="copy-link-btn">🔗 링크 복사</button>
         </div>
 
         <div class="waiting-indicator">
@@ -157,8 +185,36 @@
 
   <div id="copy-toast" class="toast">링크가 복사되었습니다!</div>
 
+  <!-- 내 전적 모달 -->
+  <div id="stats-modal" class="rules-modal" style="display:none" onclick="closeStatsModal()">
+    <div class="rules-modal-content" onclick="event.stopPropagation()">
+      <div class="rules-modal-header">
+        <h2>📊 내 전적</h2>
+        <button class="rules-close-btn" onclick="closeStatsModal()">✕</button>
+      </div>
+      <div class="rules-body">
+        <table id="stats-table" class="stats-table"></table>
+        <div style="text-align:right;margin-top:16px;">
+          <button class="btn-stats-reset" onclick="confirmResetStats()">기록 초기화</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 규칙 모달 -->
+  <div id="rules-modal" class="rules-modal" style="display:none" onclick="closeRules()">
+    <div class="rules-modal-content" onclick="event.stopPropagation()">
+      <div class="rules-modal-header">
+        <h2 id="rules-title"></h2>
+        <button class="rules-close-btn" onclick="closeRules()">✕</button>
+      </div>
+      <div id="rules-body" class="rules-body"></div>
+    </div>
+  </div>
+
   <script src="https://developers.kakao.com/sdk/js/kakao.min.js"></script>
   <script src="/socket.io/socket.io.js"></script>
+  <script src="js/stats.js"></script>
   <script src="js/lobby.js"></script>
   <!-- Service Worker 등록 -->
   <script>

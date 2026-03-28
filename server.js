@@ -167,6 +167,16 @@ function cleanRateLimit(socketId) {
   }
 }
 
+// 1시간마다 오래된 rateLimits 항목 자동 정리 (메모리 누수 방지)
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, times] of rateLimits) {
+    const recent = times.filter(t => now - t < 60 * 1000);
+    if (recent.length === 0) rateLimits.delete(key);
+    else rateLimits.set(key, recent);
+  }
+}, 60 * 60 * 1000);
+
 // ========== Helpers ==========
 function log(msg) {
   const ts = new Date().toLocaleTimeString('ko-KR');

@@ -337,6 +337,7 @@ html, body {
   overflow: hidden;
   user-select: none;
   -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
 .cell {
@@ -542,6 +543,13 @@ html, body {
   color: var(--text-muted);
 }
 .btn-neutral:hover { background: rgba(255,255,255,0.1); }
+
+.btn-info {
+  background: rgba(74,158,255,0.1);
+  color: var(--blue);
+  border-color: rgba(74,158,255,0.3);
+}
+.btn-info:hover { background: rgba(74,158,255,0.2); }
 
 .btn-chat {
   background: rgba(74,158,255,0.1);
@@ -919,6 +927,8 @@ html, body {
 #omokboard {
   position: relative;
   user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
 /* 15×15 CSS grid — each cell is an intersection */
@@ -1122,6 +1132,8 @@ html, body {
   flex-direction: column;
   gap: 0;
   user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
 .c4-arrows {
@@ -1246,6 +1258,9 @@ html, body {
   padding: 6px;
   border-radius: 8px;
   border: 2px solid #14451e;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
 .othello-cell {
@@ -1394,6 +1409,8 @@ html, body {
   border-radius: 6px;
   overflow: hidden;
   user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
 .ck-cell {

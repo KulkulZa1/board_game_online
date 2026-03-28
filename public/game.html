@@ -168,6 +168,7 @@
 
       <!-- 게임 컨트롤 -->
       <div id="game-controls">
+        <button class="btn-control btn-info" id="rules-btn" title="게임 규칙 보기">📋 규칙</button>
         <button class="btn-control btn-danger" id="resign-btn">기권</button>
         <button class="btn-control btn-neutral" id="draw-btn">무승부 제안</button>
         <button class="btn-control btn-leave" id="leave-btn">나가기</button>
@@ -245,6 +246,17 @@
     </div>
   </div>
 
+  <!-- 규칙 모달 -->
+  <div id="game-rules-modal" class="modal" style="display:none;" onclick="if(event.target===this)this.style.display='none'">
+    <div class="modal-content" style="max-width:460px;max-height:75vh;overflow-y:auto;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+        <h2 id="game-rules-title" style="margin:0;font-size:17px;"></h2>
+        <button class="modal-close" id="game-rules-close-btn">✕</button>
+      </div>
+      <div id="game-rules-body"></div>
+    </div>
+  </div>
+
   <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.12.0/chess.min.js"></script>
   <script src="/socket.io/socket.io.js"></script>
   <script src="js/sound.js"></script>
@@ -256,6 +268,7 @@
   <script src="js/othello-board.js"></script>
   <script src="js/indian-poker.js"></script>
   <script src="js/checkers-board.js"></script>
+  <script src="js/stats.js"></script>
   <script src="js/review.js"></script>
   <script src="js/game.js"></script>
   <script>
