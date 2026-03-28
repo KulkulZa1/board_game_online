@@ -19,6 +19,13 @@
   let drawOfferPending = false;
   let pendingSpectatorSocketId = null;
 
+  // ========== 버튼 중복/도배 방지 ==========
+  let drawOfferCount    = 0;     // 게임당 무승부 제안 누적 횟수
+  let drawLastOfferTime = 0;     // 마지막 무승부 제안 시각 (ms)
+  let drawBtnDisabled   = false; // 임시 비활성 여부 (횟수 초과 시)
+  let resignLastClick   = 0;     // 마지막 기권 버튼 클릭 시각
+  let resignEmitted     = false; // 기권 이중 전송 방지 플래그
+
   // ========== Socket ==========
   const socket = io({ reconnectionAttempts: 20 });
 
@@ -241,6 +248,11 @@
     if (ActiveBoard) ActiveBoard.setMyTurn(false);
     Timer.stopLoop();
 
+    // 버튼 보호 상태 초기화
+    drawOfferCount = 0; drawBtnDisabled = false; drawLastOfferTime = 0;
+    const drawBtnEl = document.getElementById('draw-btn');
+    if (drawBtnEl) { drawBtnEl.disabled = false; drawBtnEl.textContent = '무승부 제안'; }
+
     // 승리 돌 강조
     if (gameType === 'omok' && winCells && winCells.length) {
       OmokBoard.highlightWin(winCells);
@@ -313,6 +325,28 @@
 
   document.getElementById('draw-btn').addEventListener('click', () => {
     if (gameType !== 'chess' || gameStatus !== 'active' || myRole === 'spectator') return;
+    if (drawBtnDisabled) return;
+    const now = Date.now();
+    if (now - drawLastOfferTime < 5000) {
+      showToastMsg('무승부 제안은 5초에 한 번만 가능합니다.');
+      return;
+    }
+    drawLastOfferTime = now;
+    drawOfferCount++;
+    if (drawOfferCount >= 3) {
+      drawBtnDisabled = true;
+      const btn = document.getElementById('draw-btn');
+      btn.disabled = true;
+      btn.textContent = '무승부 제안 (대기 중)';
+      showToastMsg('무승부 제안이 너무 많습니다. 60초 후 재사용 가능합니다.');
+      setTimeout(() => {
+        drawBtnDisabled = false;
+        drawOfferCount  = 0;
+        btn.disabled    = false;
+        btn.textContent = '무승부 제안';
+      }, 60000);
+      return;
+    }
     socket.emit('game:draw:offer');
     showToastMsg('무승부를 제안했습니다.');
   });
@@ -320,10 +354,15 @@
   // ========== Resign ==========
   document.getElementById('resign-btn').addEventListener('click', () => {
     if (gameStatus !== 'active' || myRole === 'spectator') return;
+    const now = Date.now();
+    if (now - resignLastClick < 3000) return;   // 3초 쿨다운
+    resignLastClick = now;
     resignModal.style.display = 'flex';
   });
 
   document.getElementById('resign-confirm-btn').addEventListener('click', () => {
+    if (resignEmitted) return;                  // 이중 전송 방지
+    resignEmitted = true;
     resignModal.style.display = 'none';
     socket.emit('game:resign');
   });

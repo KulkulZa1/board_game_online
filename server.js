@@ -643,6 +643,7 @@ io.on('connection', (socket) => {
 
   // --- Game: Resign ---
   socket.on('game:resign', () => {
+    if (!rateCheck(socket.id, 'resign', 3, 60 * 1000)) return;
     const found = getRoomBySocketId(socket.id);
     if (!found) return;
     const { room, role } = found;
@@ -655,6 +656,7 @@ io.on('connection', (socket) => {
 
   // --- Game: Draw offer ---
   socket.on('game:draw:offer', () => {
+    if (!rateCheck(socket.id, 'drawOffer', 5, 60 * 1000)) return;
     const found = getRoomBySocketId(socket.id);
     if (!found) return;
     const { room, role } = found;
