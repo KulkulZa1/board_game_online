@@ -62,33 +62,38 @@ const GAME_RULES = {
 
 (function () {
   const params = new URLSearchParams(location.search);
-  const roomId = params.get('room');
+  const roomId       = params.get('room');
+  const soloGame     = params.get('solo');   // 'connect4' | (향후 다른 게임)
+  const soloColor    = params.get('color') || 'white';
+  const isSoloMode   = !!soloGame;
 
-  if (!roomId) {
+  if (!roomId && !isSoloMode) {
     location.href = '/';
     return;
   }
 
   // ========== State ==========
-  let gameType     = null;        // 'chess' | 'omok' | 'connect4' | 'othello' | 'indianpoker' | 'checkers'
-  let ActiveBoard  = null;        // Board, OmokBoard, Connect4Board, OthelloBoard, IndianPoker, CheckersBoard
-  let myColor      = null;
-  let myRole       = null;        // 'host' | 'guest' | 'spectator'
+  let gameType     = isSoloMode ? soloGame : null;
+  let ActiveBoard  = null;
+  let myColor      = isSoloMode ? soloColor : null;
+  let myRole       = isSoloMode ? 'host' : null;  // solo에서는 항상 host
   let gameStatus   = 'connecting';
-  let isUnlimited  = false;
-  let chess        = null;        // chess.js 인스턴스 (체스 전용)
+  let isUnlimited  = true;  // solo는 타이머 없음
+  let chess        = null;
   let drawOfferPending = false;
   let pendingSpectatorSocketId = null;
 
   // ========== 버튼 중복/도배 방지 ==========
-  let drawOfferCount    = 0;     // 게임당 무승부 제안 누적 횟수
-  let drawLastOfferTime = 0;     // 마지막 무승부 제안 시각 (ms)
-  let drawBtnDisabled   = false; // 임시 비활성 여부 (횟수 초과 시)
-  let resignLastClick   = 0;     // 마지막 기권 버튼 클릭 시각
-  let resignEmitted     = false; // 기권 이중 전송 방지 플래그
+  let drawOfferCount    = 0;
+  let drawLastOfferTime = 0;
+  let drawBtnDisabled   = false;
+  let resignLastClick   = 0;
+  let resignEmitted     = false;
 
-  // ========== Socket ==========
-  const socket = io({ reconnectionAttempts: 20 });
+  // ========== Socket (솔로 모드에서는 더미 사용) ==========
+  const socket = isSoloMode
+    ? { on: () => {}, emit: () => {}, connected: false, disconnect: () => {} }
+    : io({ reconnectionAttempts: 20 });
 
   // ========== DOM ==========
   const connectingOverlay       = document.getElementById('connecting-overlay');
@@ -105,6 +110,12 @@ const GAME_RULES = {
   const oppLabel  = document.getElementById('opponent-label');
   const myDot     = document.getElementById('my-dot');
   const oppDot    = document.getElementById('opponent-dot');
+
+  // 솔로 모드: 연결 오버레이 즉시 숨김
+  if (isSoloMode) {
+    connectingOverlay.style.display    = 'none';
+    spectatorJoinOverlay.style.display = 'none';
+  }
 
   // ========== Board area switcher ==========
   function switchBoardArea(type) {
@@ -1020,4 +1031,198 @@ const GAME_RULES = {
     // 간단 버전: 서버에서 validMoves 받아오면 그걸 씀
     return [];
   }
+
+  // =========================================================
+  // ========== 솔로 모드 (vs AI) ==========
+  // =========================================================
+  if (isSoloMode) {
+    // 솔로 모드 전용 상태
+    let soloBoard      = [];
+    let soloColHeights = [0, 0, 0, 0, 0, 0, 0];
+    let soloTurn       = 'white';    // white(선공) = 사목에서 빨강
+    const aiColor      = soloColor === 'white' ? 'black' : 'white';
+    const playerColor  = soloColor;
+    let soloGameOver   = false;
+    let aiThinking     = false;
+
+    // 6×7 빈 보드 생성
+    function makeSoloBoard() {
+      return Array.from({ length: 6 }, () => Array(7).fill(null));
+    }
+
+    // 솔로 모드 초기화
+    function initSoloGame() {
+      soloBoard      = makeSoloBoard();
+      soloColHeights = [0, 0, 0, 0, 0, 0, 0];
+      soloTurn       = 'white';
+      soloGameOver   = false;
+      aiThinking     = false;
+
+      gameStatus = 'active';
+      gameType   = 'connect4';
+
+      // 보드 영역 표시
+      switchBoardArea('connect4');
+
+      // Connect4Board 초기화 (기존 컴포넌트 재사용)
+      Connect4Board.init({
+        board:      soloBoard,
+        myColor:    playerColor,
+        onMove:     handleSoloPlayerMove,
+        colHeights: soloColHeights,
+      });
+
+      // 플레이어 턴 여부 결정
+      const myTurnFirst = playerColor === 'white';
+      Connect4Board.setMyTurn(myTurnFirst);
+
+      // UI 설정
+      connectingOverlay.style.display    = 'none';
+      spectatorJoinOverlay.style.display = 'none';
+
+      const colorLabel = playerColor === 'white' ? '빨강 (선공)' : '노랑 (후공)';
+      myLabel.textContent  = `나 (${colorLabel})`;
+      oppLabel.textContent = 'AI 봇';
+      myDot.className      = 'player-color-dot ' + playerColor;
+      oppDot.className     = 'player-color-dot ' + aiColor;
+
+      // 솔로 모드: 기권 = 재시작, 무승부 버튼 숨김
+      document.getElementById('resign-btn').style.display = '';
+      document.getElementById('draw-btn').style.display   = 'none';
+      document.getElementById('leave-btn').style.display  = '';
+
+      ActiveBoard = Connect4Board;
+      updateTurnIndicator(soloTurn);
+
+      // AI가 선공이면 먼저 두게
+      if (playerColor !== 'white') {
+        setTimeout(soloAIMove, 600);
+      }
+    }
+
+    // 플레이어 이동 처리
+    function handleSoloPlayerMove({ col }) {
+      if (soloGameOver || aiThinking) return;
+      if (soloTurn !== playerColor) return;
+      if (soloColHeights[col] >= 6) return;
+
+      applySoloMove(col, playerColor);
+
+      // 승리/무승부 확인
+      if (AIConnect4.checkWin(soloBoard, playerColor)) {
+        endSoloGame(playerColor, 'four-in-a-row');
+        return;
+      }
+      if (soloColHeights.every(h => h >= 6)) {
+        endSoloGame('draw', 'board-full');
+        return;
+      }
+
+      // AI 차례
+      soloTurn = aiColor;
+      updateTurnIndicator(soloTurn);
+      Connect4Board.setMyTurn(false);
+      aiThinking = true;
+
+      setTimeout(soloAIMove, 400 + Math.random() * 300);
+    }
+
+    // AI 이동 처리
+    function soloAIMove() {
+      if (soloGameOver) return;
+
+      const col = AIConnect4.getBestMove(soloBoard, soloColHeights, aiColor, playerColor);
+      applySoloMove(col, aiColor);
+      aiThinking = false;
+
+      if (AIConnect4.checkWin(soloBoard, aiColor)) {
+        endSoloGame(aiColor, 'four-in-a-row');
+        return;
+      }
+      if (soloColHeights.every(h => h >= 6)) {
+        endSoloGame('draw', 'board-full');
+        return;
+      }
+
+      soloTurn = playerColor;
+      updateTurnIndicator(soloTurn);
+      Connect4Board.setMyTurn(true);
+    }
+
+    // 보드에 돌 놓기 + UI 갱신
+    function applySoloMove(col, color) {
+      const row = 6 - 1 - soloColHeights[col];
+      soloBoard[row][col] = color;
+      soloColHeights[col]++;
+
+      // Connect4Board.updateAfterMove로 UI 갱신
+      const moveRecord = { col, color };
+      Connect4Board.updateAfterMove(soloBoard, moveRecord, soloColHeights);
+
+      if (typeof Sound !== 'undefined') Sound.play('move');
+    }
+
+    // 게임 종료
+    function endSoloGame(winner, reason) {
+      soloGameOver = true;
+      gameStatus   = 'finished';
+      Connect4Board.setMyTurn(false);
+
+      // 이긴 칸 하이라이트
+      if (winner !== 'draw') {
+        const winCells = getSoloWinCells(soloBoard, winner);
+        if (winCells.length) Connect4Board.highlightWin(winCells);
+      }
+
+      // 통계 저장
+      if (typeof Stats !== 'undefined') {
+        const result = winner === playerColor ? 'win' : winner === 'draw' ? 'draw' : 'loss';
+        Stats.record('connect4', result);
+      }
+
+      // 사운드
+      if (typeof Sound !== 'undefined') {
+        if (winner === 'draw')          Sound.play('draw');
+        else if (winner === playerColor) Sound.play('win');
+        else                             Sound.play('lose');
+      }
+
+      showGameOver(winner, reason);
+
+      // 재대국 버튼 → 페이지 재로드
+      document.getElementById('rematch-btn').textContent = '다시하기';
+      document.getElementById('rematch-btn').onclick = () => location.reload();
+    }
+
+    // 이긴 칸 좌표 계산
+    function getSoloWinCells(board, color) {
+      const dirs = [[0,1],[1,0],[1,1],[1,-1]];
+      for (const [dr, dc] of dirs) {
+        for (let r = 0; r < 6; r++) {
+          for (let c = 0; c < 7; c++) {
+            if (board[r][c] !== color) continue;
+            const cells = [[r, c]];
+            for (let i = 1; i < 4; i++) {
+              const nr = r + dr*i, nc = c + dc*i;
+              if (nr < 0 || nr >= 6 || nc < 0 || nc >= 7 || board[nr][nc] !== color) break;
+              cells.push([nr, nc]);
+            }
+            if (cells.length === 4) return cells.map(([rr, cc]) => ({ row: rr, col: cc }));
+          }
+        }
+      }
+      return [];
+    }
+
+    // 솔로 모드 기권 처리 (기존 resign-btn 재사용)
+    document.getElementById('resign-btn').onclick = () => {
+      if (soloGameOver) return;
+      if (!confirm('게임을 포기하고 다시 시작하시겠습니까?')) return;
+      endSoloGame(aiColor, 'resign');
+    };
+
+    // 솔로 모드 시작
+    initSoloGame();
+  }
+  // =========================================================
 })();

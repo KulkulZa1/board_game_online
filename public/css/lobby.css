@@ -447,6 +447,23 @@ h2 {
   background: rgba(74,158,255,0.25);
 }
 
+.btn-solo {
+  padding: 8px 10px;
+  background: rgba(76,175,80,0.15);
+  color: #4caf50;
+  border: 1px solid rgba(76,175,80,0.35);
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+.btn-solo:hover {
+  background: rgba(76,175,80,0.25);
+}
+
 .btn-play {
   padding: 8px 10px;
   background: linear-gradient(135deg, #f0c040, #e6a800);
