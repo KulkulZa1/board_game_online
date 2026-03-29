@@ -170,6 +170,7 @@
       <div id="game-controls">
         <button class="btn-control btn-info" id="rules-btn" title="게임 규칙 보기">📋 규칙</button>
         <button class="btn-control btn-danger" id="resign-btn">기권</button>
+        <button class="btn-control btn-undo" id="undo-btn" style="display:none;" title="마지막 수 무르기">↩ 무르기</button>
         <button class="btn-control btn-neutral" id="draw-btn">무승부 제안</button>
         <button class="btn-control btn-leave" id="leave-btn">나가기</button>
         <button class="btn-control btn-chat" id="chat-toggle-btn">💬 채팅</button>
@@ -234,6 +235,32 @@
     </div>
   </div>
 
+  <!-- 무르기 요청 모달 (멀티플레이어 - 상대방에게 표시) -->
+  <div id="undo-modal" class="modal" style="display:none;">
+    <div class="modal-content">
+      <h2>무르기 요청</h2>
+      <p>상대방이 마지막 수를 취소하려 합니다.</p>
+      <div class="modal-buttons">
+        <button class="btn-primary" id="undo-accept-btn">수락</button>
+        <button class="btn-secondary" id="undo-decline-btn">거절</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 자동 거절 설정 패널 (멀티플레이어 전용, 게임 중 표시) -->
+  <div id="auto-decline-panel" style="display:none;">
+    <label class="auto-decline-toggle" title="상대방의 무르기 요청을 자동으로 거절합니다">
+      <input type="checkbox" id="auto-decline-undo">
+      <span class="toggle-slider"></span>
+      <span class="toggle-label">무르기 자동 거절</span>
+    </label>
+    <label class="auto-decline-toggle" title="상대방의 무승부 제안을 자동으로 거절합니다">
+      <input type="checkbox" id="auto-decline-draw">
+      <span class="toggle-slider"></span>
+      <span class="toggle-label">무승부 자동 거절</span>
+    </label>
+  </div>
+
   <!-- 기권 확인 모달 -->
   <div id="resign-modal" class="modal" style="display:none;">
     <div class="modal-content">
@@ -259,30 +286,30 @@
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.12.0/chess.min.js"></script>
   <script src="/socket.io/socket.io.js"></script>
-  <script src="js/sound.js"></script>
-  <script src="js/timer.js"></script>
-  <script src="js/chat.js"></script>
-  <script src="js/board.js"></script>
-  <script src="js/omok-board.js"></script>
-  <script src="js/connect4-board.js"></script>
-  <script src="js/othello-board.js"></script>
-  <script src="js/indian-poker.js"></script>
-  <script src="js/checkers-board.js"></script>
-  <script src="js/stats.js"></script>
-  <script src="js/ai-connect4.js"></script>
-  <script src="js/ai-chess.js"></script>
-  <script src="js/ai-omok.js"></script>
-  <script src="js/ai-othello.js"></script>
-  <script src="js/ai-indianpoker.js"></script>
-  <script src="js/ai-checkers.js"></script>
-  <script src="js/game-chess.js"></script>
-  <script src="js/game-omok.js"></script>
-  <script src="js/game-connect4.js"></script>
-  <script src="js/game-othello.js"></script>
-  <script src="js/game-checkers.js"></script>
-  <script src="js/game-indianpoker.js"></script>
-  <script src="js/review.js"></script>
-  <script src="js/game.js"></script>
+  <script src="js/sound.js?v=1.2"></script>
+  <script src="js/timer.js?v=1.2"></script>
+  <script src="js/chat.js?v=1.2"></script>
+  <script src="js/board.js?v=1.2"></script>
+  <script src="js/omok-board.js?v=1.2"></script>
+  <script src="js/connect4-board.js?v=1.2"></script>
+  <script src="js/othello-board.js?v=1.2"></script>
+  <script src="js/indian-poker.js?v=1.2"></script>
+  <script src="js/checkers-board.js?v=1.2"></script>
+  <script src="js/stats.js?v=1.2"></script>
+  <script src="js/ai-connect4.js?v=1.2"></script>
+  <script src="js/ai-chess.js?v=1.2"></script>
+  <script src="js/ai-omok.js?v=1.2"></script>
+  <script src="js/ai-othello.js?v=1.2"></script>
+  <script src="js/ai-indianpoker.js?v=1.3"></script>
+  <script src="js/ai-checkers.js?v=1.2"></script>
+  <script src="js/game-chess.js?v=1.2"></script>
+  <script src="js/game-omok.js?v=1.3"></script>
+  <script src="js/game-connect4.js?v=1.3"></script>
+  <script src="js/game-othello.js?v=1.2"></script>
+  <script src="js/game-checkers.js?v=1.2"></script>
+  <script src="js/game-indianpoker.js?v=1.3"></script>
+  <script src="js/review.js?v=1.2"></script>
+  <script src="js/game.js?v=1.3"></script>
   <script>
     // Sound controls init
     (function () {

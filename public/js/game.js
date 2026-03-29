@@ -66,6 +66,19 @@ const GAME_RULES = {
   const soloGame     = params.get('solo');   // 'connect4' | (향후 다른 게임)
   const soloColor    = params.get('color') || 'white';
   const isSoloMode   = !!soloGame;
+  // 솔로 모드 추가 옵션
+  const soloBoardSizeParam = params.get('boardSize');
+  const soloBoardRows      = params.get('boardRows');
+  const soloBoardCols      = params.get('boardCols');
+  const soloNumDecks       = parseInt(params.get('numDecks'))     || 2;
+  const soloWinCondition   = parseInt(params.get('winCondition')) || 2;
+  const soloOptions = {
+    numDecks:     soloNumDecks,
+    winCondition: soloWinCondition,
+    boardSize:    soloBoardSizeParam ? { size: parseInt(soloBoardSizeParam) }
+                : soloBoardRows     ? { rows: parseInt(soloBoardRows), cols: parseInt(soloBoardCols) }
+                : null,
+  };
 
   if (!roomId && !isSoloMode) {
     location.href = '/';
@@ -200,8 +213,12 @@ const GAME_RULES = {
     // 플레이어 전용 컨트롤 표시
     document.getElementById('resign-btn').style.display = '';
     document.getElementById('draw-btn').style.display   = gameType === 'chess' ? '' : 'none';
+    document.getElementById('undo-btn').style.display   = gameType === 'indianpoker' ? 'none' : '';
     // 수 기록/복기 패널 — 체스는 SAN 복기 지원
     document.getElementById('moves-panel').style.display = gameType === 'indianpoker' ? 'none' : '';
+    // 자동 거절 패널 표시 (관전자 제외, 인디언 포커 제외)
+    const autoDeclinePanel = document.getElementById('auto-decline-panel');
+    if (autoDeclinePanel && gameType !== 'indianpoker') autoDeclinePanel.style.display = '';
 
     if (state.status === 'active') {
       gameStatus = 'active';
@@ -352,6 +369,14 @@ const GAME_RULES = {
     if (gameType !== 'chess') return;
     if (drawOfferPending) return;
     drawOfferPending = true;
+    // 자동 거절 설정 확인
+    const autoDeclineDraw = document.getElementById('auto-decline-draw');
+    if (autoDeclineDraw && autoDeclineDraw.checked) {
+      drawOfferPending = false;
+      socket.emit('game:draw:respond', { accept: false });
+      showToastMsg('무승부 제안을 자동으로 거절했습니다.');
+      return;
+    }
     drawModal.style.display = 'flex';
   });
 
@@ -730,11 +755,43 @@ const GAME_RULES = {
   }
 
   function appendMoveToList(move) {
-    if (gameType === 'chess' || move.san) {
+    if (!move) return;  // 패스 이벤트 등 수(手) 없는 경우 (예: 오셀로 패스)
+    if (gameType === 'chess' || (move.san && !move.notation)) {
       appendChessMoveToList(move);
+    } else if (move.notation) {
+      appendGenericMoveToList(move);
+    } else if (move.from && move.to) {
+      // 체커: { from: {row,col}, to: {row,col}, captured, moveNum, color }
+      const fromLabel = String.fromCharCode(65 + move.from.col) + (8 - move.from.row);
+      const toLabel   = String.fromCharCode(65 + move.to.col)   + (8 - move.to.row);
+      appendGenericMoveToList({
+        moveNum:  move.moveNum,
+        color:    move.color,
+        notation: `${fromLabel}→${toLabel}${move.captured ? ' ✕' : ''}`,
+      });
     } else {
       appendOmokMoveToList(move);
     }
+  }
+
+  function appendGenericMoveToList(move) {
+    // 체커 등 notation 필드가 있는 경우 (예: "B6→A5")
+    const moveListEl = document.getElementById('move-list');
+    const stone = move.color === 'black' ? '⬤' : '○';
+    const text  = `${move.moveNum}. ${stone} ${move.notation}`;
+
+    const row = document.createElement('div');
+    row.className = 'move-row';
+    row.style.gridTemplateColumns = '1fr';
+
+    const el = document.createElement('span');
+    el.className   = 'move-san';
+    el.textContent = text;
+    el.style.color = move.color === 'black' ? '#ccc' : '#fff';
+    row.appendChild(el);
+
+    moveListEl.appendChild(row);
+    moveListEl.scrollTop = moveListEl.scrollHeight;
   }
 
   function appendChessMoveToList(move) {
@@ -775,7 +832,8 @@ const GAME_RULES = {
   function appendOmokMoveToList(move) {
     const moveListEl = document.getElementById('move-list');
     const colLetter  = String.fromCharCode(65 + move.col);
-    const rowLabel   = 15 - move.row;
+    const boardRows  = move.boardRows || 15;
+    const rowLabel   = boardRows - move.row;
     const stone      = move.color === 'black' ? '●' : '○';
     const notation   = `${move.moveNum}. ${stone} ${colLetter}${rowLabel}`;
 
@@ -800,7 +858,9 @@ const GAME_RULES = {
       'four-in-a-row':  '4목 완성',
       'board-full':     '무승부 (보드 꽉 참)',
       'no-pieces':      '상대 말 전멸',
+      'no-moves':       '이동 불가 (상대 말 전멸)',
       'chips-depleted': '칩 소진',
+      'out-of-chips':   '칩 소진',
       resign:           '기권',
       timeout:          '시간 초과',
       agreement:        '합의 무승부',
@@ -897,6 +957,21 @@ const GAME_RULES = {
   // ========== 솔로 모드 (vs AI) — game-connect4.js에 위임 ==========
   // =========================================================
   if (isSoloMode) {
+    // 무르기 버튼: 무르기 지원 게임에서만 표시 (connect4·indianpoker 제외)
+    // 솔로 모드는 상대방 승인 불필요 — 쿨다운 없이 즉시 작동
+    const UNDO_SUPPORTED = ['chess', 'omok', 'othello', 'checkers'];
+    const undoBtn = document.getElementById('undo-btn');
+    if (undoBtn) {
+      undoBtn.style.display = UNDO_SUPPORTED.includes(gameType) ? '' : 'none';
+      undoBtn.addEventListener('click', () => {
+        if (window._soloUndoCallback) window._soloUndoCallback();
+      });
+    }
+
+    // 수기록 패널 표시 (인디언 포커 제외)
+    const movesPanel = document.getElementById('moves-panel');
+    if (movesPanel) movesPanel.style.display = gameType === 'indianpoker' ? 'none' : '';
+
     const handler = GameHandlers[gameType];
     if (handler && typeof handler.startSolo === 'function') {
       handler.startSolo(soloColor, {
@@ -908,6 +983,74 @@ const GAME_RULES = {
         connectingOverlay,
         spectatorJoinOverlay,
         myLabel, oppLabel, myDot, oppDot,
+        appendMoveToList,
+        showToastMsg,
+        setupUndo: (fn) => { window._soloUndoCallback = fn; },
+      }, soloOptions);
+    }
+  }
+
+  // 멀티플레이어 무르기 소켓 이벤트 (향후 서버 구현 대응)
+  const undoModal = document.getElementById('undo-modal');
+  if (undoModal) {
+    document.getElementById('undo-accept-btn').addEventListener('click', () => {
+      undoModal.style.display = 'none';
+      socket.emit('game:undo:respond', { accept: true });
+    });
+    document.getElementById('undo-decline-btn').addEventListener('click', () => {
+      undoModal.style.display = 'none';
+      socket.emit('game:undo:respond', { accept: false });
+    });
+  }
+  socket.on('game:undo:requested', () => {
+    // 자동 거절 설정 확인
+    const autoDeclineUndo = document.getElementById('auto-decline-undo');
+    if (autoDeclineUndo && autoDeclineUndo.checked) {
+      socket.emit('game:undo:respond', { accept: false });
+      showToastMsg('무르기 요청을 자동으로 거절했습니다.');
+      return;
+    }
+    if (undoModal) undoModal.style.display = 'flex';
+  });
+  socket.on('game:undo:declined', () => {
+    showToastMsg('상대방이 무르기를 거절했습니다.');
+  });
+  socket.on('game:undo:applied', (state) => {
+    showToastMsg('무르기가 적용되었습니다.');
+    // 서버에서 새 상태 받으면 보드 재초기화
+    if (state && GameHandlers[gameType]) {
+      const handleAction = gameType === 'indianpoker' ? handleIPAction : handleMyMove;
+      const init = GameHandlers[gameType].initBoard(state, myColor, handleAction, myRole);
+      ActiveBoard = init.board;
+      if (ActiveBoard) ActiveBoard.setMyTurn(state.currentTurn === myColor);
+    }
+  });
+
+  // 멀티플레이어 무르기 버튼 (비솔로)
+  if (!isSoloMode) {
+    let undoReqTime = 0;
+    let undoRequested = false;
+    const undoBtnMulti = document.getElementById('undo-btn');
+    if (undoBtnMulti) {
+      undoBtnMulti.addEventListener('click', () => {
+        if (gameStatus !== 'active' || myRole === 'spectator') return;
+        const now = Date.now();
+        if (now - undoReqTime < 30000) {
+          showToastMsg('무르기는 30초에 한 번만 요청할 수 있습니다.');
+          return;
+        }
+        if (undoRequested) return;
+        undoReqTime = now;
+        undoRequested = true;
+        socket.emit('game:undo:request');
+        showToastMsg('무르기를 요청했습니다. 상대방 수락을 기다립니다.');
+        undoBtnMulti.textContent = '무르기 대기 중...';
+        undoBtnMulti.disabled = true;
+        setTimeout(() => {
+          undoRequested = false;
+          undoBtnMulti.textContent = '↩ 무르기';
+          undoBtnMulti.disabled = false;
+        }, 30000);
       });
     }
   }

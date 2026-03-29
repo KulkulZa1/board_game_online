@@ -49,9 +49,10 @@ const GAME_RULES = {
     title: '🃏 인디언 포커 규칙',
     sections: [
       { head: '기본', text: '자신의 카드는 이마에 대고 보지 않습니다. 화면에 "?"로 표시됩니다. 상대방의 카드는 볼 수 있습니다.' },
+      { head: '카드', text: '카드 범위: A(1) ~ 10. 기본적으로 높은 숫자가 강합니다.\n• A는 특별 규칙: 10을 상대로만 이깁니다. 나머지 경우(2~9 상대)에는 최하위입니다.' },
       { head: '배팅', text: '게스트가 먼저 배팅 → 호스트 → 쇼다운 순서로 진행됩니다.' },
-      { head: '액션', text: '• 콜: 상대 배팅에 맞춤\n• 레이즈: 5칩 추가 (최대 3회)\n• 폴드: 포기, 상대방 승리' },
-      { head: '승패', text: '쇼다운 시 높은 숫자가 이깁니다 (A < 2 < … < K). 동점이면 호스트 승리.' },
+      { head: '액션', text: '• 콜: 상대 배팅에 맞춤\n• 레이즈: 5칩 추가 (최대 3회)\n• 폴드: 포기, 상대방 승리\n⚠️ 10을 가지고 폴드하면 앤티만큼 추가 칩 손실!' },
+      { head: '승리 조건', text: '① 칩 모두 획득 시 종료\n② 덱 소진 후 칩 비교 (더 많은 쪽 승리)\n방 생성 시 선택 가능합니다.' },
       { head: '쿨다운', text: '각 액션은 1.5초에 1번만 가능합니다.' },
     ]
   },
@@ -180,6 +181,7 @@ window.startSolo = function(gameType) {
   const createSection     = document.getElementById('create-section');
   const createTitle       = document.getElementById('create-title');
   const colorSection      = document.getElementById('color-section');
+  const boardSizeGroup    = document.getElementById('board-size-group');
   const createBtn         = document.getElementById('create-btn');
 
   const gameLabelMap = {
@@ -187,17 +189,19 @@ window.startSolo = function(gameType) {
     othello: '오셀로', indianpoker: '인디언 포커', checkers: '체커'
   };
 
-  // 솔로 전용 색상 선택 UI
+  // 솔로 옵션 상태
+  let soloBoardSize  = null;
+  let soloNumDecks   = 2;
+  let soloWinCond    = 2;
+
+  // 솔로 전용 UI
   gameSelectSection.style.display = 'none';
   createSection.style.display     = '';
   createTitle.textContent = `혼자하기 — ${gameLabelMap[gameType] || gameType}`;
-  colorSection.style.display = '';
   document.getElementById('color-label').textContent = '내 색상 선택 (AI가 반대 색)';
 
-  // 시간 선택 숨김 (솔로 = 무제한)
-  document.querySelectorAll('.form-group').forEach(g => {
-    if (g.id !== 'color-section') g.style.display = 'none';
-  });
+  // 모든 form-group 숨김 후 필요한 것만 표시
+  document.querySelectorAll('.form-group').forEach(g => { g.style.display = 'none'; });
 
   // 색상 버튼 라벨 - 게임별 설정
   const soloColorMeta = {
@@ -213,9 +217,76 @@ window.startSolo = function(gameType) {
   document.getElementById('label-white').textContent = cm.labelW;
   document.getElementById('icon-black').textContent  = cm.iconB;
   document.getElementById('label-black').textContent = cm.labelB;
-  // 인디언 포커는 색상 선택 불필요 (항상 플레이어 역할 고정)
-  const soloColorSection = document.getElementById('color-section');
-  if (soloColorSection) soloColorSection.style.display = gameType === 'indianpoker' ? 'none' : '';
+
+  // 인디언 포커: 색상 선택 불필요, 덱/승리조건 표시
+  if (gameType === 'indianpoker') {
+    colorSection.style.display = 'none';
+    boardSizeGroup.style.display = '';
+    boardSizeGroup.innerHTML = `
+      <label class="create-label">덱 수</label>
+      <div class="board-size-btns" id="solo-deck-btns">
+        ${[1,2,3].map(n =>
+          `<button class="size-btn${n===2?' active':''}" onclick="window._setSoloDecks(${n},this)">${n}덱 (${n*10}장)</button>`
+        ).join('')}
+      </div>
+      <label class="create-label" style="margin-top:12px;">승리 조건</label>
+      <div class="board-size-btns" id="solo-wincond-btns">
+        <button class="size-btn" onclick="window._setSoloWinCond(1,this)">칩 모두 획득 시 종료</button>
+        <button class="size-btn active" onclick="window._setSoloWinCond(2,this)">덱 소진 후 칩 비교</button>
+      </div>`;
+  } else {
+    // 색상 선택 표시 (인디언 포커 외)
+    colorSection.style.display = '';
+
+    // 보드 크기 선택 (오목/사목)
+    if (gameType === 'omok') {
+      soloBoardSize = { size: 15 };
+      boardSizeGroup.style.display = '';
+      boardSizeGroup.innerHTML = `
+        <label class="create-label">보드 크기</label>
+        <div class="board-size-btns">
+          ${[13,15,17,19].map(s =>
+            `<button class="size-btn${s===15?' active':''}" onclick="window._setSoloBoardSizeOmok(${s},this)">${s}×${s}</button>`
+          ).join('')}
+        </div>`;
+    } else if (gameType === 'connect4') {
+      soloBoardSize = { rows: 6, cols: 7 };
+      const presets = [{rows:5,cols:4},{rows:6,cols:7},{rows:7,cols:8},{rows:8,cols:9}];
+      boardSizeGroup.style.display = '';
+      boardSizeGroup.innerHTML = `
+        <label class="create-label">보드 크기</label>
+        <div class="board-size-btns">
+          ${presets.map(p =>
+            `<button class="size-btn${p.rows===6&&p.cols===7?' active':''}" onclick="window._setSoloBoardSizeC4(${p.rows},${p.cols},this)">${p.rows}행×${p.cols}열</button>`
+          ).join('')}
+        </div>`;
+    } else {
+      boardSizeGroup.style.display = 'none';
+      boardSizeGroup.innerHTML = '';
+    }
+  }
+
+  // 솔로 보드 크기 핸들러 (클로저로 soloBoardSize 참조)
+  window._setSoloBoardSizeOmok = function(size, btn) {
+    soloBoardSize = { size };
+    btn.closest('.board-size-btns').querySelectorAll('.size-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  };
+  window._setSoloBoardSizeC4 = function(rows, cols, btn) {
+    soloBoardSize = { rows, cols };
+    btn.closest('.board-size-btns').querySelectorAll('.size-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  };
+  window._setSoloDecks = function(n, btn) {
+    soloNumDecks = n;
+    btn.closest('.board-size-btns').querySelectorAll('.size-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  };
+  window._setSoloWinCond = function(wc, btn) {
+    soloWinCond = wc;
+    btn.closest('.board-size-btns').querySelectorAll('.size-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  };
 
   // "방 만들기" → "시작"
   createBtn.textContent = '시작';
@@ -223,19 +294,31 @@ window.startSolo = function(gameType) {
     e.preventDefault();
     const selectedColorBtn = document.querySelector('.color-btn.active');
     const color = selectedColorBtn ? selectedColorBtn.dataset.color : 'white';
-    // 시간 선택 섹션 복원 (다른 게임 전환 대비)
+    // 모든 form-group 복원
     document.querySelectorAll('.form-group').forEach(g => { g.style.display = ''; });
     createBtn.textContent = '방 만들기';
     createBtn.onclick = null;
-    window.location.href = `/game.html?solo=${gameType}&color=${color}`;
+
+    let url = `/game.html?solo=${gameType}&color=${color}`;
+    if (soloBoardSize) {
+      if (soloBoardSize.size) {
+        url += `&boardSize=${soloBoardSize.size}`;
+      } else if (soloBoardSize.rows) {
+        url += `&boardRows=${soloBoardSize.rows}&boardCols=${soloBoardSize.cols}`;
+      }
+    }
+    if (gameType === 'indianpoker') {
+      url += `&numDecks=${soloNumDecks}&winCondition=${soloWinCond}`;
+    }
+    window.location.href = url;
   };
 
   // 뒤로 버튼 처리 복원
   window.backToGameSelect = function() {
     document.querySelectorAll('.form-group').forEach(g => { g.style.display = ''; });
-    // color-section 다시 표시
     const cs = document.getElementById('color-section');
     if (cs) cs.style.display = '';
+    if (boardSizeGroup) { boardSizeGroup.style.display = 'none'; boardSizeGroup.innerHTML = ''; }
     createBtn.textContent = '방 만들기';
     createBtn.onclick = null;
     window.backToGameSelect = origBack;
@@ -264,6 +347,7 @@ window.confirmResetStats = function() {
   let isCustomTime      = false;
   let currentRoomId     = null;
   let selectedBoardSize = null; // { size } for omok | { rows, cols } for connect4
+  let selectedIpOpts   = { numDecks: 2, winCondition: 2 }; // 인디언 포커 옵션
 
   // DOM
   const gameSelectSection = document.getElementById('game-select-section');
@@ -271,15 +355,6 @@ window.confirmResetStats = function() {
   const waitingSection    = document.getElementById('waiting-section');
   const joinSection       = document.getElementById('join-section');
   const errorSection      = document.getElementById('error-section');
-
-  // ========== Init ==========
-  if (roomIdFromUrl) {
-    showJoinSection();
-  } else if (gameFromUrl && ['chess', 'omok', 'connect4', 'othello', 'indianpoker', 'checkers'].includes(gameFromUrl)) {
-    selectGame(gameFromUrl);
-  } else {
-    showGameSelectSection();
-  }
 
   // ========== Section visibility ==========
   function showGameSelectSection() {
@@ -391,6 +466,7 @@ window.confirmResetStats = function() {
     selectedMinutes   = 10;
     isCustomTime      = false;
     selectedBoardSize = null;
+    selectedIpOpts    = { numDecks: 2, winCondition: 2 };
     // color-section 다시 표시 (connect4·indianpoker 선택 후 숨겨진 상태 복원)
     const colorSection = document.getElementById('color-section');
     if (colorSection) colorSection.style.display = '';
@@ -430,6 +506,21 @@ window.confirmResetStats = function() {
               onclick="window._setBoardSizeC4(${p.rows},${p.cols})">${p.rows}행×${p.cols}열</button>`
           ).join('')}
         </div>`;
+    } else if (gameType === 'indianpoker') {
+      selectedIpOpts = { numDecks: 2, winCondition: 2 };
+      group.style.display = '';
+      group.innerHTML = `
+        <label class="create-label">덱 수</label>
+        <div class="board-size-btns" id="mp-deck-btns">
+          ${[1,2,3].map(n =>
+            `<button class="size-btn${n===2?' active':''}" onclick="window._setIpDecks(${n},this)">${n}덱 (${n*10}장)</button>`
+          ).join('')}
+        </div>
+        <label class="create-label" style="margin-top:12px;">승리 조건</label>
+        <div class="board-size-btns" id="mp-wincond-btns">
+          <button class="size-btn" onclick="window._setIpWinCond(1,this)">칩 모두 획득 시 종료</button>
+          <button class="size-btn active" onclick="window._setIpWinCond(2,this)">덱 소진 후 칩 비교</button>
+        </div>`;
     } else {
       selectedBoardSize = null;
       group.style.display = 'none';
@@ -449,6 +540,18 @@ window.confirmResetStats = function() {
     document.querySelectorAll('#board-size-group .size-btn').forEach(b => {
       b.classList.toggle('active', Number(b.dataset.rows) === rows && Number(b.dataset.cols) === cols);
     });
+  };
+
+  window._setIpDecks = function (n, btn) {
+    selectedIpOpts.numDecks = n;
+    btn.closest('.board-size-btns').querySelectorAll('.size-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  };
+
+  window._setIpWinCond = function (wc, btn) {
+    selectedIpOpts.winCondition = wc;
+    btn.closest('.board-size-btns').querySelectorAll('.size-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
   };
 
   function updateColorPickerLabels(gameType) {
@@ -525,10 +628,11 @@ window.confirmResetStats = function() {
     };
 
     socket.emit('room:create', {
-      hostColor:  selectedColor,
+      hostColor:       selectedColor,
       timeControl,
-      gameType:   selectedGame,
-      boardSize:  selectedBoardSize || undefined,
+      gameType:        selectedGame,
+      boardSize:       selectedBoardSize || undefined,
+      indianPokerOpts: selectedGame === 'indianpoker' ? selectedIpOpts : undefined,
     });
   });
 
@@ -663,5 +767,14 @@ window.confirmResetStats = function() {
     } else {
       webshareBtn.style.display = 'none';
     }
+  }
+
+  // ========== Init (모든 함수 정의 후 실행) ==========
+  if (roomIdFromUrl) {
+    showJoinSection();
+  } else if (gameFromUrl && ['chess', 'omok', 'connect4', 'othello', 'indianpoker', 'checkers'].includes(gameFromUrl)) {
+    window.selectGame(gameFromUrl);
+  } else {
+    showGameSelectSection();
   }
 })();

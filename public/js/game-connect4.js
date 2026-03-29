@@ -44,29 +44,36 @@ window.GameHandlers.connect4 = (function () {
   //   myLabel, oppLabel, myDot, oppDot,
   // }
   // =========================================================
-  function startSolo(playerColor, helpers) {
+  function startSolo(playerColor, helpers, options) {
+    options = options || {};
     const {
       switchBoardArea, updateTurnIndicator, showGameOver,
       setActiveBoard, setGameStatus,
       connectingOverlay, spectatorJoinOverlay,
       myLabel, oppLabel, myDot, oppDot,
+      appendMoveToList,
     } = helpers;
+
+    const bs = (options.boardSize && options.boardSize.rows) ? options.boardSize : { rows: 6, cols: 7 };
+    const ROWS = bs.rows;
+    const COLS = bs.cols;
 
     const aiColor = playerColor === 'white' ? 'black' : 'white';
 
     let soloBoard      = [];
-    let soloColHeights = [0, 0, 0, 0, 0, 0, 0];
+    let soloColHeights = Array(COLS).fill(0);
     let soloTurn       = 'white';
     let soloGameOver   = false;
     let aiThinking     = false;
+    let moveNum        = 0;
 
     function makeSoloBoard() {
-      return Array.from({ length: 6 }, () => Array(7).fill(null));
+      return Array.from({ length: ROWS }, () => Array(COLS).fill(null));
     }
 
     // 초기화
     soloBoard      = makeSoloBoard();
-    soloColHeights = [0, 0, 0, 0, 0, 0, 0];
+    soloColHeights = Array(COLS).fill(0);
     soloTurn       = 'white';
     soloGameOver   = false;
     aiThinking     = false;
@@ -79,6 +86,7 @@ window.GameHandlers.connect4 = (function () {
       myColor:    playerColor,
       onMove:     handleSoloPlayerMove,
       colHeights: soloColHeights,
+      boardSize:  { rows: ROWS, cols: COLS },
     });
     Connect4Board.setMyTurn(playerColor === 'white');
 
@@ -115,7 +123,7 @@ window.GameHandlers.connect4 = (function () {
     function handleSoloPlayerMove({ col }) {
       if (soloGameOver || aiThinking) return;
       if (soloTurn !== playerColor) return;
-      if (soloColHeights[col] >= 6) return;
+      if (soloColHeights[col] >= ROWS) return;
 
       applySoloMove(col, playerColor);
 
@@ -123,7 +131,7 @@ window.GameHandlers.connect4 = (function () {
         endSoloGame(playerColor, 'four-in-a-row');
         return;
       }
-      if (soloColHeights.every(h => h >= 6)) {
+      if (soloColHeights.every(h => h >= ROWS)) {
         endSoloGame('draw', 'board-full');
         return;
       }
@@ -145,7 +153,7 @@ window.GameHandlers.connect4 = (function () {
         endSoloGame(aiColor, 'four-in-a-row');
         return;
       }
-      if (soloColHeights.every(h => h >= 6)) {
+      if (soloColHeights.every(h => h >= ROWS)) {
         endSoloGame('draw', 'board-full');
         return;
       }
@@ -156,11 +164,16 @@ window.GameHandlers.connect4 = (function () {
     }
 
     function applySoloMove(col, color) {
-      const row = 6 - 1 - soloColHeights[col];
+      const row = ROWS - 1 - soloColHeights[col];
       soloBoard[row][col] = color;
       soloColHeights[col]++;
+      moveNum++;
       Connect4Board.updateAfterMove(soloBoard, { col, color }, soloColHeights);
       if (typeof Sound !== 'undefined') Sound.play('move');
+      if (typeof appendMoveToList === 'function') {
+        const colLetter = String.fromCharCode(65 + col);
+        appendMoveToList({ moveNum, color, notation: colLetter });
+      }
     }
 
     function endSoloGame(winner, reason) {

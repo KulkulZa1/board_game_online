@@ -39,25 +39,29 @@ window.GameHandlers.omok = (function () {
     return state.currentTurn === myColor;
   }
 
-  function startSolo(playerColor, helpers) {
+  function startSolo(playerColor, helpers, options) {
+    options = options || {};
     const {
       switchBoardArea, updateTurnIndicator, showGameOver,
       setActiveBoard, setGameStatus,
       connectingOverlay, spectatorJoinOverlay,
       myLabel, oppLabel, myDot, oppDot,
+      appendMoveToList, setupUndo,
     } = helpers;
 
     const aiColor  = playerColor === 'black' ? 'white' : 'black';
-    const size     = 15;
+    const size     = (options.boardSize && options.boardSize.size) ? options.boardSize.size : 15;
     let soloBoard  = _emptyOmokBoard({ size });
     let soloTurn   = 'black'; // 흑 선공
     let soloGameOver = false;
     let aiThinking   = false;
+    let moveNum      = 0;
+    let moveHistory  = []; // [{row,col,color}] 무르기용
 
     setGameStatus('active');
     switchBoardArea('omok');
 
-    OmokBoard.init({ board: soloBoard, myColor: playerColor, onMove: handlePlayerMove });
+    OmokBoard.init({ board: soloBoard, myColor: playerColor, onMove: handlePlayerMove, boardSize: { size } });
     OmokBoard.setMyTurn(playerColor === 'black');
 
     connectingOverlay.style.display    = 'none';
@@ -82,6 +86,27 @@ window.GameHandlers.omok = (function () {
       endSoloGame(aiColor, 'resign');
     };
 
+    // 무르기 (마지막 플레이어 + AI 수 제거)
+    if (typeof setupUndo === 'function') {
+      setupUndo(() => {
+        if (soloGameOver || aiThinking) return;
+        if (moveHistory.length < 2) return;
+        const aiLast = moveHistory.pop();
+        const playerLast = moveHistory.pop();
+        soloBoard[aiLast.row][aiLast.col] = null;
+        soloBoard[playerLast.row][playerLast.col] = null;
+        moveNum = Math.max(0, moveNum - 2);
+        soloTurn = playerColor;
+        aiThinking = false;
+        OmokBoard.updateAfterMove(soloBoard, null);
+        OmokBoard.setMyTurn(true);
+        updateTurnIndicator(playerColor);
+        // 수기록 마지막 2줄 제거
+        const ml = document.getElementById('move-list');
+        if (ml) { for (let i=0; i<2 && ml.lastElementChild; i++) ml.removeChild(ml.lastElementChild); }
+      });
+    }
+
     if (playerColor !== 'black') setTimeout(aiMove, 600);
 
     function handlePlayerMove({ row, col }) {
@@ -89,7 +114,12 @@ window.GameHandlers.omok = (function () {
       if (soloTurn !== playerColor) return;
       if (soloBoard[row][col]) return;
       soloBoard[row][col] = playerColor;
+      moveHistory.push({ row, col, color: playerColor });
+      moveNum++;
       OmokBoard.updateAfterMove(soloBoard, { row, col });
+      if (typeof appendMoveToList === 'function') {
+        appendMoveToList({ moveNum, col, row, color: playerColor });
+      }
       if (typeof Sound !== 'undefined') Sound.play('move');
       if (AIOmok.checkWin(soloBoard, playerColor, size)) { endSoloGame(playerColor, 'five-in-a-row'); return; }
       soloTurn = aiColor;
@@ -104,7 +134,12 @@ window.GameHandlers.omok = (function () {
       const move = AIOmok.getBestMove(soloBoard, aiColor, size);
       if (!move) return;
       soloBoard[move.row][move.col] = aiColor;
+      moveHistory.push({ row: move.row, col: move.col, color: aiColor });
+      moveNum++;
       OmokBoard.updateAfterMove(soloBoard, move);
+      if (typeof appendMoveToList === 'function') {
+        appendMoveToList({ moveNum, col: move.col, row: move.row, color: aiColor });
+      }
       if (typeof Sound !== 'undefined') Sound.play('move');
       aiThinking = false;
       if (AIOmok.checkWin(soloBoard, aiColor, size)) { endSoloGame(aiColor, 'five-in-a-row'); return; }

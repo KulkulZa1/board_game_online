@@ -11,10 +11,13 @@ const app = express();
 const server = http.createServer(app);
 
 // ========== CORS ==========
-// 개인 PC 호스팅 + Cloudflare Tunnel 사용 시 외부 접속 허용
-// 보안은 UUID 방 ID + rate limit으로 충분히 보장됨
+// ALLOWED_ORIGINS 환경변수로 허용 도메인 제한 가능 (쉼표 구분)
+// 미설정 시 전체 허용 (Cloudflare Tunnel / Render.com 자동 URL 대응)
+const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
+  : '*';
 const io = new Server(server, {
-  cors: { origin: '*', methods: ['GET', 'POST'] }
+  cors: { origin: ALLOWED_ORIGINS, methods: ['GET', 'POST'] }
 });
 
 app.use(express.json());
@@ -183,7 +186,7 @@ function log(msg) {
   console.log(`[${ts}] ${msg}`);
 }
 
-function createRoomState(hostColor, timeControl, hostToken, gameType, boardSize) {
+function createRoomState(hostColor, timeControl, hostToken, gameType, boardSize, indianPokerOpts) {
   const minutes = timeControl.minutes;
   const ms = minutes ? minutes * 60 * 1000 : null;
   const base = {
@@ -240,16 +243,21 @@ function createRoomState(hostColor, timeControl, hostToken, gameType, boardSize)
     base.lastMove    = null;
     base.consecutivePasses = 0;
   } else if (gameType === 'indianpoker') {
-    base.phase      = 'waiting';
-    base.deck       = shuffleDeck();
-    base.hands      = { host: null, guest: null };
-    base.chips      = { host: 100, guest: 100 };
-    base.pot        = 0;
-    base.bets       = { host: 0, guest: 0 };
-    base.ante       = 5;
-    base.roundNum   = 0;
-    base.betTurn    = null;
-    base.raiseCount = 0;
+    const ipNumDecks   = (indianPokerOpts && Number.isInteger(indianPokerOpts.numDecks)   && indianPokerOpts.numDecks   >= 1 && indianPokerOpts.numDecks   <= 5) ? indianPokerOpts.numDecks   : 2;
+    const ipWinCond    = (indianPokerOpts && indianPokerOpts.winCondition === 1) ? 1 : 2;
+    base.phase         = 'waiting';
+    base.numDecks      = ipNumDecks;
+    base.winCondition  = ipWinCond;
+    base.deck          = shuffleDeck(ipNumDecks);
+    base.deckUsed      = 0; // cards dealt so far
+    base.hands         = { host: null, guest: null };
+    base.chips         = { host: 100, guest: 100 };
+    base.pot           = 0;
+    base.bets          = { host: 0, guest: 0 };
+    base.ante          = 5;
+    base.roundNum      = 0;
+    base.betTurn       = null;
+    base.raiseCount    = 0;
   } else if (gameType === 'checkers') {
     base.board       = initCheckersBoard();
     base.currentTurn = hostColor; // 호스트 색이 선공 (기본 white=red)
@@ -448,7 +456,7 @@ io.on('connection', (socket) => {
   log(`소켓 연결 — id=${socket.id.slice(0,8)} ip=${clientIp}`);
 
   // --- Room: Create ---
-  socket.on('room:create', ({ hostColor, timeControl, gameType, boardSize }) => {
+  socket.on('room:create', ({ hostColor, timeControl, gameType, boardSize, indianPokerOpts }) => {
     // Rate limit: 1분 내 5회
     if (!rateCheck(socket.id, 'create', 5, 60 * 1000)) {
       socket.emit('room:error', { code: 'RATE_LIMIT', message: '요청이 너무 많습니다. 잠시 후 다시 시도하세요.' });
@@ -497,7 +505,15 @@ io.on('connection', (socket) => {
     const roomId    = uuidv4();
     const hostToken = uuidv4();
 
-    const room = createRoomState(hostColor, timeControl, hostToken, gameType, validatedBoardSize);
+    // 인디언 포커 옵션 검증
+    let validatedIpOpts = undefined;
+    if (gameType === 'indianpoker' && indianPokerOpts && typeof indianPokerOpts === 'object') {
+      validatedIpOpts = {
+        numDecks:     (Number.isInteger(Number(indianPokerOpts.numDecks)) && Number(indianPokerOpts.numDecks) >= 1 && Number(indianPokerOpts.numDecks) <= 5) ? Number(indianPokerOpts.numDecks) : 2,
+        winCondition: indianPokerOpts.winCondition === 1 ? 1 : 2,
+      };
+    }
+    const room = createRoomState(hostColor, timeControl, hostToken, gameType, validatedBoardSize, validatedIpOpts);
     room.id = roomId;
     rooms.set(roomId, room);
     tokenMap.set(hostToken, { roomId, role: 'host' });
@@ -700,6 +716,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('game:draw:respond', ({ accept }) => {
+    if (!rateCheck(socket.id, 'draw_respond', 5, 60 * 1000)) return;
     const found = getRoomBySocketId(socket.id);
     if (!found) return;
     const { room, role } = found;
@@ -717,6 +734,7 @@ io.on('connection', (socket) => {
 
   // --- Game: Rematch ---
   socket.on('game:rematch:request', () => {
+    if (!rateCheck(socket.id, 'rematch_req', 3, 60 * 1000)) return;
     const found = getRoomBySocketId(socket.id);
     if (!found) return;
     const { room, role } = found;
@@ -734,6 +752,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('game:rematch:respond', ({ accept }) => {
+    if (!rateCheck(socket.id, 'rematch_res', 3, 60 * 1000)) return;
     const found = getRoomBySocketId(socket.id);
     if (!found) return;
     const { room, role } = found;
@@ -790,6 +809,7 @@ io.on('connection', (socket) => {
 
   // --- Spectator: Approve/Deny (host only) ---
   socket.on('spectator:approve', ({ socketId }) => {
+    if (!rateCheck(socket.id, 'spec_approve', 10, 60 * 1000)) return;
     const found = getRoomBySocketId(socket.id);
     if (!found || found.role !== 'host') return;
     const { room } = found;
@@ -798,6 +818,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('spectator:deny', ({ socketId }) => {
+    if (!rateCheck(socket.id, 'spec_deny', 10, 60 * 1000)) return;
     const found = getRoomBySocketId(socket.id);
     if (!found || found.role !== 'host') return;
     const { room } = found;
@@ -1157,7 +1178,7 @@ function resetForRematch(room) {
     room.lastMove    = null;
     room.consecutivePasses = 0;
   } else if (room.gameType === 'indianpoker') {
-    room.deck       = shuffleDeck();
+    room.deck       = shuffleDeck(room.numDecks);
     room.hands      = { host: null, guest: null };
     room.chips      = { host: 100, guest: 100 };
     room.pot        = 0;
@@ -1178,12 +1199,14 @@ function resetForRematch(room) {
 }
 
 // ========== shuffleDeck ==========
-function shuffleDeck() {
-  const ranks = [1,2,3,4,5,6,7,8,9,10,11,12,13];
+// 인디언 포커용: 1~10 랭크만 사용, numDecks × 10장
+function shuffleDeck(numDecks) {
+  numDecks = numDecks || 2;
   const suits = ['♠','♥','♦','♣'];
   const deck = [];
-  for (const suit of suits) {
-    for (const rank of ranks) {
+  for (let d = 0; d < numDecks; d++) {
+    for (let rank = 1; rank <= 10; rank++) {
+      const suit = suits[Math.floor(Math.random() * 4)];
       deck.push({ rank, suit });
     }
   }
@@ -1193,6 +1216,13 @@ function shuffleDeck() {
     [deck[i], deck[j]] = [deck[j], deck[i]];
   }
   return deck;
+}
+
+// A(1) beats 10 only; otherwise higher rank wins. Returns positive if a beats b.
+function compareIndianPokerRanks(a, b) {
+  if (a === 1 && b === 10) return 1;
+  if (b === 1 && a === 10) return -1;
+  return a - b;
 }
 
 // ========== initCheckersBoard ==========
@@ -1232,7 +1262,8 @@ function handleConnect4Move(socket, room, role, { col }) {
   room.colHeights[col]++;
   room.lastMove = { row, col };
 
-  const moveRecord = { col, row, color: yourColor, moveNum: room.moves.length + 1, timestamp: Date.now() };
+  const colLetter = String.fromCharCode(65 + col);
+  const moveRecord = { col, row, color: yourColor, moveNum: room.moves.length + 1, notation: colLetter, timestamp: Date.now() };
   room.moves.push(moveRecord);
 
   const nextColor = yourColor === 'white' ? 'black' : 'white';
@@ -1321,7 +1352,7 @@ function handleOthelloMove(socket, room, role, { row, col }) {
   }
   room.lastMove = { row, col };
 
-  const moveRecord = { row, col, color: yourColor, flipped, moveNum: room.moves.length + 1, timestamp: Date.now() };
+  const moveRecord = { row, col, color: yourColor, flipped, moveNum: room.moves.length + 1, boardRows: 8, timestamp: Date.now() };
   room.moves.push(moveRecord);
 
   const oppColor = yourColor === 'white' ? 'black' : 'white';
@@ -1424,9 +1455,9 @@ function countStones(board) {
 // ========== Checkers Move Handler ==========
 function handleCheckersMove(socket, room, role, { from, to }) {
   if (!from || !to) return;
-  const fr = parseInt(from.row), fc = parseInt(from.col);
-  const tr = parseInt(to.row),   tc = parseInt(to.col);
-  if (isNaN(fr)||isNaN(fc)||isNaN(tr)||isNaN(tc)) return;
+  const fr = from.row, fc = from.col;
+  const tr = to.row,   tc = to.col;
+  if (!Number.isInteger(fr)||!Number.isInteger(fc)||!Number.isInteger(tr)||!Number.isInteger(tc)) return;
   if (fr<0||fr>7||fc<0||fc>7||tr<0||tr>7||tc<0||tc>7) return;
 
   const yourColor = getRoleColor(room, role);
@@ -1621,9 +1652,21 @@ function startIndianPokerRound(room) {
   room.raiseCount   = 0;
   room.roundNum++;
 
-  // 덱 소진 시 리셔플
-  if (room.deck.length < 2) room.deck = shuffleDeck();
+  // 덱 소진 처리
+  if (room.deck.length < 2) {
+    if (room.winCondition === 2) {
+      // 덱 소진 → 칩 비교로 승패 결정
+      const winner = room.chips.host > room.chips.guest ? 'white'
+                   : room.chips.guest > room.chips.host ? 'black'
+                   : null; // 동점 무승부
+      endGame(room, winner, 'deck-exhausted');
+      return;
+    }
+    // winCondition===1: 칩 소진까지 계속 → 덱 재생성
+    room.deck = shuffleDeck(room.numDecks);
+  }
 
+  room.deckUsed    = (room.deckUsed || 0) + 2;
   room.hands.host  = room.deck.pop();
   room.hands.guest = room.deck.pop();
   room.phase = 'bet';
@@ -1646,7 +1689,8 @@ function startIndianPokerRound(room) {
   log(`인디언 포커 라운드 ${room.roundNum} 시작 — 방 ${room.id.slice(0,8)}, pot=${room.pot}`);
 }
 
-function handleIndianPokerAction(socket, room, role, { action, amount }) {
+function handleIndianPokerAction(socket, room, role, { action }) {
+  // amount는 서버 측 고정값(5)만 사용 — 클라이언트 amount 파라미터 무시
   if (room.phase !== 'bet') return;
   if (room.betTurn !== role) {
     if (socket) socket.emit('game:move:invalid', { reason: '아직 당신의 차례가 아닙니다.' });
@@ -1665,11 +1709,21 @@ function handleIndianPokerAction(socket, room, role, { action, amount }) {
     room.pot = 0;
     room.phase = 'showdown';
 
+    // 10을 가지고 폴드하면 추가 페널티
+    const folderCard = role === 'host' ? room.hands.host : room.hands.guest;
+    const FOLD_PENALTY = room.ante; // 앤티만큼 추가 손실
+    if (folderCard && folderCard.rank === 10) {
+      room.chips[role]       -= FOLD_PENALTY;
+      room.chips[winnerRole] += FOLD_PENALTY;
+      if (room.chips[role] < 0) room.chips[role] = 0;
+    }
+
     io.to(room.id).emit('indianpoker:showdown', {
       hostCard:  room.hands.host,
       guestCard: room.hands.guest,
       winner,
       reason: 'fold',
+      foldPenalty: (folderCard && folderCard.rank === 10) ? FOLD_PENALTY : 0,
       pot:   0,
       chips: room.chips
     });
@@ -1759,14 +1813,15 @@ function doShowdown(room) {
   const gCard = room.hands.guest;
   let winner, reason = 'showdown';
 
-  if (hCard.rank > gCard.rank) {
+  const cmp = compareIndianPokerRanks(hCard.rank, gCard.rank);
+  if (cmp > 0) {
     winner = 'white'; // host wins
     room.chips.host += room.pot;
-  } else if (gCard.rank > hCard.rank) {
+  } else if (cmp < 0) {
     winner = 'black'; // guest wins
     room.chips.guest += room.pot;
   } else {
-    // 같으면 호스트 승 (이마에 대는 게임 특성: 이마에 있는 자기 카드 더 잘 보이는 사람)
+    // 동점이면 호스트 승
     winner = 'white';
     room.chips.host += room.pot;
   }
