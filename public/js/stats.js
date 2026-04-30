@@ -9,6 +9,7 @@ window.Stats = (function () {
     othello:     '⬜ 오셀로',
     indianpoker: '🃏 인디언 포커',
     checkers:    '🔴 체커',
+    applegame:   '🍎 사과게임',
   };
 
   function _load() {

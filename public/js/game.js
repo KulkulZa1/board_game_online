@@ -58,6 +58,15 @@ const GAME_RULES = {
       { head: '색상', text: '호스트: 빨강(선공) / 게스트: 검정(후공)' },
     ]
   },
+  applegame: {
+    title: '🍎 사과게임 규칙',
+    sections: [
+      { head: '목표', text: '격자에서 합이 10이 되는 직사각형 구역을 드래그하여 사과를 제거합니다. 제거한 사과가 더 많은 플레이어가 승리합니다.' },
+      { head: '이동', text: '드래그로 직사각형 범위를 선택하면 미리보기가 나타납니다. 합이 10이면 초록색으로 바뀌고, 손을 떼면 사과가 사라집니다.' },
+      { head: '종료 조건', text: '더 이상 합이 10이 되는 직사각형을 만들 수 없으면 게임이 종료됩니다.' },
+      { head: '솔로 모드', text: '2분 타이머 내에 AI와 교대로 진행합니다. 시간 종료 시 점수 비교로 승패를 결정합니다.' },
+    ]
+  },
 };
 
 (function () {
@@ -132,7 +141,7 @@ const GAME_RULES = {
 
   // ========== Board area switcher ==========
   function switchBoardArea(type) {
-    ['chess','omok','connect4','othello','indianpoker','checkers'].forEach(t => {
+    ['chess','omok','connect4','othello','indianpoker','checkers','applegame'].forEach(t => {
       const el = document.getElementById(`${t}-board-area`);
       if (el) el.style.display = t === type ? '' : 'none';
     });
@@ -196,7 +205,7 @@ const GAME_RULES = {
     myRole      = state.hostColor === myColor ? 'host' : 'guest';
     isUnlimited = !state.timeControl.minutes;
 
-    const titleMap = { chess:'체스 대국', omok:'오목 대국', connect4:'사목 대국', othello:'오셀로 대국', indianpoker:'인디언 포커', checkers:'체커 대국' };
+    const titleMap = { chess:'체스 대국', omok:'오목 대국', connect4:'사목 대국', othello:'오셀로 대국', indianpoker:'인디언 포커', checkers:'체커 대국', applegame:'사과게임 대국' };
     document.title = titleMap[gameType] || '대국';
     switchBoardArea(gameType);
     setupPlayerBars();
@@ -260,7 +269,7 @@ const GAME_RULES = {
       if (gameType === 'othello') {
         GameHandlers.othello.onMoveMade({ board, move, validMoves, pass }, showToastMsg);
       } else {
-        GameHandlers[gameType].onMoveMade({ move, fen, board, colHeights, validMoves, mustJump });
+        GameHandlers[gameType].onMoveMade({ move, fen, board, colHeights, validMoves, mustJump, scores });
       }
     }
 
@@ -551,7 +560,7 @@ const GAME_RULES = {
     gameType    = state.gameType || 'chess';
     isUnlimited = !state.timeControl.minutes;
 
-    const specTitleMap = { chess:'체스 관전', omok:'오목 관전', connect4:'사목 관전', othello:'오셀로 관전', indianpoker:'인디언 포커 관전', checkers:'체커 관전' };
+    const specTitleMap = { chess:'체스 관전', omok:'오목 관전', connect4:'사목 관전', othello:'오셀로 관전', indianpoker:'인디언 포커 관전', checkers:'체커 관전', applegame:'사과게임 관전' };
     document.title = specTitleMap[gameType] || '관전';
     switchBoardArea(gameType);
 

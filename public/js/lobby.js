@@ -66,6 +66,15 @@ const GAME_RULES = {
       { head: '색상', text: '호스트: 빨강(선공) / 게스트: 검정(후공)' },
     ]
   },
+  applegame: {
+    title: '🍎 사과게임 규칙',
+    sections: [
+      { head: '목표', text: '격자에서 합이 10이 되는 직사각형 구역을 드래그하여 사과를 제거합니다. 제거한 사과가 더 많은 플레이어가 승리합니다.' },
+      { head: '이동', text: '드래그로 직사각형 범위를 선택하면 미리보기가 나타납니다. 합이 10이면 초록색으로 바뀌고, 손을 떼면 사과가 사라집니다.' },
+      { head: '종료 조건', text: '더 이상 합이 10이 되는 직사각형을 만들 수 없으면 게임이 종료됩니다.' },
+      { head: '솔로 모드', text: '2분 타이머 내에 AI와 교대로 진행합니다. 시간 종료 시 점수 비교로 승패를 결정합니다.' },
+    ]
+  },
 };
 
 // ========== 규칙 모달 ==========
@@ -186,7 +195,7 @@ window.startSolo = function(gameType) {
 
   const gameLabelMap = {
     chess: '체스', omok: '오목', connect4: '사목',
-    othello: '오셀로', indianpoker: '인디언 포커', checkers: '체커'
+    othello: '오셀로', indianpoker: '인디언 포커', checkers: '체커', applegame: '사과게임'
   };
 
   // 솔로 옵션 상태
@@ -211,6 +220,7 @@ window.startSolo = function(gameType) {
     othello:     { iconW:'○', labelW:'백 (후공)', iconB:'⬤', labelB:'흑 (선공)' },
     indianpoker: { iconW:'🎴', labelW:'플레이어', iconB:'🤖', labelB:'AI 봇' },
     checkers:    { iconW:'🔴', labelW:'빨강 (선공)', iconB:'⚫', labelB:'검정 (후공)' },
+    applegame:   { iconW:'🍎', labelW:'선공 (백)', iconB:'🍎', labelB:'후공 (흑)' },
   };
   const cm = soloColorMeta[gameType] || soloColorMeta.chess;
   document.getElementById('icon-white').textContent  = cm.iconW;
@@ -435,13 +445,13 @@ window.confirmResetStats = function() {
     // 색상 선택 패널: connect4/indianpoker는 색상 선택 불필요
     const colorSection = document.getElementById('color-section');
     if (colorSection) {
-      colorSection.style.display = (gameType === 'connect4' || gameType === 'indianpoker') ? 'none' : '';
+      colorSection.style.display = (gameType === 'connect4' || gameType === 'indianpoker' || gameType === 'applegame') ? 'none' : '';
     }
 
     // 기본 색상 설정
     if (gameType === 'omok') {
       setSelectedColor('black');
-    } else if (gameType === 'connect4' || gameType === 'indianpoker') {
+    } else if (gameType === 'connect4' || gameType === 'indianpoker' || gameType === 'applegame') {
       setSelectedColor('white'); // 내부적으로 white=host 역할
     } else {
       setSelectedColor('white');
@@ -454,6 +464,7 @@ window.confirmResetStats = function() {
       othello:     '오셀로 방 만들기',
       indianpoker: '인디언 포커 방 만들기',
       checkers:    '체커 방 만들기',
+      applegame:   '사과게임 방 만들기',
     };
     document.getElementById('create-title').textContent = titleMap[gameType] || '방 만들기';
     updateBoardSizePicker(gameType);
@@ -772,7 +783,7 @@ window.confirmResetStats = function() {
   // ========== Init (모든 함수 정의 후 실행) ==========
   if (roomIdFromUrl) {
     showJoinSection();
-  } else if (gameFromUrl && ['chess', 'omok', 'connect4', 'othello', 'indianpoker', 'checkers'].includes(gameFromUrl)) {
+  } else if (gameFromUrl && ['chess', 'omok', 'connect4', 'othello', 'indianpoker', 'checkers', 'applegame'].includes(gameFromUrl)) {
     window.selectGame(gameFromUrl);
   } else {
     showGameSelectSection();
