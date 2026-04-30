@@ -1527,3 +1527,121 @@ html, body {
   .ip-actions { flex-direction: column !important; gap: 8px !important; }
 }
 
+/* ===== 사과게임 ===== */
+#applegame-board-area {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 4px;
+}
+
+.ag-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.ag-scorebar {
+  display: flex;
+  gap: 20px;
+  font-size: 13px;
+  font-weight: 700;
+}
+.ag-score-white { color: #e8e8e8; }
+.ag-score-sep   { color: #666; }
+.ag-score-black { color: #aaa; }
+
+.ag-sum-display {
+  font-size: 12px;
+  font-weight: 600;
+  height: 18px;
+  letter-spacing: 0.02em;
+}
+.ag-sum-valid   { color: #4caf50; }
+.ag-sum-invalid { color: #e05555; }
+.ag-sum-null    { color: #888; }
+
+.ag-grid-wrap {
+  position: relative;
+}
+
+.ag-grid {
+  display: grid;
+  gap: 2px;
+  background: #1a2a1a;
+  padding: 6px;
+  border-radius: 10px;
+  border: 2px solid #2a4a2a;
+  cursor: default;
+}
+
+.ag-my-turn .ag-grid { cursor: crosshair; }
+
+.ag-cell {
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-size: 13px;
+  font-weight: 800;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+  background: #e8453c;
+  transition: opacity 0.15s;
+}
+
+/* 숫자별 색상 */
+.ag-num-1 { background: #e74c3c; }
+.ag-num-2 { background: #e67e22; }
+.ag-num-3 { background: #f1c40f; color: #333; text-shadow: none; }
+.ag-num-4 { background: #2ecc71; }
+.ag-num-5 { background: #1abc9c; }
+.ag-num-6 { background: #3498db; }
+.ag-num-7 { background: #9b59b6; }
+.ag-num-8 { background: #e91e63; }
+.ag-num-9 { background: #795548; }
+
+.ag-cell.ag-empty {
+  background: #0f1a0f;
+  border-radius: 4px;
+}
+
+/* 선택 오버레이 */
+.ag-selection {
+  position: absolute;
+  border: 2px solid rgba(255,255,255,0.4);
+  background: rgba(255,255,255,0.08);
+  border-radius: 4px;
+  pointer-events: none;
+  z-index: 10;
+  transition: border-color 0.08s, background 0.08s;
+}
+.ag-sel-valid {
+  border-color: #4caf50;
+  background: rgba(76,175,80,0.22);
+}
+.ag-sel-invalid {
+  border-color: #e05555;
+  background: rgba(224,85,85,0.12);
+}
+.ag-sel-null {
+  border-color: rgba(255,255,255,0.2);
+  background: rgba(255,255,255,0.04);
+}
+
+/* 반응형 */
+@media (max-width: 620px) {
+  .ag-cell { width: 26px; height: 26px; font-size: 10px; }
+  .ag-grid  { gap: 1px; padding: 4px; }
+}
+@media (max-width: 420px) {
+  .ag-cell { width: 20px; height: 20px; font-size: 8px; }
+  .ag-grid  { gap: 1px; padding: 3px; border-radius: 6px; }
+}
+

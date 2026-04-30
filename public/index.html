@@ -89,6 +89,16 @@
             <button class="btn-play">플레이</button>
           </div>
         </div>
+        <div class="game-card" id="card-applegame" onclick="selectGame('applegame')">
+          <div class="game-card-icon">🍎</div>
+          <div class="game-card-name">사과게임</div>
+          <div class="game-card-desc">합이 10인 사각형 선택<br>17×10 사과 격자</div>
+          <div class="card-actions">
+            <button class="btn-rules" onclick="showRules('applegame');event.stopPropagation()">📋 규칙</button>
+            <button class="btn-solo" onclick="startSolo('applegame');event.stopPropagation()">🤖 혼자</button>
+            <button class="btn-play">플레이</button>
+          </div>
+        </div>
       </div>
     </section>
 
