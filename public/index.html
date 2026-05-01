@@ -99,6 +99,16 @@
             <button class="btn-play">플레이</button>
           </div>
         </div>
+        <div class="game-card" id="card-battleship" onclick="selectGame('battleship')">
+          <div class="game-card-icon">🚢</div>
+          <div class="game-card-name">배틀십</div>
+          <div class="game-card-desc">함대를 숨기고 적함을 격침<br>10×10 격자 해전</div>
+          <div class="card-actions">
+            <button class="btn-rules" onclick="showRules('battleship');event.stopPropagation()">📋 규칙</button>
+            <button class="btn-solo"  onclick="startSolo('battleship');event.stopPropagation()">🤖 혼자</button>
+            <button class="btn-play">플레이</button>
+          </div>
+        </div>
       </div>
     </section>
 

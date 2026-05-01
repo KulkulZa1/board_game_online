@@ -10,6 +10,7 @@ window.Stats = (function () {
     indianpoker: '🃏 인디언 포커',
     checkers:    '🔴 체커',
     applegame:   '🍎 사과게임',
+    battleship:  '🚢 배틀십',
   };
 
   function _load() {

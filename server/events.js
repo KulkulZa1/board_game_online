@@ -31,12 +31,12 @@ function registerEvents(io) {
       }
 
       // 입력 검증
-      if (!['chess', 'omok', 'connect4', 'othello', 'indianpoker', 'checkers', 'applegame'].includes(gameType)) {
+      if (!['chess', 'omok', 'connect4', 'othello', 'indianpoker', 'checkers', 'applegame', 'battleship'].includes(gameType)) {
         socket.emit('room:error', { code: 'INVALID_GAME_TYPE', message: '잘못된 게임 타입입니다.' });
         return;
       }
-      if (gameType === 'connect4' || gameType === 'indianpoker' || gameType === 'applegame') {
-        hostColor = 'white'; // host=white(red/dealer), guest=black(yellow/player2)
+      if (gameType === 'connect4' || gameType === 'indianpoker' || gameType === 'applegame' || gameType === 'battleship') {
+        hostColor = 'white'; // host=white, guest=black
       } else if (!['white', 'black'].includes(hostColor)) {
         return;
       }

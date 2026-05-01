@@ -38,6 +38,8 @@ function startGame(room) {
     room.timers.activeColor = 'black'; // 흑 선공
   } else if (room.gameType === 'indianpoker') {
     room.timers.activeColor = null; // 카드게임: 별도 처리
+  } else if (room.gameType === 'battleship') {
+    room.timers.activeColor = null; // 배틀십: 배치 단계 완료 후 타이머 시작
   } else {
     room.timers.activeColor = room.currentTurn || 'white';
   }

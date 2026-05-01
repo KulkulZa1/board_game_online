@@ -179,6 +179,31 @@ window.GameRegistry = (function () {
         ]
       }
     },
+    {
+      id: 'battleship',
+      name: '배틀십',
+      icon: '🚢',
+      desc: '함대를 숨기고 적함을 격침<br>10×10 격자 해전',
+      forceWhite: true,
+      soloIcon: '🚢',
+      soloIconW: '🚢',
+      soloIconB: '🤖',
+      soloLabelW: '플레이어',
+      soloLabelB: 'AI 함대',
+      createTitle: '배틀십 방 만들기',
+      gameTitle: '배틀십 해전',
+      specTitle: '배틀십 관전',
+      boardAreaId: 'battleship-board-area',
+      rules: {
+        title: '🚢 배틀십 규칙',
+        sections: [
+          { head: '배치', text: '게임 시작 전 10×10 격자에 함선 5척을 배치합니다. 항공모함(5), 전함(4), 순양함(3), 잠수함(3), 구축함(2)' },
+          { head: '공격', text: '좌표를 클릭해 적 함대를 공격합니다. 🔴 적중, ⚪ 빗나감. 상대 함선 5척을 모두 격침하면 승리!' },
+          { head: '교대', text: '매 턴 한 번씩 교대로 공격합니다. 빗나가도 턴이 넘어갑니다.' },
+          { head: '솔로 모드', text: 'AI 함대를 상대로 3분 내에 최대한 많은 함선을 격침하세요.' },
+        ]
+      }
+    },
   ];
 
   function getGame(id) { return GAMES.find(function (g) { return g.id === id; }); }

@@ -196,10 +196,12 @@
     socket.emit('game:move', data);
   }
 
-  socket.on('game:move:made', ({ move, fen, board, timers, turn, validMoves, colHeights, mustJump, scores, pass }) => {
+  socket.on('game:move:made', ({ move, fen, board, timers, turn, validMoves, colHeights, mustJump, scores, pass, attackGrids }) => {
     if (GameHandlers[gameType]) {
       if (gameType === 'othello') {
         GameHandlers.othello.onMoveMade({ board, move, validMoves, pass }, showToastMsg);
+      } else if (gameType === 'battleship') {
+        GameHandlers.battleship.onMoveMade({ move, attackGrids });
       } else {
         GameHandlers[gameType].onMoveMade({ move, fen, board, colHeights, validMoves, mustJump, scores });
       }
@@ -892,6 +894,24 @@
 
   socket.on('indianpoker:showdown', (data) => {
     if (ActiveBoard && ActiveBoard.showShowdown) ActiveBoard.showShowdown(data);
+  });
+
+  // ========== 배틀십 전용 이벤트 ==========
+  socket.on('battleship:placed', () => {
+    // 상대방이 배치를 완료했음을 표시
+    const ti = document.getElementById('turn-indicator');
+    if (ti) ti.textContent = '상대방이 배치 중...';
+  });
+
+  socket.on('battleship:game-start', ({ currentTurn }) => {
+    // 배치 단계 → 활성 단계로 전환
+    if (typeof BattleshipBoard !== 'undefined') {
+      BattleshipBoard.setPhase('active');
+      const isMyTurn = currentTurn === myColor;
+      BattleshipBoard.setMyTurn(isMyTurn);
+    }
+    updateTurnIndicator(currentTurn);
+    gameStatus = 'active';
   });
 
   // =========================================================
