@@ -12,6 +12,7 @@ window.Stats = (function () {
     applegame:   '🍎 사과게임',
     battleship:  '🚢 배틀십',
     backgammon:  '🎲 백가몬',
+    texasholdem: '🃏 텍사스 홀덤',
   };
 
   function _load() {

@@ -36,7 +36,7 @@ function startGame(room) {
   room.timers.black       = ms;
   if (room.gameType === 'omok' || room.gameType === 'othello') {
     room.timers.activeColor = 'black'; // 흑 선공
-  } else if (room.gameType === 'indianpoker') {
+  } else if (room.gameType === 'indianpoker' || room.gameType === 'texasholdem') {
     room.timers.activeColor = null; // 카드게임: 별도 처리
   } else if (room.gameType === 'battleship') {
     room.timers.activeColor = null; // 배틀십: 배치 단계 완료 후 타이머 시작
@@ -64,10 +64,13 @@ function startGame(room) {
     }
   });
 
-  // 인디언 포커: 게임 시작 후 첫 라운드 딜
+  // 카드게임: 게임 시작 후 첫 라운드 딜
   if (room.gameType === 'indianpoker') {
     const { startIndianPokerRound } = require('./handlers/indianpoker');
     setTimeout(() => startIndianPokerRound(room), 500);
+  } else if (room.gameType === 'texasholdem') {
+    const { startTHRound } = require('./handlers/texasholdem');
+    setTimeout(() => startTHRound(room), 500);
   }
 }
 

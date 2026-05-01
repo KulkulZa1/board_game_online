@@ -1,0 +1,236 @@
+/* css/games/texasholdem.css — 텍사스 홀덤 전용 스타일 */
+
+#texasholdem-board-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  padding: 8px 4px;
+  box-sizing: border-box;
+}
+
+.th-table {
+  width: 100%;
+  max-width: 560px;
+  background: #1a3a2a;
+  border: 4px solid #8b6914;
+  border-radius: 50px;
+  padding: 20px 16px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  position: relative;
+}
+
+/* ── 상대방 영역 ──────────────────────────────────── */
+.th-opponent-zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+
+.th-opponent-label {
+  font-size: 0.8rem;
+  color: #8892a4;
+}
+
+/* ── 커뮤니티 카드 ─────────────────────────────────── */
+.th-community-zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.th-pot-label {
+  font-size: 1rem;
+  color: #f0c040;
+  font-weight: 700;
+}
+
+.th-community-cards {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+/* ── 내 영역 ──────────────────────────────────────── */
+.th-my-zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+
+.th-my-label {
+  font-size: 0.8rem;
+  color: #4a9eff;
+}
+
+/* ── 카드 ─────────────────────────────────────────── */
+.th-card {
+  width: 52px;
+  height: 74px;
+  background: #fff;
+  border: 2px solid #ccc;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+  font-weight: 700;
+  box-shadow: 2px 3px 8px rgba(0,0,0,0.5);
+  position: relative;
+  flex-shrink: 0;
+  transition: transform 0.2s;
+}
+
+.th-card:hover { transform: translateY(-3px); }
+
+.th-card.red  { color: #cc2200; }
+.th-card.black { color: #111; }
+
+.th-card.back {
+  background: linear-gradient(135deg, #1a3a7a 0%, #2a5ab0 50%, #1a3a7a 100%);
+  border-color: #4a7ae0;
+}
+
+.th-card.back::after {
+  content: '🂠';
+  font-size: 2rem;
+  color: rgba(255,255,255,0.7);
+}
+
+.th-card.placeholder {
+  background: rgba(255,255,255,0.08);
+  border: 2px dashed #3a4a5a;
+  box-shadow: none;
+}
+
+.th-card-rank {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.th-card-suit {
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+.th-hand-name {
+  font-size: 0.75rem;
+  color: #4af;
+  min-height: 1.1em;
+  text-align: center;
+  font-style: italic;
+}
+
+/* ── 칩 정보 ──────────────────────────────────────── */
+.th-chip-info {
+  font-size: 0.85rem;
+  color: #b0b8c8;
+}
+
+.th-chip-info span { color: #f0c040; font-weight: 700; }
+
+/* ── 행동 정보 / 베팅 컨트롤 ─────────────────────── */
+.th-action-zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  max-width: 400px;
+}
+
+.th-phase-label {
+  font-size: 0.8rem;
+  color: #8892a4;
+  text-align: center;
+}
+
+.th-bet-info {
+  font-size: 0.9rem;
+  color: #f0c040;
+  text-align: center;
+  min-height: 1.2em;
+}
+
+.th-bet-buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.th-btn {
+  padding: 10px 18px;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.1s, opacity 0.2s;
+  min-width: 70px;
+}
+
+.th-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.th-btn:hover:not(:disabled) { transform: translateY(-2px); }
+
+.th-btn-fold  { background: #c02020; color: #fff; }
+.th-btn-check { background: #204080; color: #fff; }
+.th-btn-call  { background: #208040; color: #fff; }
+.th-btn-raise { background: #d09020; color: #fff; }
+
+/* 대기 중 메시지 */
+.th-waiting-msg {
+  font-size: 0.85rem;
+  color: #8892a4;
+  font-style: italic;
+  text-align: center;
+  min-height: 1.2em;
+}
+
+/* 쇼다운 결과 */
+.th-showdown-banner {
+  font-size: 1.1rem;
+  font-weight: 700;
+  text-align: center;
+  padding: 6px 16px;
+  border-radius: 8px;
+  background: rgba(240, 192, 64, 0.2);
+  border: 1px solid #f0c040;
+  color: #f0c040;
+}
+
+/* 버튼(딜러) 마크 */
+.th-dealer-btn {
+  display: inline-block;
+  background: #f0f0c0;
+  color: #222;
+  border-radius: 50%;
+  width: 20px; height: 20px;
+  font-size: 0.65rem;
+  font-weight: 900;
+  line-height: 20px;
+  text-align: center;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+/* ── 반응형 ───────────────────────────────────────── */
+@media (max-width: 480px) {
+  .th-card { width: 42px; height: 60px; font-size: 0.9rem; }
+  .th-card-rank { font-size: 0.85rem; }
+  .th-card-suit { font-size: 1rem; }
+  .th-btn { padding: 8px 12px; font-size: 0.8rem; min-width: 60px; }
+  .th-table { padding: 14px 10px; gap: 8px; }
+}

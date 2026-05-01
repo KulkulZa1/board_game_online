@@ -151,15 +151,16 @@
       if (init.chess !== undefined) chess = init.chess;
     }
 
+    const _isCardGame = gameType === 'indianpoker' || gameType === 'texasholdem';
     // 플레이어 전용 컨트롤 표시
     document.getElementById('resign-btn').style.display = '';
     document.getElementById('draw-btn').style.display   = gameType === 'chess' ? '' : 'none';
-    document.getElementById('undo-btn').style.display   = gameType === 'indianpoker' ? 'none' : '';
+    document.getElementById('undo-btn').style.display   = _isCardGame ? 'none' : '';
     // 수 기록/복기 패널 — 체스는 SAN 복기 지원
-    document.getElementById('moves-panel').style.display = gameType === 'indianpoker' ? 'none' : '';
-    // 자동 거절 패널 표시 (관전자 제외, 인디언 포커 제외)
+    document.getElementById('moves-panel').style.display = _isCardGame ? 'none' : '';
+    // 자동 거절 패널 표시 (관전자 제외, 카드게임 제외)
     const autoDeclinePanel = document.getElementById('auto-decline-panel');
-    if (autoDeclinePanel && gameType !== 'indianpoker') autoDeclinePanel.style.display = '';
+    if (autoDeclinePanel && !_isCardGame) autoDeclinePanel.style.display = '';
 
     if (state.status === 'active') {
       gameStatus = 'active';
@@ -196,23 +197,27 @@
     socket.emit('game:move', data);
   }
 
-  socket.on('game:move:made', ({ move, fen, board, timers, turn, validMoves, colHeights, mustJump, scores, pass, attackGrids }) => {
+  socket.on('game:move:made', ({ move, fen, board, timers, turn, validMoves, colHeights, mustJump, scores, pass, attackGrids, phase, community, pot, chips, bets, roundBet, betTurn, raiseCount, toCall }) => {
     if (GameHandlers[gameType]) {
       if (gameType === 'othello') {
         GameHandlers.othello.onMoveMade({ board, move, validMoves, pass }, showToastMsg);
       } else if (gameType === 'battleship') {
         GameHandlers.battleship.onMoveMade({ move, attackGrids });
+      } else if (gameType === 'texasholdem') {
+        GameHandlers.texasholdem.onMoveMade({ move, phase, community, pot, chips, bets, roundBet, betTurn, raiseCount, toCall, turn });
+      } else if (gameType === 'backgammon') {
+        GameHandlers.backgammon.onMoveMade(arguments[0]);
       } else {
         GameHandlers[gameType].onMoveMade({ move, fen, board, colHeights, validMoves, mustJump, scores });
       }
     }
 
-    if (gameType !== 'indianpoker') appendMoveToList(move);
+    if (gameType !== 'indianpoker' && gameType !== 'texasholdem') appendMoveToList(move);
 
     if (myRole === 'spectator') {
       if (ActiveBoard) ActiveBoard.setMyTurn(gameStatus === 'active');
-    } else if (gameType === 'indianpoker') {
-      // 인디언 포커 턴은 indianpoker:bet:turn 으로 처리
+    } else if (gameType === 'indianpoker' || gameType === 'texasholdem') {
+      // 카드게임 턴은 전용 이벤트로 처리
     } else {
       const isMyTurn = turn === myColor;
       ActiveBoard.setMyTurn(isMyTurn);
@@ -893,6 +898,19 @@
   });
 
   socket.on('indianpoker:showdown', (data) => {
+    if (ActiveBoard && ActiveBoard.showShowdown) ActiveBoard.showShowdown(data);
+  });
+
+  // ========== 텍사스 홀덤 전용 이벤트 ==========
+  socket.on('texasholdem:dealt', (data) => {
+    if (ActiveBoard && ActiveBoard.showDeal) ActiveBoard.showDeal(data);
+  });
+
+  socket.on('texasholdem:community', (data) => {
+    if (ActiveBoard && ActiveBoard.update) ActiveBoard.update(data);
+  });
+
+  socket.on('texasholdem:showdown', (data) => {
     if (ActiveBoard && ActiveBoard.showShowdown) ActiveBoard.showShowdown(data);
   });
 

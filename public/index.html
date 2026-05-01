@@ -109,6 +109,16 @@
             <button class="btn-play">플레이</button>
           </div>
         </div>
+        <div class="game-card" id="card-texasholdem" onclick="selectGame('texasholdem')">
+          <div class="game-card-icon">🃏</div>
+          <div class="game-card-name">텍사스 홀덤</div>
+          <div class="game-card-desc">커뮤니티 카드 포커<br>최고 패 보유자 승리</div>
+          <div class="card-actions">
+            <button class="btn-rules" onclick="showRules('texasholdem');event.stopPropagation()">📋 규칙</button>
+            <button class="btn-solo"  onclick="startSolo('texasholdem');event.stopPropagation()">🤖 혼자</button>
+            <button class="btn-play">플레이</button>
+          </div>
+        </div>
         <div class="game-card" id="card-backgammon" onclick="selectGame('backgammon')">
           <div class="game-card-icon">🎲</div>
           <div class="game-card-name">백가몬</div>

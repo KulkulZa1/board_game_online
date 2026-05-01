@@ -205,6 +205,33 @@ window.GameRegistry = (function () {
       }
     },
     {
+      id: 'texasholdem',
+      name: '텍사스 홀덤',
+      icon: '🃏',
+      desc: '커뮤니티 카드 포커<br>최고 패 보유자 승리',
+      forceWhite: true,
+      soloIcon: '🃏',
+      soloIconW: '🃏',
+      soloIconB: '🤖',
+      soloLabelW: '플레이어',
+      soloLabelB: 'AI 봇',
+      createTitle: '텍사스 홀덤 방 만들기',
+      gameTitle: '텍사스 홀덤',
+      specTitle: '텍사스 홀덤 관전',
+      boardAreaId: 'texasholdem-board-area',
+      rules: {
+        title: '🃏 텍사스 홀덤 규칙',
+        sections: [
+          { head: '목표', text: '커뮤니티 카드 5장과 본인 홀 카드 2장을 조합해 가장 강한 5장 패를 만들면 승리합니다.' },
+          { head: '패 순위 (강→약)', text: '로열 플러시 > 스트레이트 플러시 > 포카드 > 풀하우스 > 플러시 > 스트레이트 > 트리플스 > 투 페어 > 원 페어 > 하이카드' },
+          { head: '진행', text: '① 홀 카드 2장 지급 → ② 프리플랍 베팅 → ③ 플랍(3장) → ④ 턴(1장) → ⑤ 리버(1장) → ⑥ 쇼다운' },
+          { head: '블라인드', text: '버튼(D) 플레이어가 스몰블라인드(10), 상대방이 빅블라인드(20)를 자동 베팅합니다.' },
+          { head: '베팅', text: '• 폴드: 패 포기\n• 체크: 베팅 없이 패스 (베팅이 없을 때만 가능)\n• 콜: 상대 베팅에 맞춤\n• 레이즈: 20칩 추가 (라운드당 최대 4회)' },
+          { head: '승리 조건', text: '상대방 칩을 모두 가져오면 승리합니다. 각 핸드에서 폴드시 팟을 상대방에게 넘깁니다.' },
+        ]
+      }
+    },
+    {
       id: 'backgammon',
       name: '백가몬',
       icon: '🎲',
