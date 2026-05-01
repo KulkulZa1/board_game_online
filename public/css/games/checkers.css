@@ -1,0 +1,97 @@
+/* ===== 체커 (Checkers) ===== */
+#checkersboard {
+  display: inline-block;
+  padding: 8px;
+}
+
+.ck-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 52px);
+  grid-template-rows: repeat(8, 52px);
+  gap: 0;
+  border: 3px solid #5d4037;
+  border-radius: 6px;
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.ck-cell {
+  width: 52px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.ck-light { background: #f0d9b5; }
+.ck-dark  { background: #5d4037; cursor: pointer; }
+.ck-dark:hover { background: #6d4c41; }
+
+.ck-my-turn .ck-dark:hover { background: #7d5c51; }
+
+.ck-piece {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  transition: transform 0.15s;
+}
+
+.ck-white {
+  background: radial-gradient(circle at 35% 35%, #ff8a80, #c62828);
+  border: 3px solid #b71c1c;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+}
+
+.ck-black {
+  background: radial-gradient(circle at 35% 35%, #616161, #212121);
+  border: 3px solid #000;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+}
+
+.ck-king .ck-crown {
+  font-size: 1rem;
+  color: #f0c040;
+  text-shadow: 0 0 4px rgba(0,0,0,0.8);
+}
+
+.ck-selected { background: #4a90d9 !important; }
+
+.ck-movable::after {
+  content: '';
+  width: 18px;
+  height: 18px;
+  background: rgba(74,144,217,0.5);
+  border-radius: 50%;
+  position: absolute;
+  border: 2px solid #4a90d9;
+}
+
+.ck-can-move .ck-piece { box-shadow: 0 0 0 3px #4a90d9; }
+
+.ck-hint { animation: ckHintPulse 0.7s ease infinite alternate; }
+
+@keyframes ckHintPulse {
+  from { background: #5d4037; }
+  to   { background: #7c5c8a; }
+}
+
+.ck-last .ck-piece { box-shadow: 0 0 0 3px #f0c040; }
+
+@media (max-width: 480px) {
+  .ck-grid  { grid-template-columns: repeat(8, 44px); grid-template-rows: repeat(8, 44px); }
+  .ck-cell  { width: 44px; height: 44px; }
+  .ck-piece { width: 36px; height: 36px; }
+}
+
+@media (max-width: 360px) {
+  .ck-grid  { grid-template-columns: repeat(8, 38px); grid-template-rows: repeat(8, 38px); }
+  .ck-cell  { width: 38px; height: 38px; }
+  .ck-piece { width: 30px; height: 30px; }
+}
