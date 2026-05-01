@@ -10,4 +10,5 @@ module.exports = new Map([
   ['battleship',  require('./battleship')],
   ['backgammon',  require('./backgammon')],
   ['texasholdem', require('./texasholdem')],
+  ['dotsboxes',   require('./dotsboxes')],
 ]);

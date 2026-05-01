@@ -109,6 +109,16 @@
             <button class="btn-play">플레이</button>
           </div>
         </div>
+        <div class="game-card" id="card-dotsboxes" onclick="selectGame('dotsboxes')">
+          <div class="game-card-icon">📦</div>
+          <div class="game-card-name">도트앤박스</div>
+          <div class="game-card-desc">선을 그어 박스 완성<br>5×5 격자 퍼즐</div>
+          <div class="card-actions">
+            <button class="btn-rules" onclick="showRules('dotsboxes');event.stopPropagation()">📋 규칙</button>
+            <button class="btn-solo"  onclick="startSolo('dotsboxes');event.stopPropagation()">🤖 혼자</button>
+            <button class="btn-play">플레이</button>
+          </div>
+        </div>
         <div class="game-card" id="card-texasholdem" onclick="selectGame('texasholdem')">
           <div class="game-card-icon">🃏</div>
           <div class="game-card-name">텍사스 홀덤</div>

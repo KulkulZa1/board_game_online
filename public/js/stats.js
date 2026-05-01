@@ -13,6 +13,7 @@ window.Stats = (function () {
     battleship:  '🚢 배틀십',
     backgammon:  '🎲 백가몬',
     texasholdem: '🃏 텍사스 홀덤',
+    dotsboxes:   '📦 도트앤박스',
   };
 
   function _load() {

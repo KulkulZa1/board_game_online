@@ -31,7 +31,7 @@ function registerEvents(io) {
       }
 
       // 입력 검증
-      if (!['chess', 'omok', 'connect4', 'othello', 'indianpoker', 'checkers', 'applegame', 'battleship', 'backgammon', 'texasholdem'].includes(gameType)) {
+      if (!['chess', 'omok', 'connect4', 'othello', 'indianpoker', 'checkers', 'applegame', 'battleship', 'backgammon', 'texasholdem', 'dotsboxes'].includes(gameType)) {
         socket.emit('room:error', { code: 'INVALID_GAME_TYPE', message: '잘못된 게임 타입입니다.' });
         return;
       }

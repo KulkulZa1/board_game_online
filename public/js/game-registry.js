@@ -205,6 +205,31 @@ window.GameRegistry = (function () {
       }
     },
     {
+      id: 'dotsboxes',
+      name: '도트앤박스',
+      icon: '📦',
+      desc: '선을 그어 박스 완성<br>5×5 격자 퍼즐',
+      forceWhite: false,
+      soloIcon: '📦',
+      soloIconW: '🔵',
+      soloIconB: '🔴',
+      soloLabelW: '백 (선공)',
+      soloLabelB: '흑 (후공)',
+      createTitle: '도트앤박스 방 만들기',
+      gameTitle: '도트앤박스 대국',
+      specTitle: '도트앤박스 관전',
+      boardAreaId: 'dotsboxes-board-area',
+      rules: {
+        title: '📦 도트앤박스 규칙',
+        sections: [
+          { head: '목표', text: '더 많은 박스를 자신의 색으로 채우면 승리합니다. 5×5 = 25개 박스.' },
+          { head: '이동', text: '매 턴 인접한 두 점 사이에 선 하나를 그립니다. 점과 점을 잇는 선분을 클릭하세요.' },
+          { head: '박스 완성', text: '네 변이 모두 채워진 박스는 선을 그은 플레이어의 색으로 채워집니다. 박스를 완성하면 보너스로 한 번 더 선을 그을 수 있습니다.' },
+          { head: '종료', text: '모든 선이 그어지면 게임이 종료됩니다. 더 많은 박스를 가진 플레이어가 승리합니다.' },
+        ]
+      }
+    },
+    {
       id: 'texasholdem',
       name: '텍사스 홀덤',
       icon: '🃏',

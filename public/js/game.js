@@ -197,7 +197,7 @@
     socket.emit('game:move', data);
   }
 
-  socket.on('game:move:made', ({ move, fen, board, timers, turn, validMoves, colHeights, mustJump, scores, pass, attackGrids, phase, community, pot, chips, bets, roundBet, betTurn, raiseCount, toCall }) => {
+  socket.on('game:move:made', ({ move, fen, board, timers, turn, validMoves, colHeights, mustJump, scores, pass, attackGrids, phase, community, pot, chips, bets, roundBet, betTurn, raiseCount, toCall, edges, boxes, dice, remainingMoves }) => {
     if (GameHandlers[gameType]) {
       if (gameType === 'othello') {
         GameHandlers.othello.onMoveMade({ board, move, validMoves, pass }, showToastMsg);
@@ -206,7 +206,9 @@
       } else if (gameType === 'texasholdem') {
         GameHandlers.texasholdem.onMoveMade({ move, phase, community, pot, chips, bets, roundBet, betTurn, raiseCount, toCall, turn });
       } else if (gameType === 'backgammon') {
-        GameHandlers.backgammon.onMoveMade(arguments[0]);
+        GameHandlers.backgammon.onMoveMade({ move, board, dice, remainingMoves, phase, turn, validMoves });
+      } else if (gameType === 'dotsboxes') {
+        GameHandlers.dotsboxes.onMoveMade({ move, edges, boxes, scores, turn });
       } else {
         GameHandlers[gameType].onMoveMade({ move, fen, board, colHeights, validMoves, mustJump, scores });
       }
