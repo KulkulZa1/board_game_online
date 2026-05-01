@@ -197,7 +197,7 @@
     socket.emit('game:move', data);
   }
 
-  socket.on('game:move:made', ({ move, fen, board, timers, turn, validMoves, colHeights, mustJump, scores, pass, attackGrids, phase, community, pot, chips, bets, roundBet, betTurn, raiseCount, toCall, edges, boxes, dice, remainingMoves }) => {
+  socket.on('game:move:made', ({ move, fen, board, timers, turn, validMoves, colHeights, mustJump, scores, pass, attackGrids, phase, community, pot, chips, bets, roundBet, betTurn, raiseCount, toCall, edges, boxes, dice, remainingMoves, pits }) => {
     if (GameHandlers[gameType]) {
       if (gameType === 'othello') {
         GameHandlers.othello.onMoveMade({ board, move, validMoves, pass }, showToastMsg);
@@ -209,6 +209,8 @@
         GameHandlers.backgammon.onMoveMade({ move, board, dice, remainingMoves, phase, turn, validMoves });
       } else if (gameType === 'dotsboxes') {
         GameHandlers.dotsboxes.onMoveMade({ move, edges, boxes, scores, turn });
+      } else if (gameType === 'mancala') {
+        GameHandlers.mancala.onMoveMade({ move, pits, turn });
       } else {
         GameHandlers[gameType].onMoveMade({ move, fen, board, colHeights, validMoves, mustJump, scores });
       }

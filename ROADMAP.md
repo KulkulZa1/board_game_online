@@ -2,7 +2,7 @@
 
 ## Current Status: v1.4.0 (in progress)
 
-**Live games (9):** 체스, 오목, 사목, 오셀로, 인디언 포커, 체커, 사과게임, 배틀십, 백가몬  
+**Live games (12):** 체스, 오목, 사목, 오셀로, 인디언 포커, 체커, 사과게임, 배틀십, 백가몬, 텍사스 홀덤, 도트앤박스, 만칼라  
 **Platform:** Web (PWA) — https://board-game-online.onrender.com  
 **Deployment:** Render.com, Node.js + Socket.io, no database
 
@@ -28,7 +28,7 @@
 - **Architecture:** Monolithic `server.js` split into `server/` modules + game handler registry
 - **Frontend:** `game-registry.js` as central metadata store; per-game CSS files
 - **Docs:** `ADDING_A_GAME.md` — 10-step checklist; AI agent token cost per game: 3k (was 52k)
-- **New games:** 배틀십 (Battleship) — placement phase + hunt-and-target AI; 백가몬 (Backgammon) — full rules with bar, bearing off, doubles, heuristic AI
+- **New games:** 배틀십, 백가몬, 텍사스 홀덤, 도트앤박스, 만칼라 — 5 games added; Phase B complete (12 total)
 
 ---
 
@@ -42,9 +42,9 @@ Priority order (highest value, lowest effort first):
 |---|------|--------|--------|
 | 1 | 배틀십 (Battleship) | Medium | ✅ Done |
 | 2 | 백가몬 (Backgammon) | Medium | ✅ Done |
-| 3 | 텍사스 홀덤 (Texas Hold'em) | Medium | 🔄 Next |
-| 4 | 도트앤박스 (Dots & Boxes) | Easy | ⬜ Planned |
-| 5 | 만칼라 (Mancala) | Easy | ⬜ Planned |
+| 3 | 텍사스 홀덤 (Texas Hold'em) | Medium | ✅ Done |
+| 4 | 도트앤박스 (Dots & Boxes) | Easy | ✅ Done |
+| 5 | 만칼라 (Mancala) | Easy | ✅ Done |
 | 6 | 장기 (Korean Chess) | Hard | ⬜ Future |
 | 7 | 고 9×9 (Mini Go) | Hard | ⬜ Future |
 

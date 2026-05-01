@@ -1,0 +1,156 @@
+/* css/games/mancala.css — 만칼라 전용 스타일 */
+
+#mancala-board-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  padding: 8px 4px;
+  box-sizing: border-box;
+}
+
+.mc-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  max-width: 560px;
+}
+
+/* ── 상태 메시지 ─────────────────────────────────── */
+.mc-status {
+  font-size: 0.85rem;
+  text-align: center;
+  min-height: 1.2em;
+}
+.mc-status.my-turn  { color: #4af; font-weight: 600; }
+.mc-status.opp-turn { color: #fa4; }
+
+/* ── 보드 컨테이너 ───────────────────────────────── */
+.mc-board {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  width: 100%;
+  background: #3a2800;
+  border: 3px solid #8b6914;
+  border-radius: 50px;
+  padding: 12px;
+  box-sizing: border-box;
+}
+
+/* 창고 (mancala) */
+.mc-store {
+  flex: 0 0 70px;
+  background: #1a1200;
+  border: 2px solid #8b6914;
+  border-radius: 40px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 8px 4px;
+}
+
+.mc-store-label {
+  font-size: 0.6rem;
+  color: #8892a4;
+  text-align: center;
+}
+
+.mc-store-count {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: #f0c040;
+}
+
+.mc-store.white .mc-store-count { color: #7ac8f0; }
+.mc-store.black .mc-store-count { color: #f07a7a; }
+
+/* 중앙 pit 그리드 */
+.mc-center {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mc-row {
+  display: flex;
+  gap: 6px;
+  justify-content: stretch;
+}
+
+/* 개별 pit */
+.mc-pit {
+  flex: 1;
+  aspect-ratio: 1;
+  background: #2a1800;
+  border: 2px solid #6a4a10;
+  border-radius: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: default;
+  transition: background 0.15s, transform 0.1s;
+  position: relative;
+}
+
+.mc-pit.clickable {
+  cursor: pointer;
+  border-color: #f0c040;
+}
+
+.mc-pit.clickable:hover {
+  background: #3a2800;
+  transform: scale(1.08);
+}
+
+.mc-pit.clickable.white { border-color: #7ac8f0; }
+.mc-pit.clickable.black { border-color: #f07a7a; }
+
+.mc-pit.empty { opacity: 0.4; }
+
+.mc-pit-count {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #f0e8c0;
+}
+
+.mc-pit-num {
+  font-size: 0.55rem;
+  color: #666;
+}
+
+/* 씨앗 시각화 (작은 원들) */
+.mc-seeds {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 2px;
+  max-width: 80%;
+}
+
+.mc-seed {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: #d4a940;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.4);
+  flex-shrink: 0;
+}
+
+/* ── 반응형 ─────────────────────────────────────── */
+@media (max-width: 480px) {
+  .mc-store { flex: 0 0 50px; }
+  .mc-pit-count { font-size: 0.85rem; }
+  .mc-store-count { font-size: 1.1rem; }
+  .mc-board { padding: 8px; border-radius: 30px; }
+}
+
+@media (max-width: 360px) {
+  .mc-store { flex: 0 0 40px; }
+  .mc-seeds { display: none; }
+}

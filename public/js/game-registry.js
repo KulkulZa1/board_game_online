@@ -283,6 +283,33 @@ window.GameRegistry = (function () {
         ]
       }
     },
+    {
+      id: 'mancala',
+      name: '만칼라',
+      icon: '🪴',
+      desc: '씨앗 배분·캡처 전략<br>14구멍 만칼라 보드',
+      forceWhite: false,
+      soloIcon: '🪴',
+      soloIconW: '○',
+      soloIconB: '⬤',
+      soloLabelW: '백 (선공)',
+      soloLabelB: '흑 (후공)',
+      createTitle: '만칼라 방 만들기',
+      gameTitle: '만칼라 대국',
+      specTitle: '만칼라 관전',
+      boardAreaId: 'mancala-board-area',
+      rules: {
+        title: '🪴 만칼라 규칙',
+        sections: [
+          { head: '목표', text: '게임 종료 시 자신의 창고에 씨앗이 더 많으면 승리합니다.' },
+          { head: '이동', text: '자신의 구멍(pit)을 클릭하면, 그 안의 씨앗을 반시계 방향으로 하나씩 나눠줍니다. 상대방의 창고(mancala)는 건너뜁니다.' },
+          { head: '보너스 턴', text: '마지막 씨앗이 자신의 창고에 들어가면 한 번 더 이동할 수 있습니다.' },
+          { head: '캡처', text: '마지막 씨앗이 자신의 빈 구멍에 들어가고, 그 맞은편 상대 구멍에 씨앗이 있으면 양쪽 씨앗을 모두 자신의 창고로 가져옵니다.' },
+          { head: '종료', text: '어느 한 쪽 진영의 구멍이 모두 비면 게임이 종료됩니다. 나머지 씨앗은 각 플레이어 창고로 이동합니다.' },
+          { head: '선공', text: '백(하단)이 먼저 둡니다.' },
+        ]
+      }
+    },
   ];
 
   function getGame(id) { return GAMES.find(function (g) { return g.id === id; }); }

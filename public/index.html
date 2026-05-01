@@ -139,6 +139,16 @@
             <button class="btn-play">플레이</button>
           </div>
         </div>
+        <div class="game-card" id="card-mancala" onclick="selectGame('mancala')">
+          <div class="game-card-icon">🪴</div>
+          <div class="game-card-name">만칼라</div>
+          <div class="game-card-desc">씨앗 배분·캡처 전략<br>14구멍 만칼라 보드</div>
+          <div class="card-actions">
+            <button class="btn-rules" onclick="showRules('mancala');event.stopPropagation()">📋 규칙</button>
+            <button class="btn-solo"  onclick="startSolo('mancala');event.stopPropagation()">🤖 혼자</button>
+            <button class="btn-play">플레이</button>
+          </div>
+        </div>
       </div>
     </section>
 

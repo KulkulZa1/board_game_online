@@ -14,6 +14,7 @@ window.Stats = (function () {
     backgammon:  '🎲 백가몬',
     texasholdem: '🃏 텍사스 홀덤',
     dotsboxes:   '📦 도트앤박스',
+    mancala:     '🪴 만칼라',
   };
 
   function _load() {
