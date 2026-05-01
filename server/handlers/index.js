@@ -8,4 +8,5 @@ module.exports = new Map([
   ['indianpoker', require('./indianpoker')],
   ['applegame',   require('./applegame')],
   ['battleship',  require('./battleship')],
+  ['backgammon',  require('./backgammon')],
 ]);

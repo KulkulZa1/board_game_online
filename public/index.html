@@ -109,6 +109,16 @@
             <button class="btn-play">플레이</button>
           </div>
         </div>
+        <div class="game-card" id="card-backgammon" onclick="selectGame('backgammon')">
+          <div class="game-card-icon">🎲</div>
+          <div class="game-card-name">백가몬</div>
+          <div class="game-card-desc">주사위로 말 이동·탈출<br>24포인트 보드게임</div>
+          <div class="card-actions">
+            <button class="btn-rules" onclick="showRules('backgammon');event.stopPropagation()">📋 규칙</button>
+            <button class="btn-solo"  onclick="startSolo('backgammon');event.stopPropagation()">🤖 혼자</button>
+            <button class="btn-play">플레이</button>
+          </div>
+        </div>
       </div>
     </section>
 

@@ -11,6 +11,7 @@ window.Stats = (function () {
     checkers:    '🔴 체커',
     applegame:   '🍎 사과게임',
     battleship:  '🚢 배틀십',
+    backgammon:  '🎲 백가몬',
   };
 
   function _load() {

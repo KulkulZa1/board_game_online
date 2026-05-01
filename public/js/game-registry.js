@@ -204,6 +204,33 @@ window.GameRegistry = (function () {
         ]
       }
     },
+    {
+      id: 'backgammon',
+      name: '백가몬',
+      icon: '🎲',
+      desc: '주사위로 말 이동·탈출<br>24포인트 보드게임',
+      forceWhite: false,
+      soloIcon: '🎲',
+      soloIconW: '⬜',
+      soloIconB: '⬛',
+      soloLabelW: '백 (선공)',
+      soloLabelB: '흑 (후공)',
+      createTitle: '백가몬 방 만들기',
+      gameTitle: '백가몬 대국',
+      specTitle: '백가몬 관전',
+      boardAreaId: 'backgammon-board-area',
+      rules: {
+        title: '🎲 백가몬 규칙',
+        sections: [
+          { head: '목표', text: '자신의 말 15개를 모두 홈 보드로 이동시킨 후 탈출(borne off)시키면 승리합니다.' },
+          { head: '이동', text: '주사위 2개를 굴려 나온 숫자만큼 말을 이동합니다. 백은 24→1 방향, 흑은 1→24 방향으로 이동합니다.' },
+          { head: '블럭·히트', text: '상대 말이 2개 이상인 포인트에는 진입할 수 없습니다(블럭). 상대 말이 1개(블롯)인 포인트에 이동하면 그 말을 바(BAR)로 보냅니다.' },
+          { head: '바 복귀', text: '바에 말이 있으면 다른 이동 전에 반드시 바에서 먼저 입장해야 합니다.' },
+          { head: '탈출', text: '모든 말이 홈 보드(백 1-6, 흑 19-24)에 있으면 주사위 수만큼 말을 탈출시킬 수 있습니다.' },
+          { head: '더블', text: '주사위 두 개 숫자가 같으면 4번 이동할 수 있습니다.' },
+        ]
+      }
+    },
   ];
 
   function getGame(id) { return GAMES.find(function (g) { return g.id === id; }); }
