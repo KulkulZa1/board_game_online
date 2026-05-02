@@ -2,7 +2,7 @@
 
 ## Overview
 
-This is a real-time multiplayer board game platform built with Node.js + Express + Socket.io. It supports 8 games (Chess, Omok, Connect4, Othello, Checkers, Indian Poker, Apple Game, Battleship), runs as a Progressive Web App (PWA), and is deployed on Render.com. There is **no database** — all game state is held in memory on the server, and player stats are stored in browser localStorage.
+This is a real-time multiplayer board game platform built with Node.js + Express + Socket.io. It supports **12 games** (Chess, Omok, Connect4, Othello, Checkers, Indian Poker, Apple Game, Battleship, Backgammon, Texas Hold'em, Dots & Boxes, Mancala), runs as a Progressive Web App (PWA), and is deployed on Render.com. There is **no database** — all game state is held in memory on the server, and player stats are stored in browser localStorage.
 
 ---
 
@@ -53,7 +53,11 @@ board_game_online/
 │       ├── checkers.js
 │       ├── indianpoker.js
 │       ├── applegame.js
-│       └── battleship.js
+│       ├── battleship.js
+│       ├── backgammon.js
+│       ├── texasholdem.js
+│       ├── dotsboxes.js
+│       └── mancala.js
 │
 ├── package.json         # 4 dependencies: express, socket.io, chess.js (0.12.0), uuid
 ├── render.yaml          # Render.com deployment config
@@ -79,8 +83,13 @@ board_game_online/
     │       ├── indianpoker.css
     │       ├── checkers.css
     │       ├── applegame.css
-    │       └── battleship.css
+    │       ├── battleship.css
+    │       ├── backgammon.css
+    │       ├── texasholdem.css
+    │       ├── dotsboxes.css
+    │       └── mancala.css
     └── js/
+        ├── admob.js                   # AdMob interstitial wrapper (no-op on web, live in native)
         ├── game-registry.js           # Central metadata: all game names, rules, icons, titles
         ├── game.js                    # Main frontend orchestrator (socket events, routing)
         ├── lobby.js                   # Room management UI
@@ -92,6 +101,10 @@ board_game_online/
         ├── game-indianpoker.js        # Indian Poker UI handler
         ├── game-applegame.js          # Apple Game UI handler
         ├── game-battleship.js         # Battleship UI handler
+        ├── game-backgammon.js         # Backgammon UI handler
+        ├── game-texasholdem.js        # Texas Hold'em UI handler
+        ├── game-dotsboxes.js          # Dots & Boxes UI handler
+        ├── game-mancala.js            # Mancala UI handler
         ├── ai-chess.js                # Chess AI (minimax depth-3, alpha-beta)
         ├── ai-omok.js                 # Omok AI (heuristic pattern scoring)
         ├── ai-connect4.js             # Connect4 AI (minimax depth-6, alpha-beta)
@@ -100,6 +113,10 @@ board_game_online/
         ├── ai-indianpoker.js          # Indian Poker AI (card comparison heuristic)
         ├── ai-applegame.js            # Apple Game AI (greedy largest rectangle)
         ├── ai-battleship.js           # Battleship AI (hunt-and-target strategy)
+        ├── ai-backgammon.js           # Backgammon AI (heuristic)
+        ├── ai-texasholdem.js          # Texas Hold'em AI (hand-strength heuristic)
+        ├── ai-dotsboxes.js            # Dots & Boxes AI (chain strategy)
+        ├── ai-mancala.js              # Mancala AI (heuristic)
         ├── board.js                   # Chess board renderer
         ├── omok-board.js              # Omok board renderer
         ├── connect4-board.js          # Connect4 board renderer
@@ -108,6 +125,9 @@ board_game_online/
         ├── indian-poker.js            # Indian Poker UI module
         ├── applegame-board.js         # Apple Game board renderer
         ├── battleship-board.js        # Battleship board renderer
+        ├── backgammon-board.js        # Backgammon board renderer
+        ├── dotsboxes-board.js         # Dots & Boxes board renderer
+        ├── mancala-board.js           # Mancala board renderer
         ├── chat.js                    # Chat + emoji system
         ├── timer.js                   # Timer with client-side interpolation
         ├── review.js                  # Chess game replay
@@ -264,8 +284,7 @@ Deployed on **Render.com** via `render.yaml`:
 
 **Branch strategy:**
 - `main` → production (auto-deployed by Render on push)
-- `dev` → development branch for staging changes
-- Feature branches merge to `dev`, then `dev` merges to `main`
+- Feature branches merge directly to `main`
 
 ---
 
