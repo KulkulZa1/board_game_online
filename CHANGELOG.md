@@ -56,6 +56,39 @@
 
 ---
 
+## [v1.4.0] — 2026-05-01 (진행 중)
+
+### 추가
+
+**게임**
+- 사과게임: 17×10 격자, 합이 10이 되는 사각형 선택·제거, 턴제 멀티플레이 + 솔로 AI
+- 배틀십: 10×10 격자 해전, 함선 배치 후 교대 공격, 솔로 AI (hunt-and-target 전략)
+- 백가몬: 24포인트 보드, 주사위 2개, 바(BAR)·탈출(borne-off)·더블 완전 구현, 멀티플레이 + 솔로 AI (휴리스틱)
+- 텍사스 홀덤: 헤즈업 포커, 블라인드(10/20), 4라운드 베팅, 7카드 핸드 평가(C(7,5)=21조합), 멀티플레이 + 솔로 AI
+- 도트앤박스: 5×5 격자, SVG 렌더링, 박스 완성 시 보너스 턴, 멀티플레이 + 솔로 AI (체인 전략)
+- 만칼라: 14구멍(pit 0-5 백, 6 백창고, 7-12 흑, 13 흑창고), 반시계 배분, 보너스 턴·캡처 룰, 멀티플레이 + 솔로 AI
+
+**모바일 (Phase C)**
+- `capacitor.config.json`: Capacitor 앱 설정, WebView가 Render.com 서버 로드, AdMob 플러그인 연결
+- `public/js/admob.js`: 네이티브 앱에서만 동작하는 전면 광고 래퍼 (`Capacitor.Plugins.AdMob`), 웹에서는 무시
+- 솔로 모드 게임 종료 후 전면 광고 표시 (`game.js` 연동)
+- `BUILDING_ANDROID.md`: Capacitor 초기화 → AdMob 설정 → 서명 AAB 빌드 → Play Store 제출 전 과정 가이드
+
+**아키텍처 개선**
+- `server.js` 단일 파일(2,038줄) → `server/` 모듈 폴더로 분리
+  - `server/handlers/index.js`: 게임 핸들러 레지스트리 (새 게임 추가 시 1줄 등록)
+  - `createRoomState` / `resetForRematch`: 핸들러 플러그인 패턴으로 리팩터링
+  - `server/events.js` `game:move` 디스패처: 단일 레지스트리 조회로 단순화
+- `game-registry.js`: 게임별 메타데이터(이름·규칙·아이콘·제목) 중앙 집중화
+  - `game.js`, `lobby.js`에서 중복 데이터 ~120줄 제거
+- `css/games/`: 게임별 CSS 파일 분리 (`game.css` 공유 스타일만 유지)
+
+**문서**
+- `ADDING_A_GAME.md`: AI 에이전트·개발자를 위한 10단계 게임 추가 가이드
+- `CLAUDE.md` 업데이트: 새 아키텍처 반영
+
+---
+
 ## [v1.2.0] — 2026-03-29
 
 ### 추가

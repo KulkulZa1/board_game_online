@@ -89,6 +89,66 @@
             <button class="btn-play">플레이</button>
           </div>
         </div>
+        <div class="game-card" id="card-applegame" onclick="selectGame('applegame')">
+          <div class="game-card-icon">🍎</div>
+          <div class="game-card-name">사과게임</div>
+          <div class="game-card-desc">합이 10인 사각형 선택<br>17×10 사과 격자</div>
+          <div class="card-actions">
+            <button class="btn-rules" onclick="showRules('applegame');event.stopPropagation()">📋 규칙</button>
+            <button class="btn-solo" onclick="startSolo('applegame');event.stopPropagation()">🤖 혼자</button>
+            <button class="btn-play">플레이</button>
+          </div>
+        </div>
+        <div class="game-card" id="card-battleship" onclick="selectGame('battleship')">
+          <div class="game-card-icon">🚢</div>
+          <div class="game-card-name">배틀십</div>
+          <div class="game-card-desc">함대를 숨기고 적함을 격침<br>10×10 격자 해전</div>
+          <div class="card-actions">
+            <button class="btn-rules" onclick="showRules('battleship');event.stopPropagation()">📋 규칙</button>
+            <button class="btn-solo"  onclick="startSolo('battleship');event.stopPropagation()">🤖 혼자</button>
+            <button class="btn-play">플레이</button>
+          </div>
+        </div>
+        <div class="game-card" id="card-dotsboxes" onclick="selectGame('dotsboxes')">
+          <div class="game-card-icon">📦</div>
+          <div class="game-card-name">도트앤박스</div>
+          <div class="game-card-desc">선을 그어 박스 완성<br>5×5 격자 퍼즐</div>
+          <div class="card-actions">
+            <button class="btn-rules" onclick="showRules('dotsboxes');event.stopPropagation()">📋 규칙</button>
+            <button class="btn-solo"  onclick="startSolo('dotsboxes');event.stopPropagation()">🤖 혼자</button>
+            <button class="btn-play">플레이</button>
+          </div>
+        </div>
+        <div class="game-card" id="card-texasholdem" onclick="selectGame('texasholdem')">
+          <div class="game-card-icon">🃏</div>
+          <div class="game-card-name">텍사스 홀덤</div>
+          <div class="game-card-desc">커뮤니티 카드 포커<br>최고 패 보유자 승리</div>
+          <div class="card-actions">
+            <button class="btn-rules" onclick="showRules('texasholdem');event.stopPropagation()">📋 규칙</button>
+            <button class="btn-solo"  onclick="startSolo('texasholdem');event.stopPropagation()">🤖 혼자</button>
+            <button class="btn-play">플레이</button>
+          </div>
+        </div>
+        <div class="game-card" id="card-backgammon" onclick="selectGame('backgammon')">
+          <div class="game-card-icon">🎲</div>
+          <div class="game-card-name">백가몬</div>
+          <div class="game-card-desc">주사위로 말 이동·탈출<br>24포인트 보드게임</div>
+          <div class="card-actions">
+            <button class="btn-rules" onclick="showRules('backgammon');event.stopPropagation()">📋 규칙</button>
+            <button class="btn-solo"  onclick="startSolo('backgammon');event.stopPropagation()">🤖 혼자</button>
+            <button class="btn-play">플레이</button>
+          </div>
+        </div>
+        <div class="game-card" id="card-mancala" onclick="selectGame('mancala')">
+          <div class="game-card-icon">🪴</div>
+          <div class="game-card-name">만칼라</div>
+          <div class="game-card-desc">씨앗 배분·캡처 전략<br>14구멍 만칼라 보드</div>
+          <div class="card-actions">
+            <button class="btn-rules" onclick="showRules('mancala');event.stopPropagation()">📋 규칙</button>
+            <button class="btn-solo"  onclick="startSolo('mancala');event.stopPropagation()">🤖 혼자</button>
+            <button class="btn-play">플레이</button>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -255,6 +315,7 @@
   <script src="/socket.io/socket.io.js"></script>
   <script src="js/stats.js?v=1.3"></script>
   <script src="js/guest.js?v=1.3"></script>
+  <script src="js/game-registry.js?v=1.0"></script>
   <script src="js/lobby.js?v=1.3"></script>
   <!-- Service Worker 등록 -->
   <script>

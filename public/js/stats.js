@@ -9,6 +9,12 @@ window.Stats = (function () {
     othello:     '⬜ 오셀로',
     indianpoker: '🃏 인디언 포커',
     checkers:    '🔴 체커',
+    applegame:   '🍎 사과게임',
+    battleship:  '🚢 배틀십',
+    backgammon:  '🎲 백가몬',
+    texasholdem: '🃏 텍사스 홀덤',
+    dotsboxes:   '📦 도트앤박스',
+    mancala:     '🪴 만칼라',
   };
 
   function _load() {

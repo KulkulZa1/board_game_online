@@ -1,0 +1,382 @@
+/* battleship.css — 배틀십 게임 스타일 */
+
+/* ===== 레이아웃 ===== */
+.bs-layout {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.bs-fleet-layout {
+  display: flex;
+  gap: 24px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+/* ===== 그리드 공통 ===== */
+.bs-grid-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.bs-grid-label {
+  font-size: 12px;
+  color: #8892a4;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 2px;
+}
+
+.bs-col-labels,
+.bs-row-labels {
+  display: flex;
+}
+
+.bs-col-labels {
+  padding-left: 22px;
+}
+
+.bs-col-label,
+.bs-row-label {
+  width: 32px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: #5a6578;
+  font-weight: 500;
+}
+
+.bs-row-label {
+  width: 22px;
+  height: 32px;
+}
+
+.bs-grid-body {
+  display: flex;
+}
+
+.bs-grid {
+  display: grid;
+  grid-template-columns: repeat(10, 32px);
+  grid-template-rows: repeat(10, 32px);
+  border-left: 1px solid #2a3040;
+  border-top: 1px solid #2a3040;
+}
+
+.bs-cell {
+  width: 32px;
+  height: 32px;
+  border-right: 1px solid #2a3040;
+  border-bottom: 1px solid #2a3040;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  cursor: default;
+  position: relative;
+  background: #0d1117;
+  transition: background 0.1s;
+}
+
+/* ===== 공격 그리드 (클릭 가능) ===== */
+.bs-attack-grid .bs-cell.bs-available {
+  cursor: crosshair;
+}
+
+.bs-attack-grid .bs-cell.bs-available:hover {
+  background: #1a2a3a;
+}
+
+/* ===== 함선 색상 ===== */
+.bs-cell.bs-ship-carrier    { background: #1a3a5c; }
+.bs-cell.bs-ship-battleship { background: #1a4a2a; }
+.bs-cell.bs-ship-cruiser    { background: #3a2a1a; }
+.bs-cell.bs-ship-submarine  { background: #2a1a4a; }
+.bs-cell.bs-ship-destroyer  { background: #3a1a2a; }
+
+/* ===== 미리보기 (배치 중) ===== */
+.bs-cell.bs-preview-valid   { background: #1a4a2a; outline: 2px solid #4caf50; z-index: 1; }
+.bs-cell.bs-preview-invalid { background: #4a1a1a; outline: 2px solid #e05555; z-index: 1; }
+
+/* ===== 공격 결과 ===== */
+.bs-cell.bs-hit {
+  background: #3a1010 !important;
+}
+.bs-cell.bs-hit::after {
+  content: '🔴';
+  font-size: 16px;
+}
+
+.bs-cell.bs-miss {
+  background: #101828 !important;
+}
+.bs-cell.bs-miss::after {
+  content: '';
+  display: block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #4a5568;
+}
+
+/* ===== 격침 ===== */
+.bs-cell.bs-sunk {
+  background: #1a0505 !important;
+  opacity: 0.7;
+}
+.bs-cell.bs-sunk::after {
+  content: '💥';
+  font-size: 14px;
+}
+
+/* ===== 내 함대 — 피격된 셀 ===== */
+.bs-cell.bs-own-hit {
+  background: #4a1010 !important;
+  opacity: 0.85;
+}
+.bs-cell.bs-own-hit::after {
+  content: '🔥';
+  font-size: 13px;
+}
+
+/* ===== 배치 패널 ===== */
+.bs-palette {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 140px;
+  padding: 8px;
+  background: #0f1117;
+  border-radius: 10px;
+  border: 1px solid #2a3040;
+}
+
+.bs-palette-title {
+  font-size: 12px;
+  color: #8892a4;
+  font-weight: 600;
+  margin-bottom: 4px;
+  text-align: center;
+}
+
+.bs-palette-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  border: 1px solid #2a3040;
+  background: #131720;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.bs-palette-item:hover:not(.bs-palette-item-placed) {
+  background: #1a2030;
+  border-color: #4a9eff55;
+}
+
+.bs-palette-item.bs-palette-item-selected {
+  background: #1a2a40;
+  border-color: #4a9eff;
+  box-shadow: 0 0 0 2px #4a9eff44;
+}
+
+.bs-palette-item.bs-palette-item-placed {
+  opacity: 0.4;
+  cursor: default;
+  text-decoration: line-through;
+}
+
+.bs-palette-ship-preview {
+  display: flex;
+  gap: 2px;
+}
+
+.bs-palette-ship-cell {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  background: #4a9eff;
+}
+
+.bs-palette-ship-cell.bs-palette-carrier    { background: #4a90d0; }
+.bs-palette-ship-cell.bs-palette-battleship { background: #50c060; }
+.bs-palette-ship-cell.bs-palette-cruiser    { background: #d0904a; }
+.bs-palette-ship-cell.bs-palette-submarine  { background: #9060d0; }
+.bs-palette-ship-cell.bs-palette-destroyer  { background: #d05070; }
+
+.bs-palette-ship-name {
+  font-size: 12px;
+  color: #c8d0de;
+  flex: 1;
+}
+
+.bs-palette-ship-size {
+  font-size: 11px;
+  color: #5a6578;
+}
+
+/* ===== 배치 컨트롤 ===== */
+.bs-placement-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.bs-rotate-btn,
+.bs-place-btn,
+.bs-random-btn {
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  width: 100%;
+  transition: background 0.15s, transform 0.1s;
+}
+
+.bs-rotate-btn {
+  background: #1a2a40;
+  color: #4a9eff;
+  border: 1px solid #4a9eff44;
+}
+
+.bs-rotate-btn:hover {
+  background: #1e3050;
+}
+
+.bs-random-btn {
+  background: #1a3040;
+  color: #7abcff;
+  border: 1px solid #3a5a7a;
+}
+
+.bs-random-btn:hover {
+  background: #1e3850;
+}
+
+.bs-place-btn {
+  background: #4a9eff;
+  color: #fff;
+  display: none;
+}
+
+.bs-place-btn.bs-place-btn-ready {
+  display: block;
+  animation: bs-pulse 1.5s infinite;
+}
+
+.bs-place-btn:hover {
+  background: #3a8eef;
+  transform: translateY(-1px);
+}
+
+@keyframes bs-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 #4a9eff44; }
+  50%       { box-shadow: 0 0 0 6px #4a9eff00; }
+}
+
+/* ===== 상태 메시지 ===== */
+.bs-status-msg {
+  text-align: center;
+  font-size: 13px;
+  color: #8892a4;
+  margin: 8px 0;
+  min-height: 20px;
+}
+
+.bs-status-msg.bs-my-turn {
+  color: #f0c040;
+  font-weight: 600;
+}
+
+/* ===== 그리드 제목 ===== */
+.bs-grid-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #8892a4;
+  text-align: center;
+  margin-bottom: 4px;
+  letter-spacing: 0.03em;
+}
+
+.bs-grid-title.bs-mine  { color: #4a9eff; }
+.bs-grid-title.bs-enemy { color: #e05555; }
+
+/* ===== 마지막 포격 하이라이트 ===== */
+.bs-cell.bs-last-shot {
+  outline: 2px solid #f0c040;
+  z-index: 1;
+}
+
+/* ===== 대기 메시지 (배치 중) ===== */
+.bs-waiting-msg {
+  padding: 16px;
+  background: #0f1117;
+  border-radius: 10px;
+  border: 1px solid #2a3040;
+  color: #8892a4;
+  font-size: 13px;
+  text-align: center;
+}
+
+/* ===== 반응형: 600px 이하 ===== */
+@media (max-width: 600px) {
+  .bs-grid {
+    grid-template-columns: repeat(10, 28px);
+    grid-template-rows: repeat(10, 28px);
+  }
+
+  .bs-cell {
+    width: 28px;
+    height: 28px;
+    font-size: 12px;
+  }
+
+  .bs-col-label {
+    width: 28px;
+  }
+
+  .bs-row-label {
+    height: 28px;
+  }
+
+  .bs-fleet-layout {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .bs-layout {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .bs-palette {
+    flex-direction: row;
+    flex-wrap: wrap;
+    min-width: unset;
+    width: 100%;
+    max-width: 320px;
+  }
+
+  .bs-palette-item {
+    flex: 1 1 auto;
+    min-width: 60px;
+    flex-direction: column;
+    gap: 4px;
+    padding: 6px;
+    font-size: 11px;
+  }
+}

@@ -1,0 +1,182 @@
+/* ===== 오목 (Omok) ===== */
+#omok-board-area {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+
+#omokboard {
+  position: relative;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.omok-grid {
+  display: grid;
+  grid-template-columns: repeat(15, 1fr);
+  background: #dcb468;
+  background-image:
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent calc(100% / 14 - 1px),
+      #8b6c34 calc(100% / 14 - 1px),
+      #8b6c34 calc(100% / 14)
+    ),
+    repeating-linear-gradient(
+      90deg,
+      transparent,
+      transparent calc(100% / 14 - 1px),
+      #8b6c34 calc(100% / 14 - 1px),
+      #8b6c34 calc(100% / 14)
+    );
+  border: 3px solid #6b4c1e;
+  border-radius: 4px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+}
+
+.omok-cell {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  cursor: default;
+}
+
+.omok-my-turn .omok-cell:not([class*="omok-stone"]):hover {
+  cursor: crosshair;
+}
+
+.omok-star::after {
+  content: '';
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  background: #5a3a10;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.omok-star:has(.omok-stone)::after {
+  display: none;
+}
+
+.omok-stone {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  position: relative;
+  z-index: 2;
+  transition: transform 0.12s ease;
+}
+
+.omok-black {
+  background: radial-gradient(circle at 35% 30%, #666, #111 60%, #000);
+  box-shadow: 1px 2px 6px rgba(0,0,0,0.7), inset 0 1px 2px rgba(255,255,255,0.12);
+}
+
+.omok-white {
+  background: radial-gradient(circle at 35% 30%, #fff, #ddd 55%, #bbb);
+  box-shadow: 1px 2px 6px rgba(0,0,0,0.5), inset 0 1px 3px rgba(255,255,255,0.8);
+}
+
+.omok-last .omok-stone::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 8px;
+  height: 8px;
+  background: #e63030;
+  border-radius: 50%;
+}
+
+.omok-win .omok-stone {
+  box-shadow: 0 0 0 3px #f0c040, 0 0 12px rgba(240,192,64,0.7);
+}
+
+.omok-placed {
+  animation: omok-drop 0.15s ease-out;
+}
+
+@keyframes omok-drop {
+  0%   { transform: scale(0.5); opacity: 0.6; }
+  100% { transform: scale(1);   opacity: 1;   }
+}
+
+.omok-ghost .omok-stone,
+.omok-ghost::before {
+  opacity: 0.4;
+}
+
+.omok-ghost[data-ghost-color="black"]::before {
+  content: '';
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #555, #000 60%);
+  position: absolute;
+  opacity: 0.45;
+  z-index: 2;
+}
+
+.omok-ghost[data-ghost-color="white"]::before {
+  content: '';
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fff, #ccc 60%);
+  position: absolute;
+  opacity: 0.45;
+  z-index: 2;
+}
+
+.omok-hint {
+  animation: omok-hint-pulse 0.6s ease-in-out infinite alternate;
+}
+
+.omok-hint::before {
+  content: '';
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: rgba(138,43,226,0.45);
+  border: 2px solid #a855f7;
+  position: absolute;
+  z-index: 3;
+}
+
+@keyframes omok-hint-pulse {
+  from { opacity: 0.7; }
+  to   { opacity: 1;   }
+}
+
+.omok-selected::before {
+  content: '';
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: rgba(74,158,255,0.35);
+  border: 2px solid #4a9eff;
+  position: absolute;
+  z-index: 3;
+}
+
+@media (max-width: 480px) {
+  .omok-cell { width: 24px; height: 24px; }
+  .omok-stone { width: 22px; height: 22px; }
+  .omok-ghost[data-ghost-color="black"]::before,
+  .omok-ghost[data-ghost-color="white"]::before { width: 22px; height: 22px; }
+  .omok-hint::before, .omok-selected::before { width: 18px; height: 18px; }
+}
+
+@media (max-width: 360px) {
+  .omok-cell { width: 20px; height: 20px; }
+}

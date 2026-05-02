@@ -1,0 +1,59 @@
+/* ===== 인디언 포커 (Indian Poker) ===== */
+#indianpoker-board-area {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 300px;
+  padding: 8px;
+}
+
+.ip-card {
+  width: 80px;
+  height: 110px;
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-size: 1.8rem;
+  font-weight: 700;
+  border: 2px solid #444;
+  transition: transform 0.3s, box-shadow 0.3s;
+}
+
+.ip-card-revealed {
+  background: #fff;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+}
+
+.ip-card-back {
+  background: linear-gradient(135deg, #1a1f2e, #2a3040);
+  border-color: #3a4050;
+  color: #8892a4;
+}
+
+.ip-suit-red   { color: #e74c3c; }
+.ip-suit-black { color: #1a1a1a; }
+
+.ip-action-btn {
+  padding: 10px 20px;
+  min-height: 44px;
+  border-radius: 8px;
+  border: none;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: filter 0.15s;
+}
+
+.ip-action-btn:hover { filter: brightness(1.15); }
+
+.ip-fold  { background: #c0392b; color: #fff; }
+.ip-call  { background: #27ae60; color: #fff; }
+.ip-raise { background: #f0c040; color: #1a1a2e; }
+
+@media (max-width: 480px) {
+  .ip-action-btn { width: 100%; justify-content: center; }
+  .ip-actions { flex-direction: column !important; gap: 8px !important; }
+}
