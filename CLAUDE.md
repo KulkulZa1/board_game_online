@@ -2,7 +2,7 @@
 
 ## Overview
 
-This is a real-time multiplayer board game platform built with Node.js + Express + Socket.io. It supports 6 games (Chess, Omok, Connect4, Othello, Checkers, Indian Poker), runs as a Progressive Web App (PWA), and is deployed on Render.com. There is **no database** — all game state is held in memory on the server, and player stats are stored in browser localStorage.
+This is a real-time multiplayer board game platform built with Node.js + Express + Socket.io. It supports 8 games (Chess, Omok, Connect4, Othello, Checkers, Indian Poker, Apple Game, Battleship), runs as a Progressive Web App (PWA), and is deployed on Render.com. There is **no database** — all game state is held in memory on the server, and player stats are stored in browser localStorage.
 
 ---
 
@@ -34,111 +34,164 @@ There is no `.env` file in the repo — configure via the shell or deployment pl
 
 ```
 board_game_online/
-├── server.js            # Entire backend (Express + Socket.io, ~1,900 lines)
+├── server.js            # Thin entry point: require('./server/index.js')
+├── server/              # Backend modules (Node.js, no build step)
+│   ├── index.js         # Express + Socket.io setup, server startup
+│   ├── state.js         # Shared mutable state (rooms, tokenMap, io ref)
+│   ├── utils.js         # Pure helpers (rateCheck, getRoleColor, etc.)
+│   ├── rooms.js         # createRoomState(), resetForRematch()
+│   ├── endgame.js       # endGame(), startGame(), approveSpectator()
+│   ├── timers.js        # Timer tick loop, rate-limit cleanup
+│   ├── events.js        # All socket.on() event handlers
+│   ├── routes.js        # HTTP routes (/api/status, /admin/*)
+│   └── handlers/        # Per-game move handlers
+│       ├── index.js     # Game registry Map (gameType → handler module)
+│       ├── chess.js
+│       ├── omok.js
+│       ├── connect4.js
+│       ├── othello.js
+│       ├── checkers.js
+│       ├── indianpoker.js
+│       ├── applegame.js
+│       └── battleship.js
+│
 ├── package.json         # 4 dependencies: express, socket.io, chess.js (0.12.0), uuid
 ├── render.yaml          # Render.com deployment config
+├── ADDING_A_GAME.md     # Developer guide: 10-step checklist to add a new game
 ├── README.md            # Korean-language project intro
-├── CHANGELOG.md         # Version history (v1.0 → v1.2)
+├── CHANGELOG.md         # Version history
 │
-├── public/
-│   ├── index.html       # Lobby (game selection + room create/join)
-│   ├── game.html        # Game page (board + chat + timer)
-│   ├── admin.html       # Admin dashboard (status, shutdown)
-│   ├── privacy.html     # Play Store privacy policy
-│   ├── manifest.json    # PWA manifest
-│   ├── sw.js            # Service Worker (caching/offline)
-│   ├── .well-known/
-│   │   └── assetlinks.json  # Android TWA domain verification
-│   ├── css/
-│   │   ├── lobby.css
-│   │   └── game.css
-│   └── js/
-│       ├── game.js                    # Main frontend orchestrator
-│       ├── lobby.js                   # Room management UI
-│       ├── game-chess.js              # Chess UI handler
-│       ├── game-omok.js               # Omok UI handler
-│       ├── game-connect4.js           # Connect4 UI handler
-│       ├── game-othello.js            # Othello UI handler
-│       ├── game-checkers.js           # Checkers UI handler
-│       ├── game-indianpoker.js        # Indian Poker UI handler
-│       ├── ai-chess.js                # Chess AI (minimax depth-3, alpha-beta)
-│       ├── ai-omok.js                 # Omok AI (heuristic pattern scoring)
-│       ├── ai-connect4.js             # Connect4 AI (minimax depth-6, alpha-beta)
-│       ├── ai-othello.js              # Othello AI (minimax depth-4, corner weighting)
-│       ├── ai-checkers.js             # Checkers AI (minimax depth-4)
-│       ├── ai-indianpoker.js          # Indian Poker AI (card comparison heuristic)
-│       ├── board.js                   # Chess board renderer
-│       ├── omok-board.js              # Omok board renderer
-│       ├── connect4-board.js          # Connect4 board renderer
-│       ├── othello-board.js           # Othello board renderer
-│       ├── checkers-board.js          # Checkers board renderer
-│       ├── indian-poker.js            # Indian Poker UI module
-│       ├── chat.js                    # Chat + emoji system
-│       ├── timer.js                   # Timer with client-side interpolation
-│       ├── review.js                  # Chess game replay
-│       ├── sound.js                   # Web Audio API procedural sounds
-│       ├── stats.js                   # Player stats (localStorage)
-│       └── guest.js                   # Guest profile management
-│
-└── docs/
-    ├── v1.0/            # Korean technical docs for v1.0
-    ├── v1.1/            # v1.1 planning notes
-    └── v1.2/            # v1.2 release notes
+└── public/
+    ├── index.html       # Lobby (game selection + room create/join)
+    ├── game.html        # Game page (board + chat + timer)
+    ├── admin.html       # Admin dashboard (status, shutdown)
+    ├── privacy.html     # Play Store privacy policy
+    ├── manifest.json    # PWA manifest
+    ├── sw.js            # Service Worker (caching/offline)
+    ├── css/
+    │   ├── lobby.css    # Lobby styles
+    │   ├── game.css     # Shared game UI (layout, chat, modals, spectator)
+    │   └── games/       # Per-game CSS (one file per game)
+    │       ├── chess.css
+    │       ├── omok.css
+    │       ├── connect4.css
+    │       ├── othello.css
+    │       ├── indianpoker.css
+    │       ├── checkers.css
+    │       ├── applegame.css
+    │       └── battleship.css
+    └── js/
+        ├── game-registry.js           # Central metadata: all game names, rules, icons, titles
+        ├── game.js                    # Main frontend orchestrator (socket events, routing)
+        ├── lobby.js                   # Room management UI
+        ├── game-chess.js              # Chess UI handler
+        ├── game-omok.js               # Omok UI handler
+        ├── game-connect4.js           # Connect4 UI handler
+        ├── game-othello.js            # Othello UI handler
+        ├── game-checkers.js           # Checkers UI handler
+        ├── game-indianpoker.js        # Indian Poker UI handler
+        ├── game-applegame.js          # Apple Game UI handler
+        ├── game-battleship.js         # Battleship UI handler
+        ├── ai-chess.js                # Chess AI (minimax depth-3, alpha-beta)
+        ├── ai-omok.js                 # Omok AI (heuristic pattern scoring)
+        ├── ai-connect4.js             # Connect4 AI (minimax depth-6, alpha-beta)
+        ├── ai-othello.js              # Othello AI (minimax depth-4, corner weighting)
+        ├── ai-checkers.js             # Checkers AI (minimax depth-4)
+        ├── ai-indianpoker.js          # Indian Poker AI (card comparison heuristic)
+        ├── ai-applegame.js            # Apple Game AI (greedy largest rectangle)
+        ├── ai-battleship.js           # Battleship AI (hunt-and-target strategy)
+        ├── board.js                   # Chess board renderer
+        ├── omok-board.js              # Omok board renderer
+        ├── connect4-board.js          # Connect4 board renderer
+        ├── othello-board.js           # Othello board renderer
+        ├── checkers-board.js          # Checkers board renderer
+        ├── indian-poker.js            # Indian Poker UI module
+        ├── applegame-board.js         # Apple Game board renderer
+        ├── battleship-board.js        # Battleship board renderer
+        ├── chat.js                    # Chat + emoji system
+        ├── timer.js                   # Timer with client-side interpolation
+        ├── review.js                  # Chess game replay
+        ├── sound.js                   # Web Audio API procedural sounds
+        ├── stats.js                   # Player stats (localStorage)
+        └── guest.js                   # Guest profile management
 ```
 
 ---
 
 ## Architecture
 
-### Backend (`server.js`)
+### Backend
 
-All backend logic lives in a **single file**. There is no build step.
+The backend is split into modules under `server/`. The entry point `server.js` is just one line: `require('./server/index.js')`.
 
-**Key data structures (in-memory):**
-- `rooms: Map<roomId, RoomState>` — all active game rooms
-- `tokenMap: Map<playerToken, {roomId, playerIndex}>` — reconnection tokens
+**Key data structures (in-memory, in `server/state.js`):**
+- `state.rooms: Map<roomId, RoomState>` — all active game rooms
+- `state.tokenMap: Map<playerToken, {roomId, role}>` — reconnection tokens
+- `state.io` — the Socket.io server instance
 
-**HTTP API:**
-- `GET /api/status` — server health, active room count (returns shutdown key for localhost requests)
+**Game handler registry (`server/handlers/index.js`):**
+```javascript
+module.exports = new Map([
+  ['chess',       require('./chess')],
+  ['battleship',  require('./battleship')],
+  // ...
+]);
+```
+Each handler exports: `{ initRoom(base, opts), resetRoom(room), handleMove(socket, room, role, data) }`
+
+**The `game:move` dispatcher** in `server/events.js` is now one line:
+```javascript
+const handler = handlers.get(room.gameType);
+if (handler) handler.handleMove(socket, room, role, data);
+```
+
+**HTTP API (`server/routes.js`):**
+- `GET /api/status` — server health + room list (shutdown key for localhost only)
 - `POST /admin/shutdown` — graceful shutdown (requires shutdown key)
 - `POST /admin/terminate` — force-end a specific game
 
-**Socket.io events (client → server):**
+**Socket.io events (client → server, in `server/events.js`):**
 
 | Event | Purpose |
 |-------|---------|
 | `room:create` | Create a new game room |
 | `room:join` | Join an existing room by ID |
 | `room:reconnect` | Reconnect with a player token |
-| `game:move` | Submit a game move (routes to per-game handler) |
+| `game:move` | Submit a game move (routes via handler registry) |
 | `game:resign` | Resign the game |
 | `game:draw:offer` | Offer/accept/decline a draw |
 | `chat:send` | Send a chat message |
 | `indianpoker:action` | Indian Poker betting action |
 
-**Per-game server handlers:**
-- `handleChessMove()` — delegates to chess.js for validation, tracks FEN history
-- `handleOmokMove()` — 5-in-a-row check + renju rule (no 6+, no double-3)
-- `handleConnect4Move()` — gravity simulation + 4-in-a-row check
-- `handleOthelloMove()` — flip logic + auto-pass when no valid moves
-- `handleCheckersMove()` — forced-jump enforcement + multi-jump chains
-- `handleIndianPokerAction()` — state machine: deal → bet → showdown
-
-**Room cleanup:**
+**Room lifecycle:**
 - Waiting rooms: deleted after 30 minutes idle
 - Finished games: deleted after 10 minutes
-- Cleanup interval: runs every 60 minutes
+- Timer tick: every 500ms, checks all active rooms
 
 ### Frontend
 
 **No frameworks** — vanilla HTML/CSS/JavaScript only.
 
-- `game.js` is the orchestrator: handles socket connection, routes events to the correct `game-*.js` handler
-- Each `game-*.js` module handles UI for one game
-- Each `ai-*.js` module implements client-side AI (runs in the browser)
-- Board renderers (`board.js`, `omok-board.js`, etc.) manage DOM manipulation for the board grid
+- `game-registry.js` — single source of truth for all per-game metadata (names, rules, titles, icons)
+- `game.js` — orchestrator: socket connection, event routing, UI coordination
+- Each `game-*.js` — UI handler for one game (standard 6-method interface)
+- Each `ai-*.js` — client-side AI engine (runs in browser, submits moves via socket)
+- Each `*-board.js` — DOM board renderer
+- `css/games/` — per-game styles loaded in `<head>`
 
-**AI is client-side only** — the AI player runs in the browser and submits moves through the normal socket flow, just like a human player.
+**Standard game handler interface** (all `game-*.js` files export this):
+```javascript
+window.GameHandlers.gamename = {
+  initBoard(state, myColor, handleAction),      // reconnect
+  initSpectatorBoard(state, hostColor, handleAction),
+  initGame(state, myColor, handleAction),        // fresh start
+  onMoveMade({ move, board, ... }),              // server broadcast
+  getMyTurn(state, myColor),                     // returns boolean
+  startSolo(playerColor, helpers, options),      // AI mode
+}
+```
+
+**AI is client-side only** — AI runs in the browser and submits moves through the normal socket flow, identical to a human player.
 
 ---
 
@@ -153,13 +206,23 @@ All backend logic lives in a **single file**. There is no build step.
 - **No linter/formatter** configured (no ESLint, no Prettier)
 
 ### Adding a New Game
-1. Add server-side handler function `handleXxxMove()` in `server.js`
-2. Register the handler in the `game:move` socket event router
-3. Create `public/js/game-xxx.js` for UI logic
-4. Create `public/js/ai-xxx.js` for AI (if supporting solo mode)
-5. Create `public/js/xxx-board.js` for board rendering (if needed)
-6. Add game card to `public/index.html` lobby grid
-7. Wire up the new handler in `public/js/game.js`
+
+See **`ADDING_A_GAME.md`** for the complete 10-step guide.
+
+Summary — 10 files, maximum 2 with >1-line edits:
+
+| File | Action |
+|------|--------|
+| `server/handlers/mygame.js` | **CREATE** |
+| `server/handlers/index.js` | **EDIT** — 1 line |
+| `public/js/game-mygame.js` | **CREATE** |
+| `public/js/mygame-board.js` | **CREATE** |
+| `public/js/ai-mygame.js` | **CREATE** |
+| `public/css/games/mygame.css` | **CREATE** |
+| `public/js/game-registry.js` | **EDIT** — 1 entry |
+| `public/index.html` | **EDIT** — 1 card block |
+| `public/game.html` | **EDIT** — board area + 3 script tags |
+| `public/js/stats.js` | **EDIT** — 1 line |
 
 ### Dependency Rules
 - **chess.js is pinned to `0.12.0`** (not `^0.12.0`) — the v0.13+ API is incompatible. Do NOT upgrade.
@@ -213,14 +276,20 @@ Deployed on **Render.com** via `render.yaml`:
 curl http://localhost:3000/api/status
 ```
 
-### View active rooms (local only)
-The `/api/status` response includes the shutdown key only when requested from `localhost`. The admin UI at `/admin.html` uses this key.
-
 ### Add or modify game rules
-All rule validation is in `server.js`. Search for `handle{GameName}Move` to find the relevant section.
+Rule validation is in `server/handlers/<gamename>.js`. Search for `handleMove` in the relevant handler file.
+
+### Add a new game
+Follow `ADDING_A_GAME.md`. The registry pattern means you only need to create the handler file and register it in `server/handlers/index.js` — no other server file needs to change.
 
 ### Modify AI difficulty
 AI engines are in `public/js/ai-*.js`. Adjust minimax depth constants at the top of each file. Higher depth = stronger AI but slower (runs in browser).
+
+### Update per-game styles
+Each game has its own CSS file at `public/css/games/<gamename>.css`. Shared layout styles are in `public/css/game.css`.
+
+### Update game metadata (rules, titles, icons)
+Edit `public/js/game-registry.js`. This is the single source of truth used by both the lobby and game page.
 
 ### Update PWA assets
 - Icons: `public/icons/`
@@ -236,3 +305,4 @@ AI engines are in `public/js/ai-*.js`. Adjust minimax depth constants at the top
 - Chess AI (depth-3) is intentionally weak to be playable in a browser
 - No user accounts — players are identified by temporary tokens per session
 - Admin shutdown is single-server only (not suitable for multi-instance deployments)
+- Scaling beyond a single Render instance requires adding a Redis adapter for Socket.io

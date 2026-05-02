@@ -1,0 +1,103 @@
+/* ===== 오셀로 (Othello) ===== */
+.othello-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+}
+
+.othello-scorebar {
+  display: flex;
+  gap: 24px;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.othello-score-black { color: #ccc; }
+.othello-score-white {
+  color: #fff;
+  text-shadow: 0 0 8px rgba(255,255,255,0.5);
+}
+
+.othello-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 50px);
+  grid-template-rows: repeat(8, 50px);
+  gap: 2px;
+  background: #1a5c2a;
+  padding: 6px;
+  border-radius: 8px;
+  border: 2px solid #14451e;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.othello-cell {
+  width: 50px;
+  height: 50px;
+  background: #2a7a3a;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.othello-cell:hover { background: #3a8a4a; }
+
+.othello-piece {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  transition: transform 0.3s;
+}
+
+.othello-black {
+  background: radial-gradient(circle at 35% 35%, #555, #111);
+  border: 2px solid #333;
+}
+
+.othello-white {
+  background: radial-gradient(circle at 35% 35%, #fff, #ccc);
+  border: 2px solid #aaa;
+}
+
+.othello-last { box-shadow: 0 0 0 3px #f0c040; }
+
+.othello-valid::after {
+  content: '';
+  width: 16px;
+  height: 16px;
+  background: rgba(255,255,255,0.35);
+  border-radius: 50%;
+  position: absolute;
+}
+
+.othello-hover { background: #4a9a5a; }
+
+.othello-hint {
+  animation: othelloHintPulse 0.6s ease infinite alternate;
+}
+
+@keyframes othelloHintPulse {
+  from { background: #2a7a3a; }
+  to   { background: #7a5aaa; }
+}
+
+.othello-flip { animation: othelloFlip 0.4s ease; }
+
+@keyframes othelloFlip {
+  0%   { transform: rotateY(0deg); }
+  50%  { transform: rotateY(90deg); }
+  100% { transform: rotateY(180deg); }
+}
+
+@media (max-width: 480px) {
+  .othello-grid  { grid-template-columns: repeat(8, 42px); grid-template-rows: repeat(8, 42px); gap: 1px; }
+  .othello-cell  { width: 42px; height: 42px; }
+  .othello-piece { width: 34px; height: 34px; }
+}
