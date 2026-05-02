@@ -25,6 +25,7 @@ function initBoard() {
 function initRoom(base) {
   base.pits        = initBoard();
   base.currentTurn = base.hostColor; // 호스트(=white) 선공
+  return base;
 }
 
 function resetRoom(room) {
