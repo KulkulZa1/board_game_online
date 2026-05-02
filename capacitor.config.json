@@ -1,0 +1,20 @@
+{
+  "appId": "com.boardgameonline.app",
+  "appName": "보드게임 온라인",
+  "webDir": "public",
+  "server": {
+    "url": "https://board-game-online.onrender.com",
+    "cleartext": false,
+    "androidScheme": "https"
+  },
+  "android": {
+    "allowMixedContent": false,
+    "captureInput": true,
+    "webContentsDebuggingEnabled": false
+  },
+  "plugins": {
+    "AdMob": {
+      "appId": "ca-app-pub-REPLACE_WITH_YOUR_ADMOB_APP_ID"
+    }
+  }
+}

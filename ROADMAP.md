@@ -52,17 +52,28 @@ All Phase B games use the existing Socket.io architecture. Adding each game:
 - 10 files, max 2 with >1-line edits (see `ADDING_A_GAME.md`)
 - No infrastructure changes needed
 
-### Phase C — Mobile Launch (1–2 months)
+### Phase C — Mobile Launch (🔄 in progress)
 
-1. Wrap as Android app with **Capacitor** (~10 hours)
-2. Add **AdMob** for solo mode interstitials
-3. Submit to **Google Play**
-4. Optional: user stats sync via Supabase (free tier)
+| Step | Task | Status |
+|------|------|--------|
+| C1 | `capacitor.config.json` — app ID, server URL, AdMob plugin config | ✅ Done |
+| C2 | `public/js/admob.js` — AdMob wrapper (no-op on web, live in native) | ✅ Done |
+| C3 | Wire AdMob into solo game over flow in `game.js` | ✅ Done |
+| C4 | `BUILDING_ANDROID.md` — full build + Play Store guide | ✅ Done |
+| C5 | Run `npx cap add android` + build signed AAB locally | ⬜ Developer action |
+| C6 | Replace placeholder AdMob IDs with real account IDs | ⬜ Developer action |
+| C7 | Play Store submission + review | ⬜ Developer action |
+| C8 | Optional: Supabase user stats sync | ⬜ Future |
 
-Why Capacitor first?
-- Zero code changes (web app already works as PWA)
-- Ads unlock revenue before building anything new
-- Google Play requires no subscription fee for web wrapper
+**Developer actions required** (needs local Android SDK):
+```bash
+npm install --save-dev @capacitor/core @capacitor/cli @capacitor/android @capacitor-community/admob
+npx cap add android
+# Edit android/app/AndroidManifest.xml (see BUILDING_ANDROID.md step 3)
+# Replace AdMob IDs in capacitor.config.json + public/js/admob.js
+npx cap sync android
+npx cap open android   # build + test in Android Studio
+```
 
 ### Phase D — Desktop / Premium (3–6 months, evaluate after C)
 

@@ -841,6 +841,7 @@
 
     subtitle.textContent = reasonMap[reason] || reason;
     gameoverModal.style.display = 'flex';
+    if (isSoloMode && window.AdMobHelper) AdMobHelper.showAfterGame();
   }
 
   function showBanner(msg, persistent) {
@@ -957,6 +958,7 @@
 
     const handler = GameHandlers[gameType];
     if (handler && typeof handler.startSolo === 'function') {
+      if (window.AdMobHelper) AdMobHelper.init();
       handler.startSolo(soloColor, {
         switchBoardArea,
         updateTurnIndicator,

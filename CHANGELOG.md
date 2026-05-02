@@ -68,6 +68,12 @@
 - 도트앤박스: 5×5 격자, SVG 렌더링, 박스 완성 시 보너스 턴, 멀티플레이 + 솔로 AI (체인 전략)
 - 만칼라: 14구멍(pit 0-5 백, 6 백창고, 7-12 흑, 13 흑창고), 반시계 배분, 보너스 턴·캡처 룰, 멀티플레이 + 솔로 AI
 
+**모바일 (Phase C)**
+- `capacitor.config.json`: Capacitor 앱 설정, WebView가 Render.com 서버 로드, AdMob 플러그인 연결
+- `public/js/admob.js`: 네이티브 앱에서만 동작하는 전면 광고 래퍼 (`Capacitor.Plugins.AdMob`), 웹에서는 무시
+- 솔로 모드 게임 종료 후 전면 광고 표시 (`game.js` 연동)
+- `BUILDING_ANDROID.md`: Capacitor 초기화 → AdMob 설정 → 서명 AAB 빌드 → Play Store 제출 전 과정 가이드
+
 **아키텍처 개선**
 - `server.js` 단일 파일(2,038줄) → `server/` 모듈 폴더로 분리
   - `server/handlers/index.js`: 게임 핸들러 레지스트리 (새 게임 추가 시 1줄 등록)
