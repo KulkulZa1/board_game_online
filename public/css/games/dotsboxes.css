@@ -1,0 +1,120 @@
+/* css/games/dotsboxes.css — 도트앤박스 전용 스타일 */
+
+#dotsboxes-board-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  padding: 8px 4px;
+  box-sizing: border-box;
+}
+
+.db-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  max-width: 500px;
+}
+
+/* ── 점수판 ─────────────────────────────────────────── */
+.db-scoreboard {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  background: #1a1f2e;
+  border: 1px solid #2a3040;
+  border-radius: 10px;
+  padding: 8px 20px;
+  font-size: 0.9rem;
+}
+
+.db-score-side {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.db-score-dot {
+  width: 14px; height: 14px;
+  border-radius: 50%;
+}
+.db-score-dot.white { background: #fff; border: 1px solid #888; }
+.db-score-dot.black { background: #333; border: 1px solid #666; }
+
+.db-score-val {
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+
+.db-turn-msg {
+  font-size: 0.75rem;
+  color: #8892a4;
+}
+
+/* ── 보드 SVG 영역 ───────────────────────────────────── */
+.db-board-svg {
+  cursor: pointer;
+  display: block;
+  max-width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+/* 점 */
+.db-dot { fill: #ddd; }
+
+/* 선 (클릭 가능 영역) */
+.db-line-hover {
+  stroke: transparent;
+  stroke-width: 14;
+  cursor: pointer;
+  fill: none;
+}
+
+.db-line {
+  stroke: #3a4a5a;
+  stroke-width: 3;
+  stroke-linecap: round;
+  fill: none;
+  transition: stroke 0.15s;
+}
+
+.db-line.white { stroke: #7ac8f0; stroke-width: 4; }
+.db-line.black { stroke: #f07a7a; stroke-width: 4; }
+.db-line.hover { stroke: rgba(200,200,200,0.5); stroke-width: 4; }
+
+/* 박스 */
+.db-box {
+  opacity: 0.4;
+  transition: opacity 0.2s;
+}
+.db-box.white { fill: #4a9eff; }
+.db-box.black { fill: #ff6b6b; }
+
+/* 박스 라벨 */
+.db-box-label {
+  font-size: 12px;
+  font-weight: 700;
+  text-anchor: middle;
+  dominant-baseline: central;
+  fill: rgba(255,255,255,0.9);
+  pointer-events: none;
+}
+
+/* 상태 메시지 */
+.db-status {
+  font-size: 0.85rem;
+  text-align: center;
+  min-height: 1.2em;
+}
+
+.db-status.my-turn  { color: #4af; font-weight: 600; }
+.db-status.opp-turn { color: #fa4; }
+.db-status.gameover { color: #f0c040; font-weight: 700; }
+
+/* ── 반응형 ─────────────────────────────────────────── */
+@media (max-width: 420px) {
+  .db-scoreboard { gap: 12px; padding: 6px 12px; font-size: 0.8rem; }
+}

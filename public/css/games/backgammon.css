@@ -1,0 +1,319 @@
+/* css/games/backgammon.css — 백가몬 전용 스타일 */
+
+#backgammon-board-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  padding: 8px 4px;
+  box-sizing: border-box;
+  user-select: none;
+}
+
+/* ── 전체 레이아웃 ───────────────────────────────── */
+.bg-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  max-width: 680px;
+}
+
+.bg-outer {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+  width: 100%;
+}
+
+/* ── 보드 ───────────────────────────────────────── */
+.bg-board {
+  flex: 1;
+  background: #2a4a2a;
+  border: 3px solid #8b6914;
+  border-radius: 8px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.bg-rows {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+/* 상단/하단 포인트 행 */
+.bg-row {
+  display: flex;
+  flex: 1;
+  min-height: 120px;
+}
+
+.bg-half {
+  display: flex;
+  flex: 1;
+}
+
+/* ── 바 (중앙) ──────────────────────────────────── */
+.bg-bar {
+  width: 40px;
+  background: #1a1a1a;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  position: relative;
+  border-left: 2px solid #8b6914;
+  border-right: 2px solid #8b6914;
+  flex-shrink: 0;
+}
+
+.bg-bar-label {
+  font-size: 0.55rem;
+  color: #666;
+  letter-spacing: 1px;
+  position: absolute;
+  top: 4px;
+  left: 0; right: 0;
+  text-align: center;
+}
+
+.bg-bar-top { justify-content: flex-end; padding-bottom: 6px; }
+.bg-bar-bottom { justify-content: flex-start; padding-top: 6px; }
+
+/* 구분선 */
+.bg-divider {
+  height: 28px;
+  background: #111;
+  border-top: 2px solid #8b6914;
+  border-bottom: 2px solid #8b6914;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  color: #555;
+  letter-spacing: 2px;
+}
+
+/* ── 각 포인트(삼각형 칼럼) ──────────────────────── */
+.bg-point {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  cursor: pointer;
+  padding: 0 1px;
+  box-sizing: border-box;
+  min-width: 0;
+  overflow: visible;
+}
+
+.bg-point:hover { background: rgba(255,255,255,0.05); }
+
+/* 삼각형 배경 (CSS clip-path) */
+.bg-point-inner {
+  position: absolute;
+  width: 100%;
+  height: 90%;
+  top: 0;
+}
+
+/* 상단 행: 삼각형이 아래를 향함 */
+.bg-row.top .bg-point-inner {
+  clip-path: polygon(10% 0%, 90% 0%, 50% 100%);
+  bottom: 0; top: auto;
+}
+.bg-row.top .bg-point { flex-direction: column-reverse; padding-top: 4px; }
+
+/* 하단 행: 삼각형이 위를 향함 */
+.bg-row.bottom .bg-point-inner {
+  clip-path: polygon(10% 100%, 90% 100%, 50% 0%);
+  top: 0;
+}
+.bg-row.bottom .bg-point { flex-direction: column; padding-bottom: 4px; }
+
+/* 삼각형 색상 교대 */
+.bg-point[data-tri="dark"]  .bg-point-inner { background: #8b2020; }
+.bg-point[data-tri="light"] .bg-point-inner { background: #d4a940; }
+
+/* 포인트 번호 레이블 */
+.bg-pt-num {
+  font-size: 0.55rem;
+  color: #aaa;
+  position: absolute;
+  line-height: 1;
+}
+.bg-row.top    .bg-pt-num { top: 2px; }
+.bg-row.bottom .bg-pt-num { bottom: 2px; }
+
+/* ── 말 (체커) ──────────────────────────────────── */
+.bg-checker {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.6rem;
+  font-weight: 700;
+  z-index: 2;
+  position: relative;
+  flex-shrink: 0;
+  margin: 1px 0;
+  transition: transform 0.15s;
+  border: 2px solid transparent;
+}
+
+.bg-checker.white {
+  background: radial-gradient(circle at 35% 35%, #fff 0%, #c8c8c8 60%, #888 100%);
+  color: #333;
+  border-color: #aaa;
+}
+
+.bg-checker.black {
+  background: radial-gradient(circle at 35% 35%, #555 0%, #222 60%, #000 100%);
+  color: #ddd;
+  border-color: #444;
+}
+
+.bg-checker.selected {
+  transform: scale(1.15);
+  box-shadow: 0 0 0 3px #4af;
+  border-color: #4af;
+}
+
+/* 이동 대상 하이라이트 */
+.bg-point.valid-dest::after {
+  content: '';
+  position: absolute;
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  background: rgba(74, 174, 255, 0.5);
+  border: 2px solid #4af;
+  z-index: 3;
+  pointer-events: none;
+}
+.bg-row.top    .bg-point.valid-dest::after { bottom: 6px; }
+.bg-row.bottom .bg-point.valid-dest::after { top: 6px; }
+
+.bg-point.valid-dest { cursor: crosshair; }
+.bg-point.valid-dest:hover { background: rgba(74, 174, 255, 0.12); }
+
+/* 바 선택 하이라이트 */
+.bg-bar.selected-bar { background: #1a2a3a; box-shadow: inset 0 0 8px #4af; }
+
+/* ── 지워지는 영역 (borne off) ──────────────────── */
+.bg-borne-off-area {
+  width: 48px;
+  background: #1a1a2e;
+  border: 2px solid #8b6914;
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 6px 4px;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.bg-off-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+
+.bg-off-label {
+  font-size: 0.55rem;
+  color: #888;
+  text-align: center;
+}
+
+.bg-off-count {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.75rem; font-weight: 700;
+}
+.bg-off-count.white {
+  background: radial-gradient(circle at 35% 35%, #fff 0%, #bbb 100%);
+  color: #333; border: 2px solid #aaa;
+}
+.bg-off-count.black {
+  background: radial-gradient(circle at 35% 35%, #555 0%, #111 100%);
+  color: #ddd; border: 2px solid #444;
+}
+
+/* ── 주사위 & 컨트롤 ──────────────────────────────── */
+.bg-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.bg-dice-group {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.bg-die {
+  width: 40px; height: 40px;
+  background: #f5f5e0;
+  border: 2px solid #888;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #222;
+  box-shadow: 2px 2px 6px rgba(0,0,0,0.5);
+  transition: opacity 0.3s;
+}
+
+.bg-die.used { opacity: 0.3; }
+.bg-die.empty { background: #333; color: #555; border-color: #555; }
+
+.bg-roll-btn {
+  padding: 10px 24px;
+  background: linear-gradient(135deg, #f0c040, #e0a020);
+  border: none; border-radius: 8px;
+  color: #1a1a2e; font-weight: 700; font-size: 0.95rem;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+  transition: transform 0.1s, opacity 0.2s;
+}
+.bg-roll-btn:hover:not(:disabled) { transform: translateY(-2px); }
+.bg-roll-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+/* 상태 메시지 */
+.bg-status-msg {
+  font-size: 0.85rem;
+  color: #8892a4;
+  text-align: center;
+  min-height: 1.2em;
+}
+
+.bg-status-msg.my-turn  { color: #4af; font-weight: 600; }
+.bg-status-msg.opp-turn { color: #fa4; }
+
+/* ── 반응형 ─────────────────────────────────────── */
+@media (max-width: 600px) {
+  .bg-checker { width: 20px; height: 20px; font-size: 0.5rem; }
+  .bg-borne-off-area { width: 38px; }
+  .bg-die { width: 34px; height: 34px; font-size: 1.2rem; }
+  .bg-roll-btn { padding: 8px 16px; font-size: 0.85rem; }
+  .bg-bar { width: 30px; }
+}
+
+@media (max-width: 400px) {
+  .bg-checker { width: 16px; height: 16px; font-size: 0.45rem; margin: 0; }
+  .bg-pt-num { display: none; }
+}

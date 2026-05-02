@@ -7,3 +7,7 @@ cloudflared.exe
 error/
 .claude/
 *.ps1
+# Capacitor generated native projects (build locally, do not commit)
+android/
+ios/
+dist/
