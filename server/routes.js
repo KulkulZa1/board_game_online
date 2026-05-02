@@ -63,16 +63,8 @@ function registerRoutes(app, server, PORT, TUNNEL_URL, SERVER_START_TIME) {
           activeColor: r.timers.activeColor,
         } : null,
         players: {
-          host: {
-            socketId:  r.players.host.socketId  || null,
-            connected: r.players.host.connected  || false,
-            ip: r.players.host.ip  || null,
-          },
-          guest: {
-            socketId:  r.players.guest.socketId || null,
-            connected: r.players.guest.connected || false,
-            ip: r.players.guest.ip || null,
-          },
+          host:  { connected: r.players.host.connected  || false },
+          guest: { connected: r.players.guest.connected || false },
         },
         moveCount,
         lastMove,
