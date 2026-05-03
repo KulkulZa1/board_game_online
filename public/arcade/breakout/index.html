@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>벽돌깨기 — 보드게임 온라인</title>
+  <link rel="icon" href="/icons/icon-192.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="container">
+
+    <header id="hdr">
+      <a href="/" class="back-btn">← 로비</a>
+      <span class="game-title">🧱 벽돌깨기</span>
+      <div id="scores">
+        <span>점수 <strong id="scoreDisplay">0</strong></span>
+        <span>최고 <strong id="highDisplay">0</strong></span>
+        <span>❤️ <strong id="livesDisplay">3</strong></span>
+      </div>
+    </header>
+
+    <div id="gameWrapper">
+      <canvas id="c" tabindex="0"></canvas>
+      <div id="overlay" class="visible">
+        <div id="overlayBox">
+          <div id="overlayIcon">🧱</div>
+          <h2 id="overlayTitle">벽돌깨기</h2>
+          <p id="overlayMsg">마우스·터치로 패들 조작</p>
+          <button id="startBtn">시작하기</button>
+          <p class="hint-text">클릭 또는 스페이스바로 시작</p>
+        </div>
+      </div>
+    </div>
+
+    <div id="levelInfo">
+      <span id="levelLabel">Level 1</span>
+      <div id="brickBar"><div id="brickFill"></div></div>
+    </div>
+
+  </div>
+
+  <script src="/js/admob.js?v=1.0"></script>
+  <script src="game.js?v=1.0"></script>
+</body>
+</html>

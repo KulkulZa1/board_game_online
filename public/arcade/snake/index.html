@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>스네이크 — 보드게임 온라인</title>
+  <link rel="icon" href="/icons/icon-192.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="container">
+
+    <header id="hdr">
+      <a href="/" class="back-btn">← 로비</a>
+      <span class="game-title">🐍 스네이크</span>
+      <div id="scores">
+        <span>점수 <strong id="scoreDisplay">0</strong></span>
+        <span>최고 <strong id="highDisplay">0</strong></span>
+      </div>
+    </header>
+
+    <div id="gameWrapper">
+      <canvas id="c" tabindex="0"></canvas>
+
+      <!-- start / game-over overlay -->
+      <div id="overlay" class="visible">
+        <div id="overlayBox">
+          <div id="overlayIcon">🐍</div>
+          <p id="overlayMsg">방향키·WASD 또는 스와이프로 조작</p>
+          <button id="startBtn">시작하기</button>
+          <p class="hint-text">스페이스바로도 시작</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- mobile d-pad -->
+    <div id="dpad">
+      <div class="dpad-row"><button data-dir="Up">▲</button></div>
+      <div class="dpad-row">
+        <button data-dir="Left">◀</button>
+        <button data-dir="Down">▼</button>
+        <button data-dir="Right">▶</button>
+      </div>
+    </div>
+
+    <div id="levelBar">
+      <span id="levelLabel">Lv.1</span>
+      <div id="levelTrack"><div id="levelFill"></div></div>
+    </div>
+
+  </div>
+
+  <script src="/js/admob.js?v=1.0"></script>
+  <script src="game.js?v=1.0"></script>
+</body>
+</html>

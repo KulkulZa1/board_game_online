@@ -1,198 +1,237 @@
 # Near-Future & 3D Expansion Plan
 
-*Last updated: 2026-05-02*
+*Last updated: 2026-05-02 | Branch: feat/v2-arcade-3d*
 
 ---
 
-## 1. Where We Are Now
+## 1. Guiding Principle: Backward Compatibility First
 
-**Current platform:** Web PWA — 12 turn-based board games, Node.js + Socket.io, no database, deployed on Render.com.  
-**Upcoming mobile:** Capacitor + AdMob wrapper ready; developer needs local Android SDK to build the AAB.
+**v1.x is production and must never break.**
 
-The platform is deliberately limited to **turn-based, server-validated, Socket.io games** because that constraint lets us ship quickly and keep the codebase small. Everything in this document is a deliberate step *beyond* that constraint.
-
----
-
-## 2. Lightweight / Idle / Arcade Games (Near Term — 1–3 months)
-
-These are **solo-only** games that run entirely in the browser with no server-side state. They require zero changes to the Socket.io backend and can ship as standalone pages under `public/games/<name>/`.
-
-### Priority list
-
-| # | Game | Style | Complexity | Notes |
-|---|------|-------|------------|-------|
-| 1 | **Snake** | Classic arcade | Low | Canvas 2D; classic 60 fps loop; touch joystick for mobile |
-| 2 | **Typhoon / Bullet Dodge** | Vertical shooter | Low–Med | Canvas 2D; keyboard + touch; procedural wave spawning |
-| 3 | **Growing Idle** (plant/clicker) | Idle / clicker | Low | DOM-based; click-to-grow loop; localStorage save |
-| 4 | **Minesweeper** | Puzzle | Low | Already in Tier 1 ROADMAP; grid reveal logic |
-| 5 | **Vampire Survivor-like** | Top-down roguelite | Med–High | Canvas 2D; ECS-style entity loop; auto-attack, XP, level-up |
-| 6 | **Asteroids** | Classic arcade | Med | Canvas 2D; vector physics; wrap-around edges |
-
-### Technical pattern for all arcade games
+Every v2 addition is an *additive* layer — new directories, new routes, new socket namespaces. Nothing in `server/`, `public/js/`, or `public/css/` that serves v1 board games changes unless it is a bug fix.
 
 ```
-public/
-  games/
-    snake/
-      index.html   # standalone page, no game.html dependency
-      game.js      # self-contained game loop (requestAnimationFrame)
-      style.css
-    survivor/
-      index.html
-      game.js      # ECS entity manager + canvas renderer
-      style.css
+v1.x (turn-based board games) ←─ stays exactly as-is
+v2.x (arcade, 3D, action)     ←─ added on top, no v1 regressions
 ```
 
-- **No server changes needed** — these pages are static HTML served by Express.
-- **Lobby integration**: add a "🕹 아케이드" section card in `index.html` that opens `games/<name>/` in a new tab or slides to a new panel.
-- **AdMob**: hook into the same `AdMobHelper.showAfterGame()` call used by board games when a run ends.
-- **Score persistence**: use `localStorage` (same pattern as board game stats). No leaderboard until Supabase auth is added.
-
-### Vampire Survivor-like — scope definition
-
-A minimal "Survivor-clone" needs:
-1. **Entity loop**: player, enemies, XP orbs, projectiles — each as plain JS objects in an array
-2. **Collision**: circle–circle AABB (no physics engine needed)
-3. **Wave spawner**: procedural enemy spawn rate scaling with elapsed time
-4. **Upgrade picker**: pause on level-up, show 3 random passive upgrades (speed, damage, area)
-5. **Renderer**: single `<canvas>` with `ctx.clearRect` + `ctx.fillRect`/`ctx.arc` per frame
-
-Estimated effort: ~40 hours for a fun minimal version. No library needed; Pixi.js optional if visual quality matters.
-
 ---
 
-## 3. 2.5D Games (Medium Term — 3–6 months)
+## 2. Software Architecture
 
-"2.5D" means a 2D game with isometric or layered-parallax rendering that gives depth without a 3D engine.
+### 2.1 Layer Model
 
-| Game | Technique | Library | Notes |
-|------|-----------|---------|-------|
-| **Isometric Puzzle** (block-pushing) | Isometric tile renderer | None (canvas math) | 45° grid; push-blocks onto targets |
-| **Tower Defense** | Top-down with z-ordering | None | Lane-based or open-field; 2D canvas |
-| **Platformer** | Side-scroll parallax | None or Phaser.js | Phaser 3 is 300 KB; self-contained |
-| **Card Roguelite** (Slay the Spire-like) | DOM / SVG cards | None | Pure DOM; turn-based; no 3D needed |
-
-**Phaser.js** is the recommended stepping stone — it handles game loop, input, sprite atlas, and tilemap loading while staying in the browser with no install.
-
----
-
-## 4. 3D Games (Long Term — 6–18 months)
-
-### Option A — Three.js in the browser (recommended first step)
-
-Three.js runs entirely client-side; the server stays unchanged (Socket.io or REST for multiplayer state).
-
-| Game | 3D approach | Effort |
-|------|-------------|--------|
-| **3D Chess** | Three.js scene + existing chess.js logic | Medium — swap board renderer only |
-| **3D Connect Four** | Cylinder-drop animation on a 3D rack | Low — purely visual upgrade |
-| **3D Backgammon** | Three.js board, dice roll animation | Medium |
-| **Bowling** | Three.js + Rapier.js physics | High |
-| **Billiards / Pool** | Three.js + Rapier.js physics | High |
-| **Mini Golf** | Three.js + Rapier.js physics | High |
-
-**Three.js integration pattern:**
 ```
-public/
-  games/
-    chess3d/
-      index.html      # standalone page
-      scene.js        # Three.js scene setup
-      board.js        # 3D board + piece instancing
-      ai.js           # reuse existing ai-chess.js
+┌──────────────────────────────────────────────────────────────┐
+│  BROWSER                                                      │
+│  ┌─────────────────┐  ┌────────────────┐  ┌───────────────┐  │
+│  │  v1 Board Games │  │  v2 Arcade     │  │  v2 3D Games  │  │
+│  │  public/        │  │  public/arcade/│  │  public/games3d│ │
+│  │  (Socket.io)    │  │  (standalone)  │  │  (Three.js +  │  │
+│  │                 │  │                │  │   Socket.io)  │  │
+│  └────────┬────────┘  └───────┬────────┘  └──────┬────────┘  │
+└───────────┼───────────────────┼──────────────────┼───────────┘
+            │ Socket.io /       │ Static HTTP       │ Socket.io /
+            │ (existing ns)     │ (no server state) │ (future ns)
+┌───────────┼───────────────────┼──────────────────┼───────────┐
+│  SERVER   │                   │                  │            │
+│  ┌────────▼──────────┐        │            ┌─────▼─────────┐  │
+│  │  server/ (v1)     │        │            │ server/v2/    │  │
+│  │  handlers/*.js    │        │            │ (future 3D    │  │
+│  │  events.js        │◄───────┘            │  multiplayer) │  │
+│  │  routes.js        │  serves arcade      └───────────────┘  │
+│  │  (Express static) │  as static files                       │
+│  └───────────────────┘                                        │
+└──────────────────────────────────────────────────────────────┘
 ```
-The server handler stays `server/handlers/chess.js` — only the renderer changes.
 
-**Rapier.js** (WASM physics, 150 KB gzip) is the recommended physics engine: faster than Cannon.js, runs in browser, no server changes needed.
+### 2.2 Directory Structure (current + planned)
 
-### Option B — Unity WebGL export (standalone games only)
+```
+board_game_online/
+│
+├── server/                     ← v1 only — DO NOT TOUCH for v2 work
+│   ├── handlers/               ← 12 game handlers (registry pattern)
+│   ├── events.js               ← socket event dispatcher
+│   └── ...
+│
+├── public/                     ← v1 static assets (lobby + board games)
+│   ├── index.html              ← lobby (has arcade section added in v2)
+│   ├── arcade/                 ← NEW v2: solo arcade games
+│   │   ├── snake/              ← ✅ done
+│   │   │   ├── index.html
+│   │   │   ├── game.js
+│   │   │   └── style.css
+│   │   ├── survivor/           ← planned Phase D
+│   │   └── idle-plant/         ← planned Phase D
+│   │
+│   └── games3d/                ← planned Phase E: 3D renderers
+│       ├── chess3d/
+│       │   ├── index.html
+│       │   ├── scene.js        ← Three.js; reuses server/handlers/chess.js
+│       │   └── style.css
+│       └── connect4-3d/
+│
+└── 3D_near_future_plan.md      ← this file
+```
 
-Use Unity **only** for games that genuinely need physics, 3D animation, or VR:
-- 3D platformer, racing game, first-person puzzle
-- WebGL export (~20–50 MB download per game — not suitable for casual web traffic)
-- Multiplayer via Unity Netcode for GameObjects (completely separate backend from Socket.io)
+### 2.3 Arcade Game Pattern (v2 standalone)
 
-**Verdict**: Unity is a separate product stream, not an upgrade of this platform. Keep it isolated under a different subdomain or repo.
+Each arcade game is a **completely self-contained page** under `public/arcade/<name>/`.
 
-### Option C — Babylon.js (alternative to Three.js)
+Rules:
+- **No import of any v1 JS** (no game.js, no lobby.js, no socket.io)
+- Solo-only by default; multiplayer wired in later via a separate socket namespace
+- `localStorage` for scores (same convention as v1 stats.js)
+- `AdMobHelper` from `/js/admob.js` for mobile ad integration
+- `<a href="/">← 로비</a>` back link to the main lobby
 
-Babylon.js has a higher-level API (physics, XR, PBR materials out-of-the-box) but is 500 KB vs Three.js at 160 KB. Prefer Three.js unless WebXR (VR/AR) support is needed.
+```
+public/arcade/<name>/
+  index.html   ← standalone, loads only its own style.css + game.js
+  game.js      ← IIFE, requestAnimationFrame loop, zero dependencies
+  style.css    ← scoped to this game only
+```
 
----
+### 2.4 3D Game Pattern (v2 with Three.js)
 
-## 5. Multiplayer Architecture for 3D / Real-time Action
+3D games live under `public/games3d/<name>/`. They can reuse the **same server handlers** as the v1 board game — only the renderer changes.
 
-The current Socket.io architecture is designed for **turn-based games** (50–500 ms latency acceptable). Real-time action games (shooters, racing, physics) need:
+```
+public/games3d/chess3d/
+  index.html        ← loads three.module.js (CDN) + scene.js
+  scene.js          ← Three.js scene; submits moves via socket.io same as v1
+  style.css
+```
 
-| Requirement | Current stack | What's needed |
-|-------------|--------------|---------------|
-| Latency | 50–200 ms OK | < 50 ms target |
-| Tick rate | Event-driven | 20–60 Hz server tick loop |
-| Protocol | Socket.io (TCP) | WebRTC DataChannel (UDP) or Socket.io with `volatile` |
-| State sync | Full state on each move | Delta compression + client prediction |
-| Anti-cheat | Server validates each move | Server authoritative simulation |
+The server handler `server/handlers/chess.js` stays unchanged. The 3D page simply connects to the same room/socket flow with a different UI.
 
-**Recommendation:** For action games, run a **separate game server** (e.g., Colyseus.js — a Node.js framework designed for real-time multiplayer with room management, schema state sync, and 20 Hz tick). The lobby/matchmaking stays on the current Socket.io server; players are redirected to the Colyseus room URL after matching.
+### 2.5 Real-time Action Games (future — Phase G)
 
----
+Turn-based Socket.io is unsuitable for shooters/racing (<50 ms target). Planned approach:
 
-## 6. Phased Execution
+- **Colyseus.js** on a separate Render service (`game2.board-game-online.onrender.com`)
+- v1 lobby redirects to the Colyseus room URL after matchmaking
+- Colyseus uses a 20 Hz authoritative server tick loop
+- v1 server is completely untouched
 
-### Phase D — Arcade / Idle games (next)
-
-| Task | Effort | Outcome |
-|------|--------|---------|
-| Snake standalone page | 8h | First arcade game live |
-| Vampire Survivor minimal | 40h | High engagement solo game |
-| Growing Idle clicker | 12h | Casual session filler |
-| Lobby "아케이드" section | 4h | Discoverable from main page |
-
-### Phase E — 3D visual upgrades to existing games
-
-| Task | Effort | Outcome |
-|------|--------|---------|
-| 3D Chess renderer (Three.js) | 20h | Same logic, dramatic visual upgrade |
-| 3D Connect4 drop animation | 8h | Purely cosmetic; reuse handler |
-| 3D Backgammon board | 24h | Dice roll 3D animation |
-
-### Phase F — New 3D / physics games
-
-| Task | Effort | Outcome |
-|------|--------|---------|
-| Bowling (Three.js + Rapier) | 60h | First physics game |
-| Mini Golf | 80h | Multi-hole; procedural generation |
-| Tower Defense 2D | 40h | High replayability |
-| Card Roguelite | 50h | Slay the Spire-like; very high engagement |
-
-### Phase G — Real-time multiplayer action (Colyseus)
-
-| Task | Effort | Outcome |
-|------|--------|---------|
-| Colyseus server setup | 16h | Separate game server on Render |
-| 2-player racing prototype | 40h | Proves real-time infra |
-| Lobby → Colyseus handoff | 8h | Seamless room redirect |
-
----
-
-## 7. Key Decisions To Make Before Starting Each Phase
-
-| Decision | Phase | Options |
-|----------|-------|---------|
-| 3D library | E/F | Three.js (recommended) vs Babylon.js |
-| Physics engine | F | Rapier.js (WASM) vs Cannon-es (pure JS) |
-| Arcade games: separate pages or in-game modal | D | Separate pages (simpler, no coupling) |
-| Action multiplayer | G | Colyseus vs raw WebRTC vs ws |
-| User accounts | any | Supabase free tier when leaderboards needed |
-| Monetisation gating | D+ | Free all browser; AdMob on mobile only |
+```
+Current:  browser ──socket.io──► server/ (turn-based, event-driven)
+Phase G:  browser ──Colyseus───► server-v2/ (20 Hz tick, delta state)
+          browser ──socket.io──► server/   (v1 board games, unchanged)
+```
 
 ---
 
-## 8. Files to Know
+## 3. Arcade Games Roadmap (Phase D)
 
-| File | Relevance to this plan |
-|------|----------------------|
-| `ADDING_A_GAME.md` | Adding turn-based board games (unchanged) |
-| `BUILDING_ANDROID.md` | Mobile AdMob integration |
-| `public/games/` | New directory for arcade / 3D game pages |
-| `server/handlers/index.js` | Add new board game handlers here |
-| `render.yaml` | May need `instances: 2` when DAU > 500 |
+Solo games, no server state, drop-in pattern.
+
+| # | Game | Style | Status | Effort |
+|---|------|-------|--------|--------|
+| 1 | 🐍 **Snake** | Classic arcade | ✅ Done | 1 day |
+| 2 | 👾 **Vampire Survivor-like** | Roguelite auto-shooter | ⬜ Next | ~5 days |
+| 3 | 🌱 **식물 키우기 (Growing Idle)** | Clicker / idle | ⬜ | 2 days |
+| 4 | ☄️ **Typhoon / Bullet Dodge** | Vertical shooter | ⬜ | 3 days |
+| 5 | 🐦 **Flappy Clone** | One-button reflex | ⬜ | 1 day |
+| 6 | 💣 **Minesweeper** | Grid puzzle | ⬜ | 1 day |
+
+### Vampire Survivor-like — Scope
+
+Minimal viable version:
+1. **Entity loop**: player, enemies (3 types), XP orbs, bullets — plain JS objects
+2. **Collision**: circle–circle (no physics engine needed)
+3. **Wave spawner**: enemy count/speed scales with elapsed time
+4. **Level-up picker**: pause on level-up, choose 1 of 3 passive upgrades
+5. **Renderer**: single `<canvas>`, `ctx.clearRect` per frame
+6. **5 weapons**: basic shot, orbit, AOE burst, boomerang, laser
+7. **Persistence**: best run time in `localStorage`
+
+Estimated effort: ~40 hours. No library needed — Three.js/Pixi.js optional for visual upgrade.
+
+---
+
+## 4. 3D Visual Upgrades (Phase E)
+
+Upgrade existing board game renderers to 3D without changing server logic.
+
+| Game | 3D Tech | Effort | Notes |
+|------|---------|--------|-------|
+| ♟ Chess 3D | Three.js + BufferGeometry pieces | 20h | Same chess.js validation |
+| 🔴 Connect4 3D | Three.js cylinder drop animation | 8h | Purely cosmetic upgrade |
+| 🎲 Backgammon 3D | Three.js board + dice roll anim | 24h | Dice spin physics via Rapier |
+| ⬤ Omok 3D | Three.js stone drop on grid | 12h | Ink-drop particle on place |
+
+**Three.js setup (per game):**
+```html
+<!-- CDN, ES module, no build step -->
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.163/build/three.module.js"}}</script>
+<script type="module" src="scene.js"></script>
+```
+
+---
+
+## 5. New 3D / Physics Games (Phase F)
+
+| Game | Engine | Multiplayer | Effort |
+|------|--------|-------------|--------|
+| 🎳 Bowling | Three.js + Rapier.js | Solo first | 60h |
+| ⛳ Mini Golf | Three.js + Rapier.js | 1v1 via Socket.io | 80h |
+| 🏰 Tower Defense | Phaser 3 (2D) | Solo | 40h |
+| 🃏 Card Roguelite | DOM/SVG (no 3D needed) | Solo | 50h |
+| 🚗 2-player Racing | Three.js + Colyseus | 1v1 real-time | 100h |
+
+**Physics: Rapier.js (WASM)**
+- 150 KB gzip, runs in browser
+- Faster than Cannon-es; deterministic
+- No server changes needed for solo physics
+
+**Unity: out of scope for this repo** — use only for a separate 3D product if DAU > 5,000 and premium packaging is needed (Steam, App Store native).
+
+---
+
+## 6. When To Add User Accounts
+
+Current: `localStorage` stats only.
+
+Add Supabase auth when **any** of these become true:
+- Leaderboard feature requested
+- Cross-device score sync needed (arcade games)
+- Play Store review requests account system
+- DAU > 200 (worth the infrastructure cost)
+
+**Migration plan**: add `supabase.js` as an optional enhancer. If Supabase JS client loads and user is signed in, sync localStorage stats to Supabase on game-over. Zero breaking change to existing code.
+
+---
+
+## 7. Scaling Triggers
+
+| Trigger | Action |
+|---------|--------|
+| DAU > 200 | Add Redis adapter for Socket.io multi-instance |
+| DAU > 500 | Move room state to Redis; add Cloudflare CDN |
+| DAU > 2,000 | PostgreSQL + Supabase auth; leaderboards |
+| Action games needed | Separate Colyseus server on Render |
+| Premium packaging | Electron (desktop) or Unity (3D/physics spin-off) |
+
+---
+
+## 8. Phased Execution
+
+### Phase D — Arcade (current, this branch)
+- [x] Snake
+- [ ] Vampire Survivor-like
+- [ ] Growing Idle
+
+### Phase E — 3D renderers for existing games
+- [ ] Chess 3D (Three.js)
+- [ ] Connect4 3D
+
+### Phase F — New 3D/physics games
+- [ ] Bowling (Three.js + Rapier)
+- [ ] Mini Golf
+- [ ] Tower Defense
+
+### Phase G — Real-time multiplayer
+- [ ] Colyseus server setup
+- [ ] 2-player racing prototype

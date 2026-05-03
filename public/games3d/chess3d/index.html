@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>3D 체스 — 보드게임 온라인</title>
+  <link rel="icon" href="/icons/icon-192.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="ui">
+    <div id="topBar">
+      <a href="/" class="back-btn">← 로비</a>
+      <span id="statusText">상대 연결 대기 중…</span>
+      <button id="btn2d" onclick="location.href='/game.html?game=chess'">2D 모드</button>
+    </div>
+    <div id="turnBar" style="display:none">
+      <span id="turnText"></span>
+      <span id="timerText" style="display:none"></span>
+    </div>
+    <div id="moveHistory"></div>
+  </div>
+
+  <canvas id="c3d"></canvas>
+
+  <div id="loadingScreen">
+    <div class="spinner"></div>
+    <p>3D 체스 로딩 중…</p>
+  </div>
+
+  <!-- Three.js r163 ES module via importmap -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.163/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.163/examples/jsm/"
+    }
+  }
+  </script>
+
+  <!-- Socket.io (same server as v1) -->
+  <script src="/socket.io/socket.io.js"></script>
+
+  <script type="module" src="scene.js?v=1.0"></script>
+</body>
+</html>
