@@ -19,6 +19,17 @@ function gracefulShutdown(signal, server) {
 }
 
 function registerRoutes(app, server, PORT, TUNNEL_URL, SERVER_START_TIME) {
+  // GET /api/version — 배포 버전 정보 (SW 캐시 무효화에 사용)
+  // Render.com은 배포 시 RENDER_GIT_COMMIT / RENDER_GIT_BRANCH 를 자동 주입함
+  app.get('/api/version', (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({
+      commit:    process.env.RENDER_GIT_COMMIT || 'local',
+      branch:    process.env.RENDER_GIT_BRANCH || 'dev',
+      startTime: SERVER_START_TIME,
+    });
+  });
+
   // GET /api/status — 서버 현황 (localhost 접속 시 shutdown 키 포함)
   app.get('/api/status', (req, res) => {
     const isLocal = req.hostname === 'localhost' || req.hostname === '127.0.0.1';

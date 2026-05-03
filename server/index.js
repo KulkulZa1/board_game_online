@@ -30,6 +30,18 @@ const io = new Server(server, {
 state.io = io;
 
 app.use(express.json());
+
+// sw.js / HTML / 루트 경로는 절대 캐시 금지 — 배포 즉시 반영 보장
+app.use((req, res, next) => {
+  const p = req.path;
+  if (p === '/sw.js' || p.endsWith('.html') || p === '/') {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+  }
+  next();
+});
+
 // TWA assetlinks.json — Play Store 도메인 연결 필수 (Content-Type: application/json)
 app.use('/.well-known', express.static(
   path.join(__dirname, '..', 'public/.well-known'),
