@@ -2,6 +2,7 @@ services:
   - type: web
     name: boardgame-online
     runtime: node
+    branch: main
     buildCommand: npm install
     startCommand: node server.js
     envVars:
