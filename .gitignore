@@ -11,3 +11,5 @@ error/
 android/
 ios/
 dist/
+.server.pid
+.server.log
