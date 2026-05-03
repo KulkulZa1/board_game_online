@@ -808,3 +808,103 @@ h2 {
   color: #c0cad8;
   line-height: 1.65;
 }
+
+/* ── Arcade section (v2) ────────────────────────────────────── */
+.section-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 24px 0 14px;
+  color: #8b949e;
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.section-divider::before,
+.section-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: #21262d;
+}
+
+.arcade-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 12px;
+}
+
+.arcade-card {
+  position: relative;
+  background: #161b22;
+  border: 1px solid #21262d;
+  border-radius: 12px;
+  padding: 16px 12px 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+  transition: border-color 0.2s, transform 0.15s, box-shadow 0.2s;
+}
+.arcade-card:hover:not(.arcade-card-soon) {
+  border-color: #2ecc71;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(46,204,113,0.15);
+}
+
+.arcade-card-soon {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.arcade-card-icon {
+  font-size: 2rem;
+  line-height: 1;
+  margin-bottom: 2px;
+}
+
+.arcade-card-name {
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.arcade-card-desc {
+  font-size: 0.72rem;
+  color: #8b949e;
+  text-align: center;
+  line-height: 1.4;
+}
+
+.arcade-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: #2ecc71;
+  color: #000;
+  font-size: 0.6rem;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.soon-badge {
+  background: #30363d;
+  color: #8b949e;
+}
+
+@media (max-width: 480px) {
+  .arcade-cards {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+  .arcade-card { padding: 12px 8px; }
+  .arcade-card-icon { font-size: 1.6rem; }
+  .arcade-card-name { font-size: 0.75rem; }
+}
