@@ -35,7 +35,8 @@ function registerEvents(io) {
         socket.emit('room:error', { code: 'INVALID_GAME_TYPE', message: '잘못된 게임 타입입니다.' });
         return;
       }
-      if (gameType === 'connect4' || gameType === 'indianpoker' || gameType === 'applegame' || gameType === 'battleship') {
+      if (gameType === 'connect4' || gameType === 'indianpoker' ||
+          gameType === 'applegame' || gameType === 'battleship' || gameType === 'texasholdem') {
         hostColor = 'white'; // host=white, guest=black
       } else if (!['white', 'black'].includes(hostColor)) {
         return;
@@ -210,10 +211,18 @@ function registerEvents(io) {
                            ? getValidCheckersMovesForPiece(room.board, room.mustJump.row, room.mustJump.col, room.board[room.mustJump.row][room.mustJump.col], true)
                            : getAllCheckersValidMoves(room.board, room.currentTurn))
                        : null,
-        chips:       room.chips       || null,
-        pot:         room.pot !== undefined ? room.pot : null,
-        phase:       room.phase       || null,
-        hands:       null, // reconnect시 인디언 포커 손패는 재발급 필요
+        chips:          room.chips          || null,
+        pot:            room.pot !== undefined ? room.pot : null,
+        phase:          room.phase          || null,
+        hands:          null, // reconnect시 인디언 포커 손패는 재발급 필요
+        pits:           room.pits           || null,
+        edges:          room.edges          || null,
+        boxes:          room.boxes          || null,
+        dice:           room.dice           || null,
+        remainingMoves: room.remainingMoves || null,
+        attackGrids:    room.attackGrids    || null,
+        community:      room.community      || null,
+        bets:           room.bets           || null,
       });
 
       const opponentRole     = getOpponentRole(role);

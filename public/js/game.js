@@ -152,10 +152,11 @@
     }
 
     const _isCardGame = gameType === 'indianpoker' || gameType === 'texasholdem';
+    const UNDO_SUPPORTED_MULTI = ['chess', 'omok', 'othello', 'checkers'];
     // 플레이어 전용 컨트롤 표시
     document.getElementById('resign-btn').style.display = '';
     document.getElementById('draw-btn').style.display   = gameType === 'chess' ? '' : 'none';
-    document.getElementById('undo-btn').style.display   = _isCardGame ? 'none' : '';
+    document.getElementById('undo-btn').style.display   = UNDO_SUPPORTED_MULTI.includes(gameType) ? '' : 'none';
     // 수 기록/복기 패널 — 체스는 SAN 복기 지원
     document.getElementById('moves-panel').style.display = _isCardGame ? 'none' : '';
     // 자동 거절 패널 표시 (관전자 제외, 카드게임 제외)
@@ -216,7 +217,7 @@
       }
     }
 
-    if (gameType !== 'indianpoker' && gameType !== 'texasholdem') appendMoveToList(move);
+    if (gameType !== 'indianpoker' && gameType !== 'texasholdem' && gameType !== 'battleship') appendMoveToList(move);
 
     if (myRole === 'spectator') {
       if (ActiveBoard) ActiveBoard.setMyTurn(gameStatus === 'active');
@@ -530,8 +531,9 @@
     document.getElementById('resign-btn').style.display = 'none';
     document.getElementById('draw-btn').style.display   = 'none';
     document.getElementById('spectator-controls').style.display = 'flex';
-    // 수 기록 패널
-    document.getElementById('moves-panel').style.display = gameType === 'chess' ? '' : '';
+    // 수 기록 패널 (배틀십·텍사스홀덤은 수 기록 없음)
+    const _noMovesList = ['battleship', 'texasholdem'];
+    document.getElementById('moves-panel').style.display = _noMovesList.includes(gameType) ? 'none' : '';
     updateSpectatorCount(state.spectatorCount || 1);
 
     if (state.status === 'active') {
@@ -821,7 +823,11 @@
       insufficient:     '기물 부족',
       disconnect:       '연결 끊김',
       admin:            '관리자 강제 종료',
-      draw:             '무승부'
+      draw:             '무승부',
+      'all-ships-sunk': '모든 함선 격침',
+      'all-lines-drawn':'모든 선 완성',
+      'all-borne-off':  '말 전부 탈출',
+      'empty-side':     '한쪽 구멍 소진',
     };
 
     const icon     = document.getElementById('gameover-icon');

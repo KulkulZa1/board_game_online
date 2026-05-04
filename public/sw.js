@@ -11,13 +11,11 @@
 const CACHE_NAME   = 'boardgame-v3';
 const COMMIT_KEY   = 'sw_last_commit';
 
-// 사전 캐시 — HTML 제외, 진짜 정적 자산만
+// 사전 캐시 — HTML 제외, 진짜 정적 자산만 (icons/ 미존재 시 phantom 경로 제외)
 const PRECACHE_ASSETS = [
   '/css/lobby.css',
   '/css/game.css',
   '/manifest.json',
-  '/icons/icon-192.png',
-  '/icons/icon-512.png',
 ];
 
 // ── Install ───────────────────────────────────────────────────────

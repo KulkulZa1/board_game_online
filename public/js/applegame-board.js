@@ -218,7 +218,7 @@ window.AppleGameBoard = (function () {
     let sum = 0;
     for (let r = rect.row1; r <= rect.row2; r++) {
       for (let c = rect.col1; c <= rect.col2; c++) {
-        if (_board[r][c] === null) return null;
+        if (_board[r][c] === null) continue; // 빈 칸 건너뜀
         sum += _board[r][c];
       }
     }
@@ -246,17 +246,12 @@ window.AppleGameBoard = (function () {
     const cellCount = (rect.row2 - rect.row1 + 1) * (rect.col2 - rect.col1 + 1);
 
     _selDiv.classList.toggle('ag-sel-valid',   sum === 10);
-    _selDiv.classList.toggle('ag-sel-invalid', sum !== null && sum !== 10);
-    _selDiv.classList.toggle('ag-sel-null',    sum === null);
+    _selDiv.classList.toggle('ag-sel-invalid', sum !== 10);
+    _selDiv.classList.remove('ag-sel-null');
 
     if (_sumDisplay) {
-      if (sum === null) {
-        _sumDisplay.textContent = '빈 칸 포함';
-        _sumDisplay.className = 'ag-sum-display ag-sum-null';
-      } else {
-        _sumDisplay.textContent = `합: ${sum}${sum === 10 ? ` ✓ (${cellCount}개)` : ''}`;
-        _sumDisplay.className = 'ag-sum-display' + (sum === 10 ? ' ag-sum-valid' : ' ag-sum-invalid');
-      }
+      _sumDisplay.textContent = `합: ${sum}${sum === 10 ? ` ✓ (${cellCount}개)` : ''}`;
+      _sumDisplay.className = 'ag-sum-display' + (sum === 10 ? ' ag-sum-valid' : ' ag-sum-invalid');
     }
   }
 

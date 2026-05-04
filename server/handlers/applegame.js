@@ -39,13 +39,13 @@ function appleGameHasAnyMove(board) {
     for (let c1 = 0; c1 < COLS; c1++)
       for (let r2 = r1; r2 < ROWS; r2++)
         for (let c2 = c1; c2 < COLS; c2++) {
-          let sum = 0, ok = true;
-          outer: for (let r = r1; r <= r2; r++)
+          let sum = 0;
+          for (let r = r1; r <= r2; r++)
             for (let c = c1; c <= c2; c++) {
-              if (board[r][c] === null) { ok = false; break outer; }
+              if (board[r][c] === null) continue; // 빈 칸 건너뜀
               sum += board[r][c];
             }
-          if (ok && sum === 10) return true;
+          if (sum === 10) return true;
         }
   return false;
 }
@@ -78,10 +78,7 @@ function handleMove(socket, room, role, { row1, col1, row2, col2 }) {
   const cells = [];
   for (let r = r1; r <= r2; r++) {
     for (let c = c1; c <= c2; c++) {
-      if (room.board[r][c] === null) {
-        socket.emit('game:move:invalid', { reason: '빈 칸이 포함되어 있습니다.' });
-        return;
-      }
+      if (room.board[r][c] === null) continue; // 빈 칸 건너뜀
       sum += room.board[r][c];
       cells.push({ row: r, col: c });
     }

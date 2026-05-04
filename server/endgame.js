@@ -48,20 +48,28 @@ function startGame(room) {
   log(`방 ${room.id.slice(0,8)} 게임 시작 — ${room.gameType} / ${room.hostColor} vs ${room.guestColor}`);
 
   state.io.to(room.id).emit('game:start', {
-    gameType:    room.gameType,
-    boardSize:   room.boardSize  || null,
-    fen:         room.fen   || null,
-    board:       room.board || null,
-    currentTurn: room.currentTurn || null,
-    colHeights:  room.colHeights || null,
-    mustJump:    room.mustJump   || null,
-    scores:      room.scores     || null,
-    moves: room.moves,
+    gameType:       room.gameType,
+    boardSize:      room.boardSize      || null,
+    fen:            room.fen            || null,
+    board:          room.board          || null,
+    currentTurn:    room.currentTurn    || null,
+    colHeights:     room.colHeights     || null,
+    mustJump:       room.mustJump       || null,
+    scores:         room.scores         || null,
+    moves:          room.moves,
     timers: {
       white:       room.timers.white,
       black:       room.timers.black,
       activeColor: room.timers.activeColor
-    }
+    },
+    pits:           room.pits           || null,
+    edges:          room.edges          || null,
+    boxes:          room.boxes          || null,
+    dice:           room.dice           || null,
+    remainingMoves: room.remainingMoves || null,
+    attackGrids:    room.attackGrids    || null,
+    community:      room.community      || null,
+    bets:           room.bets           || null,
   });
 
   // 카드게임: 게임 시작 후 첫 라운드 딜
@@ -88,30 +96,38 @@ function approveSpectator(room, spectatorSocketId) {
   const approvedCount = [...room.spectators.values()].filter(s => s.approved).length;
 
   specSocket.emit('spectator:approved', {
-    roomId:      room.id,
-    status:      room.status,
-    gameType:    room.gameType,
-    fen:         room.fen   || null,
-    board:       room.board || null,
-    currentTurn: room.currentTurn || null,
-    moves:       room.moves,
+    roomId:         room.id,
+    status:         room.status,
+    gameType:       room.gameType,
+    fen:            room.fen            || null,
+    board:          room.board          || null,
+    currentTurn:    room.currentTurn    || null,
+    moves:          room.moves,
     timers: {
       white:       room.timers.white,
       black:       room.timers.black,
       activeColor: room.timers.activeColor,
     },
-    hostColor:   room.hostColor,
-    timeControl: room.timeControl,
-    chat:        room.chat,
-    winner:      room.winner,
+    hostColor:      room.hostColor,
+    timeControl:    room.timeControl,
+    chat:           room.chat,
+    winner:         room.winner,
     spectatorCount: approvedCount,
-    hands:       room.hands || null,          // 인디언 포커: 관전자는 두 카드 모두 공개
-    chips:       room.chips || null,
-    pot:         room.pot   !== undefined ? room.pot : null,
-    phase:       room.phase || null,
-    colHeights:  room.colHeights || null,
-    mustJump:    room.mustJump   || null,
-    scores:      room.scores     || null,
+    hands:          room.hands          || null, // 인디언 포커: 관전자는 두 카드 모두 공개
+    chips:          room.chips          || null,
+    pot:            room.pot   !== undefined ? room.pot : null,
+    phase:          room.phase          || null,
+    colHeights:     room.colHeights     || null,
+    mustJump:       room.mustJump       || null,
+    scores:         room.scores         || null,
+    pits:           room.pits           || null,
+    edges:          room.edges          || null,
+    boxes:          room.boxes          || null,
+    dice:           room.dice           || null,
+    remainingMoves: room.remainingMoves || null,
+    attackGrids:    room.attackGrids    || null,
+    community:      room.community      || null,
+    bets:           room.bets           || null,
   });
 
   state.io.to(room.id).emit('spectator:joined', {

@@ -287,6 +287,7 @@ window.confirmResetStats = function() {
   // ========== Section visibility ==========
   function showGameSelectSection() {
     gameSelectSection.style.display = '';
+    document.getElementById('arcade-section').style.display = '';
     createSection.style.display     = 'none';
     waitingSection.style.display    = 'none';
     joinSection.style.display       = 'none';
@@ -295,6 +296,7 @@ window.confirmResetStats = function() {
 
   function showCreateSection() {
     gameSelectSection.style.display = 'none';
+    document.getElementById('arcade-section').style.display = 'none';
     createSection.style.display     = '';
     waitingSection.style.display    = 'none';
     joinSection.style.display       = 'none';
@@ -303,6 +305,7 @@ window.confirmResetStats = function() {
 
   function showWaitingSection(roomId) {
     gameSelectSection.style.display = 'none';
+    document.getElementById('arcade-section').style.display = 'none';
     createSection.style.display     = 'none';
     waitingSection.style.display    = '';
     joinSection.style.display       = 'none';
@@ -336,6 +339,7 @@ window.confirmResetStats = function() {
 
   function showJoinSection() {
     gameSelectSection.style.display = 'none';
+    document.getElementById('arcade-section').style.display = 'none';
     createSection.style.display     = 'none';
     waitingSection.style.display    = 'none';
     joinSection.style.display       = '';
@@ -344,6 +348,7 @@ window.confirmResetStats = function() {
 
   function showError(msg) {
     gameSelectSection.style.display = 'none';
+    document.getElementById('arcade-section').style.display = 'none';
     createSection.style.display     = 'none';
     waitingSection.style.display    = 'none';
     joinSection.style.display       = 'none';
