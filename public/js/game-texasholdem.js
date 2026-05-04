@@ -37,7 +37,8 @@ window.GameHandlers.texasholdem = (function () {
 
   // ── 솔로 (vs AI) 모드 ────────────────────────────────────────────
   function startSolo(playerColor, helpers, options) {
-    const { showGameOver } = helpers;
+    const { switchBoardArea, showGameOver } = helpers;
+    switchBoardArea('texasholdem');
     const playerRole = 'host';
     const aiRole     = 'guest';
     const SMALL_BLIND = 10, BIG_BLIND = 20, MAX_RAISES = 4;

@@ -49,7 +49,8 @@ window.GameHandlers.mancala = (function () {
 
   // ── 솔로 (vs AI) 모드 ────────────────────────────────────────────
   function startSolo(playerColor, helpers, options) {
-    const { showGameOver, updateTurnIndicator } = helpers;
+    const { switchBoardArea, showGameOver, updateTurnIndicator } = helpers;
+    switchBoardArea('mancala');
     const aiColor   = playerColor === 'white' ? 'black' : 'white';
     const SOLO_TIME = (options && options.timerSeconds) || 300;
 

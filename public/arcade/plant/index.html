@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>식물 키우기 — 보드게임 온라인</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="container">
+
+    <header id="hdr">
+      <a href="/" class="back-btn">← 로비</a>
+      <span class="game-title">🌱 식물 키우기</span>
+      <button id="resetBtn" class="reset-btn" title="처음부터">🔄</button>
+    </header>
+
+    <!-- 자원 표시줄 -->
+    <div id="resourceBar">
+      <div class="res-item">
+        <span class="res-icon">💧</span>
+        <span id="waterVal">0</span>
+        <span class="res-label">물</span>
+      </div>
+      <div class="res-item">
+        <span class="res-icon">☀️</span>
+        <span id="sunVal">0</span>
+        <span class="res-label">햇빛</span>
+      </div>
+      <div class="res-item">
+        <span class="res-icon">🌿</span>
+        <span id="nutrientVal">0</span>
+        <span class="res-label">영양분</span>
+      </div>
+      <div class="res-item">
+        <span class="res-icon">⭐</span>
+        <span id="starVal">0</span>
+        <span class="res-label">별</span>
+      </div>
+    </div>
+
+    <!-- 식물 영역 -->
+    <div id="plantArea">
+      <div id="plantStage">🌱</div>
+      <div id="stageName">씨앗</div>
+      <div id="growthBar">
+        <div id="growthFill"></div>
+      </div>
+      <div id="growthText">성장 0 / 100</div>
+
+      <!-- 클릭 버튼 -->
+      <button id="waterBtn" class="action-btn water-btn">
+        💧 물 주기
+        <span class="btn-rate" id="waterRate">+1/클릭</span>
+      </button>
+    </div>
+
+    <!-- 업그레이드 패널 -->
+    <div id="upgradePanel">
+      <div class="panel-title">🛒 업그레이드</div>
+      <div id="upgradeList"></div>
+    </div>
+
+    <!-- 업적 / 메시지 토스트 -->
+    <div id="toast"></div>
+
+  </div>
+
+  <script src="/js/admob.js?v=1.0"></script>
+  <script src="game.js?v=1.0"></script>
+</body>
+</html>
