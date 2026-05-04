@@ -55,7 +55,8 @@ window.GameHandlers.dotsboxes = (function () {
 
   // ── 솔로 (vs AI) 모드 ────────────────────────────────────────────
   function startSolo(playerColor, helpers, options) {
-    const { showGameOver, updateTurnIndicator } = helpers;
+    const { switchBoardArea, showGameOver, updateTurnIndicator } = helpers;
+    switchBoardArea('dotsboxes');
     const aiColor    = playerColor === 'white' ? 'black' : 'white';
     const playerCode = playerColor === 'white' ? 1 : 2;
     const aiCode     = playerColor === 'white' ? 2 : 1;
