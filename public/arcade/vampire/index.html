@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>뱀파이어 서바이버 — 보드게임 온라인</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="container">
+    <header id="hdr">
+      <a href="/" class="back-btn">← 로비</a>
+      <span class="game-title">👾 뱀파이어 서바이버</span>
+      <div id="hdr-stats">
+        <span>Lv.<strong id="lvDisp">1</strong></span>
+        <span>⏱<strong id="timeDisp">0:00</strong></span>
+        <span>💀<strong id="killDisp">0</strong></span>
+      </div>
+    </header>
+
+    <div id="gameWrapper">
+      <canvas id="c" tabindex="0"></canvas>
+
+      <!-- 레벨업 선택 오버레이 -->
+      <div id="levelOverlay" style="display:none;">
+        <div id="levelBox">
+          <div id="levelTitle">⬆ 레벨 업!</div>
+          <div id="upgradeList"></div>
+        </div>
+      </div>
+
+      <!-- 시작/게임오버 오버레이 -->
+      <div id="overlay" class="visible">
+        <div id="overlayBox">
+          <div id="overlayIcon">👾</div>
+          <p id="overlayMsg">생존하며 적을 처치하세요!<br>WASD / 방향키 또는 조이스틱</p>
+          <p id="overlaySub"></p>
+          <button id="startBtn">시작하기</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 체력 바 -->
+    <div id="hpBar">
+      <span>❤</span>
+      <div id="hpTrack"><div id="hpFill"></div></div>
+      <span id="hpText">100/100</span>
+    </div>
+
+    <!-- XP 바 -->
+    <div id="xpBar">
+      <span id="xpLabel">Lv.1</span>
+      <div id="xpTrack"><div id="xpFill"></div></div>
+      <span id="xpText">0/30</span>
+    </div>
+
+    <!-- 무기 슬롯 -->
+    <div id="weaponSlots"></div>
+
+    <!-- 모바일 조이스틱 -->
+    <div id="joystickZone">
+      <div id="joystickBase">
+        <div id="joystickKnob"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/admob.js?v=1.0"></script>
+  <script src="game.js?v=1.0"></script>
+</body>
+</html>
