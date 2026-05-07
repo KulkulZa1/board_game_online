@@ -60,6 +60,7 @@ check_url "game.html"
 check_url "js/game-registry.js"
 check_url "js/game.js"
 check_url "js/admob.js"
+check_url "icons/icon.svg"
 
 for game in chess omok connect4 othello checkers indianpoker applegame battleship backgammon texasholdem dotsboxes mancala; do
   check_url "js/game-${game}.js"
@@ -71,6 +72,10 @@ check_url "arcade/snake/"
 check_url "arcade/snake/game.js"
 check_url "arcade/breakout/"
 check_url "arcade/breakout/game.js"
+check_url "arcade/vampire/"
+check_url "arcade/vampire/game.js"
+check_url "arcade/plant/"
+check_url "arcade/plant/game.js"
 
 # 3D
 check_url "games3d/chess3d/"
@@ -86,6 +91,8 @@ check_js() {
 
 check_js public/arcade/snake/game.js
 check_js public/arcade/breakout/game.js
+check_js public/arcade/vampire/game.js
+check_js public/arcade/plant/game.js
 check_js public/games3d/chess3d/scene.js
 check_js server/handlers/mancala.js
 check_js server/events.js

@@ -1,5 +1,8 @@
 # Co-work Brief — Render.com Deployment Fix
 
+> Historical note: this was written for a specific deployment incident.
+> Re-check `git log origin/main`, `render.yaml`, and the live server before following the commit-specific instructions below.
+
 > Hand this file to a new Claude session with:
 > "Read COWORK_BRIEF.md and fix the deployment issue."
 
@@ -103,7 +106,7 @@ feat/v2-arcade-3d ← development — Snake, Breakout, 3D Chess (NOT deployed ye
 | `server/handlers/index.js` | Game registry (12 entries) |
 | `public/js/game-registry.js` | Frontend game metadata (12 entries) |
 | `scripts/diagnose.sh` | Diagnostic script — run first |
-| `scripts/check.sh` | Local smoke test (43 checks) |
+| `scripts/check.sh` | Local Bash smoke test |
 | `CLAUDE.md` | Full architecture guide |
 
 ---

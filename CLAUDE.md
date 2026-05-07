@@ -264,9 +264,15 @@ Summary — 10 files, maximum 2 with >1-line edits:
 
 ## Tests
 
-**There are no automated tests.** The project has no test runner, no test files, and no `test` script in `package.json`.
+The project has lightweight automated checks:
 
-When making changes:
+```bash
+npm run lint   # JS syntax check across the repository
+npm test       # starts the local server and smoke-checks routes/assets/handlers
+npm run check  # lint + test
+```
+
+When making gameplay changes:
 - Manually test the affected game(s) by running the server and playing locally
 - Test both 2-player (open two browser tabs) and solo (vs AI) modes
 - Verify the admin endpoint still responds: `GET /api/status`

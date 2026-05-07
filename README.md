@@ -46,11 +46,22 @@ https://board-game-online.onrender.com
 git clone https://github.com/KulkulZa1/board_game_online.git
 cd board_game_online
 npm install
-node server.js
+npm start
 # → http://localhost:3000
 ```
 
 **Node.js 18 이상** 필요
+
+### 검증 명령
+
+```bash
+npm run lint   # 모든 JS 파일 문법 검사
+npm test       # 로컬 서버 기동 + 핵심 라우트/정적 자산/핸들러 스모크 테스트
+npm run check  # lint + test
+npm run build  # 별도 빌드 단계 없음 안내
+```
+
+이 프로젝트는 번들러 없는 Node/Express + 정적 HTML/CSS/JS 앱입니다. Render.com 배포도 `npm install` 후 `node server.js`로 실행됩니다.
 
 ---
 
