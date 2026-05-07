@@ -80,6 +80,13 @@ check_url "arcade/plant/game.js"
 # 3D
 check_url "games3d/chess3d/"
 check_url "games3d/chess3d/scene.js"
+check_url "sandbox/"
+check_url "sandbox/vampire-survivors/"
+check_url "sandbox/vampire-survivors/game.js"
+check_url "sandbox/plant-growing/"
+check_url "sandbox/plant-growing/game.js"
+check_url "sandbox/tower-defense/"
+check_url "sandbox/tower-defense/game.js"
 
 # ── 4. JS syntax ─────────────────────────────────────────────────
 echo ""

@@ -64,6 +64,7 @@ board_game_online/
 ├── ADDING_A_GAME.md     # Developer guide: 10-step checklist to add a new game
 ├── README.md            # Korean-language project intro
 ├── CHANGELOG.md         # Version history
+├── sandbox/             # Experimental game prototypes served at /sandbox/
 │
 └── public/
     ├── index.html       # Lobby (game selection + room create/join)
@@ -287,6 +288,7 @@ Deployed on **Render.com** via `render.yaml`:
 - Start command: `node server.js`
 - Port: `10000` (set via `PORT` env var by Render)
 - Health check: `GET /api/status`
+- Static roots: `public/` at `/`, `sandbox/` at `/sandbox/`
 
 **Branch strategy:**
 - `main` → production (auto-deployed by Render on push)

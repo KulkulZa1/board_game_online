@@ -47,6 +47,7 @@ app.use('/.well-known', express.static(
   path.join(__dirname, '..', 'public/.well-known'),
   { setHeaders: (res) => res.set('Content-Type', 'application/json') }
 ));
+app.use('/sandbox', express.static(path.join(__dirname, '..', 'sandbox')));
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
 // Cloudflare Tunnel 경유 시 실제 클라이언트 IP를 X-Forwarded-For / CF-Connecting-IP 로 전달

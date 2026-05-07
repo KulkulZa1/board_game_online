@@ -79,6 +79,7 @@ npm run build  # 별도 빌드 단계 없음 안내
 - 개인 전적 기록 (게임별 승/패/무 통계)
 - PC + Android 모바일 지원
 - PWA (홈 화면 추가 지원)
+- `/sandbox/` 신규 게임 실험실 (Render에서도 정적 라우트로 제공)
 
 ---
 
@@ -110,5 +111,6 @@ main    ← 안정 배포 버전 (Render.com 자동 배포)
 | 서버 | Express 4, Socket.io 4 |
 | 체스 검증 | chess.js 0.12.0 |
 | 프론트엔드 | Vanilla HTML/CSS/JS |
+| 정적 파일 | `public/` + `/sandbox/` |
 | 배포 | Render.com |
 | 형상 관리 | GitHub |
