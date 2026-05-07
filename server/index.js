@@ -48,6 +48,7 @@ app.use('/.well-known', express.static(
   { setHeaders: (res) => res.set('Content-Type', 'application/json') }
 ));
 app.use(express.static(path.join(__dirname, '..', 'public')));
+app.use('/sandbox', express.static(path.join(__dirname, '..', 'sandbox')));
 
 // Cloudflare Tunnel 경유 시 실제 클라이언트 IP를 X-Forwarded-For / CF-Connecting-IP 로 전달
 // trust proxy 활성화로 req.ip 가 실제 IP를 반환
