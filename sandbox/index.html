@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Game Design Sandbox</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:      #0a0a0f;
+      --panel:   #12121a;
+      --border:  #2a2a3a;
+      --accent:  #8e44ad;
+      --accent2: #27ae60;
+      --text:    #e0d6f0;
+      --muted:   #7a7a9a;
+    }
+
+    html, body {
+      min-height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+    }
+
+    .page {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 48px 24px 64px;
+    }
+
+    .hero {
+      text-align: center;
+      margin-bottom: 48px;
+    }
+    .hero-icon { font-size: 3rem; margin-bottom: 12px; }
+    .hero h1 { font-size: 2rem; font-weight: 800; letter-spacing: -0.02em; }
+    .hero p {
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: 1rem;
+      letter-spacing: 0.04em;
+    }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+      gap: 28px;
+    }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      overflow: hidden;
+      text-decoration: none;
+      color: inherit;
+      display: flex;
+      flex-direction: column;
+      transition: border-color 0.2s, transform 0.15s;
+    }
+    .card:hover {
+      border-color: var(--accent);
+      transform: translateY(-3px);
+    }
+
+    .card-thumb {
+      width: 100%;
+      height: 180px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 5rem;
+      position: relative;
+      overflow: hidden;
+    }
+    .card-thumb-vs {
+      background: radial-gradient(ellipse at center, #1a0d2e 0%, #0a0a1a 100%);
+    }
+    .card-thumb-pg {
+      background: radial-gradient(ellipse at center, #0d2e0d 0%, #0a1a0a 100%);
+    }
+    .card-thumb-deco {
+      position: absolute;
+      font-size: 1.8rem;
+      opacity: 0.18;
+      user-select: none;
+    }
+    .card-thumb-deco:nth-child(2) { top: 10px; left: 16px; }
+    .card-thumb-deco:nth-child(3) { top: 18px; right: 24px; font-size: 1.2rem; }
+    .card-thumb-deco:nth-child(4) { bottom: 12px; left: 30px; font-size: 1.4rem; }
+    .card-thumb-deco:nth-child(5) { bottom: 8px;  right: 20px; }
+
+    .card-body {
+      padding: 22px 24px 24px;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
+    .card-title {
+      font-size: 1.2rem;
+      font-weight: 800;
+      margin-bottom: 6px;
+    }
+    .card-desc {
+      color: var(--muted);
+      font-size: 0.88rem;
+      line-height: 1.6;
+      flex: 1;
+    }
+    .card-features {
+      margin-top: 14px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .feature-tag {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 3px 10px;
+      font-size: 0.72rem;
+      color: var(--muted);
+    }
+    .card-open {
+      margin-top: 20px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: linear-gradient(135deg, var(--accent), #6c3483);
+      border: none;
+      border-radius: 10px;
+      color: #fff;
+      font-size: 0.95rem;
+      font-weight: 700;
+      padding: 10px 24px;
+      cursor: pointer;
+      text-decoration: none;
+      transition: opacity 0.15s;
+      align-self: flex-start;
+    }
+    .card-open-pg {
+      background: linear-gradient(135deg, var(--accent2), #1e8449);
+    }
+    .card-open:hover { opacity: 0.88; }
+
+    .footer {
+      text-align: center;
+      margin-top: 56px;
+      color: var(--muted);
+      font-size: 0.78rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="hero">
+      <div class="hero-icon">🎮</div>
+      <h1>Game Design Sandbox</h1>
+      <p>Prototype · Balance · Iterate · Ship</p>
+    </div>
+
+    <div class="cards">
+      <!-- Vampire Survivors Sandbox -->
+      <a class="card" href="./vampire-survivors/">
+        <div class="card-thumb card-thumb-vs">
+          <span class="card-thumb-deco">💀</span>
+          <span class="card-thumb-deco">⚡</span>
+          <span class="card-thumb-deco">🔵</span>
+          <span class="card-thumb-deco">👹</span>
+          <span style="position:relative;z-index:1;">🧛</span>
+        </div>
+        <div class="card-body">
+          <div class="card-title">🧛 Vampire Survivors Sandbox</div>
+          <div class="card-desc">
+            Live-edit stages, skills, items, and probability curves while the
+            game runs. Drag boss pins on the timeline, tune XP curves,
+            simulate pity systems, and spawn any enemy on demand.
+          </div>
+          <div class="card-features">
+            <span class="feature-tag">Stage Editor</span>
+            <span class="feature-tag">Skill Designer</span>
+            <span class="feature-tag">Item Builder</span>
+            <span class="feature-tag">Probability Tuner</span>
+            <span class="feature-tag">Enemy Designer</span>
+            <span class="feature-tag">Analytics Overlay</span>
+          </div>
+          <span class="card-open">Open Sandbox →</span>
+        </div>
+      </a>
+
+      <!-- Plant Growing Sandbox -->
+      <a class="card" href="./plant-growing/">
+        <div class="card-thumb card-thumb-pg">
+          <span class="card-thumb-deco">🌿</span>
+          <span class="card-thumb-deco">💧</span>
+          <span class="card-thumb-deco">🌸</span>
+          <span class="card-thumb-deco">✨</span>
+          <span style="position:relative;z-index:1;">🌱</span>
+        </div>
+        <div class="card-body">
+          <div class="card-title">🌱 Plant Growing Sandbox</div>
+          <div class="card-desc">
+            Design growth stages, upgrade trees, idle income curves, surprise
+            events, visitors, and seasonal cycles. Jump to any stage instantly
+            with the timeline scrubber.
+          </div>
+          <div class="card-features">
+            <span class="feature-tag">Stage Designer</span>
+            <span class="feature-tag">Upgrade Tree</span>
+            <span class="feature-tag">Event Builder</span>
+            <span class="feature-tag">Visitor System</span>
+            <span class="feature-tag">Season Cycle</span>
+            <span class="feature-tag">Prestige Curve</span>
+          </div>
+          <span class="card-open card-open-pg">Open Sandbox →</span>
+        </div>
+      </a>
+    </div>
+
+    <div class="footer">
+      All sandboxes run entirely in-browser · No server required · Edits auto-save to localStorage
+    </div>
+  </div>
+</body>
+</html>

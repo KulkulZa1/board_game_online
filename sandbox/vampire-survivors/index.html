@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🧛 Vampire Survivors Sandbox</title>
+  <link rel="stylesheet" href="graphics/sprites.css">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #0a0a0f;
+      --panel:    #12121a;
+      --border:   #2a2a3a;
+      --accent:   #8e44ad;
+      --text:     #e0d6f0;
+      --muted:    #7a7a9a;
+      --panel-w:  320px;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      font-size: 13px;
+      overflow: hidden;
+    }
+
+    /* ── Toolbar ─────────────────────────────────────────────────── */
+    #toolbar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+      height: 40px;
+      position: relative;
+      z-index: 10;
+    }
+    #toolbar a.back-link {
+      color: var(--muted); text-decoration: none; font-size: 0.85rem;
+      margin-right: 4px;
+    }
+    #toolbar a.back-link:hover { color: var(--text); }
+    #toolbar .title {
+      font-weight: 700; font-size: 0.95rem; flex: 1;
+    }
+    #unsaved-dot {
+      display: none; color: #f39c12; margin-right: 2px;
+    }
+    #toolbar button {
+      background: rgba(255,255,255,0.07);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      padding: 3px 10px;
+      cursor: pointer;
+      font-size: 0.78rem;
+      white-space: nowrap;
+    }
+    #toolbar button:hover { background: rgba(255,255,255,0.12); }
+
+    /* ── Main layout ─────────────────────────────────────────────── */
+    #main {
+      display: flex;
+      height: calc(100vh - 40px);
+    }
+
+    /* ── Canvas wrap ─────────────────────────────────────────────── */
+    #game-canvas-wrap {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #06060c;
+      overflow: hidden;
+      position: relative;
+    }
+    #game-canvas {
+      display: block;
+      image-rendering: pixelated;
+    }
+
+    /* ── Level-up overlay ────────────────────────────────────────── */
+    #levelup-overlay {
+      display: none;
+      position: absolute;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      align-items: center;
+      justify-content: center;
+      z-index: 20;
+    }
+    .levelup-box {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 24px;
+      max-width: 380px;
+      width: 90%;
+      text-align: center;
+    }
+    .levelup-box h2 { font-size: 1.4rem; margin-bottom: 14px; color: #f39c12; }
+    .levelup-choices { display: flex; flex-direction: column; gap: 8px; }
+    .levelup-choice {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 14px;
+      color: var(--text);
+      cursor: pointer;
+      text-align: left;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      transition: background 0.15s;
+    }
+    .levelup-choice:hover { background: rgba(255,255,255,0.1); }
+    .choice-icon { font-size: 1.5rem; }
+    .choice-name { font-weight: 700; display: block; }
+    .choice-desc { font-size: 0.8rem; color: var(--muted); }
+    .levelup-choice.rarity-rare    { border-color: #2980b9; }
+    .levelup-choice.rarity-legendary { border-color: #f39c12; }
+    .levelup-choice.rarity-uncommon  { border-color: #27ae60; }
+
+    /* ── Editor panel ────────────────────────────────────────────── */
+    #editor-panel {
+      width: var(--panel-w);
+      min-width: var(--panel-w);
+      background: var(--panel);
+      border-left: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    #tab-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 2px;
+      padding: 6px 6px 0;
+      border-bottom: 1px solid var(--border);
+      background: #0e0e16;
+    }
+    .tab-btn {
+      background: none;
+      border: 1px solid transparent;
+      border-radius: 6px 6px 0 0;
+      color: var(--muted);
+      padding: 4px 8px;
+      cursor: pointer;
+      font-size: 0.72rem;
+      white-space: nowrap;
+    }
+    .tab-btn:hover { color: var(--text); }
+    .tab-btn.active {
+      background: var(--panel);
+      border-color: var(--border);
+      border-bottom-color: var(--panel);
+      color: var(--text);
+    }
+
+    #tab-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px;
+    }
+    #tab-content::-webkit-scrollbar { width: 5px; }
+    #tab-content::-webkit-scrollbar-track { background: transparent; }
+    #tab-content::-webkit-scrollbar-thumb { background: #2a2a3a; border-radius: 3px; }
+
+    /* ── Panel components ────────────────────────────────────────── */
+    .tab-section h3 {
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      margin: 10px 0 6px;
+      padding-bottom: 4px;
+      border-bottom: 1px solid var(--border);
+    }
+    .tab-section h3:first-child { margin-top: 4px; }
+
+    .field-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 5px;
+    }
+    .field-row label, .field-row > span:first-child {
+      min-width: 90px;
+      max-width: 90px;
+      color: var(--muted);
+      font-size: 0.78rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .field-row input[type=range] {
+      flex: 1;
+      accent-color: var(--accent);
+      min-width: 0;
+      height: 14px;
+    }
+    .field-row input[type=number], .field-row input[type=text] {
+      width: 56px;
+      background: #1a1a2a;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text);
+      padding: 2px 4px;
+      font-size: 0.78rem;
+    }
+    .field-row select {
+      flex: 1;
+      background: #1a1a2a;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text);
+      padding: 2px 4px;
+      font-size: 0.78rem;
+    }
+    .field-row input[type=checkbox] { accent-color: var(--accent); }
+
+    .field-label {
+      font-size: 0.72rem;
+      color: var(--muted);
+      margin: 6px 0 2px;
+    }
+
+    .btn-small {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      color: var(--text);
+      padding: 2px 8px;
+      cursor: pointer;
+      font-size: 0.72rem;
+    }
+    .btn-small:hover { background: rgba(255,255,255,0.1); }
+    .btn-play { border-color: #27ae60; color: #27ae60; }
+    .btn-spawn { border-color: #e67e22; color: #e67e22; }
+
+    /* Stage block */
+    .stage-block {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px;
+      margin-bottom: 8px;
+    }
+    .stage-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 6px;
+    }
+    .stage-name { font-weight: 700; font-size: 0.85rem; }
+
+    /* Boss pins */
+    .boss-pins { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
+    .pin-tag {
+      background: rgba(192,57,43,0.2);
+      border: 1px solid #c0392b44;
+      border-radius: 4px;
+      padding: 2px 6px;
+      font-size: 0.72rem;
+      display: flex;
+      align-items: center;
+      gap: 3px;
+    }
+    .pin-del {
+      background: none; border: none; color: #e74c3c;
+      cursor: pointer; padding: 0 2px; font-size: 0.8rem;
+    }
+    .pin-add { margin-left: 2px; }
+
+    .wave-timeline { display: block; margin: 4px 0; }
+    .wave-row {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      margin-bottom: 3px;
+    }
+    .wave-at { color: var(--muted); font-size: 0.72rem; min-width: 28px; }
+    .wave-type { font-size: 0.72rem; flex: 1; }
+    .wave-count { width: 44px; font-size: 0.72rem; }
+
+    /* Rarity group */
+    .rarity-group { margin-bottom: 10px; }
+    .rarity-label {
+      font-size: 0.65rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+    .rarity-group.rarity-legendary .rarity-label { color: #f39c12; }
+    .rarity-group.rarity-rare .rarity-label { color: #2980b9; }
+    .rarity-group.rarity-uncommon .rarity-label { color: #27ae60; }
+
+    /* Skill block */
+    .skill-block {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 7px;
+      margin-bottom: 6px;
+    }
+    .skill-header {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 5px;
+    }
+    .skill-icon { font-size: 1.2rem; }
+    .skill-name { font-weight: 700; flex: 1; }
+    .skill-rarity { font-size: 0.72rem; width: 90px; }
+    .level-inputs { display: flex; gap: 3px; margin-bottom: 4px; flex-wrap: wrap; }
+    .level-input { width: 38px; font-size: 0.72rem; }
+    .chart-wrap { margin-bottom: 4px; }
+    .evolve-tag {
+      font-size: 0.72rem;
+      color: #f39c12;
+      margin-top: 3px;
+    }
+
+    /* Node graph */
+    .node-graph-wrap {
+      background: rgba(0,0,0,0.2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+      margin-top: 6px;
+    }
+    .graph-node {
+      position: absolute;
+      width: 30px;
+      height: 30px;
+      background: #1a1a2e;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1rem;
+      cursor: pointer;
+      transform: translate(-50%, -50%);
+    }
+    .graph-node:hover { border-color: var(--accent); }
+
+    /* Item block */
+    .item-block {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px 8px;
+      margin-bottom: 5px;
+      flex-wrap: wrap;
+    }
+    .item-icon { font-size: 1.2rem; }
+    .item-name { font-weight: 600; min-width: 80px; }
+
+    /* Character block */
+    .char-block {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px;
+      margin-bottom: 8px;
+    }
+    .char-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+    .char-name { font-weight: 700; }
+
+    /* Enemy block */
+    .enemy-block {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 7px;
+      margin-bottom: 8px;
+    }
+    .enemy-header {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 5px;
+    }
+    .enemy-name { flex: 1; font-weight: 700; }
+
+    /* Analytics */
+    .analytics-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+      margin: 8px 0;
+    }
+    .stat-chip {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px;
+      text-align: center;
+    }
+    .stat-val { font-size: 1rem; font-weight: 700; color: #4af; }
+    .stat-lbl { font-size: 0.65rem; color: var(--muted); margin-top: 2px; }
+
+    /* ── Mobile drawer ────────────────────────────────────────────── */
+    @media (max-width: 768px) {
+      #main { flex-direction: column; }
+      #game-canvas-wrap {
+        height: calc(100vh - 40px - 48px);
+      }
+      #editor-panel {
+        position: fixed;
+        bottom: 0; left: 0; right: 0;
+        width: 100%;
+        height: 60vh;
+        transform: translateY(100%);
+        transition: transform 0.3s ease;
+        z-index: 30;
+        border-left: none;
+        border-top: 1px solid var(--border);
+      }
+      #editor-panel.panel-open { transform: translateY(0); }
+      #panel-toggle {
+        display: flex;
+        position: fixed;
+        bottom: 0; left: 0; right: 0;
+        height: 48px;
+        background: var(--panel);
+        border-top: 1px solid var(--border);
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        z-index: 25;
+        color: var(--text);
+        font-size: 0.9rem;
+        font-weight: 700;
+      }
+    }
+    @media (min-width: 769px) {
+      #panel-toggle { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <!-- Toolbar -->
+  <div id="toolbar">
+    <a class="back-link" href="../">← Back</a>
+    <span class="title">🧛 VS Sandbox</span>
+    <span id="unsaved-dot">●</span>
+    <button data-action="pause">⏸</button>
+    <button data-action="export">📤</button>
+    <button data-action="import">📥</button>
+    <button data-action="snapshot">💾</button>
+    <button data-action="snapshots">📂</button>
+    <button data-action="reset">↺</button>
+  </div>
+
+  <!-- Main layout -->
+  <div id="main">
+    <!-- Canvas -->
+    <div id="game-canvas-wrap">
+      <canvas id="game-canvas" width="800" height="600"></canvas>
+      <!-- Level-up + end-game overlay -->
+      <div id="levelup-overlay"></div>
+    </div>
+
+    <!-- Editor panel -->
+    <div id="editor-panel">
+      <!-- built by VSUI.init() -->
+    </div>
+  </div>
+
+  <!-- Mobile panel toggle -->
+  <div id="panel-toggle">☰ Editor Panel</div>
+
+  <!-- Scripts: load order matters (file:// has no module system) -->
+  <script src="graphics/theme.js"></script>
+  <script src="config.js"></script>
+  <script src="game.js"></script>
+  <script src="ui.js"></script>
+
+  <script>
+    // Mobile drawer toggle
+    document.getElementById('panel-toggle').addEventListener('click', function () {
+      document.getElementById('editor-panel').classList.toggle('panel-open');
+    });
+
+    // Boot
+    VSGame.init(document.getElementById('game-canvas'));
+    VSUI.init();
+  </script>
+</body>
+</html>
