@@ -1,0 +1,93 @@
+/* sprites.css — CSS classes for TD editor panel */
+
+/* ── Rarity borders ──────────────────────────────────────────────── */
+.rarity-common    { border-color: #95a5a6 !important; }
+.rarity-uncommon  { border-color: #27ae60 !important; }
+.rarity-rare      { border-color: #2980b9 !important; }
+.rarity-legendary { border-color: #f39c12 !important; }
+
+.rarity-common    .passive-name { color: #95a5a6; }
+.rarity-uncommon  .passive-name { color: #27ae60; }
+.rarity-rare      .passive-name { color: #2980b9; }
+.rarity-legendary .passive-name { color: #f39c12; }
+
+/* ── Background previews ─────────────────────────────────────────── */
+.token-bg-dawn       { background-color: #0d1520; }
+.token-bg-dusk       { background-color: #1a1008; }
+.token-bg-nightfall  { background-color: #0a0d1a; }
+.token-bg-cursed     { background-color: #110d1a; }
+.token-bg-storm      { background-color: #0a1010; }
+.token-bg-abyss      { background-color: #080810; }
+.token-bg-siege      { background-color: #100808; }
+.token-bg-chaos      { background-color: #100a08; }
+.token-bg-apocalypse { background-color: #100808; }
+.token-bg-endgame    { background-color: #08080c; }
+.token-bg-infinity   { background-color: #050508; }
+
+/* ── Enemy type badges ───────────────────────────────────────────── */
+.enemy-grunt  { color: #7dcea0; }
+.enemy-runner { color: #8e44ad; }
+.enemy-tank   { color: #e67e22; }
+.enemy-boss   { color: #c0392b; }
+
+/* ── Tower level badges ──────────────────────────────────────────── */
+.tower-lv1 { border-color: #95a5a6; }
+.tower-lv2 { border-color: #27ae60; }
+.tower-lv3 { border-color: #2980b9; }
+.tower-lv4 { border-color: #f39c12; }
+.tower-lv5 { border-color: #c0392b; }
+
+/* ── Wave dot colors ─────────────────────────────────────────────── */
+.wave-dot-grunt  { background: #7dcea0; }
+.wave-dot-runner { background: #8e44ad; }
+.wave-dot-tank   { background: #e67e22; }
+.wave-dot-boss   { background: #c0392b; }
+
+/* ── Icon display ────────────────────────────────────────────────── */
+.icon-token {
+  font-size: 1.3rem;
+  line-height: 1;
+  display: inline-block;
+  width: 1.6rem;
+  text-align: center;
+}
+
+/* ── Passive pool dot ────────────────────────────────────────────── */
+.pool-dot {
+  display: inline-block;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  margin-right: 4px;
+}
+.pool-common    { background: #95a5a6; }
+.pool-uncommon  { background: #27ae60; }
+.pool-rare      { background: #2980b9; }
+.pool-legendary { background: #f39c12; }
+
+/* ── Upgrade level row ───────────────────────────────────────────── */
+.upgrade-row {
+  background: rgba(255,255,255,0.02);
+  border: 1px solid #1e2e3e;
+  border-radius: 5px;
+  padding: 5px 8px;
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.78rem;
+}
+.upgrade-row .lv-badge {
+  font-size: 0.65rem;
+  padding: 1px 5px;
+  border-radius: 4px;
+  border: 1px solid;
+  min-width: 28px;
+  text-align: center;
+}
+.upgrade-special-badge {
+  font-size: 0.65rem;
+  padding: 1px 5px;
+  border-radius: 4px;
+  border: 1px solid #f39c12;
+  color: #f39c12;
+}

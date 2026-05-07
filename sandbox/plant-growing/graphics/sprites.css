@@ -1,0 +1,67 @@
+/* sprites.css — CSS token classes for Plant Growing Sandbox DOM elements */
+
+/* ── Growth stage colors ─────────────────────────────────────────────────── */
+.stage-seed     { border-color: #7dcea0 !important; }
+.stage-sprout   { border-color: #27ae60 !important; }
+.stage-sapling  { border-color: #1e8449 !important; }
+.stage-bush     { border-color: #196f3d !important; }
+.stage-flower   { border-color: #e91e8c !important; }
+.stage-bloom    { border-color: #c0392b !important; }
+.stage-fruit    { border-color: #e67e22 !important; }
+.stage-ancient  { border-color: #7f8c8d !important; }
+.stage-mythic   { border-color: #8e44ad !important; }
+
+/* ── Rarity borders (for upgrades / items) ───────────────────────────────── */
+.rarity-common    { border-color: #95a5a6 !important; }
+.rarity-uncommon  { border-color: #27ae60 !important; }
+.rarity-rare      { border-color: #2980b9 !important; }
+.rarity-legendary { border-color: #f39c12 !important; }
+
+/* ── Weather type dots ───────────────────────────────────────────────────── */
+.weather-dot-sunny   { background: #f1c40f; }
+.weather-dot-cloudy  { background: #95a5a6; }
+.weather-dot-rainy   { background: #2980b9; }
+.weather-dot-stormy  { background: #8e44ad; }
+.weather-dot-snowy   { background: #abebc6; }
+.weather-dot-foggy   { background: #7f8c8d; }
+.weather-dot-windy   { background: #1abc9c; }
+
+/* ── Season backgrounds ──────────────────────────────────────────────────── */
+.season-spring { background: rgba(46,204,113,0.08); }
+.season-summer { background: rgba(241,196,15,0.08); }
+.season-autumn { background: rgba(230,126,34,0.08); }
+.season-winter { background: rgba(52,152,219,0.08); }
+
+/* ── Visitor type colors ──────────────────────────────────────────────────── */
+.visitor-bee       { color: #f1c40f; }
+.visitor-butterfly { color: #e91e8c; }
+.visitor-bird      { color: #3498db; }
+.visitor-rabbit    { color: #95a5a6; }
+.visitor-fairy     { color: #9b59b6; }
+.visitor-gnome     { color: #e67e22; }
+.visitor-merchant  { color: #1abc9c; }
+
+/* ── Upgrade tier badges ──────────────────────────────────────────────────── */
+.tier-1 { background: rgba(149,165,166,0.12); border-color: #95a5a644; }
+.tier-2 { background: rgba(39,174,96,0.12);   border-color: #27ae6044; }
+.tier-3 { background: rgba(243,156,18,0.12);  border-color: #f39c1244; }
+
+/* ── Icon display ────────────────────────────────────────────────────────── */
+.icon-token {
+  font-size: 1.3rem;
+  line-height: 1;
+  display: inline-block;
+  width: 1.6rem;
+  text-align: center;
+}
+
+/* ── Resource chip ───────────────────────────────────────────────────────── */
+.resource-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 12px;
+  padding: 2px 8px;
+  font-size: 0.78rem;
+}

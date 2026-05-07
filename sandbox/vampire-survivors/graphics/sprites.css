@@ -1,0 +1,54 @@
+/* sprites.css — CSS classes that map token names to visuals.
+   Used by DOM elements in the editor panel (icon previews, rarity borders, etc.)
+   Canvas rendering uses tokenColor() / tokenEmoji() directly.           */
+
+/* ── Rarity borders ──────────────────────────────────────────────────────── */
+.rarity-common    { border-color: #95a5a6 !important; }
+.rarity-uncommon  { border-color: #27ae60 !important; }
+.rarity-rare      { border-color: #2980b9 !important; }
+.rarity-legendary { border-color: #f39c12 !important; }
+
+.rarity-common    .skill-name { color: #95a5a6; }
+.rarity-uncommon  .skill-name { color: #27ae60; }
+.rarity-rare      .skill-name { color: #2980b9; }
+.rarity-legendary .skill-name { color: #f39c12; }
+
+/* ── Background previews ─────────────────────────────────────────────────── */
+.token-bg-forest  { background-color: #0d1a0d; }
+.token-bg-castle  { background-color: #1a1a2e; }
+.token-bg-desert  { background-color: #2e1a0d; }
+.token-bg-snow    { background-color: #0d1a2e; }
+.token-bg-crypt   { background-color: #120a1a; }
+
+/* ── Enemy type badges ───────────────────────────────────────────────────── */
+.enemy-zombie   { color: #7dcea0; }
+.enemy-skeleton { color: #d5d8dc; }
+.enemy-bat      { color: #8e44ad; }
+.enemy-ghost    { color: #abebc6; }
+.enemy-demon    { color: #e74c3c; }
+.enemy-elite    { color: #e67e22; }
+.enemy-boss     { color: #c0392b; }
+
+/* ── Item slot badges ────────────────────────────────────────────────────── */
+.slot-weapon    { background: rgba(231,76,60,0.15);  border-color: #e74c3c44; }
+.slot-armor     { background: rgba(41,128,185,0.15); border-color: #2980b944; }
+.slot-accessory { background: rgba(39,174,96,0.15);  border-color: #27ae6044; }
+.slot-relic     { background: rgba(243,156,18,0.15); border-color: #f39c1244; }
+
+/* ── Icon display ────────────────────────────────────────────────────────── */
+.icon-token {
+  font-size: 1.3rem;
+  line-height: 1;
+  display: inline-block;
+  width: 1.6rem;
+  text-align: center;
+}
+
+/* ── Wave type color dots ────────────────────────────────────────────────── */
+.wave-dot-zombie   { background: #7dcea0; }
+.wave-dot-skeleton { background: #d5d8dc; }
+.wave-dot-bat      { background: #8e44ad; }
+.wave-dot-ghost    { background: #abebc6; }
+.wave-dot-demon    { background: #e74c3c; }
+.wave-dot-elite    { background: #e67e22; }
+.wave-dot-boss     { background: #c0392b; }
