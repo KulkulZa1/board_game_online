@@ -2,6 +2,7 @@
 window.Chat = (function () {
   let myRole = null;
   let socket = null;
+  let initialized = false;
 
   const messagesEl   = document.getElementById('chat-messages');
   const inputEl      = document.getElementById('chat-input');
@@ -13,6 +14,9 @@ window.Chat = (function () {
   function init(options) {
     myRole = options.role;
     socket = options.socket;
+
+    if (initialized) return;
+    initialized = true;
 
     sendBtn.addEventListener('click', sendMessage);
     inputEl.addEventListener('keydown', e => {

@@ -64,6 +64,7 @@ board_game_online/
 ├── ADDING_A_GAME.md     # Developer guide: 10-step checklist to add a new game
 ├── README.md            # Korean-language project intro
 ├── CHANGELOG.md         # Version history
+├── sandbox/             # Experimental game prototypes served at /sandbox/
 │
 └── public/
     ├── index.html       # Lobby (game selection + room create/join)
@@ -264,9 +265,15 @@ Summary — 10 files, maximum 2 with >1-line edits:
 
 ## Tests
 
-**There are no automated tests.** The project has no test runner, no test files, and no `test` script in `package.json`.
+The project has lightweight automated checks:
 
-When making changes:
+```bash
+npm run lint   # JS syntax check across the repository
+npm test       # starts the local server and smoke-checks routes/assets/handlers
+npm run check  # lint + test
+```
+
+When making gameplay changes:
 - Manually test the affected game(s) by running the server and playing locally
 - Test both 2-player (open two browser tabs) and solo (vs AI) modes
 - Verify the admin endpoint still responds: `GET /api/status`
@@ -281,6 +288,7 @@ Deployed on **Render.com** via `render.yaml`:
 - Start command: `node server.js`
 - Port: `10000` (set via `PORT` env var by Render)
 - Health check: `GET /api/status`
+- Static roots: `public/` at `/`, `sandbox/` at `/sandbox/`
 
 **Branch strategy:**
 - `main` → production (auto-deployed by Render on push)

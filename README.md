@@ -46,11 +46,22 @@ https://board-game-online.onrender.com
 git clone https://github.com/KulkulZa1/board_game_online.git
 cd board_game_online
 npm install
-node server.js
+npm start
 # → http://localhost:3000
 ```
 
 **Node.js 18 이상** 필요
+
+### 검증 명령
+
+```bash
+npm run lint   # 모든 JS 파일 문법 검사
+npm test       # 로컬 서버 기동 + 핵심 라우트/정적 자산/핸들러 스모크 테스트
+npm run check  # lint + test
+npm run build  # 별도 빌드 단계 없음 안내
+```
+
+이 프로젝트는 번들러 없는 Node/Express + 정적 HTML/CSS/JS 앱입니다. Render.com 배포도 `npm install` 후 `node server.js`로 실행됩니다.
 
 ---
 
@@ -68,6 +79,7 @@ node server.js
 - 개인 전적 기록 (게임별 승/패/무 통계)
 - PC + Android 모바일 지원
 - PWA (홈 화면 추가 지원)
+- `/sandbox/` 신규 게임 실험실 (Render에서도 정적 라우트로 제공)
 
 ---
 
@@ -99,5 +111,6 @@ main    ← 안정 배포 버전 (Render.com 자동 배포)
 | 서버 | Express 4, Socket.io 4 |
 | 체스 검증 | chess.js 0.12.0 |
 | 프론트엔드 | Vanilla HTML/CSS/JS |
+| 정적 파일 | `public/` + `/sandbox/` |
 | 배포 | Render.com |
 | 형상 관리 | GitHub |
