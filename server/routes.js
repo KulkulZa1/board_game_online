@@ -2,6 +2,7 @@
 const state = require('./state');
 const { log } = require('./utils');
 const { endGame } = require('./endgame');
+const { isAdminEnabled, isLocalRequest } = require('./security');
 
 function gracefulShutdown(signal, server) {
   log(`${signal} 수신 — 서버를 안전하게 종료합니다...`);
@@ -32,7 +33,7 @@ function registerRoutes(app, server, PORT, TUNNEL_URL, SERVER_START_TIME) {
 
   // GET /api/status — 서버 현황 (localhost 접속 시 shutdown 키 포함)
   app.get('/api/status', (req, res) => {
-    const isLocal = req.hostname === 'localhost' || req.hostname === '127.0.0.1';
+    const isLocal = isLocalRequest(req);
     const list = [...state.rooms.values()];
 
     // 방 상세 목록 (민감 정보 제외)
@@ -106,6 +107,9 @@ function registerRoutes(app, server, PORT, TUNNEL_URL, SERVER_START_TIME) {
 
   // POST /admin/shutdown — body에 key 전달 (URL 히스토리에 키 노출 방지)
   app.post('/admin/shutdown', (req, res) => {
+    if (!isAdminEnabled(req)) {
+      return res.status(404).json({ error: 'Admin endpoint is disabled.' });
+    }
     if (!req.body || req.body.key !== state.shutdownKey) {
       return res.status(401).json({ error: '잘못된 셧다운 키입니다.' });
     }
@@ -116,6 +120,9 @@ function registerRoutes(app, server, PORT, TUNNEL_URL, SERVER_START_TIME) {
 
   // POST /admin/terminate — 특정 방 게임 강제 종료
   app.post('/admin/terminate', (req, res) => {
+    if (!isAdminEnabled(req)) {
+      return res.status(404).json({ error: 'Admin endpoint is disabled.' });
+    }
     if (!req.body || req.body.key !== state.shutdownKey) {
       return res.status(401).json({ error: '잘못된 셧다운 키입니다.' });
     }

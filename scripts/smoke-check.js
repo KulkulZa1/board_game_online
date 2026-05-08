@@ -71,6 +71,22 @@ function checkHandlers() {
   }
 }
 
+function checkSecurityHelpers() {
+  const { isLoopbackAddress } = require('../server/security');
+  const localAddresses = ['127.0.0.1', '127.12.34.56', '::1', '::ffff:127.0.0.1', 'localhost'];
+  const remoteAddresses = ['192.168.0.10', '10.0.0.5', '172.16.0.4', '203.0.113.9', 'example.com', ''];
+
+  const missed = localAddresses.filter((address) => !isLoopbackAddress(address));
+  if (missed.length) {
+    throw new Error(`Loopback detection missed: ${missed.join(', ')}`);
+  }
+
+  const falsePositive = remoteAddresses.filter((address) => isLoopbackAddress(address));
+  if (falsePositive.length) {
+    throw new Error(`Loopback detection false positive: ${falsePositive.join(', ')}`);
+  }
+}
+
 function runSyntaxCheck() {
   if (!checkJavaScriptSyntax()) {
     throw new Error('JS syntax check failed');
@@ -179,6 +195,7 @@ async function main() {
     }
 
     checkHandlers();
+    checkSecurityHelpers();
 
     const gameIds = [
       'chess', 'omok', 'connect4', 'othello', 'checkers', 'indianpoker',
