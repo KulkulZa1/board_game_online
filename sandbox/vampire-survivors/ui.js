@@ -108,11 +108,14 @@ window.VSUI = (function () {
     var stages = VS_CONFIG.STAGES || [];
     var html = '<div class="tab-section">';
     html += '<h3>Stages</h3>';
+    html += '<button class="btn-small stage-add" style="margin-bottom:8px">+ Stage</button>';
 
     stages.forEach(function (s, si) {
       html += '<div class="stage-block" data-si="' + si + '">';
       html += '<div class="stage-header">' +
-              '<span class="stage-name">' + esc(s.name) + '</span>' +
+              '<input type="text" class="stage-name-input" data-si="' + si + '" value="' + esc(s.name || ('Stage ' + (si + 1))) + '" style="flex:1;min-width:0;background:#111827;color:#fff;border:1px solid #2a3344;border-radius:5px;padding:3px 6px;">' +
+              '<button class="btn-small stage-duplicate" data-si="' + si + '">Copy</button>' +
+              (stages.length > 1 ? '<button class="btn-small stage-delete" data-si="' + si + '">Del</button>' : '') +
               '<button class="btn-small btn-play" data-si="' + si + '">▶ Play</button></div>';
 
       html += sliderField('Duration (s)', s.durationSeconds, 30, 600, 10,
@@ -136,15 +139,20 @@ window.VSUI = (function () {
       html += '<div class="field-label">Waves</div>';
       (s.waveSchedule || []).forEach(function (w, wi) {
         html += '<div class="wave-row">';
-        html += '<span class="wave-at">@' + w.atSecond + 's</span>';
+        html += '<input type="number" class="wave-at-input" min="0" max="' + (s.durationSeconds || 600) + '" value="' + (w.atSecond || 0) + '"' +
+                ' data-si="' + si + '" data-wi="' + wi + '" title="Second">';
         html += '<select class="wave-type" data-si="' + si + '" data-wi="' + wi + '">' +
                 Object.keys(VS_CONFIG.ENEMY_TYPES || {}).map(function (k) {
                   return '<option value="' + k + '"' + (w.enemyType === k ? ' selected' : '') + '>' + k + '</option>';
                 }).join('') + '</select>';
         html += '<input type="number" class="wave-count" min="1" max="30" value="' + w.count + '"' +
                 ' data-si="' + si + '" data-wi="' + wi + '">';
+        html += '<input type="number" class="wave-interval" min="100" max="10000" step="100" value="' + (w.intervalMs || 2000) + '"' +
+                ' data-si="' + si + '" data-wi="' + wi + '" title="Interval ms">';
+        html += '<button class="btn-small wave-delete" data-si="' + si + '" data-wi="' + wi + '">Del</button>';
         html += '</div>';
       });
+      html += '<button class="btn-small wave-add" data-si="' + si + '">+ Wave</button>';
       html += '</div>';
     });
 
@@ -536,6 +544,41 @@ window.VSUI = (function () {
       });
     });
 
+    content.querySelectorAll('.stage-name-input').forEach(function (el) {
+      el.addEventListener('change', function () {
+        VS_CONFIG.STAGES[el.dataset.si].name = el.value || ('Stage ' + (parseInt(el.dataset.si) + 1));
+        scheduleSave();
+        renderActiveTab();
+      });
+    });
+
+    content.querySelectorAll('.stage-add').forEach(function (el) {
+      el.addEventListener('click', function () {
+        VS_CONFIG.STAGES = VS_CONFIG.STAGES || [];
+        VS_CONFIG.STAGES.push(makeStageCopy(VS_CONFIG.STAGES[VS_CONFIG.STAGES.length - 1], VS_CONFIG.STAGES.length));
+        scheduleSave();
+        renderActiveTab();
+      });
+    });
+
+    content.querySelectorAll('.stage-duplicate').forEach(function (el) {
+      el.addEventListener('click', function () {
+        var src = VS_CONFIG.STAGES[parseInt(el.dataset.si)];
+        VS_CONFIG.STAGES.splice(parseInt(el.dataset.si) + 1, 0, makeStageCopy(src, VS_CONFIG.STAGES.length));
+        scheduleSave();
+        renderActiveTab();
+      });
+    });
+
+    content.querySelectorAll('.stage-delete').forEach(function (el) {
+      el.addEventListener('click', function () {
+        if ((VS_CONFIG.STAGES || []).length <= 1) return;
+        VS_CONFIG.STAGES.splice(parseInt(el.dataset.si), 1);
+        scheduleSave();
+        renderActiveTab();
+      });
+    });
+
     // Wave type / count
     content.querySelectorAll('.wave-type').forEach(function (el) {
       el.addEventListener('change', function () {
@@ -547,6 +590,38 @@ window.VSUI = (function () {
       el.addEventListener('change', function () {
         VS_CONFIG.STAGES[el.dataset.si].waveSchedule[el.dataset.wi].count = parseInt(el.value);
         scheduleSave();
+      });
+    });
+    content.querySelectorAll('.wave-at-input').forEach(function (el) {
+      el.addEventListener('change', function () {
+        VS_CONFIG.STAGES[el.dataset.si].waveSchedule[el.dataset.wi].atSecond = Math.max(0, parseInt(el.value) || 0);
+        sortWaves(el.dataset.si);
+        scheduleSave();
+        renderActiveTab();
+      });
+    });
+    content.querySelectorAll('.wave-interval').forEach(function (el) {
+      el.addEventListener('change', function () {
+        VS_CONFIG.STAGES[el.dataset.si].waveSchedule[el.dataset.wi].intervalMs = Math.max(100, parseInt(el.value) || 2000);
+        scheduleSave();
+      });
+    });
+    content.querySelectorAll('.wave-add').forEach(function (el) {
+      el.addEventListener('click', function () {
+        var stage = VS_CONFIG.STAGES[parseInt(el.dataset.si)];
+        stage.waveSchedule = stage.waveSchedule || [];
+        stage.waveSchedule.push(makeWave(stage.waveSchedule.length, stage.durationSeconds));
+        sortWaves(el.dataset.si);
+        scheduleSave();
+        renderActiveTab();
+      });
+    });
+    content.querySelectorAll('.wave-delete').forEach(function (el) {
+      el.addEventListener('click', function () {
+        var waves = VS_CONFIG.STAGES[el.dataset.si].waveSchedule || [];
+        waves.splice(parseInt(el.dataset.wi), 1);
+        scheduleSave();
+        renderActiveTab();
       });
     });
 
@@ -804,6 +879,37 @@ window.VSUI = (function () {
       var dot = document.getElementById('unsaved-dot');
       if (dot) dot.style.display = 'none';
     } catch (e) { /* storage full */ }
+  }
+
+  function makeStageCopy(src, idx) {
+    var base = src ? JSON.parse(JSON.stringify(src)) : {
+      durationSeconds: 120,
+      backgroundToken: 'bg_forest',
+      bossAt: [],
+      waveSchedule: [makeWave(0, 120)],
+      ambientHazards: [],
+      musicToken: 'music_forest'
+    };
+    base.id = 'custom_' + Date.now() + '_' + idx;
+    base.name = 'Custom Stage ' + (idx + 1);
+    base.waveSchedule = base.waveSchedule && base.waveSchedule.length ? base.waveSchedule : [makeWave(0, base.durationSeconds)];
+    return base;
+  }
+
+  function makeWave(idx, durationSeconds) {
+    var types = Object.keys(VS_CONFIG.ENEMY_TYPES || {});
+    return {
+      atSecond: Math.min((durationSeconds || 120) - 1, idx * 15),
+      enemyType: types[0] || 'zombie',
+      count: 3,
+      intervalMs: 2000
+    };
+  }
+
+  function sortWaves(stageIdx) {
+    var stage = VS_CONFIG.STAGES[parseInt(stageIdx)];
+    if (!stage || !stage.waveSchedule) return;
+    stage.waveSchedule.sort(function (a, b) { return (a.atSecond || 0) - (b.atSecond || 0); });
   }
 
   function startAutosave() {

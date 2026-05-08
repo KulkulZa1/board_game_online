@@ -65,6 +65,19 @@ npm run build  # 별도 빌드 단계 없음 안내
 
 ---
 
+## Sandbox to main-game content flow
+
+The sandbox editors save their live config to browser `localStorage` on the same origin:
+
+| Sandbox | Storage key | Main game using it |
+|---|---|---|
+| `/sandbox/vampire-survivors/` | `sandbox_vs_config` | `/arcade/vampire/` |
+| `/sandbox/tower-defense/` | `sandbox_td_config` | `/arcade/tower-defense/` |
+
+For a real deployment check, edit and save a sandbox stage on the production origin, then open the matching `/arcade/.../` page on the same origin. Local `localStorage` and Render production `localStorage` are separate browser origins, so local sandbox edits do not automatically appear on production.
+
+---
+
 ## 주요 기능
 
 - 12가지 게임 지원
