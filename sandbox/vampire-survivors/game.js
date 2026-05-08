@@ -23,6 +23,7 @@ window.VSGame = (function () {
   var projectiles = [];
   var particles = [];
   var groundItems = [];
+  var nextEnemyId = 1;
   var analyticsData = { kills: 0, dmgDealt: 0, dmgTaken: 0, xpCollected: 0,
                         levelUps: 0, peakEnemies: 0, wavesCompleted: 0 };
 
@@ -115,6 +116,7 @@ window.VSGame = (function () {
     particles = [];
     groundItems = [];
     waveTimers = {};
+    nextEnemyId = 1;
     elapsed = 0;
     analyticsData = { kills: 0, dmgDealt: 0, dmgTaken: 0, xpCollected: 0,
                       levelUps: 0, peakEnemies: 0, wavesCompleted: 0 };
@@ -281,13 +283,15 @@ window.VSGame = (function () {
     if (y === undefined) y = Math.random() * H;
 
     enemies.push({
+      id: nextEnemyId++,
       x: x, y: y,
       hp: def.hp, maxHp: def.hp,
       def: def,        // live reference — panel edits propagate automatically
       typeKey: typeKey,
       angle: 0,
       hitFlash: 0,
-      shootCd: 0
+      shootCd: 0,
+      dead: false
     });
   }
 
@@ -471,7 +475,7 @@ window.VSGame = (function () {
       // Hit enemies
       var hitRadius = p.aura ? p.auraRadius : p.size;
       enemies.forEach(function (e, ei) {
-        if (p.hits.has(ei)) return;
+        if (e.dead || p.hits.has(e.id)) return;
         var hitR = (e.def.size || 14) / 2 + hitRadius;
         if (dist(p, e) < hitR) {
           var dmg = p.dmg;
@@ -488,7 +492,7 @@ window.VSGame = (function () {
           spawnParticle(e.x + (Math.random()-0.5)*10, e.y + (Math.random()-0.5)*10,
                         tokenColor('particle_hit'), 4, 0.3);
 
-          p.hits.add(ei);
+          p.hits.add(e.id);
           var pierceLeft = (p.pierce || 0);
           if (p.hits.size > pierceLeft + 1) { toRemove.push(pi); }
 
@@ -504,13 +508,13 @@ window.VSGame = (function () {
       if (!seen.has(i)) { seen.add(i); projectiles.splice(i, 1); }
     });
 
-    // Clean up dead enemy refs from hit sets after enemy array may have shrunk
-    projectiles.forEach(function (p) { if (p.hits) p.hits = new Set(); });
   }
 
   // ── Kill enemy ───────────────────────────────────────────────────────────
 
   function killEnemy(e, idx) {
+    if (e.dead) return;
+    e.dead = true;
     analyticsData.kills++;
 
     // Drop XP gem
@@ -535,6 +539,12 @@ window.VSGame = (function () {
         if (Math.random() < (dropCfg.heart || 0.05))
           groundItems.push({ x: e.x, y: e.y + 10, type: 'heart', value: 10, age: 0 });
       }
+    }
+
+    if (idx >= 0 && enemies[idx] && enemies[idx].id === e.id) {
+      enemies.splice(idx, 1);
+    } else {
+      enemies = enemies.filter(function (enemy) { return enemy.id !== e.id; });
     }
   }
 

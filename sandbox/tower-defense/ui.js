@@ -122,21 +122,32 @@ window.TDUI = (function () {
   function renderStages() {
     var html = '<div class="tab-section">';
     html += '<h3>Stages</h3>';
+    html += '<button class="btn-small stage-add" style="margin-bottom:8px">+ Stage</button>';
     var gs = TDGame.getState();
     TD_CONFIG.STAGES.forEach(function (stage, si) {
       var isCurrent = gs.stageIdx === si;
       html += '<div class="stage-block' + (isCurrent ? ' current-stage' : '') + '">';
-      html += '<div class="stage-header"><span class="stage-name">' + esc(stage.name) + '</span>';
+      html += '<div class="stage-header"><input type="text" class="stage-name-input" data-si="' + si + '" value="' + esc(stage.name || ('Stage ' + (si + 1))) + '" style="flex:1;min-width:0;background:#111827;color:#fff;border:1px solid #2a3344;border-radius:5px;padding:3px 6px;">';
+      html += '<button class="btn-small stage-duplicate" data-si="' + si + '">Copy</button>';
+      if (TD_CONFIG.STAGES.length > 1) html += '<button class="btn-small stage-delete" data-si="' + si + '">Del</button>';
       html += '<button class="btn-small btn-jump" data-play-stage="' + si + '">▶ Play</button>';
       html += '</div>';
-      // Wave list
       html += '<div style="font-size:0.72rem;color:var(--muted);margin-bottom:4px">Waves: ' + stage.waves.length + '</div>';
-      html += '<div style="display:flex;flex-wrap:wrap;gap:3px;margin-bottom:4px;">';
       stage.waves.forEach(function (w, wi) {
-        var dotClass = 'wave-dot-' + w.enemyType;
-        html += '<span title="Wave ' + (wi + 1) + ': ' + w.count + ' ' + w.enemyType + (w.isBoss ? ' BOSS' : '') + '" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#333;border:1px solid ' + (w.isBoss ? '#c0392b' : '#444') + '" class="' + dotClass + '"></span>';
+        html += '<div class="field-row" style="align-items:center">';
+        html += '<span>Wave ' + (wi + 1) + '</span>';
+        html += '<select class="wave-type" data-si="' + si + '" data-wi="' + wi + '">';
+        Object.keys(TD_CONFIG.ENEMY_TYPES || {}).forEach(function (key) {
+          html += '<option value="' + key + '"' + (w.enemyType === key ? ' selected' : '') + '>' + key + '</option>';
+        });
+        html += '</select>';
+        html += '<input type="number" class="wave-count" min="1" max="200" value="' + (w.count || 1) + '" data-si="' + si + '" data-wi="' + wi + '" title="Count">';
+        html += '<input type="number" class="wave-interval" min="0" max="10000" step="100" value="' + (w.intervalMs || 0) + '" data-si="' + si + '" data-wi="' + wi + '" title="Interval ms">';
+        html += '<label style="font-size:0.72rem;color:var(--muted);min-width:auto"><input type="checkbox" class="wave-boss" data-si="' + si + '" data-wi="' + wi + '"' + (w.isBoss ? ' checked' : '') + '> Boss</label>';
+        html += '<button class="btn-small wave-delete" data-si="' + si + '" data-wi="' + wi + '">Del</button>';
+        html += '</div>';
       });
-      html += '</div>';
+      html += '<button class="btn-small wave-add" data-si="' + si + '">+ Wave</button>';
       html += '</div>';
     });
     html += '</div>';
@@ -404,6 +415,86 @@ window.TDUI = (function () {
   }
 
   function bindTabControls() {
+    tabContent.querySelectorAll('.stage-name-input').forEach(function (el) {
+      el.addEventListener('change', function () {
+        TD_CONFIG.STAGES[parseInt(el.dataset.si)].name = el.value || ('Stage ' + (parseInt(el.dataset.si) + 1));
+        markUnsaved();
+        refresh();
+      });
+    });
+
+    tabContent.querySelectorAll('.stage-add').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        TD_CONFIG.STAGES.push(makeStageCopy(TD_CONFIG.STAGES[TD_CONFIG.STAGES.length - 1], TD_CONFIG.STAGES.length));
+        if (TDGame) TDGame.onConfigChange();
+        markUnsaved();
+        refresh();
+      });
+    });
+
+    tabContent.querySelectorAll('.stage-duplicate').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var idx = parseInt(btn.dataset.si);
+        TD_CONFIG.STAGES.splice(idx + 1, 0, makeStageCopy(TD_CONFIG.STAGES[idx], TD_CONFIG.STAGES.length));
+        if (TDGame) TDGame.onConfigChange();
+        markUnsaved();
+        refresh();
+      });
+    });
+
+    tabContent.querySelectorAll('.stage-delete').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        if (TD_CONFIG.STAGES.length <= 1) return;
+        TD_CONFIG.STAGES.splice(parseInt(btn.dataset.si), 1);
+        TDGame.startStage(Math.min(TDGame.getState().stageIdx, TD_CONFIG.STAGES.length - 1));
+        markUnsaved();
+        refresh();
+      });
+    });
+
+    tabContent.querySelectorAll('.wave-type').forEach(function (el) {
+      el.addEventListener('change', function () {
+        TD_CONFIG.STAGES[el.dataset.si].waves[el.dataset.wi].enemyType = el.value;
+        markUnsaved();
+      });
+    });
+    tabContent.querySelectorAll('.wave-count').forEach(function (el) {
+      el.addEventListener('change', function () {
+        TD_CONFIG.STAGES[el.dataset.si].waves[el.dataset.wi].count = Math.max(1, parseInt(el.value) || 1);
+        markUnsaved();
+      });
+    });
+    tabContent.querySelectorAll('.wave-interval').forEach(function (el) {
+      el.addEventListener('change', function () {
+        TD_CONFIG.STAGES[el.dataset.si].waves[el.dataset.wi].intervalMs = Math.max(0, parseInt(el.value) || 0);
+        markUnsaved();
+      });
+    });
+    tabContent.querySelectorAll('.wave-boss').forEach(function (el) {
+      el.addEventListener('change', function () {
+        TD_CONFIG.STAGES[el.dataset.si].waves[el.dataset.wi].isBoss = el.checked;
+        markUnsaved();
+      });
+    });
+    tabContent.querySelectorAll('.wave-add').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var stage = TD_CONFIG.STAGES[parseInt(btn.dataset.si)];
+        stage.waves = stage.waves || [];
+        stage.waves.push(makeWave());
+        markUnsaved();
+        refresh();
+      });
+    });
+    tabContent.querySelectorAll('.wave-delete').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var waves = TD_CONFIG.STAGES[btn.dataset.si].waves || [];
+        if (waves.length <= 1) return;
+        waves.splice(parseInt(btn.dataset.wi), 1);
+        markUnsaved();
+        refresh();
+      });
+    });
+
     // Play stage buttons
     tabContent.querySelectorAll('[data-play-stage]').forEach(function (btn) {
       btn.addEventListener('click', function () {
@@ -629,6 +720,30 @@ window.TDUI = (function () {
   function save() {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(TD_CONFIG)); } catch (e) {}
     if (unsavedDot) unsavedDot.style.display = 'none';
+  }
+
+  function makeStageCopy(src, idx) {
+    var stage = src ? JSON.parse(JSON.stringify(src)) : {
+      backgroundToken: 'bg_dawn',
+      waves: [makeWave()]
+    };
+    stage.id = 'custom_' + Date.now() + '_' + idx;
+    stage.name = 'Custom Stage ' + (idx + 1);
+    stage.waves = stage.waves && stage.waves.length ? stage.waves : [makeWave()];
+    return stage;
+  }
+
+  function makeWave() {
+    var types = Object.keys(TD_CONFIG.ENEMY_TYPES || {});
+    return {
+      count: 6,
+      enemyType: types[0] || 'grunt',
+      intervalMs: 1000,
+      hpMult: 1,
+      speedMult: 1,
+      isBoss: false,
+      bossTimerSec: 30
+    };
   }
 
   function loadFromStorage() {
