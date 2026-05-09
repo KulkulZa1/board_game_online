@@ -5,6 +5,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
+    "dev": "node server.js",
     "build": "node scripts/no-build.js",
     "lint": "node scripts/check-js.js",
     "test": "node scripts/smoke-check.js",
