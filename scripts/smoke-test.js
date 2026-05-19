@@ -108,7 +108,7 @@ setTimeout(() => {
     { path: '/api/status',     label: '/api/status → 200',                  expect: 200 },
     { path: '/',               label: '/ → 200 (로비)',                      expect: 200 },
     { path: '/game.html',      label: '/game.html → 200 (게임 페이지)',       expect: 200 },
-    { path: '/sandbox/',       label: '/sandbox/ → 404 (개발자 도구 비노출)', expect: 404 },
+    { path: '/sandbox/',       label: '/sandbox/ → 200 (샌드박스)',          expect: 200 },
     { path: '/arcade/snake/',    label: '/arcade/snake/ → 200',    expect: 200 },
     { path: '/arcade/breakout/', label: '/arcade/breakout/ → 200', expect: 200 },
     { path: '/arcade/vampire/',  label: '/arcade/vampire/ → 200',  expect: 200 },

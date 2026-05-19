@@ -9,6 +9,10 @@ These notes capture the current launch-readiness checks for the Node/Express sta
 - Render start command: `node server.js`.
 - Render build command: `npm install`.
 - Health endpoint: `/api/status`.
+- Build/version endpoint: `/api/version`.
+- Lobby/admin diagnostic badge: `/js/version-badge.js` reads `/api/version` with `cache: no-store` so production cache/deploy mismatches are visible from the page.
+- Non-admin production verifier: `npm run verify:production` checks `/api/version`, lobby/admin badge loading, deploy-sensitive cache headers, and service-worker network-first behavior.
+- Detailed operator runbook: `docs/render-version-verification.md`.
 - Render deploys from `main`, so branch changes are not visible on production until the PR is merged and Render redeploys.
 
 ## Security findings
@@ -33,6 +37,8 @@ This launch-readiness pass found and fixed:
 - Service worker caching no longer serves old JS/CSS before checking the network; this prevents deployed game logic from appearing stale after Render deploys.
 - All HTML pages now load `/js/sw-update.js`, which registers the service worker consistently and reloads controlled pages once after an updated worker takes control.
 - Server responses for HTML, `sw.js`, JS, CSS, and `manifest.json` now send `Cache-Control: no-cache, no-store, must-revalidate`.
+- Lobby and admin pages now show the running branch/commit from `/api/version`, making it clear whether Render is serving the expected deploy.
+- `scripts/verify-production-version.js` can verify the same version/cache surfaces against Render without GitHub or Render admin permissions.
 
 Current production observations before this branch is merged and Render redeploys:
 
@@ -73,6 +79,7 @@ npm run lint
 npm test
 npm run build
 npm run dev
+npm run verify:production
 ```
 
 Manual checks:
@@ -83,6 +90,8 @@ Manual checks:
 - Save sandbox config for each sandbox-backed game and reopen the matching main game on the same origin.
 - Check browser console and network panels for errors.
 - Compare local routes with `https://board-game-online.onrender.com/` after Render redeploys.
+- Confirm the lobby/admin build badge commit matches the branch/commit expected from the Render deploy.
+- Run `EXPECTED_COMMIT=<commit> npm run verify:production` after Render redeploys. Use `VERIFY_BASE_URL=http://127.0.0.1:<port>` to run the same verifier against a local server.
 
 ## Remaining launch risks
 

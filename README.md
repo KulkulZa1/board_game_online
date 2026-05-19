@@ -60,6 +60,7 @@ npm test       # 로컬 서버 기동 + 핵심 라우트/정적 자산/핸들러
 npm run check  # lint + test
 npm run build  # 별도 빌드 단계 없음 안내
 npm run dev    # 로컬 개발 서버 실행
+npm run verify:production  # Render 배포 버전/캐시 진단
 ```
 
 이 프로젝트는 번들러 없는 Node/Express + 정적 HTML/CSS/JS 앱입니다. Render.com 배포도 `npm install` 후 `node server.js`로 실행됩니다.
@@ -79,6 +80,22 @@ The sandbox editors save their live config to browser `localStorage` on the same
 For a real deployment check, edit and save a sandbox stage on the production origin, then open the matching `/arcade/.../` page on the same origin. Local `localStorage` and Render production `localStorage` are separate browser origins, so local sandbox edits do not automatically appear on production.
 
 See `docs/launch-readiness.md` for the current security, deployment, and manual verification checklist.
+
+---
+
+## Production version diagnostics
+
+The lobby and admin pages show a small build badge in the lower-left corner. It reads `/api/version` with `cache: no-store` and displays the branch plus short commit currently served by the running Node process.
+
+Use this when checking Render cache/deploy issues:
+
+1. Deploy or redeploy Render.
+2. Hard refresh the lobby at `https://board-game-online.onrender.com/`.
+3. Confirm the badge commit matches the expected Git commit.
+4. Run `EXPECTED_COMMIT=<commit> npm run verify:production` to verify `/api/version`, the badge script, HTML cache headers, and service-worker deploy behavior from a non-admin client.
+5. If the badge updates but a game script does not, inspect browser service worker state and static asset headers.
+
+The badge is diagnostic-only. It does not change gameplay and is not loaded into the shared game room shell.
 
 ---
 
@@ -117,6 +134,7 @@ main    ← 안정 배포 버전 (Render.com 자동 배포)
 | 게임 추가 가이드 | `ADDING_A_GAME.md` |
 | 신규 게임 후보 검토 | `docs/new-game-candidates.md` |
 | 런칭 준비/배포 검증 | `docs/launch-readiness.md` |
+| Render 버전/캐시 검증 | `docs/render-version-verification.md` |
 | Android 빌드 가이드 | `BUILDING_ANDROID.md` |
 | AI 어시스턴트 가이드 | `CLAUDE.md` |
 
