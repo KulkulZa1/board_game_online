@@ -13,6 +13,8 @@
 - Smoke coverage now checks chat broadcast trimming and the client bubble behavior for live messages versus history replay.
 - Shared service-worker update helper is loaded by root, game, arcade, 3D, and sandbox HTML pages.
 - New game candidate review documents safe next games and defers full Japanese riichi mahjong behind smaller rule/scoring trainer steps.
+- Lobby/admin build diagnostics badge shows the running branch and commit from `/api/version` for Render deploy/cache checks.
+- `npm run verify:production` checks the public Render version, badge, cache headers, and service-worker update policy without admin access.
 
 ### Changed
 

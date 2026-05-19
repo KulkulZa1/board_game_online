@@ -286,6 +286,122 @@ function checkServiceWorkerUpdateCoverage() {
   }
 }
 
+function checkVersionBadgeCoverage() {
+  const badgeScript = fs.readFileSync(path.join(root, 'public/js/version-badge.js'), 'utf8');
+  if (!badgeScript.includes('/api/version')) {
+    throw new Error('version-badge.js should read the deployment identity from /api/version');
+  }
+  if (!badgeScript.includes('textContent')) {
+    throw new Error('version-badge.js should render API values with textContent');
+  }
+  if (badgeScript.includes('innerHTML')) {
+    throw new Error('version-badge.js should not use innerHTML for deployment metadata');
+  }
+
+  const pages = ['public/index.html', 'public/admin.html'];
+  const missing = pages
+    .filter((file) => !fs.readFileSync(path.join(root, file), 'utf8').includes('/js/version-badge.js'));
+  if (missing.length) {
+    throw new Error(`Pages missing version-badge.js: ${missing.join(', ')}`);
+  }
+}
+
+async function checkVersionBadgeUi() {
+  class Element {
+    constructor(tagName = 'div') {
+      this.tagName = tagName;
+      this.children = [];
+      this.parentNode = null;
+      this.attributes = {};
+      this.dataset = {};
+      this.id = '';
+      this.title = '';
+      this.type = '';
+      this._textContent = '';
+    }
+
+    appendChild(child) {
+      child.parentNode = this;
+      this.children.push(child);
+      if (child.id) elements.set(child.id, child);
+      return child;
+    }
+
+    setAttribute(name, value) {
+      this.attributes[name] = String(value);
+    }
+
+    querySelector(selector) {
+      return this.children.find((child) => child.tagName === selector) || null;
+    }
+
+    set textContent(value) {
+      this._textContent = String(value);
+    }
+
+    get textContent() {
+      return [
+        this._textContent,
+        ...this.children.map((child) => child.textContent),
+      ].join('');
+    }
+  }
+
+  const elements = new Map();
+  const document = {
+    readyState: 'complete',
+    head: new Element('head'),
+    body: new Element('body'),
+    getElementById(id) {
+      return elements.get(id) || null;
+    },
+    createElement(tagName) {
+      return new Element(tagName);
+    },
+    addEventListener() {},
+  };
+
+  const fetchCalls = [];
+  const context = {
+    document,
+    navigator: {},
+    window: {
+      setTimeout() {},
+    },
+    fetch: async (url, options) => {
+      fetchCalls.push({ url, options });
+      return {
+        ok: true,
+        json: async () => ({
+          branch: 'audit/version-diagnostics',
+          commit: 'abcdef1234567890',
+          startTime: 1779200000000,
+        }),
+      };
+    },
+  };
+
+  vm.runInNewContext(
+    fs.readFileSync(path.join(root, 'public/js/version-badge.js'), 'utf8'),
+    context,
+    { filename: 'public/js/version-badge.js' }
+  );
+
+  await Promise.resolve();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  const badge = document.getElementById('build-version-badge');
+  if (!badge) {
+    throw new Error('version-badge.js did not render a build diagnostics badge');
+  }
+  if (!fetchCalls.some((call) => call.url === '/api/version' && call.options && call.options.cache === 'no-store')) {
+    throw new Error('version-badge.js should fetch /api/version with cache: no-store');
+  }
+  if (!badge.textContent.includes('audit/version-diagnostics abcdef1')) {
+    throw new Error(`version-badge.js rendered unexpected badge text: "${badge.textContent}"`);
+  }
+}
+
 function socketPath(socket) {
   return `/socket.io/?EIO=4&transport=polling&sid=${encodeURIComponent(socket.sid)}`;
 }
@@ -413,6 +529,7 @@ async function main() {
       '/icons/icon.svg',
       '/js/game-registry.js',
       '/js/sw-update.js',
+      '/js/version-badge.js',
       '/js/game.js',
       '/js/admob.js',
       '/js/sandbox-config.js',
@@ -448,6 +565,8 @@ async function main() {
     checkChatBubbleUi();
     await checkDeploymentCachePolicy();
     checkServiceWorkerUpdateCoverage();
+    checkVersionBadgeCoverage();
+    await checkVersionBadgeUi();
     runSyntaxCheck();
     console.log(`Smoke check passed: ${baseUrl}`);
   } catch (error) {
