@@ -34,7 +34,7 @@ This launch-readiness pass found and fixed:
 - All HTML pages now load `/js/sw-update.js`, which registers the service worker consistently and reloads controlled pages once after an updated worker takes control.
 - Server responses for HTML, `sw.js`, JS, CSS, and `manifest.json` now send `Cache-Control: no-cache, no-store, must-revalidate`.
 
-Current production observations on 2026-05-19 before this chat-bubble change is deployed:
+Current production observations before this branch is merged and Render redeploys:
 
 - Production home, `/arcade/tower-defense/`, and `/sandbox/` loaded successfully and matched the local route list for the checked pages.
 - Browser console warnings/errors were empty on the checked production lobby, Tower Defense route, and sandbox index route.

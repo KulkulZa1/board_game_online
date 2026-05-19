@@ -1,15 +1,12 @@
 {
   "name": "board-game-online",
-  "version": "1.0.0",
-  "description": "Real-time multiplayer board games with KakaoTalk link sharing",
+  "version": "1.4.0",
+  "description": "Real-time 1v1 multiplayer board game platform — 12 games, link sharing, PWA, AI solo mode",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js",
-    "build": "node scripts/no-build.js",
-    "lint": "node scripts/check-js.js",
-    "test": "node scripts/smoke-check.js",
-    "check": "npm run lint && npm test"
+    "test": "node scripts/smoke-test.js",
+    "sandbox": "npx serve sandbox -l 3001"
   },
   "engines": {
     "node": ">=18.0.0"

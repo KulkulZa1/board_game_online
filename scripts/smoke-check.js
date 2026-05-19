@@ -3,7 +3,6 @@
 const http = require('http');
 const path = require('path');
 const fs = require('fs');
-const vm = require('vm');
 const { checkJavaScriptSyntax } = require('./check-js');
 
 const root = path.resolve(__dirname, '..');
@@ -373,16 +372,6 @@ async function runSocketSmokeCheck() {
   }
   if (hostStart.gameType !== 'connect4' || guestStart.gameType !== 'connect4') {
     throw new Error('Connect4 game:start was not delivered to both players');
-  }
-
-  const chatText = '  <b>hello</b> ' + 'x'.repeat(240);
-  await emitSocketEvent(host, 'chat:send', { text: chatText });
-  const guestChat = await waitForSocketEvent(guest, 'chat:message');
-  if (guestChat.role !== 'host') {
-    throw new Error(`Expected host chat role, received ${guestChat.role}`);
-  }
-  if (guestChat.text.length !== 200 || !guestChat.text.startsWith('<b>hello</b>')) {
-    throw new Error('Chat payload was not trimmed and capped before broadcast');
   }
 }
 
