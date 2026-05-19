@@ -1,132 +1,116 @@
-# Co-work Brief — Render.com Deployment Fix
+# Co-work Brief — Multi-Agent Handoff
 
-> Historical note: this was written for a specific deployment incident.
-> Re-check `git log origin/main`, `render.yaml`, and the live server before following the commit-specific instructions below.
-
-> Hand this file to a new Claude session with:
-> "Read COWORK_BRIEF.md and fix the deployment issue."
+> Hand this file to a new AI session to orient it quickly.
+> "Read COWORK_BRIEF.md, then CLAUDE.md, then begin the task."
 
 ---
 
-## Problem
+## Project in one sentence
 
-The live server at **https://board-game-online.onrender.com** is showing **only 6 games**
-(체스, 오목, 사목, 오셀로, 인디언 포커, 체커 — v1.0 era).
-
-The `main` branch in this repo has **12 games + security fixes + v2 arcade section**
-(last commit: `dd6246c`).
-
-Render.com is serving an **old version** and has not picked up `main`.
+Real-time 1v1 multiplayer board game platform (12 games) with a solo arcade section
+(4 games) and developer-only game design sandbox tools (3 sandboxes).
+Tech: Node.js + Express + Socket.io + Vanilla JS. No database. No build step.
 
 ---
 
-## Root Cause (most likely)
+## Three layers — read this first
 
-`render.yaml` previously had **no `branch` field** — so Render.com used whatever branch
-was configured in the dashboard at service-creation time (probably `develop` or an old
-`claude/...` feature branch).
-
-**This has been fixed locally** — `render.yaml` now contains `branch: main`.
-The fix is committed on `main` at `dd6246c`.
-
----
-
-## What needs to happen
-
-### Step 1 — Verify the fix is on remote main
-```bash
-git fetch origin
-git log --oneline origin/main -5
-# Should show dd6246c at the top
-```
-
-### Step 2 — Run the diagnostic script
-```bash
-bash scripts/diagnose.sh
-# This hits the live server and reports exactly what version is running.
-# If Claude Code cannot reach the URL (network allowlist), skip to Step 3.
-```
-
-### Step 3 — Force Render to redeploy from main
-
-**Option A (preferred) — via Render dashboard (user action required):**
-1. Go to https://dashboard.render.com
-2. Click **boardgame-online** service
-3. Go to **Settings** → **Branch** → change to `main` if not already set
-4. Click **Manual Deploy** → **Deploy latest commit**
-5. Wait ~2 min, then open https://board-game-online.onrender.com — should show 12 games
-
-**Option B — push a no-op commit to trigger auto-deploy:**
-```bash
-git checkout main
-git commit --allow-empty -m "chore: trigger Render redeploy from main"
-git push origin main
-```
-
-### Step 4 — Verify after deploy
-Check https://board-game-online.onrender.com:
-- Lobby shows **12 game cards** (체스 through 만칼라)
-- An **아케이드 섹션** (Arcade section) is visible below board games
-- `/api/status` response has no `"ip"` or `"socketId"` fields
+| Layer | Games | Served at | Dev command |
+|-------|-------|-----------|-------------|
+| A — Board Games | 12 multiplayer | `/` lobby → `/game.html` | `node server.js` |
+| B — Arcade Games | 4 solo | `/arcade/*` | (same server) |
+| C — Sandbox | 3 design tools | **NOT in production** | `npm run sandbox` |
 
 ---
 
-## What is on main (v1.4.0 — commit dd6246c)
-
-| Layer | What changed |
-|-------|-------------|
-| Server | `server.js` (2 lines) → thin entry point for `server/` modules |
-| Handlers | 12 game handlers in `server/handlers/` registry |
-| Frontend | `public/js/game-registry.js` — central metadata for all 12 games |
-| Security | gameType validated via `handlers.has()` (not hardcoded list); `/api/status` strips IPs |
-| Mobile | `capacitor.config.json`, `public/js/admob.js`, `BUILDING_ANDROID.md` |
-| Docs | `CLAUDE.md`, `README.md`, `CHANGELOG.md`, `ROADMAP.md` all updated |
-
-**12 games:** 체스, 오목, 사목, 오셀로, 인디언 포커, 체커, 사과게임, 배틀십, 백가몬, 텍사스 홀덤, 도트앤박스, 만칼라
-
----
-
-## Branch structure
-
-```
-main              ← production target (dd6246c) — 12 games, all fixes
-feat/v2-arcade-3d ← development — Snake, Breakout, 3D Chess (NOT deployed yet)
-```
-
-**DO NOT merge `feat/v2-arcade-3d` into `main` yet** — it's work-in-progress.
-
----
-
-## Key files to know
-
-| File | Purpose |
-|------|---------|
-| `render.yaml` | Render.com deploy config — now has `branch: main` |
-| `server.js` | 2-line entry point: `require('./server/index.js')` |
-| `server/handlers/index.js` | Game registry (12 entries) |
-| `public/js/game-registry.js` | Frontend game metadata (12 entries) |
-| `scripts/diagnose.sh` | Diagnostic script — run first |
-| `scripts/check.sh` | Local Bash smoke test |
-| `CLAUDE.md` | Full architecture guide |
-
----
-
-## Verification commands
+## Start here for any task
 
 ```bash
-# 1. Check remote main has 12 handlers
-node -e "const h=require('./server/handlers'); console.log([...h.keys()].length, 'handlers');"
-# Expected: 12 handlers
-
-# 2. Start local server and run full check
-bash scripts/start.sh
-bash scripts/check.sh
-bash scripts/stop.sh
-
-# 3. Check live server (if network allows)
-bash scripts/diagnose.sh
+npm install          # install 4 deps (express, socket.io, chess.js 0.12.0, uuid)
+node server.js       # start on :3000
+npm test             # smoke test — 65 assertions, must all pass
 ```
 
 ---
 
-*Generated: 2026-05-02 | For: board_game_online repo (KulkulZa1/board_game_online)*
+## Key files (read these, not the whole codebase)
+
+| File | What it tells you |
+|------|-------------------|
+| `GAMES.md` | State shape + move format + win conditions for all 12 board games + arcade/sandbox summaries |
+| `CLAUDE.md` | Full architecture, conventions, directory layout, security patterns |
+| `ADDING_A_GAME.md` | 10-step checklist for adding a new board game |
+| `ADDING_AN_ARCADE_GAME.md` | Guide for adding a solo arcade game |
+| `ROADMAP.md` | What's done, what's planned, key architectural decisions |
+
+---
+
+## Current state (v1.4.0 — 2026-05-19)
+
+### Stable and complete
+- All 12 board game handlers (`server/handlers/*.js`)
+- All 12 frontend game handlers + AI engines + board renderers
+- 4 arcade games at `/arcade/{snake,breakout,vampire,plant}/`
+- 3 sandbox design tools (`sandbox/{vampire-survivors,plant-growing,tower-defense}/`)
+- Smoke test: 65 assertions (handlers + HTTP routes including all arcade games)
+
+### Known open items
+1. Android AdMob IDs are placeholders — need real values before Play Store submission
+2. 3D chess (`/games3d/chess3d/`) importmap compatibility needs device testing
+3. Per-game handler unit tests for backgammon, texasholdem, dotsboxes (not yet written)
+4. Tower Defense arcade game (production version) — sandbox prototype exists, arcade not yet built
+
+---
+
+## Architecture at a glance
+
+**Server:**
+```
+server.js → server/index.js → registers routes + socket events
+server/events.js: socket.on('game:move') → handlers.get(room.gameType).handleMove(...)
+server/handlers/index.js: Map of gameType → { initRoom, resetRoom, handleMove }
+server/endgame.js: endGame(room, winner, reason, extras) — call to finish any game
+```
+
+**Frontend:**
+```
+public/js/game.js: orchestrator — connects socket, routes events to GameHandlers[gameType]
+public/js/game-registry.js: central metadata for all 12 games (icons, names, rules)
+public/js/game-<name>.js: UI handler per game — initGame, onMoveMade, getMyTurn, startSolo
+public/js/ai-<name>.js: client-side AI per game — runs in browser
+```
+
+**Sandbox:**
+```
+sandbox/<name>/config.js: window.<X>_CONFIG (live) + window.<X>_DEFAULTS (reset copy)
+sandbox/<name>/game.js: game loop, reads config every frame
+sandbox/<name>/ui.js: 7 editor tabs, sliders, charts, localStorage persistence
+```
+
+---
+
+## Rules for any AI agent working here
+
+1. **Run `npm test` before and after changes** — all 65 must pass
+2. **chess.js is pinned to 0.12.0** — do not upgrade (v0.13+ has incompatible API)
+3. **Sandbox is NOT served in production** — assert `/sandbox/ → 404` in smoke test
+4. **No database** — do not add persistence without architectural discussion
+5. **Comments in Korean** — match existing style when adding inline comments
+6. **No build tools** — vanilla JS, no webpack, no TypeScript, no ESLint
+7. **New board game?** Follow `ADDING_A_GAME.md` exactly — 10 files, max 2 with multi-line edits
+8. **New arcade game?** Follow `ADDING_AN_ARCADE_GAME.md` — 3 files + lobby card + smoke test entry
+
+---
+
+## Branch strategy
+
+```
+main                              ← production (auto-deployed to Render.com)
+claude/add-claude-documentation-* ← current work branch
+```
+
+Push to feature branch; do not push directly to `main` without explicit permission.
+
+---
+
+*Last updated: 2026-05-19 | Repo: KulkulZa1/board_game_online*

@@ -2,7 +2,21 @@
 
 ## Overview
 
-This is a real-time multiplayer board game platform built with Node.js + Express + Socket.io. It supports **12 games** (Chess, Omok, Connect4, Othello, Checkers, Indian Poker, Apple Game, Battleship, Backgammon, Texas Hold'em, Dots & Boxes, Mancala), runs as a Progressive Web App (PWA), and is deployed on Render.com. There is **no database** — all game state is held in memory on the server, and player stats are stored in browser localStorage.
+This is a real-time multiplayer board game platform built with Node.js + Express + Socket.io. It has **three intentional layers**:
+
+| Layer | What | Where |
+|-------|------|-------|
+| **A — Board Games** | 12 turn-based 1v1 multiplayer games | Lobby → `/game.html` |
+| **B — Arcade Games** | 4 solo standalone games | `/arcade/*` |
+| **C — Sandbox** | 3 config-driven game design tools | Dev-only, `npm run sandbox` |
+
+Layer A supports **12 games**: Chess, Omok, Connect4, Othello, Checkers, Indian Poker, Apple Game, Battleship, Backgammon, Texas Hold'em, Dots & Boxes, Mancala.  
+Layer B supports **4 arcade games**: Snake, Breakout, Vampire Survivors, Plant Growing.  
+Layer C has **3 design sandboxes**: vampire-survivors, plant-growing, tower-defense.
+
+The platform runs as a PWA, is deployed on Render.com, and has **no database** — board game state is in-memory, stats are in browser localStorage.
+
+**Do not treat arcade games or sandbox as scope creep.** All three layers are intentional and should be maintained.
 
 ---
 
@@ -12,10 +26,16 @@ This is a real-time multiplayer board game platform built with Node.js + Express
 # Install dependencies (requires Node.js >= 18)
 npm install
 
-# Start the server
+# Start the game server
 node server.js
-
 # Visit http://localhost:3000
+
+# Run smoke tests (70+ assertions)
+npm test
+
+# Serve sandbox locally (dev-only, not part of production server)
+npm run sandbox
+# Visit http://localhost:3001
 ```
 
 **Environment variables** (none are required for local dev):
@@ -61,7 +81,9 @@ board_game_online/
 │
 ├── package.json         # 4 dependencies: express, socket.io, chess.js (0.12.0), uuid
 ├── render.yaml          # Render.com deployment config
-├── ADDING_A_GAME.md     # Developer guide: 10-step checklist to add a new game
+├── GAMES.md             # ALL games: state shapes, move formats, win conditions (read this first)
+├── ADDING_A_GAME.md     # Developer guide: 10-step checklist to add a new board game
+├── ADDING_AN_ARCADE_GAME.md # Developer guide: adding a solo arcade game
 ├── README.md            # Korean-language project intro
 ├── CHANGELOG.md         # Version history
 ├── sandbox/             # Experimental game prototypes served at /sandbox/
@@ -265,18 +287,27 @@ Summary — 10 files, maximum 2 with >1-line edits:
 
 ## Tests
 
-The project has lightweight automated checks:
+**`npm test`** runs `scripts/smoke-test.js` — a Node.js script with 70+ assertions:
 
-```bash
-npm run lint   # JS syntax check across the repository
-npm test       # starts the local server and smoke-checks routes/assets/handlers
-npm run check  # lint + test
-```
+1. **Module load checks** — all 12 game handlers load correctly (36 assertions: handler exists + initRoom + handleMove + resetRoom per game)
+2. **Room state creation** — chess and connect4 rooms initialize with correct structure
+3. **HTTP route checks** — server starts on port 13001 and responds correctly:
+   - `/api/status` → 200, valid JSON with `uptime` and `rooms`
+   - `/` → 200
+   - `/game.html` → 200
+   - `/sandbox/` → **404** (sandbox must NOT be production-accessible)
+   - `/arcade/snake/` → 200
+   - `/arcade/breakout/` → 200
+   - `/arcade/vampire/` → 200
+   - `/arcade/plant/` → 200
 
-When making gameplay changes:
+When adding a new board game handler, also add it to the `REQUIRED_GAMES` list in `scripts/smoke-test.js`.  
+When adding a new arcade game, also add its route to the `ROUTES` array in `scripts/smoke-test.js`.
+
+When making changes:
+- Run `npm test` to verify handlers and routes
 - Manually test the affected game(s) by running the server and playing locally
-- Test both 2-player (open two browser tabs) and solo (vs AI) modes
-- Verify the admin endpoint still responds: `GET /api/status`
+- Test both 2-player (open two browser tabs) and solo (vs AI) modes for board games
 
 ---
 
