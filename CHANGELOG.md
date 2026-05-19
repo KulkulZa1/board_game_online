@@ -5,6 +5,23 @@
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- Live multiplayer chat now shows temporary speech bubbles above the sending host/guest player bar.
+- Smoke coverage now checks chat broadcast trimming and the client bubble behavior for live messages versus history replay.
+- Shared service-worker update helper is loaded by root, game, arcade, 3D, and sandbox HTML pages.
+- New game candidate review documents safe next games and defers full Japanese riichi mahjong behind smaller rule/scoring trainer steps.
+
+### Changed
+
+- Launch-readiness docs now separate current production observations from branch-only behavior that still requires a Render redeploy.
+- Roadmap now prioritizes shared arcade/sandbox systems before adding more prototype games.
+- Service worker JS/CSS handling is now network-first instead of stale-first, and deploy-sensitive assets send no-store cache headers.
+
+---
+
 ## [v1.0.0] — 2026-03-28
 
 ### 추가

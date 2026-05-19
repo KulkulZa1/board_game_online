@@ -27,6 +27,8 @@ All three layers are **intentional**. Arcade games and sandbox are not scope cre
 **Platform:** Web (PWA) — https://board-game-online.onrender.com  
 **Deployment:** Render.com, Node.js + Socket.io, no database
 
+Full Japanese riichi mahjong is tracked as a future candidate, but should start as a solo yaku/scoring trainer before any 4-player multiplayer implementation. See `docs/new-game-candidates.md`.
+
 ---
 
 ## What We've Done
