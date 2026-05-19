@@ -81,7 +81,9 @@ board_game_online/
 │
 ├── package.json         # 4 dependencies: express, socket.io, chess.js (0.12.0), uuid
 ├── render.yaml          # Render.com deployment config
-├── ADDING_A_GAME.md     # Developer guide: 10-step checklist to add a new game
+├── GAMES.md             # ALL games: state shapes, move formats, win conditions (read this first)
+├── ADDING_A_GAME.md     # Developer guide: 10-step checklist to add a new board game
+├── ADDING_AN_ARCADE_GAME.md # Developer guide: adding a solo arcade game
 ├── README.md            # Korean-language project intro
 ├── CHANGELOG.md         # Version history
 │
