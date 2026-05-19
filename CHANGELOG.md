@@ -5,20 +5,6 @@
 
 ---
 
-## [Unreleased]
-
-### Added
-
-- Live multiplayer chat now shows temporary speech bubbles above the sending host/guest player bar.
-- Smoke coverage now checks chat broadcast trimming and the client bubble behavior for live messages versus history replay.
-
-### Changed
-
-- Launch-readiness docs now separate current production observations from branch-only behavior that still requires a Render redeploy.
-- Roadmap now prioritizes shared arcade/sandbox systems before adding more prototype games.
-
----
-
 ## [v1.0.0] — 2026-03-28
 
 ### 추가

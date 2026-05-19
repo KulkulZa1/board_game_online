@@ -1,12 +1,8 @@
 // chat.js — Chat and emoticon handling
 window.Chat = (function () {
-  const BUBBLE_VISIBLE_MS = 4000;
-  const BUBBLE_MAX_LENGTH = 64;
-
   let myRole = null;
   let socket = null;
   let initialized = false;
-  const bubbleTimers = {};
 
   const messagesEl   = document.getElementById('chat-messages');
   const inputEl      = document.getElementById('chat-input');
@@ -54,46 +50,7 @@ window.Chat = (function () {
     inputEl.value = '';
   }
 
-  function getBubbleAnchor(role) {
-    if (role !== 'host' && role !== 'guest') return null;
-
-    if (myRole === 'spectator') {
-      return document.getElementById(role === 'host' ? 'my-bar' : 'opponent-bar');
-    }
-
-    return document.getElementById(role === myRole ? 'my-bar' : 'opponent-bar');
-  }
-
-  function getBubbleText(text) {
-    const normalized = String(text || '').replace(/\s+/g, ' ').trim();
-    if (normalized.length <= BUBBLE_MAX_LENGTH) return normalized;
-    return normalized.slice(0, BUBBLE_MAX_LENGTH - 3).trimEnd() + '...';
-  }
-
-  function showBubble(msg) {
-    const anchor = getBubbleAnchor(msg.role);
-    const text = getBubbleText(msg.text);
-    if (!anchor || !text) return;
-
-    let bubble = anchor.querySelector('.chat-bubble');
-    if (!bubble) {
-      bubble = document.createElement('div');
-      anchor.appendChild(bubble);
-    }
-
-    bubble.className = 'chat-bubble';
-    bubble.textContent = text;
-
-    const key = anchor.id || msg.role;
-    if (bubbleTimers[key]) clearTimeout(bubbleTimers[key]);
-    bubbleTimers[key] = setTimeout(() => {
-      if (bubble.parentNode) bubble.remove();
-      delete bubbleTimers[key];
-    }, BUBBLE_VISIBLE_MS);
-  }
-
-  function addMessage(msg, options) {
-    const opts = options || {};
+  function addMessage(msg) {
     const isSpectator = msg.role === 'spectator';
     const isMine = msg.role === myRole && !isSpectator;
 
@@ -121,13 +78,12 @@ window.Chat = (function () {
     messagesEl.appendChild(div);
     messagesEl.scrollTop = messagesEl.scrollHeight;
 
-    if (opts.showBubble !== false) showBubble(msg);
     if (!isMine && typeof Sound !== 'undefined') Sound.play('chat');
   }
 
   function loadHistory(messages) {
     messagesEl.innerHTML = '';
-    messages.forEach(msg => addMessage(msg, { showBubble: false }));
+    messages.forEach(addMessage);
   }
 
   return { init, addMessage, loadHistory };
