@@ -104,36 +104,40 @@ function get(path, cb) {
 }
 
 setTimeout(() => {
-  let pending = 4;
+  const ROUTES = [
+    { path: '/api/status',     label: '/api/status → 200',                  expect: 200 },
+    { path: '/',               label: '/ → 200 (로비)',                      expect: 200 },
+    { path: '/game.html',      label: '/game.html → 200 (게임 페이지)',       expect: 200 },
+    { path: '/sandbox/',       label: '/sandbox/ → 404 (개발자 도구 비노출)', expect: 404 },
+    { path: '/arcade/snake/',    label: '/arcade/snake/ → 200',    expect: 200 },
+    { path: '/arcade/breakout/', label: '/arcade/breakout/ → 200', expect: 200 },
+    { path: '/arcade/vampire/',  label: '/arcade/vampire/ → 200',  expect: 200 },
+    { path: '/arcade/plant/',    label: '/arcade/plant/ → 200',    expect: 200 },
+  ];
+
+  let pending = ROUTES.length + 1; // +1 for JSON structure check
   function done() {
     pending--;
     if (pending > 0) return;
     finish();
   }
 
+  // /api/status needs body parsing — handle separately
   get('/api/status', (err, code, body) => {
     check('/api/status → 200', !err && code === 200);
     try {
       const json = JSON.parse(body);
       check('/api/status JSON 구조 유효', typeof json.uptime === 'number' && typeof json.rooms === 'object');
     } catch(e) { check('/api/status JSON 파싱', false); }
-    done();
+    done(); // counts for JSON check
+    done(); // counts for route check
   });
 
-  get('/', (err, code) => {
-    check('/ → 200 (로비)', !err && code === 200);
-    done();
-  });
-
-  get('/game.html', (err, code) => {
-    check('/game.html → 200 (게임 페이지)', !err && code === 200);
-    done();
-  });
-
-  get('/sandbox/', (err, code) => {
-    // sandbox는 프로덕션에서 노출되면 안 됨 — 404여야 함
-    check('/sandbox/ → 404 (개발자 도구 비노출)', !err && code === 404);
-    done();
+  ROUTES.slice(1).forEach(({ path, label, expect }) => {
+    get(path, (err, code) => {
+      check(label, !err && code === expect);
+      done();
+    });
   });
 
 }, 800);
