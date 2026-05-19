@@ -28,13 +28,23 @@ This launch-readiness pass found and fixed:
 - Plant sandbox could not add, duplicate, rename, or delete growth stages; the stage editor now supports those actions.
 - Sandbox pages caused a browser favicon 404; sandbox pages now declare `/icons/icon.svg`.
 - `npm run dev` was missing; it now starts the local server like `npm start`.
+- Multiplayer chat now shows short speech bubbles above host/guest player bars while preserving the existing chat log.
+- The smoke test now covers chat payload trimming plus client-side bubble behavior for live messages versus history replay.
 
-Current production observations before this branch is merged and Render redeploys:
+Current production observations on 2026-05-19 before this chat-bubble change is deployed:
 
-- Production home does not list Tower Defense and `/arcade/tower-defense/` returns `Cannot GET /arcade/tower-defense/`.
-- Production Plant main game does not consume `sandbox_pg_config`; injected production-origin storage still showed the default `씨앗` stage and `+1/클릭`.
-- Production Vampire started and advanced time, but 9 seconds of live play showed `0` kills, indicating the deployed build is missing the local attack-loop fix that exists on this branch.
-- Production still requests `/favicon.ico` on at least one sandbox path; this branch fixes that by adding favicon links to sandbox HTML.
+- Production home, `/arcade/tower-defense/`, and `/sandbox/` loaded successfully and matched the local route list for the checked pages.
+- Browser console warnings/errors were empty on the checked production lobby, Tower Defense route, and sandbox index route.
+- The new chat speech-bubble behavior is not visible on production until this branch is merged and Render redeploys.
+- Shell-based `Invoke-WebRequest` to the HTTPS production status endpoint failed in this Windows environment with a receive error, but the in-app browser loaded the production app successfully.
+
+## Chat speech bubble behavior
+
+- Live host/guest chat creates a temporary bubble above the sending player's bar.
+- Loaded history does not replay bubbles after refresh or reconnect.
+- New messages from the same player replace the existing bubble instead of stacking.
+- Bubble text is assigned through `textContent`, capped for display, and auto-hidden after roughly four seconds.
+- Spectator-authored messages remain chat-log-only until the shell has a stable spectator avatar area.
 
 ## Sandbox to main-game flow
 
