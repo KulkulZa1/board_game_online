@@ -29,6 +29,8 @@ Before adding many more games, stabilize the shared platform pieces that every g
 
 Recommended next implementation target: a 2048/merge variant after shared arcade config validation exists.
 
+Full Japanese riichi mahjong is tracked as a future candidate, but should start as a solo yaku/scoring trainer before any 4-player multiplayer implementation. See `docs/new-game-candidates.md`.
+
 ---
 
 ## What We've Done

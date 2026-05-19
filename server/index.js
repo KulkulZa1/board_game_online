@@ -31,10 +31,18 @@ state.io = io;
 
 app.use(express.json());
 
-// sw.js / HTML / 루트 경로는 절대 캐시 금지 — 배포 즉시 반영 보장
+// 배포 직후 게임 로직이 오래된 브라우저/SW 캐시에서 실행되지 않도록
+// HTML, SW, JS, CSS, manifest는 항상 재검증 없이 네트워크에서 받게 한다.
 app.use((req, res, next) => {
   const p = req.path;
-  if (p === '/sw.js' || p.endsWith('.html') || p === '/') {
+  if (
+    p === '/' ||
+    p === '/sw.js' ||
+    p === '/manifest.json' ||
+    p.endsWith('.html') ||
+    p.endsWith('.js') ||
+    p.endsWith('.css')
+  ) {
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.setHeader('Pragma', 'no-cache');
     res.setHeader('Expires', '0');

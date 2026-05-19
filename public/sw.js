@@ -1,14 +1,14 @@
-// 보드게임 온라인 — Service Worker v3
+// 보드게임 온라인 — Service Worker v4
 // 전략:
 //   HTML / 루트        → 네트워크 우선 (캐시 우선 절대 금지)
-//   JS / CSS           → stale-while-revalidate (즉시 반환 + 백그라운드 갱신)
+//   JS / CSS           → 네트워크 우선 (배포 후 오래된 게임 로직 방지)
 //   Socket.io / API    → 네트워크 직접 (캐시 완전 금지)
 //   이미지 / 폰트      → 캐시 우선, 없으면 네트워크 후 저장
 //
 // 캐시 무효화:
 //   activate 시 /api/version 호출 → commit 해시가 바뀌면 캐시 전체 삭제
 
-const CACHE_NAME   = 'boardgame-v3';
+const CACHE_NAME   = 'boardgame-v4';
 const COMMIT_KEY   = 'sw_last_commit';
 
 // 사전 캐시 — HTML 제외, 진짜 정적 자산만 (icons/ 미존재 시 phantom 경로 제외)
@@ -85,9 +85,14 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // ③ JS / CSS → stale-while-revalidate
+  // ③ JS / CSS / manifest → 네트워크 우선
   if (path.endsWith('.js') || path.endsWith('.css')) {
-    event.respondWith(staleWhileRevalidate(request));
+    event.respondWith(networkFirst(request));
+    return;
+  }
+
+  if (path === '/manifest.json') {
+    event.respondWith(networkFirst(request));
     return;
   }
 
@@ -109,18 +114,6 @@ async function networkFirst(request) {
     const cached = await caches.match(request);
     return cached || Response.error();
   }
-}
-
-async function staleWhileRevalidate(request) {
-  const cache  = await caches.open(CACHE_NAME);
-  const cached = await cache.match(request);
-
-  const fetchPromise = fetch(request).then((response) => {
-    if (response.ok) cache.put(request, response.clone());
-    return response;
-  }).catch(() => null);
-
-  return cached || fetchPromise;
 }
 
 async function cacheFirst(request) {
