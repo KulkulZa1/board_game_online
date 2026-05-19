@@ -12,6 +12,7 @@ These notes capture the current launch-readiness checks for the Node/Express sta
 - Build/version endpoint: `/api/version`.
 - Lobby/admin diagnostic badge: `/js/version-badge.js` reads `/api/version` with `cache: no-store` so production cache/deploy mismatches are visible from the page.
 - Non-admin production verifier: `npm run verify:production` checks `/api/version`, lobby/admin badge loading, deploy-sensitive cache headers, and service-worker network-first behavior.
+- Detailed operator runbook: `docs/render-version-verification.md`.
 - Render deploys from `main`, so branch changes are not visible on production until the PR is merged and Render redeploys.
 
 ## Security findings

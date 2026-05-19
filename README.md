@@ -146,6 +146,7 @@ main    ← 안정 배포 버전 (Render.com 자동 배포)
 | 게임 추가 가이드 | `ADDING_A_GAME.md` |
 | 신규 게임 후보 검토 | `docs/new-game-candidates.md` |
 | 런칭 준비/배포 검증 | `docs/launch-readiness.md` |
+| Render 버전/캐시 검증 | `docs/render-version-verification.md` |
 | Android 빌드 가이드 | `BUILDING_ANDROID.md` |
 | AI 어시스턴트 가이드 | `CLAUDE.md` |
 
