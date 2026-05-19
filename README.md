@@ -82,6 +82,18 @@ See `docs/launch-readiness.md` for the current security, deployment, and manual 
 
 ---
 
+## Chat speech bubbles
+
+In multiplayer rooms, live chat messages still appear in the normal chat log and now also show a short speech bubble above the sending player's bar.
+
+- Bubbles use the existing `chat:send` / `chat:message` Socket.io flow.
+- History replay does not recreate old bubbles after refresh or reconnect.
+- One bubble is shown per player at a time; a newer message replaces the older bubble.
+- Bubble text is inserted with `textContent`, visually truncated, and hidden automatically after a short delay.
+- Spectator-authored chat remains in the chat log only because there is no stable spectator avatar/player bar in the shared game shell yet.
+
+---
+
 ## 주요 기능
 
 - 12가지 게임 지원

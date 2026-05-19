@@ -3,6 +3,7 @@
 const http = require('http');
 const path = require('path');
 const fs = require('fs');
+const vm = require('vm');
 const { checkJavaScriptSyntax } = require('./check-js');
 
 const root = path.resolve(__dirname, '..');
@@ -90,6 +91,148 @@ function checkSecurityHelpers() {
 function runSyntaxCheck() {
   if (!checkJavaScriptSyntax()) {
     throw new Error('JS syntax check failed');
+  }
+}
+
+function createDomStub() {
+  class Element {
+    constructor(id = null, tagName = 'div') {
+      this.id = id;
+      this.tagName = tagName;
+      this.children = [];
+      this.parentNode = null;
+      this.className = '';
+      this.dataset = {};
+      this.eventListeners = {};
+      this.style = {};
+      this.value = '';
+      this.scrollTop = 0;
+      this.scrollHeight = 0;
+      this._textContent = '';
+    }
+
+    addEventListener(type, handler) {
+      this.eventListeners[type] = handler;
+    }
+
+    appendChild(child) {
+      child.parentNode = this;
+      this.children.push(child);
+      this.scrollHeight = this.children.length;
+      return child;
+    }
+
+    remove() {
+      if (!this.parentNode) return;
+      this.parentNode.children = this.parentNode.children.filter((child) => child !== this);
+      this.parentNode = null;
+    }
+
+    querySelector(selector) {
+      if (!selector.startsWith('.')) return null;
+      const className = selector.slice(1);
+      return this.children.find((child) =>
+        String(child.className).split(/\s+/).includes(className)
+      ) || null;
+    }
+
+    set textContent(value) {
+      this._textContent = String(value);
+    }
+
+    get textContent() {
+      return [
+        this._textContent,
+        ...this.children.map((child) => child.textContent),
+      ].join('');
+    }
+
+    set innerHTML(value) {
+      this.children = [];
+      this._textContent = String(value);
+    }
+  }
+
+  const elements = new Map([
+    ['chat-messages', new Element('chat-messages')],
+    ['chat-input', new Element('chat-input', 'input')],
+    ['chat-send-btn', new Element('chat-send-btn', 'button')],
+    ['chat-panel', new Element('chat-panel')],
+    ['chat-toggle-btn', new Element('chat-toggle-btn', 'button')],
+    ['chat-close-btn', new Element('chat-close-btn', 'button')],
+    ['my-bar', new Element('my-bar')],
+    ['opponent-bar', new Element('opponent-bar')],
+  ]);
+
+  return {
+    elements,
+    document: {
+      getElementById(id) { return elements.get(id) || null; },
+      createElement(tagName) { return new Element(null, tagName); },
+      querySelectorAll(selector) {
+        if (selector === '.emote-btn') return [];
+        return [];
+      },
+    },
+  };
+}
+
+function loadChatModuleForTest() {
+  const { elements, document } = createDomStub();
+  const timers = [];
+  const context = {
+    window: {},
+    document,
+    Sound: { play() {} },
+    setTimeout(fn, delay) {
+      timers.push({ fn, delay });
+      return timers.length;
+    },
+    clearTimeout(id) {
+      if (timers[id - 1]) timers[id - 1].cleared = true;
+    },
+  };
+  context.window.Sound = context.Sound;
+  vm.runInNewContext(
+    fs.readFileSync(path.join(root, 'public/js/chat.js'), 'utf8'),
+    context,
+    { filename: 'public/js/chat.js' }
+  );
+  return { Chat: context.window.Chat, elements, timers };
+}
+
+function checkChatBubbleUi() {
+  const { Chat, elements, timers } = loadChatModuleForTest();
+  const emitted = [];
+  Chat.init({ role: 'host', socket: { emit: (...args) => emitted.push(args) } });
+
+  Chat.loadHistory([{ role: 'guest', text: 'history message' }]);
+  if (elements.get('opponent-bar').querySelector('.chat-bubble')) {
+    throw new Error('Chat history should not replay speech bubbles');
+  }
+
+  const longText = '<img src=x onerror=alert(1)> ' + 'a'.repeat(90);
+  Chat.addMessage({ role: 'host', text: longText });
+  const myBubble = elements.get('my-bar').querySelector('.chat-bubble');
+  if (!myBubble) {
+    throw new Error('Live host chat did not create a speech bubble above my player bar');
+  }
+  if (myBubble.children.length) {
+    throw new Error('Speech bubble should store chat text as textContent, not child HTML');
+  }
+  if (myBubble.textContent.length > 65 || !myBubble.textContent.endsWith('...')) {
+    throw new Error('Speech bubble should truncate long messages with an ellipsis');
+  }
+
+  Chat.addMessage({ role: 'guest', text: 'guest hello' });
+  const opponentBubble = elements.get('opponent-bar').querySelector('.chat-bubble');
+  if (!opponentBubble || opponentBubble.textContent !== 'guest hello') {
+    throw new Error('Guest chat should create a bubble above the opponent player bar');
+  }
+
+  const visibleTimers = timers.filter((timer) => !timer.cleared);
+  if (!visibleTimers.some((timer) => timer.delay >= 3000 && timer.delay <= 5000)) {
+    throw new Error('Speech bubbles should auto-hide after a short delay');
   }
 }
 
@@ -181,6 +324,16 @@ async function runSocketSmokeCheck() {
   if (hostStart.gameType !== 'connect4' || guestStart.gameType !== 'connect4') {
     throw new Error('Connect4 game:start was not delivered to both players');
   }
+
+  const chatText = '  <b>hello</b> ' + 'x'.repeat(240);
+  await emitSocketEvent(host, 'chat:send', { text: chatText });
+  const guestChat = await waitForSocketEvent(guest, 'chat:message');
+  if (guestChat.role !== 'host') {
+    throw new Error(`Expected host chat role, received ${guestChat.role}`);
+  }
+  if (guestChat.text.length !== 200 || !guestChat.text.startsWith('<b>hello</b>')) {
+    throw new Error('Chat payload was not trimmed and capped before broadcast');
+  }
 }
 
 async function main() {
@@ -241,6 +394,7 @@ async function main() {
     }
 
     await runSocketSmokeCheck();
+    checkChatBubbleUi();
     runSyntaxCheck();
     console.log(`Smoke check passed: ${baseUrl}`);
   } catch (error) {
