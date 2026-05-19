@@ -213,7 +213,8 @@ npm install --save-dev @capacitor/assets
 npx capacitor-assets generate
 ```
 
-현재 프로젝트에 `/public/icons/icon-192.png`와 `/public/icons/icon-512.png`가 있으면 자동으로 모든 해상도 아이콘이 생성됩니다.
+현재 프로젝트에는 웹/PWA 기본 아이콘으로 `/public/icons/icon.svg`가 있습니다.
+Play Store용 PNG 아이콘은 `/public/icons/README.md` 안내에 따라 추가한 뒤 아래 명령으로 네이티브 아이콘을 생성하세요.
 
 ---
 

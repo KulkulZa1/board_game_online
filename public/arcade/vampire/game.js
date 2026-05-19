@@ -47,11 +47,84 @@
 
   // ── 게임 상태 ───────────────────────────────────────────────────
   let state = 'idle'; // idle | playing | levelup | dead | win
-  let player, enemies, projectiles, xpGems, particles;
-  let elapsed, kills, waveTimer, frameId;
-  let camera;
+  let player = null;
+  let enemies = [];
+  let projectiles = [];
+  let xpGems = [];
+  let particles = [];
+  let elapsed = 0;
+  let kills = 0;
+  let waveTimer = 0;
+  let frameId;
+  let camera = { x: 0, y: 0 };
+  let selectedStageIdx = 0;
+
+  const SANDBOX_CONFIG = window.VS_CONFIG || null;
+  const ENEMY_COLORS = {
+    zombie: '#e74c3c',
+    skeleton: '#9b59b6',
+    bat: '#2ecc71',
+    ghost: '#95a5a6',
+    demon: '#e67e22',
+    elite: '#c0392b',
+    boss: '#f1c40f'
+  };
+
+  function sandboxStage() {
+    if (!SANDBOX_CONFIG || !Array.isArray(SANDBOX_CONFIG.STAGES) || !SANDBOX_CONFIG.STAGES.length) return null;
+    selectedStageIdx = Math.max(0, Math.min(selectedStageIdx, SANDBOX_CONFIG.STAGES.length - 1));
+    return SANDBOX_CONFIG.STAGES[selectedStageIdx];
+  }
+
+  function sandboxEnemy(typeKey) {
+    return SANDBOX_CONFIG && SANDBOX_CONFIG.ENEMY_TYPES && SANDBOX_CONFIG.ENEMY_TYPES[typeKey];
+  }
+
+  function sandboxSkill(id) {
+    const skills = SANDBOX_CONFIG && SANDBOX_CONFIG.SKILLS;
+    return Array.isArray(skills) ? skills.find(skill => skill.id === id) : null;
+  }
+
+  function syncSandboxWeaponStats() {
+    Object.keys(WEAPON_DEFS).forEach((id) => {
+      const skill = sandboxSkill(id);
+      if (!skill || !skill.perLevel) return;
+      if (Array.isArray(skill.perLevel.damage)) {
+        WEAPON_DEFS[id].dmg = Number(skill.perLevel.damage[0]) || WEAPON_DEFS[id].dmg;
+      }
+      if (Array.isArray(skill.perLevel.cooldownMs)) {
+        WEAPON_DEFS[id].cd = (Number(skill.perLevel.cooldownMs[0]) || WEAPON_DEFS[id].cd * 1000) / 1000;
+      }
+    });
+  }
+
+  function getSurviveGoal() {
+    const stage = sandboxStage();
+    return stage && stage.durationSeconds ? stage.durationSeconds : SURVIVE_GOAL;
+  }
+
+  function renderStageSelect() {
+    const wrap = document.getElementById('stageSelectWrap');
+    const select = document.getElementById('stageSelect');
+    if (!wrap || !select || !SANDBOX_CONFIG || !Array.isArray(SANDBOX_CONFIG.STAGES)) return;
+    if (SANDBOX_CONFIG.STAGES.length <= 1) {
+      wrap.style.display = 'none';
+      return;
+    }
+    select.textContent = '';
+    SANDBOX_CONFIG.STAGES.forEach((stage, idx) => {
+      const name = stage && stage.name ? stage.name : `Stage ${idx + 1}`;
+      const option = document.createElement('option');
+      option.value = String(idx);
+      option.textContent = name;
+      select.appendChild(option);
+    });
+    select.value = String(selectedStageIdx);
+    wrap.style.display = 'block';
+  }
 
   function initGame() {
+    syncSandboxWeaponStats();
     player = {
       x: 0, y: 0,
       hp: BASE_HP, maxHp: BASE_HP,
@@ -76,6 +149,7 @@
 
     // 시작 무기
     addWeapon('orb');
+    addWeapon('arrow');
     spawnWave();
     updateHUD();
   }
@@ -146,6 +220,18 @@
 
   // ── 적 생성 ─────────────────────────────────────────────────────
   function spawnWave() {
+    const stage = sandboxStage();
+    if (stage && Array.isArray(stage.waveSchedule) && stage.waveSchedule.length) {
+      const active = stage.waveSchedule.filter(wave => elapsed >= (Number(wave.atSecond) || 0));
+      const wave = active.length ? active[active.length - 1] : stage.waveSchedule[0];
+      const count = Math.min(Number(wave.count) || 1, 20);
+      for (let i = 0; i < count; i++) {
+        if (enemies.length >= MAX_ENEMIES) break;
+        spawnSandboxEnemy(wave.enemyType || 'zombie');
+      }
+      return;
+    }
+
     const difficulty = 1 + elapsed / 120;
     const count = Math.min(5 + Math.floor(elapsed / 20), 20);
     for (let i = 0; i < count; i++) {
@@ -168,9 +254,32 @@
     }
   }
 
+  function spawnSandboxEnemy(typeKey) {
+    const def = sandboxEnemy(typeKey) || sandboxEnemy('zombie');
+    if (!def) return;
+    const angle = Math.random() * Math.PI * 2;
+    const distFromPlayer = 350 + Math.random() * 150;
+    const difficulty = 1 + elapsed / 120;
+    const isBoss = def.isBoss || typeKey === 'boss' || def.behavior === 'boss_chase';
+    const tier = isBoss ? 2 : (def.hp > 100 ? 1 : 0);
+    const hp = (Number(def.hp) || [30, 80, 250][tier]) * difficulty;
+    enemies.push({
+      x: player.x + Math.cos(angle) * distFromPlayer,
+      y: player.y + Math.sin(angle) * distFromPlayer,
+      hp,
+      maxHp: hp,
+      speed: Number(def.speed) || [75, 55, 35][tier],
+      size: Math.max(8, (Number(def.size) || [20, 30, 44][tier]) / 2),
+      color: ENEMY_COLORS[typeKey] || ENEMY_COLORS.zombie,
+      xpVal: Number(def.xpValue) || [3, 8, 20][tier],
+      tier,
+      hurtFlash: 0,
+    });
+  }
+
   // ── 투사체 발사 ─────────────────────────────────────────────────
   function fireWeapon(id, dt) {
-    if (!player.weaponCDs[id] !== undefined) return;
+    if (player.weaponCDs[id] === undefined) return;
     player.weaponCDs[id] -= dt;
     if (player.weaponCDs[id] > 0) return;
 
@@ -313,7 +422,7 @@
     elapsed += dt;
     document.getElementById('timeDisp').textContent = fmtTime(elapsed);
 
-    if (elapsed >= SURVIVE_GOAL) { endGame('win'); return; }
+    if (elapsed >= getSurviveGoal()) { endGame('win'); return; }
 
     update(dt);
     render(dt);
@@ -430,6 +539,8 @@
       ctx.beginPath(); ctx.moveTo(-60, y); ctx.lineTo(W + 60, y); ctx.stroke();
     }
     ctx.restore();
+
+    if (!player) return;
 
     ctx.save();
     ctx.translate(-camera.x, -camera.y);
@@ -626,6 +737,9 @@
 
   // ── 버튼 연결 ───────────────────────────────────────────────────
   document.getElementById('startBtn').addEventListener('click', () => {
+    const select = document.getElementById('stageSelect');
+    if (select) selectedStageIdx = parseInt(select.value, 10) || 0;
+    if (frameId) cancelAnimationFrame(frameId);
     document.getElementById('overlay').classList.remove('visible');
     document.getElementById('levelOverlay').style.display = 'none';
     initGame();
@@ -635,5 +749,6 @@
   });
 
   // 첫 프레임 시작
+  renderStageSelect();
   frameId = requestAnimationFrame(loop);
 })();

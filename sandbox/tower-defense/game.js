@@ -363,6 +363,8 @@ window.TDGame = (function () {
         arcRadius: cfg.arcChainRadius,
         hitSet: {},
         towerId: tower.id,
+        targetId: target.id,
+        r: isVoid ? 6 : 4,
         life: 2.0
       });
     }
@@ -524,10 +526,11 @@ window.TDGame = (function () {
       tower.cd = (tower.cd || 0) - dt * 1000;
       if (tower.cd > 0) return;
       var range = getTowerRange(tower);
-      var target = null, minDist = Infinity;
+      var target = null, closestToBase = Infinity;
       enemies.forEach(function (e) {
         var d = dist(tower, e);
-        if (d < range && d < minDist) { minDist = d; target = e; }
+        var baseDist = dist(e, BASE);
+        if (d < range && baseDist < closestToBase) { closestToBase = baseDist; target = e; }
       });
       if (!target) return;
       fireTower(tower, target, dt);
@@ -539,6 +542,15 @@ window.TDGame = (function () {
       var p = projectiles[j];
       p.life -= dt;
       if (p.life <= 0) { projectiles.splice(j, 1); continue; }
+      var tracked = enemies.find(function (enemy) { return enemy.id === p.targetId; });
+      if (tracked) {
+        var tdx = tracked.x - p.x;
+        var tdy = tracked.y - p.y;
+        var tlen = Math.sqrt(tdx * tdx + tdy * tdy) || 1;
+        var pspeed = Math.sqrt(p.vx * p.vx + p.vy * p.vy) || TD_CONFIG.TOWER.projectileSpeed;
+        p.vx = (tdx / tlen) * pspeed;
+        p.vy = (tdy / tlen) * pspeed;
+      }
       p.x += p.vx * dt;
       p.y += p.vy * dt;
       // Off canvas
@@ -550,7 +562,7 @@ window.TDGame = (function () {
       for (var k = enemies.length - 1; k >= 0; k--) {
         var en = enemies[k];
         if (p.hitSet[en.id]) continue;
-        if (dist(p, en) < en.size) {
+        if (dist(p, en) < en.size + (p.r || 4)) {
           var res = hitEnemy(p, en);
           if (res === 'killed') {
             doArcChain(p, {x: p.x, y: p.y});

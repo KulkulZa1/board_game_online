@@ -3,7 +3,7 @@
   'use strict';
 
   // ── 성장 단계 ───────────────────────────────────────────────────
-  const STAGES = [
+  const DEFAULT_STAGES = [
     { name: '씨앗',    icon: '🌱', need: 0   },
     { name: '새싹',    icon: '🌿', need: 100  },
     { name: '줄기',    icon: '🌾', need: 300  },
@@ -14,6 +14,33 @@
     { name: '고목',    icon: '🌲', need: 7500 },
     { name: '신목 🌟', icon: '✨🌲✨', need: 12000 },
   ];
+
+  const TOKEN_EMOJI = {
+    plant_seed: '🌱',
+    plant_sprout: '🌿',
+    plant_sapling: '🌾',
+    plant_bush: '🌳',
+    plant_flower: '🌸',
+    plant_bloom: '🌺',
+    plant_fruit: '🍇',
+    plant_ancient: '🌲',
+    plant_mythic: '✨🌲✨'
+  };
+
+  function sandboxStages() {
+    const config = window.PG_CONFIG;
+    if (!config || !config.__loadedFromSandbox) return null;
+    const stages = config.GROWTH_STAGES;
+    if (!Array.isArray(stages) || !stages.length) return null;
+    return stages.map((stage, idx) => ({
+      name: stage.name || DEFAULT_STAGES[idx]?.name || `Stage ${idx + 1}`,
+      icon: TOKEN_EMOJI[stage.spriteToken] || DEFAULT_STAGES[idx]?.icon || '🌱',
+      need: Number(stage.xpRequired) || 0,
+      tapValue: Number(stage.tapValue) || 1,
+    })).sort((a, b) => a.need - b.need);
+  }
+
+  const STAGES = sandboxStages() || DEFAULT_STAGES;
 
   // ── 업그레이드 정의 ─────────────────────────────────────────────
   // cost: [단계별 비용], resource: 소비 자원, effect: 설명
@@ -105,7 +132,9 @@
     try {
       const raw = localStorage.getItem(SAVE_KEY);
       if (!raw) return defaultSave();
-      return { ...defaultSave(), ...JSON.parse(raw) };
+      const loaded = { ...defaultSave(), ...JSON.parse(raw) };
+      loaded.stageIdx = Math.max(0, Math.min(loaded.stageIdx || 0, STAGES.length - 1));
+      return loaded;
     } catch { return defaultSave(); }
   }
 
@@ -115,12 +144,14 @@
   }
 
   let save = loadSave();
+  let toastTimer;
 
   // ── 파생 스탯 계산 ─────────────────────────────────────────────
   function calcStats() {
     const lv = (id) => save.upgrades[id] || 0;
+    const stageTap = STAGES[save.stageIdx] && STAGES[save.stageIdx].tapValue;
     return {
-      clickWater:    1   + lv('waterCan')   * 1,
+      clickWater:    (stageTap || 1) + lv('waterCan') * 1,
       sunPerSec:     0   + lv('sunPanel')   * 0.5,
       growthMult:    1   + lv('fertilizer') * 0.15,
       waterPerSec:   0   + lv('rainCloud')  * 0.3,
@@ -331,7 +362,6 @@
   window._buyUpgrade = buyUpgrade;
 
   // ── 토스트 ──────────────────────────────────────────────────────
-  let toastTimer;
   function showToast(msg) {
     const el = document.getElementById('toast');
     el.textContent = msg;

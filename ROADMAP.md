@@ -29,6 +29,29 @@ All three layers are **intentional**. Arcade games and sandbox are not scope cre
 
 ---
 
+## Launch-readiness priorities
+
+Before adding many more games, stabilize the shared platform pieces that every game uses:
+
+1. Keep the first six v1.0 board games stable and regression-test them whenever the shared shell changes.
+2. Finish sandbox-to-main-game publishing semantics: validate saved JSON, make drafts clearly local-only, and define how a stage becomes production content.
+3. Add browser-level smoke checks for lobby, room creation, join/reconnect, spectator approval, chat bubbles, and mobile layout.
+4. Keep arcade games lightweight and replayable; do not add new prototypes until Tower Defense, Vampire, and Plant have clear playable loops and saved-stage behavior.
+5. Prepare shared arcade schemas for stage data, waves/enemies, upgrades, rewards, input, collision helpers, HUD, and result screens.
+
+## Candidate games for later
+
+| Candidate | Why it fits | Cost | Sandbox fit | Risk |
+|---|---|---:|---|---|
+| 2048 / merge puzzle variant | Very mobile-friendly, short sessions, deterministic tests | Low | Board size, tile values, goals | Can feel generic without a twist |
+| Reaction-time / rhythm-tap mini game | Fast to understand, good mobile controls | Low-Medium | Beat map or timing-window editor | Needs sound/timing polish |
+| Simple card battler | Reuses turn shell and room flow, supports solo and 1:1 | Medium | Deck/enemy encounter editor | Balance can grow quickly |
+| Snake roguelite | Reuses arcade input and progression ideas | Medium | Arena, food, hazards, upgrades | Needs careful touch controls |
+
+Recommended next implementation target: a 2048/merge variant after shared arcade config validation exists.
+
+---
+
 ## What We've Done
 
 ### v1.0 — Foundation

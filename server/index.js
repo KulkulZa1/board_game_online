@@ -47,6 +47,7 @@ app.use('/.well-known', express.static(
   path.join(__dirname, '..', 'public/.well-known'),
   { setHeaders: (res) => res.set('Content-Type', 'application/json') }
 ));
+app.use('/sandbox', express.static(path.join(__dirname, '..', 'sandbox')));
 app.use(express.static(path.join(__dirname, '..', 'public')));
 // sandbox/ is a developer-only design tool — not served in production.
 // To use locally: serve sandbox/ directly via a separate static server.
