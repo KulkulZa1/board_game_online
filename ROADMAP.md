@@ -1,6 +1,8 @@
 # Roadmap & Project Status
 
-## Current Status: v1.4.0 (in progress)
+## Current Status: v1.4.0
+
+**Last reviewed: 2026-05-19 — architecture review completed. See below.**
 
 **Live games (12):** 체스, 오목, 사목, 오셀로, 인디언 포커, 체커, 사과게임, 배틀십, 백가몬, 텍사스 홀덤, 도트앤박스, 만칼라  
 **Platform:** Web (PWA) — https://board-game-online.onrender.com  
@@ -133,4 +135,39 @@ Real-time action games, 3D/physics games → Unity spin-off (v2)
 
 ---
 
-*Last updated: 2026-05-01*
+---
+
+## Architecture Review — 2026-05-19
+
+### Decision: Keep current Vanilla JS + Express + Socket.io structure
+
+**Reason:** The v1 board game layer is stable, well-structured, and aligned with the
+original purpose. Migration to React/TypeScript is unjustified — current problems
+are scope management issues, not language/framework deficiencies.
+
+### What is in scope (keep building)
+- v1 multiplayer board games (core purpose)
+- v2 arcade standalone solo games (additive, limited scope)
+- PWA + Android Capacitor packaging
+
+### What is out of scope until further review
+- `sandbox/` game design tools — developer-only, NOT player-facing, NOT served in production
+- 3D games beyond chess3d (Bowling, Mini Golf, Racing — separate product territory)
+- User accounts / Supabase (only when DAU > 200)
+- Real-time action multiplayer / Colyseus (separate product)
+
+### Known issues to fix before next feature work
+1. ✅ `sandbox/` route removed from production server
+2. ✅ `package.json` name/description updated
+3. ✅ Basic smoke test added (`npm test`)
+4. ⬜ Android AdMob IDs need real values before Play Store submission
+5. ⬜ 3D chess importmap compatibility check on target devices
+
+### Next 5 tasks (in priority order)
+1. Validate all 12 games manually on mobile (reconnect + rematch edge cases)
+2. Add per-game handler unit tests for at least 3 of the newer games (backgammon, texasholdem, dotsboxes)
+3. Replace AdMob placeholder IDs if targeting Android release
+4. Decide fate of `sandbox/`: keep as local-only dev tool or delete
+5. Decide fate of arcade games: keep 4 existing, freeze new additions until v1 is fully stable
+
+*Last updated: 2026-05-19*
