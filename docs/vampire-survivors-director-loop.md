@@ -28,6 +28,10 @@ This note records the launch-readiness work for `/arcade/vampire/`.
   - A dead run can revive once by spending coins or, in native Capacitor builds, through `AdMobHelper.showRewardedRevive()`.
 - Start boost hook.
   - Runs can be boosted once with coins or native rewarded ad through `AdMobHelper.showRewardedStartBoost()`.
+- Tower Defense hybrid mechanic.
+  - During a run, `T` places the selected tower at the player position and `Y` cycles Cannon/Frost/Tesla.
+  - Tower charges recover over time and from kills, creating a small defend-or-save decision layer inside the survival loop.
+  - Towers expire after a limited lifetime and the oldest tower is replaced when the cap is reached.
 
 ## Verification targets
 
@@ -42,6 +46,7 @@ This note records the launch-readiness work for `/arcade/vampire/`.
   - selecting different characters changes starting weapons.
   - pause overlay appears with `P` and resumes without time jump.
   - death screen shows coin rewards and a revive action.
+  - `T` places a tower, tower projectiles damage enemies, Frost freezes enemies, and Tesla chains to nearby enemies.
   - mobile viewport stacks selection cards without covering controls.
 
 ## Remaining design work
@@ -49,3 +54,4 @@ This note records the launch-readiness work for `/arcade/vampire/`.
 - Premium character purchase and ad-removal IAP are not implemented; current rewarded hooks use test ad IDs and must be replaced before store submission.
 - The sandbox version still needs a full mirror of the production evolution/meta loop if sandbox editing is expected to tune every production rule.
 - Two-player cooperative Vampire Survivors mode remains a larger architecture task because it needs deterministic state sync or authoritative server simulation.
+- The TD hybrid currently ships as an in-run tower-placement layer, not a full sandbox-authored premium TD stage publishing system.

@@ -4,6 +4,7 @@
 
 ### Added
 - Character selection, difficulty selection, local meta progression, permanent upgrades, daily challenge, map unlocks, pause UI, survival win resolution, and rewarded ad hooks for `/arcade/vampire/`.
+- Tower Defense hybrid loop for `/arcade/vampire/`: players can place Cannon/Frost/Tesla towers during runs with rechargeable tower charges.
 - Smoke-check coverage for Vampire Survivors character/difficulty/meta/pause/revive markers.
 - `docs/vampire-survivors-director-loop.md` with verification targets and remaining design work.
 

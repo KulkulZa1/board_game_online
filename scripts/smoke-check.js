@@ -342,6 +342,8 @@ function checkVampireDirectorLoopCoverage() {
     'META_UPGRADE_DEFS',
     'MAP_DEFS',
     'START_BOOST_COST',
+    'HYBRID_TOWER_TYPES',
+    'MAX_HYBRID_TOWERS',
     'META_KEY',
     'selectedCharacterId',
     'selectedDifficultyId',
@@ -360,6 +362,10 @@ function checkVampireDirectorLoopCoverage() {
     'runDifficulty.enemyHpMult',
     'spawnMult',
     'showRewardedStartBoost',
+    'placeHybridTower',
+    'updateHybridTowers',
+    'fireHybridTower',
+    'towerCharges',
   ];
   const missingGameMarkers = requiredGameMarkers.filter((marker) => !game.includes(marker));
   if (missingGameMarkers.length) {

@@ -128,6 +128,13 @@
     { id: 'snow', name: 'Snow Endgame', desc: 'Longer, harder, better payout.', durationSeconds: 720, enemyHpMult: 1.18, spawnMult: 1.18, coinMult: 1.35, bg: '#13212b', unlock: { achievement: 'clearHard', cost: 900, label: 'Clear Hard or pay 900 coins' } },
   ];
   const START_BOOST_COST = 90;
+  const HYBRID_TOWER_TYPES = [
+    { id: 'cannon', name: 'Cannon', icon: 'C', color: '#3498db', range: 190, dmg: 26, cd: 0.72, projectileSpeed: 430 },
+    { id: 'frost', name: 'Frost', icon: 'F', color: '#5dade2', range: 165, dmg: 13, cd: 1.1, projectileSpeed: 330, slow: 1.6 },
+    { id: 'tesla', name: 'Tesla', icon: 'T', color: '#f1c40f', range: 150, dmg: 18, cd: 0.9, chain: 2 },
+  ];
+  const MAX_HYBRID_TOWERS = 8;
+  const TOWER_RECHARGE_SECONDS = 45;
 
   // 랜덤 아이템 박스 — 40초마다 맵에 등장, 플레이어가 수집
   const ITEM_BOX_POOL = [
@@ -168,6 +175,9 @@
   let screenShake = 0;         // 화면 흔들림 강도
   let lastMoveDir = { dx: 1, dy: 0 }; // 마지막 이동 방향 (대쉬 방향 결정)
   let itemBoxes     = [];        // 월드에 존재하는 아이템 박스
+  let hybridTowers  = [];
+  let selectedTowerTypeIdx = 0;
+  let towerRecharge = 0;
   let itemBoxTimer  = 0;
   let nextBossTime  = BOSS_INTERVAL;
   let bossActive    = false;
@@ -287,6 +297,8 @@
       revived: false,
       mapId: map.id,
       dailyKey: daily ? daily.key : null,
+      towerCharges: 2,
+      maxTowerCharges: 4,
       rerolls: 0,          // 추가 리롤권 (몬스터 드롭)
     };
     enemies    = [];
@@ -304,6 +316,9 @@
     screenShake = 0;
     lastMoveDir = { dx: 1, dy: 0 };
     itemBoxes     = [];
+    hybridTowers  = [];
+    selectedTowerTypeIdx = 0;
+    towerRecharge = 0;
     itemBoxTimer  = 0;
     nextBossTime  = difficulty.bossInterval || BOSS_INTERVAL;
     bossActive    = false;
@@ -328,6 +343,7 @@
     }
     spawnWave();
     updateHUD();
+    updateTowerButton();
   }
 
   function addWeapon(id) {
@@ -522,6 +538,19 @@
       pauseBtn.addEventListener('click', () => togglePause());
       const guideBtn = document.getElementById('guideBtn');
       headerStats.insertBefore(pauseBtn, guideBtn || null);
+    }
+
+    if (headerStats && !document.getElementById('towerBtn')) {
+      const towerBtn = document.createElement('button');
+      towerBtn.id = 'towerBtn';
+      towerBtn.className = 'guide-btn tower-btn';
+      towerBtn.type = 'button';
+      towerBtn.title = 'Place tower (T)';
+      towerBtn.textContent = 'TW';
+      towerBtn.style.display = 'none';
+      towerBtn.addEventListener('click', () => placeHybridTower());
+      const pauseBtn = document.getElementById('pauseBtn');
+      headerStats.insertBefore(towerBtn, pauseBtn || document.getElementById('guideBtn') || null);
     }
 
     if (!document.getElementById('metaPanel')) {
@@ -949,6 +978,129 @@
     if (old) old.remove();
   }
 
+  function currentHybridTowerType() {
+    return HYBRID_TOWER_TYPES[selectedTowerTypeIdx % HYBRID_TOWER_TYPES.length];
+  }
+
+  function cycleHybridTowerType() {
+    selectedTowerTypeIdx = (selectedTowerTypeIdx + 1) % HYBRID_TOWER_TYPES.length;
+    updateTowerButton();
+    if (player) {
+      const def = currentHybridTowerType();
+      floatTexts.push({ x: player.x, y: player.y - 28, text: `Tower: ${def.name}`, life: 1.2, maxLife: 1.2, color: def.color, size: 13 });
+    }
+  }
+
+  function placeHybridTower() {
+    if (state !== 'playing' || !player) return false;
+    if ((player.towerCharges || 0) <= 0) {
+      floatTexts.push({ x: player.x, y: player.y - 28, text: 'Tower charge empty', life: 1.1, maxLife: 1.1, color: '#f39c12', size: 12 });
+      return false;
+    }
+    if (hybridTowers.length >= MAX_HYBRID_TOWERS) {
+      hybridTowers.shift();
+    }
+    const def = currentHybridTowerType();
+    hybridTowers.push({
+      id: Date.now() + Math.random(),
+      type: def.id,
+      x: player.x,
+      y: player.y,
+      cd: 0.2,
+      life: 90,
+      pulse: 0,
+      kills: 0,
+    });
+    player.towerCharges--;
+    for (let i = 0; i < 10; i++) spawnParticle(player.x, player.y, def.color, 4 + Math.random() * 4, 0.35);
+    floatTexts.push({ x: player.x, y: player.y - 34, text: `${def.name} placed`, life: 1.4, maxLife: 1.4, color: def.color, size: 13 });
+    updateTowerButton();
+    return true;
+  }
+
+  function nearestEnemyFromPoint(point, range) {
+    let best = null;
+    let bestD = Infinity;
+    for (const enemy of enemies) {
+      const d = dist(point, enemy);
+      if (d < range && d < bestD) {
+        best = enemy;
+        bestD = d;
+      }
+    }
+    return best;
+  }
+
+  function fireHybridTower(tower, def, target) {
+    if (def.id === 'tesla') {
+      let current = target;
+      const chained = new Set();
+      for (let i = 0; i <= (def.chain || 0) && current; i++) {
+        chained.add(current);
+        dealDamage(current, def.dmg * player.dmgMult);
+        spawnParticle(current.x, current.y, def.color, 8, 0.25);
+        current = enemies.find(enemy => !chained.has(enemy) && dist(enemy, current) < 120) || null;
+      }
+      return;
+    }
+    const ang = Math.atan2(target.y - tower.y, target.x - tower.x);
+    projectiles.push({
+      type: 'tower',
+      towerType: def.id,
+      x: tower.x,
+      y: tower.y,
+      vx: Math.cos(ang) * def.projectileSpeed,
+      vy: Math.sin(ang) * def.projectileSpeed,
+      r: def.id === 'frost' ? 6 : 5,
+      dmg: def.dmg * player.dmgMult,
+      life: def.range / def.projectileSpeed + 0.25,
+      color: def.color,
+      slow: def.slow || 0,
+    });
+  }
+
+  function updateHybridTowers(dt) {
+    if (!player) return;
+    if ((player.towerCharges || 0) < (player.maxTowerCharges || 4)) {
+      towerRecharge += dt;
+      if (towerRecharge >= TOWER_RECHARGE_SECONDS) {
+        towerRecharge = 0;
+        player.towerCharges++;
+        floatTexts.push({ text: 'Tower charge ready', life: 1.8, maxLife: 1.8, screenSpace: true, color: '#5dade2', size: 15 });
+      }
+    } else {
+      towerRecharge = 0;
+    }
+
+    for (let i = hybridTowers.length - 1; i >= 0; i--) {
+      const tower = hybridTowers[i];
+      tower.life -= dt;
+      tower.pulse += dt;
+      if (tower.life <= 0) {
+        hybridTowers.splice(i, 1);
+        continue;
+      }
+      const def = HYBRID_TOWER_TYPES.find(t => t.id === tower.type) || HYBRID_TOWER_TYPES[0];
+      tower.cd -= dt;
+      if (tower.cd > 0) continue;
+      const target = nearestEnemyFromPoint(tower, def.range);
+      if (!target) continue;
+      fireHybridTower(tower, def, target);
+      tower.cd = def.cd;
+    }
+    updateTowerButton();
+  }
+
+  function updateTowerButton() {
+    const btn = document.getElementById('towerBtn');
+    if (!btn) return;
+    const def = currentHybridTowerType();
+    const charges = player ? (player.towerCharges || 0) : 0;
+    btn.textContent = `${def.icon}${charges}`;
+    btn.title = `Place ${def.name} tower (T). Switch type with Y.`;
+    btn.style.borderColor = def.color;
+  }
+
   // ── 입력 ────────────────────────────────────────────────────────
   const keys = {};
   document.addEventListener('keydown', e => {
@@ -956,6 +1108,16 @@
     if (e.key === 'p' || e.key === 'P') {
       e.preventDefault();
       togglePause();
+      return;
+    }
+    if (e.key === 't' || e.key === 'T') {
+      e.preventDefault();
+      placeHybridTower();
+      return;
+    }
+    if (e.key === 'y' || e.key === 'Y') {
+      e.preventDefault();
+      cycleHybridTowerType();
       return;
     }
     // 레벨업 / 아이템 선택 화면에서 숫자키로 선택 / 리롤
@@ -1253,6 +1415,11 @@
     if (!enemy.isBoss && Math.random() < 0.05 && player.rerolls < 9) {
       player.rerolls++;
       floatTexts.push({ x: enemy.x, y: enemy.y - 20, text: '🎲 리롤권 획득!', life: 1.8, maxLife: 1.8, color: '#a29bfe', size: 13 });
+    }
+    if (!enemy.isBoss && kills % 35 === 0 && player.towerCharges < player.maxTowerCharges) {
+      player.towerCharges++;
+      towerRecharge = 0;
+      floatTexts.push({ x: enemy.x, y: enemy.y - 32, text: 'Tower charge +1', life: 1.6, maxLife: 1.6, color: '#5dade2', size: 13 });
     }
     enemies.splice(enemies.indexOf(enemy), 1);
     document.getElementById('killDisp').textContent = kills;
@@ -1606,6 +1773,7 @@
 
     // 무기 발사
     for (const id of player.weapons) fireWeapon(id, dt);
+    updateHybridTowers(dt);
 
     // 투사체 업데이트
     for (let i = projectiles.length - 1; i >= 0; i--) {
@@ -1651,6 +1819,18 @@
         }
       } else if (p.type === 'explosion') {
         p.r = p.maxR * (1 - p.life / 0.4);
+      } else if (p.type === 'tower') {
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        for (let j = enemies.length - 1; j >= 0; j--) {
+          const e = enemies[j];
+          if (dist(p, e) < p.r + e.size) {
+            dealDamage(e, p.dmg);
+            if (p.slow && e.hp > 0) e.frozen = Math.max(e.frozen || 0, p.slow);
+            projectiles.splice(i, 1);
+            break;
+          }
+        }
       }
     }
 
@@ -1854,6 +2034,31 @@
     }
 
     // 파티클
+    for (const tower of hybridTowers) {
+      const def = HYBRID_TOWER_TYPES.find(t => t.id === tower.type) || HYBRID_TOWER_TYPES[0];
+      const pulse = 1 + Math.sin((tower.pulse || 0) * 5) * 0.06;
+      ctx.save();
+      ctx.translate(tower.x, tower.y);
+      ctx.globalAlpha = Math.min(1, tower.life / 8);
+      ctx.strokeStyle = `rgba(255,255,255,${tower.cd <= 0 ? 0.16 : 0.08})`;
+      ctx.beginPath();
+      ctx.arc(0, 0, def.range, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = def.color;
+      ctx.shadowBlur = 14;
+      ctx.shadowColor = def.color;
+      ctx.beginPath();
+      ctx.rect(-12 * pulse, -12 * pulse, 24 * pulse, 24 * pulse);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = '#09101c';
+      ctx.font = 'bold 12px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(def.icon, 0, 1);
+      ctx.restore();
+    }
+
     for (const p of particles) {
       const alpha = p.life / p.maxLife;
       ctx.globalAlpha = alpha;
@@ -1889,6 +2094,14 @@
         ctx.fillStyle = '#f39c12';
         ctx.fillRect(-12, -2, 24, 4);
         ctx.restore();
+      } else if (p.type === 'tower') {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        ctx.fillStyle = p.color || '#5dade2';
+        ctx.shadowBlur = 12;
+        ctx.shadowColor = p.color || '#5dade2';
+        ctx.fill();
+        ctx.shadowBlur = 0;
       } else if (p.type === 'laser' || p.type === 'deathray') {
         const evolved = p.type === 'deathray';
         const ex = p.x + Math.cos(p.angle) * p.length;
@@ -2186,6 +2399,26 @@
       ctx.fillText('DASH', cx, cy);
       ctx.textAlign = 'left';
       ctx.textBaseline = 'alphabetic';
+
+      const towerDef = currentHybridTowerType();
+      const tx = 38, ty = H - 36;
+      ctx.beginPath();
+      ctx.arc(tx, ty, rad, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      ctx.fill();
+      ctx.strokeStyle = towerDef.color;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.fillStyle = towerDef.color;
+      ctx.font = 'bold 11px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(`${towerDef.icon}${player.towerCharges || 0}`, tx, ty);
+      ctx.fillStyle = 'rgba(255,255,255,0.75)';
+      ctx.font = '9px sans-serif';
+      ctx.fillText('T/Y', tx, ty + 25);
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'alphabetic';
     }
 
     ctx.restore(); // 화면 흔들기 종료
@@ -2216,6 +2449,8 @@
     renderStartOptions();
     const pauseBtn = document.getElementById('pauseBtn');
     if (pauseBtn) pauseBtn.style.display = 'none';
+    const towerBtn = document.getElementById('towerBtn');
+    if (towerBtn) towerBtn.style.display = 'none';
     ov.classList.add('visible');
 
     if (window.AdMobHelper) AdMobHelper.showAfterGame();
@@ -2343,6 +2578,8 @@
     if (pauseOverlay) pauseOverlay.style.display = 'none';
     const pauseBtn = document.getElementById('pauseBtn');
     if (pauseBtn) pauseBtn.style.display = '';
+    const towerBtn = document.getElementById('towerBtn');
+    if (towerBtn) towerBtn.style.display = '';
     document.getElementById('levelOverlay').style.display = 'none';
     initGame();
     state = 'playing';

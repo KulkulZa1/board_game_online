@@ -656,6 +656,12 @@ html, body {
   color: #f1c40f;
 }
 
+.tower-btn {
+  min-width: 34px;
+  border-color: #5dade2;
+  font-weight: 900;
+}
+
 .secondary-btn:disabled {
   opacity: 0.58;
   cursor: default;
