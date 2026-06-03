@@ -87,8 +87,10 @@ html, body {
   inset: 0;
   background: rgba(0, 0, 0, 0.82);
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
+  overflow-y: auto;
+  padding: 12px;
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.25s;
@@ -101,11 +103,13 @@ html, body {
   flex-direction: column;
   align-items: center;
   gap: 10px;
+  width: min(680px, 100%);
   padding: 28px 24px;
   background: rgba(18,18,26,0.92);
   border-radius: 16px;
   border: 1px solid #8e44ad44;
   min-width: 240px;
+  margin: auto 0;
 }
 
 #overlayIcon { font-size: 3rem; }
@@ -509,7 +513,7 @@ html, body {
 }
 
 .start-select-wrap {
-  width: min(640px, 92vw);
+  width: 100%;
   margin: 10px auto;
   text-align: left;
 }
@@ -525,7 +529,7 @@ html, body {
 
 .start-select-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 8px;
 }
 
@@ -647,7 +651,7 @@ html, body {
 }
 
 .daily-panel {
-  width: min(640px, 92vw);
+  width: 100%;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -660,6 +664,10 @@ html, body {
   text-align: left;
 }
 
+.monetization-panel {
+  background: rgba(241, 196, 15, 0.06);
+}
+
 .daily-text {
   color: var(--muted);
   font-size: 0.74rem;
@@ -667,7 +675,7 @@ html, body {
 }
 
 .upgrade-grid {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
 }
 
 .selected-lite {

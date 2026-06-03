@@ -28,6 +28,10 @@ This note records the launch-readiness work for `/arcade/vampire/`.
   - A dead run can revive once by spending coins or, in native Capacitor builds, through `AdMobHelper.showRewardedRevive()`.
 - Start boost hook.
   - Runs can be boosted once with coins or native rewarded ad through `AdMobHelper.showRewardedStartBoost()`.
+- Ad removal and premium character purchase boundary.
+  - `AdMobHelper.purchaseAdRemoval()` and `restorePurchases()` are native-only hooks for Capacitor billing plugins.
+  - When `adsRemoved` is owned, forced interstitials are suppressed while opt-in rewarded revive/boost actions remain available.
+  - Locked premium characters can call `AdMobHelper.purchasePremiumCharacter()` and persist ownership in local meta only after the native helper reports success.
 - Tower Defense hybrid mechanic.
   - During a run, `T` places the selected tower at the player position and `Y` cycles Cannon/Frost/Tesla.
   - Tower charges recover over time and from kills, creating a small defend-or-save decision layer inside the survival loop.
@@ -59,7 +63,7 @@ This note records the launch-readiness work for `/arcade/vampire/`.
 
 ## Remaining design work
 
-- Premium character purchase and ad-removal IAP are not implemented; current rewarded hooks use test ad IDs and must be replaced before store submission.
+- Real store configuration is not complete: product IDs, billing plugin choice, receipt validation, and production AdMob IDs must be configured before store submission.
 - The sandbox version now mirrors skill leveling and evolution recipes, but it does not yet mirror the full production meta loop: character unlocks, difficulty/map selection, daily modifiers, coins, achievements, and TD hybrid tuning remain arcade-side.
 - Two-player cooperative Vampire Survivors mode remains a larger architecture task because it needs deterministic state sync or authoritative server simulation.
 - The TD hybrid currently ships as an in-run tower-placement layer, not a full sandbox-authored premium TD stage publishing system.

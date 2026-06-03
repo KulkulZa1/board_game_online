@@ -363,6 +363,10 @@ function checkVampireDirectorLoopCoverage() {
     'runDifficulty.enemyHpMult',
     'spawnMult',
     'showRewardedStartBoost',
+    'adsRemoved',
+    'premiumCharacters',
+    'purchasePremiumCharacter',
+    'monetizationPanel',
     'placeHybridTower',
     'updateHybridTowers',
     'fireHybridTower',
@@ -377,14 +381,21 @@ function checkVampireDirectorLoopCoverage() {
     throw new Error(`Vampire Survivors loop coverage missing: ${missingGameMarkers.join(', ')}`);
   }
 
-  const requiredCssMarkers = ['.meta-panel', '.start-card', '.pause-overlay', '.end-actions', '.daily-panel', '.upgrade-grid', '.run-report'];
+  const requiredCssMarkers = ['.meta-panel', '.start-card', '.pause-overlay', '.end-actions', '.daily-panel', '.upgrade-grid', '.run-report', '.monetization-panel'];
   const missingCssMarkers = requiredCssMarkers.filter((marker) => !css.includes(marker));
   if (missingCssMarkers.length) {
     throw new Error(`Vampire Survivors UI CSS missing: ${missingCssMarkers.join(', ')}`);
   }
 
-  if (!admob.includes('REWARDED_ID') || !admob.includes('showRewardedRevive') || !admob.includes('showRewardedStartBoost')) {
-    throw new Error('AdMob helper should expose rewarded revive and start boost hooks');
+  if (
+    !admob.includes('REWARDED_ID') ||
+    !admob.includes('showRewardedRevive') ||
+    !admob.includes('showRewardedStartBoost') ||
+    !admob.includes('purchaseAdRemoval') ||
+    !admob.includes('restorePurchases') ||
+    !admob.includes('purchasePremiumCharacter')
+  ) {
+    throw new Error('AdMob helper should expose rewarded, ad removal, restore, and premium character hooks');
   }
 }
 

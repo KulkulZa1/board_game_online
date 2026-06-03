@@ -108,7 +108,7 @@
       dmgMult: 0.95,
       cdMult: 0.9,
       xpRangeMult: 1.12,
-      unlock: { achievement: 'evolve1', cost: 600, label: 'Evolve a weapon or pay 600 coins' },
+      unlock: { achievement: 'evolve1', cost: 600, premiumProduct: 'reversi', label: 'Evolve a weapon, pay 600 coins, or unlock premium on mobile' },
     },
   ];
   const DIFFICULTY_DEFS = [
@@ -202,6 +202,7 @@
   let currentChoiceBuilder = null; // 현재 선택지 생성 함수 (리롤 시 재호출)
 
   let meta = loadMeta();
+  syncAdSettings();
   let selectedCharacterId = meta.lastCharacter || 'knight';
   let selectedDifficultyId = meta.lastDifficulty || 'normal';
   let selectedMapId = meta.lastMap || 'meadow';
@@ -460,6 +461,8 @@
       dailyChallengeEnabled: false,
       dailyCompletions: {},
       pendingStartBoost: false,
+      adsRemoved: false,
+      premiumCharacters: [],
     };
     try {
       const raw = localStorage.getItem(META_KEY);
@@ -473,6 +476,8 @@
         upgrades: saved.upgrades && typeof saved.upgrades === 'object' ? saved.upgrades : fallback.upgrades,
         unlockedMaps: Array.isArray(saved.unlockedMaps) && saved.unlockedMaps.length ? saved.unlockedMaps : fallback.unlockedMaps,
         dailyCompletions: saved.dailyCompletions && typeof saved.dailyCompletions === 'object' ? saved.dailyCompletions : fallback.dailyCompletions,
+        premiumCharacters: Array.isArray(saved.premiumCharacters) ? saved.premiumCharacters : fallback.premiumCharacters,
+        adsRemoved: !!saved.adsRemoved,
       };
     } catch (_err) {
       return fallback;
@@ -481,6 +486,13 @@
 
   function saveMeta() {
     try { localStorage.setItem(META_KEY, JSON.stringify(meta)); } catch (_err) {}
+    syncAdSettings();
+  }
+
+  function syncAdSettings() {
+    if (window.AdMobHelper && typeof AdMobHelper.setAdsRemoved === 'function') {
+      AdMobHelper.setAdsRemoved(!!meta.adsRemoved);
+    }
   }
 
   function currentCharacter() {
@@ -543,11 +555,30 @@
   function isCharacterUnlocked(def) {
     if (!def || !def.unlock || def.unlock.type === 'free') return true;
     if (meta.unlockedCharacters.includes(def.id)) return true;
+    if (isPremiumCharacterOwned(def.id)) return true;
     return !!(def.unlock.achievement && meta.achievements[def.unlock.achievement]);
+  }
+
+  function isPremiumCharacterOwned(id) {
+    return Array.isArray(meta.premiumCharacters) && meta.premiumCharacters.includes(id);
   }
 
   function unlockCharacter(id) {
     if (!meta.unlockedCharacters.includes(id)) meta.unlockedCharacters.push(id);
+  }
+
+  async function purchasePremiumCharacter(def) {
+    if (!def || !def.unlock || !def.unlock.premiumProduct) return false;
+    if (!window.AdMobHelper || typeof AdMobHelper.purchasePremiumCharacter !== 'function') return false;
+    const result = await AdMobHelper.purchasePremiumCharacter(def.unlock.premiumProduct);
+    if (!result || !result.ok) return false;
+    if (!Array.isArray(meta.premiumCharacters)) meta.premiumCharacters = [];
+    if (!meta.premiumCharacters.includes(def.id)) meta.premiumCharacters.push(def.id);
+    unlockCharacter(def.id);
+    selectedCharacterId = def.id;
+    meta.lastCharacter = def.id;
+    saveMeta();
+    return true;
   }
 
   function ensureMetaAchievements() {
@@ -663,6 +694,13 @@
       overlayBox.insertBefore(panel, document.getElementById('startBtn'));
     }
 
+    if (!document.getElementById('monetizationPanel')) {
+      const panel = document.createElement('div');
+      panel.id = 'monetizationPanel';
+      panel.className = 'daily-panel monetization-panel';
+      overlayBox.insertBefore(panel, document.getElementById('startBtn'));
+    }
+
     const wrapper = document.getElementById('gameWrapper');
     if (wrapper && !document.getElementById('pauseOverlay')) {
       const pauseOverlay = document.createElement('div');
@@ -711,7 +749,9 @@
       best.textContent = `Best ${fmtTime(meta.bestTime || 0)} / ${meta.bestKills || 0} K`;
       const badges = document.createElement('span');
       badges.textContent = `Achievements ${Object.keys(meta.achievements || {}).filter(id => meta.achievements[id]).length}`;
-      metaPanel.append(coins, best, badges);
+      const ads = document.createElement('span');
+      ads.textContent = meta.adsRemoved ? 'Ads Off' : 'Ads On';
+      metaPanel.append(coins, best, badges, ads);
     }
 
     const charGrid = document.querySelector('#characterSelect .start-select-grid');
@@ -730,15 +770,20 @@
         desc.textContent = def.desc;
         const metaText = document.createElement('div');
         metaText.className = 'start-card-meta';
-        metaText.textContent = unlocked ? `Starts with ${def.startWeapons.join(', ')}` : (def.unlock && def.unlock.label ? def.unlock.label : 'Locked');
+        metaText.textContent = unlocked
+          ? `Starts with ${def.startWeapons.join(', ')}${isPremiumCharacterOwned(def.id) ? ' / Premium owned' : ''}`
+          : (def.unlock && def.unlock.label ? def.unlock.label : 'Locked');
         btn.append(title, desc, metaText);
-        btn.addEventListener('click', () => {
+        btn.addEventListener('click', async () => {
           if (!isCharacterUnlocked(def)) {
             const cost = def.unlock && def.unlock.cost ? def.unlock.cost : 0;
             if (cost && meta.coins >= cost) {
               meta.coins -= cost;
               unlockCharacter(def.id);
               saveMeta();
+            } else if (await purchasePremiumCharacter(def)) {
+              renderStartOptions();
+              return;
             } else {
               return;
             }
@@ -905,6 +950,44 @@
         renderStartOptions();
       });
       startBoostPanel.append(label, coinBtn, adBtn);
+    }
+
+    const monetizationPanel = document.getElementById('monetizationPanel');
+    if (monetizationPanel) {
+      monetizationPanel.textContent = '';
+      const nativePurchases = !!(window.AdMobHelper && typeof AdMobHelper.canUseNativePurchases === 'function' && AdMobHelper.canUseNativePurchases());
+      const label = document.createElement('div');
+      label.className = 'daily-text';
+      label.textContent = meta.adsRemoved
+        ? 'Ad removal owned. Interstitial ads stay disabled on this device; rewarded boosts remain opt-in.'
+        : 'Remove ads is a native mobile purchase. Web keeps ads as no-op.';
+      const buyBtn = document.createElement('button');
+      buyBtn.type = 'button';
+      buyBtn.className = `secondary-btn${meta.adsRemoved ? ' selected-lite' : ''}`;
+      buyBtn.textContent = meta.adsRemoved ? 'Ads Removed' : (nativePurchases ? 'Remove Ads' : 'Mobile Only');
+      buyBtn.disabled = !!meta.adsRemoved || !nativePurchases;
+      buyBtn.addEventListener('click', async () => {
+        if (meta.adsRemoved || !window.AdMobHelper || typeof AdMobHelper.purchaseAdRemoval !== 'function') return;
+        const result = await AdMobHelper.purchaseAdRemoval();
+        if (!result || !result.ok) return;
+        meta.adsRemoved = true;
+        saveMeta();
+        renderStartOptions();
+      });
+      const restoreBtn = document.createElement('button');
+      restoreBtn.type = 'button';
+      restoreBtn.className = 'secondary-btn';
+      restoreBtn.textContent = 'Restore';
+      restoreBtn.disabled = !!meta.adsRemoved || !nativePurchases;
+      restoreBtn.addEventListener('click', async () => {
+        if (!window.AdMobHelper || typeof AdMobHelper.restorePurchases !== 'function') return;
+        const result = await AdMobHelper.restorePurchases();
+        if (!result || !result.ok) return;
+        meta.adsRemoved = true;
+        saveMeta();
+        renderStartOptions();
+      });
+      monetizationPanel.append(label, buyBtn, restoreBtn);
     }
   }
 
