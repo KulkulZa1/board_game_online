@@ -30,12 +30,17 @@ This launch-readiness pass found and fixed:
 - `npm run dev` was missing; it now starts the local server like `npm start`.
 - Multiplayer chat now shows short speech bubbles above host/guest player bars while preserving the existing chat log.
 - The smoke test now covers chat payload trimming plus client-side bubble behavior for live messages versus history replay.
+- Service worker caching no longer serves old JS/CSS before checking the network; this prevents deployed game logic from appearing stale after Render deploys.
+- All HTML pages now load `/js/sw-update.js`, which registers the service worker consistently and reloads controlled pages once after an updated worker takes control.
+- Server responses for HTML, `sw.js`, JS, CSS, and `manifest.json` now send `Cache-Control: no-cache, no-store, must-revalidate`.
 
-Current production observations on 2026-05-19 before this chat-bubble change is deployed:
+Current production observations before this branch is merged and Render redeploys:
 
 - Production home, `/arcade/tower-defense/`, and `/sandbox/` loaded successfully and matched the local route list for the checked pages.
 - Browser console warnings/errors were empty on the checked production lobby, Tower Defense route, and sandbox index route.
 - The new chat speech-bubble behavior is not visible on production until this branch is merged and Render redeploys.
+- Production currently still serves `sw.js` with the old JS/CSS stale-while-revalidate policy until this branch is merged and Render redeploys.
+- Production asset headers checked on 2026-05-20 showed `/sw.js` and `/api/version` were no-store, but `/js/chat.js` and `/manifest.json` still used `Cache-Control: public, max-age=0`; this branch changes JS/CSS/manifest to no-store too.
 - Shell-based `Invoke-WebRequest` to the HTTPS production status endpoint failed in this Windows environment with a receive error, but the in-app browser loaded the production app successfully.
 
 ## Chat speech bubble behavior

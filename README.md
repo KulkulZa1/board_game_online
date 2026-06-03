@@ -82,18 +82,6 @@ See `docs/launch-readiness.md` for the current security, deployment, and manual 
 
 ---
 
-## Chat speech bubbles
-
-In multiplayer rooms, live chat messages still appear in the normal chat log and now also show a short speech bubble above the sending player's bar.
-
-- Bubbles use the existing `chat:send` / `chat:message` Socket.io flow.
-- History replay does not recreate old bubbles after refresh or reconnect.
-- One bubble is shown per player at a time; a newer message replaces the older bubble.
-- Bubble text is inserted with `textContent`, visually truncated, and hidden automatically after a short delay.
-- Spectator-authored chat remains in the chat log only because there is no stable spectator avatar/player bar in the shared game shell yet.
-
----
-
 ## 주요 기능
 
 - 12가지 게임 지원
@@ -127,6 +115,8 @@ main    ← 안정 배포 버전 (Render.com 자동 배포)
 | 변경 이력 | `CHANGELOG.md` |
 | 로드맵 | `ROADMAP.md` |
 | 게임 추가 가이드 | `ADDING_A_GAME.md` |
+| 신규 게임 후보 검토 | `docs/new-game-candidates.md` |
+| 런칭 준비/배포 검증 | `docs/launch-readiness.md` |
 | Android 빌드 가이드 | `BUILDING_ANDROID.md` |
 | AI 어시스턴트 가이드 | `CLAUDE.md` |
 

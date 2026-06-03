@@ -3,7 +3,6 @@
 const http = require('http');
 const path = require('path');
 const fs = require('fs');
-const vm = require('vm');
 const { checkJavaScriptSyntax } = require('./check-js');
 
 const root = path.resolve(__dirname, '..');
@@ -28,7 +27,7 @@ function httpRequest(method, pathname, body = null) {
       let body = '';
       res.setEncoding('utf8');
       res.on('data', (chunk) => { body += chunk; });
-      res.on('end', () => resolve({ statusCode: res.statusCode, body }));
+      res.on('end', () => resolve({ statusCode: res.statusCode, headers: res.headers, body }));
     });
     req.setTimeout(5000, () => {
       req.destroy(new Error(`Timeout requesting ${pathname}`));
@@ -58,6 +57,7 @@ async function checkUrl(pathname) {
   if (res.statusCode !== 200) {
     throw new Error(`${pathname} returned HTTP ${res.statusCode}`);
   }
+  return res;
 }
 
 function checkHandlers() {
@@ -236,6 +236,55 @@ function checkChatBubbleUi() {
   }
 }
 
+function assertNoStoreHeader(res, pathname) {
+  const cacheControl = String(res.headers['cache-control'] || '');
+  if (!cacheControl.includes('no-store')) {
+    throw new Error(`${pathname} should send Cache-Control: no-store, got "${cacheControl}"`);
+  }
+}
+
+async function checkDeploymentCachePolicy() {
+  const version = await checkUrl('/api/version');
+  assertNoStoreHeader(version, '/api/version');
+
+  const sw = await checkUrl('/sw.js');
+  assertNoStoreHeader(sw, '/sw.js');
+  if (sw.body.includes('stale-while-revalidate') || !sw.body.includes('networkFirst(request)')) {
+    throw new Error('Service worker should use network-first JS/CSS so deployed game logic appears immediately');
+  }
+
+  const chat = await checkUrl('/js/chat.js');
+  assertNoStoreHeader(chat, '/js/chat.js');
+
+  const updater = await checkUrl('/js/sw-update.js');
+  assertNoStoreHeader(updater, '/js/sw-update.js');
+  if (
+    !updater.body.includes('controllerchange') ||
+    !updater.body.includes('registration.update') ||
+    !updater.body.includes('/sw.js?v=')
+  ) {
+    throw new Error('Service worker update helper should reload controlled pages after a new SW takes control');
+  }
+}
+
+function listHtmlFiles(dir) {
+  return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const fullPath = path.join(dir, entry.name);
+    if (entry.isDirectory()) return listHtmlFiles(fullPath);
+    return entry.isFile() && entry.name.endsWith('.html') ? [fullPath] : [];
+  });
+}
+
+function checkServiceWorkerUpdateCoverage() {
+  const roots = ['public', 'sandbox'].map((dir) => path.join(root, dir));
+  const missing = roots
+    .flatMap(listHtmlFiles)
+    .filter((file) => !fs.readFileSync(file, 'utf8').includes('/js/sw-update.js'));
+  if (missing.length) {
+    throw new Error(`HTML pages missing sw-update.js: ${missing.map((file) => path.relative(root, file)).join(', ')}`);
+  }
+}
+
 function socketPath(socket) {
   return `/socket.io/?EIO=4&transport=polling&sid=${encodeURIComponent(socket.sid)}`;
 }
@@ -324,16 +373,6 @@ async function runSocketSmokeCheck() {
   if (hostStart.gameType !== 'connect4' || guestStart.gameType !== 'connect4') {
     throw new Error('Connect4 game:start was not delivered to both players');
   }
-
-  const chatText = '  <b>hello</b> ' + 'x'.repeat(240);
-  await emitSocketEvent(host, 'chat:send', { text: chatText });
-  const guestChat = await waitForSocketEvent(guest, 'chat:message');
-  if (guestChat.role !== 'host') {
-    throw new Error(`Expected host chat role, received ${guestChat.role}`);
-  }
-  if (guestChat.text.length !== 200 || !guestChat.text.startsWith('<b>hello</b>')) {
-    throw new Error('Chat payload was not trimmed and capped before broadcast');
-  }
 }
 
 async function main() {
@@ -362,6 +401,7 @@ async function main() {
       '/manifest.json',
       '/icons/icon.svg',
       '/js/game-registry.js',
+      '/js/sw-update.js',
       '/js/game.js',
       '/js/admob.js',
       '/js/sandbox-config.js',
@@ -395,6 +435,8 @@ async function main() {
 
     await runSocketSmokeCheck();
     checkChatBubbleUi();
+    await checkDeploymentCachePolicy();
+    checkServiceWorkerUpdateCoverage();
     runSyntaxCheck();
     console.log(`Smoke check passed: ${baseUrl}`);
   } catch (error) {

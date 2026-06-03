@@ -390,13 +390,6 @@
       });
     })();
   </script>
-  <!-- Service Worker 등록 -->
-  <script>
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).catch(() => {});
-      });
-    }
-  </script>
+  <script src="/js/sw-update.js?v=20260520b"></script>
 </body>
 </html>
