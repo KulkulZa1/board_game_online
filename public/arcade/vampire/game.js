@@ -289,6 +289,12 @@
     spawnParticle(player.x, player.y, '#5dade2', 30, 0.6);
   }
 
+  // 요소가 없어도(구버전 캐시 등) 죽지 않는 안전한 textContent 설정
+  function setText(id, text) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = text;
+  }
+
   // ── 입력 ────────────────────────────────────────────────────────
   const keys = {};
   document.addEventListener('keydown', e => {
@@ -618,14 +624,14 @@
   function showLevelUp() {
     state = 'levelup';
     document.getElementById('lvDisp').textContent = player.level;
-    document.getElementById('levelTitle').textContent = '⬆ 레벨 업!';
+    setText('levelTitle', '⬆ 레벨 업!');
     showChoiceOverlay(buildChoices());
   }
 
   // 아이템 박스 선택 화면 — 3가지 중 선택
   function showItemBoxChoices() {
     state = 'itembox';
-    document.getElementById('levelTitle').textContent = '📦 아이템 선택!';
+    setText('levelTitle', '📦 아이템 선택!');
     const picks = shuffled(ITEM_BOX_POOL).slice(0, 3).map(item => ({
       kind: 'item',
       name: item.icon + ' ' + item.name,
@@ -1537,7 +1543,8 @@
     const el = document.getElementById('comboGuide');
     if (!el) return;
     if (el.style.display === 'none' || !el.style.display) {
-      document.getElementById('comboContent').innerHTML = buildComboGuideHTML();
+      const content = document.getElementById('comboContent');
+      if (content) content.innerHTML = buildComboGuideHTML();
       el.style.display = 'flex';
     } else {
       el.style.display = 'none';
@@ -1548,8 +1555,11 @@
     if (el) el.style.display = 'none';
   }
 
-  document.getElementById('guideBtn').addEventListener('click', toggleComboGuide);
-  document.getElementById('comboClose').addEventListener('click', closeComboGuide);
+  // 가이드 버튼 연결 — 요소가 없어도(구버전 캐시 등) 게임이 멈추지 않도록 방어
+  const guideBtnEl   = document.getElementById('guideBtn');
+  const comboCloseEl = document.getElementById('comboClose');
+  if (guideBtnEl)   guideBtnEl.addEventListener('click', toggleComboGuide);
+  if (comboCloseEl) comboCloseEl.addEventListener('click', closeComboGuide);
 
   // ── 버튼 연결 ───────────────────────────────────────────────────
   document.getElementById('startBtn').addEventListener('click', () => {

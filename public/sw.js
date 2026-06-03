@@ -1,4 +1,4 @@
-// 보드게임 온라인 — Service Worker v4
+// 보드게임 온라인 — Service Worker v5
 // 전략:
 //   HTML / 루트        → 네트워크 우선 (캐시 우선 절대 금지)
 //   JS / CSS           → 네트워크 우선 (배포 후 오래된 게임 로직 방지)
@@ -8,7 +8,7 @@
 // 캐시 무효화:
 //   activate 시 /api/version 호출 → commit 해시가 바뀌면 캐시 전체 삭제
 
-const CACHE_NAME   = 'boardgame-v4';
+const CACHE_NAME   = 'boardgame-v5';
 const COMMIT_KEY   = 'sw_last_commit';
 
 // 사전 캐시 — HTML 제외, 진짜 정적 자산만 (icons/ 미존재 시 phantom 경로 제외)
