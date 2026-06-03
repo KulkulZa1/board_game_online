@@ -90,7 +90,7 @@
   ];
 
   // ── 게임 상태 ───────────────────────────────────────────────────
-  let state = 'idle'; // idle | playing | levelup | dead | win
+  let state = 'idle'; // idle | playing | levelup | itembox | dead | win
   let player = null;
   let enemies = [];
   let projectiles = [];
@@ -291,8 +291,20 @@
 
   // ── 입력 ────────────────────────────────────────────────────────
   const keys = {};
-  document.addEventListener('keydown', e => { keys[e.key] = true; });
-  document.addEventListener('keyup',   e => { keys[e.key] = false; });
+  document.addEventListener('keydown', e => {
+    keys[e.key] = true;
+    // 레벨업 / 아이템 선택 화면에서 숫자키로 선택
+    if ((state === 'levelup' || state === 'itembox') && ['1','2','3'].includes(e.key)) {
+      const btns = document.querySelectorAll('#upgradeList .upgrade-btn');
+      const idx  = parseInt(e.key) - 1;
+      if (btns[idx]) { e.preventDefault(); btns[idx].click(); }
+    }
+    // ? 키로 조합 가이드 토글
+    if (e.key === '?' || e.key === 'h') toggleComboGuide();
+    // ESC로 조합 가이드 닫기
+    if (e.key === 'Escape') closeComboGuide();
+  });
+  document.addEventListener('keyup', e => { keys[e.key] = false; });
 
   // 조이스틱
   let joyActive = false, joyDx = 0, joyDy = 0;
@@ -363,10 +375,10 @@
     waveCount++;
     const isHorde = (waveCount % HORDE_WAVE_EVERY === 0);
     if (isHorde) floatTexts.push({ text: '🔥 HORDE WAVE!', life: 2.0, maxLife: 2.0, screenSpace: true, color: '#e74c3c', size: 20 });
-    // 난이도 곡선: 분(m) 기준 가속 성장 — 초반 완만, 후반 급증 (플레이어 DPS 가속에 대응)
-    //   1분=1.96, 3분=4.24, 5분=7.0, 10분=16.0, 15분=28.0
+    // 난이도 곡선: 분(m) 기준 가속 성장 (이차항 완화 — 초반 플레이어 성장 여유 확보)
+    //   1분=1.87, 3분=3.97, 5분=6.25, 10분=13.0, 15분=21.75
     const m = elapsed / 60;
-    const difficulty = 1 + 0.9 * m + 0.06 * m * m;
+    const difficulty = 1 + 0.9 * m + 0.03 * m * m;
     const baseCount = isHorde ? Math.min(20 + Math.floor(elapsed / 10), 60) : Math.min(8 + Math.floor(elapsed / 12), 38);
     for (let i = 0; i < baseCount; i++) {
       if (enemies.length >= MAX_ENEMIES) break;
@@ -381,7 +393,7 @@
       // 원거리 공격형(archer): tier1 40%, tier2 100%
       const bRoll = Math.random();
       const behavior = (tier === 2 || (tier === 1 && bRoll < 0.4)) ? 'archer' : 'chase';
-      const attackBase = behavior === 'archer' ? (tier === 2 ? 3.5 : 2.5) : 0;
+      const attackBase = behavior === 'archer' ? (tier === 2 ? 4.0 : 3.2) : 0;
       enemies.push({
         x: player.x + Math.cos(angle) * spawnDist,
         y: player.y + Math.sin(angle) * spawnDist,
@@ -606,13 +618,31 @@
   function showLevelUp() {
     state = 'levelup';
     document.getElementById('lvDisp').textContent = player.level;
-    const picks = buildChoices();
-    const list  = document.getElementById('upgradeList');
+    document.getElementById('levelTitle').textContent = '⬆ 레벨 업!';
+    showChoiceOverlay(buildChoices());
+  }
+
+  // 아이템 박스 선택 화면 — 3가지 중 선택
+  function showItemBoxChoices() {
+    state = 'itembox';
+    document.getElementById('levelTitle').textContent = '📦 아이템 선택!';
+    const picks = shuffled(ITEM_BOX_POOL).slice(0, 3).map(item => ({
+      kind: 'item',
+      name: item.icon + ' ' + item.name,
+      desc: '',
+      choose: () => { item.apply(player); updateHUD(); },
+    }));
+    showChoiceOverlay(picks);
+  }
+
+  function showChoiceOverlay(picks) {
+    const list = document.getElementById('upgradeList');
     list.innerHTML = '';
-    for (const c of picks) {
+    picks.forEach((c, i) => {
       const btn = document.createElement('button');
       btn.className = 'upgrade-btn' + (c.kind === 'evolve' ? ' evolution' : '');
-      btn.innerHTML = `<div class="upgrade-name">${c.name}</div><div class="upgrade-desc">${c.desc}</div>`;
+      btn.innerHTML = `<div class="upgrade-name"><span class="key-badge">${i + 1}</span>${c.name}</div>`
+        + (c.desc ? `<div class="upgrade-desc">${c.desc}</div>` : '');
       btn.onclick = () => {
         c.choose();
         document.getElementById('levelOverlay').style.display = 'none';
@@ -620,7 +650,7 @@
         updateHUD();
       };
       list.appendChild(btn);
-    }
+    });
     document.getElementById('levelOverlay').style.display = 'flex';
   }
 
@@ -802,12 +832,10 @@
       box.pulseT = (box.pulseT || 0) + dt;
       if (box.life <= 0) { itemBoxes.splice(i, 1); continue; }
       if (dist(box, player) < 26) {
-        const item = ITEM_BOX_POOL[Math.floor(Math.random() * ITEM_BOX_POOL.length)];
-        item.apply(player);
-        floatTexts.push({ x: box.x, y: box.y - 10, text: item.icon + ' ' + item.name + '!', life: 2.0, maxLife: 2.0, color: '#f1c40f', size: 15 });
         for (let k = 0; k < 10; k++) spawnParticle(box.x, box.y, '#f1c40f', 5 + Math.random() * 5, 0.5);
         itemBoxes.splice(i, 1);
-        updateHUD();
+        showItemBoxChoices();
+        break;  // 한 번에 하나만 처리
       }
     }
 
@@ -1450,6 +1478,78 @@
     }
     return a;
   }
+
+  // ── 조합 가이드 모달 ────────────────────────────────────────────
+  function buildComboGuideHTML() {
+    // 무기 진화 섹션
+    let evoRows = EVOLUTION_DEFS.map(evo => {
+      const base = WEAPON_DEFS[evo.base];
+      const ev   = WEAPON_DEFS[evo.id];
+      return `<tr>
+        <td class="evolved-name">${ev.icon} ${ev.name}</td>
+        <td>${base.icon} ${base.name} Lv.5</td>
+        <td class="combo-passive">${evo.reqName}</td>
+        <td class="combo-desc">${ev.desc}</td>
+      </tr>`;
+    }).join('');
+
+    // 패시브 섹션
+    let passRows = PASSIVE_POOL.map(pv => {
+      const forEvo = EVOLUTION_DEFS.find(e => e.req === pv.id);
+      const evoTag = forEvo ? ` <span style="color:#f1c40f;font-size:0.7em">→ ${WEAPON_DEFS[forEvo.id].icon}${WEAPON_DEFS[forEvo.id].name}</span>` : '';
+      return `<tr>
+        <td>${pv.name}</td>
+        <td class="combo-desc">${pv.desc}${evoTag}</td>
+      </tr>`;
+    }).join('');
+
+    // 아이템 박스 섹션
+    let itemRows = ITEM_BOX_POOL.map(it =>
+      `<tr><td class="item-icon">${it.icon}</td><td>${it.name}</td></tr>`
+    ).join('');
+
+    return `
+      <div class="combo-section">
+        <div class="combo-section-title">⚗️ 무기 진화 조합</div>
+        <table class="combo-table">
+          <thead><tr><th>진화 무기</th><th>기반 무기</th><th>필요 패시브</th><th>효과</th></tr></thead>
+          <tbody>${evoRows}</tbody>
+        </table>
+      </div>
+      <div class="combo-section">
+        <div class="combo-section-title">🎖 패시브 능력치</div>
+        <table class="combo-table">
+          <thead><tr><th>패시브</th><th>효과 · 진화 조건</th></tr></thead>
+          <tbody>${passRows}</tbody>
+        </table>
+      </div>
+      <div class="combo-section">
+        <div class="combo-section-title">📦 아이템 박스 종류</div>
+        <table class="combo-table">
+          <thead><tr><th></th><th>아이템</th></tr></thead>
+          <tbody>${itemRows}</tbody>
+        </table>
+      </div>
+    `;
+  }
+
+  function toggleComboGuide() {
+    const el = document.getElementById('comboGuide');
+    if (!el) return;
+    if (el.style.display === 'none' || !el.style.display) {
+      document.getElementById('comboContent').innerHTML = buildComboGuideHTML();
+      el.style.display = 'flex';
+    } else {
+      el.style.display = 'none';
+    }
+  }
+  function closeComboGuide() {
+    const el = document.getElementById('comboGuide');
+    if (el) el.style.display = 'none';
+  }
+
+  document.getElementById('guideBtn').addEventListener('click', toggleComboGuide);
+  document.getElementById('comboClose').addEventListener('click', closeComboGuide);
 
   // ── 버튼 연결 ───────────────────────────────────────────────────
   document.getElementById('startBtn').addEventListener('click', () => {

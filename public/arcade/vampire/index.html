@@ -16,17 +16,30 @@
         <span>Lv.<strong id="lvDisp">1</strong></span>
         <span>⏱<strong id="timeDisp">0:00</strong></span>
         <span>💀<strong id="killDisp">0</strong></span>
+        <button id="guideBtn" class="guide-btn" title="조합 가이드 (H키)">📖</button>
       </div>
     </header>
 
     <div id="gameWrapper">
       <canvas id="c" tabindex="0"></canvas>
 
-      <!-- 레벨업 선택 오버레이 -->
+      <!-- 레벨업 / 아이템 선택 오버레이 -->
       <div id="levelOverlay" style="display:none;">
         <div id="levelBox">
           <div id="levelTitle">⬆ 레벨 업!</div>
+          <div id="levelHint" class="level-hint">숫자키 1 · 2 · 3 으로 선택</div>
           <div id="upgradeList"></div>
+        </div>
+      </div>
+
+      <!-- 조합 가이드 모달 -->
+      <div id="comboGuide" style="display:none;">
+        <div id="comboBox">
+          <div class="combo-header">
+            <span>📖 조합 가이드</span>
+            <button id="comboClose" class="combo-close">✕</button>
+          </div>
+          <div id="comboContent"></div>
         </div>
       </div>
 
