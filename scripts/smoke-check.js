@@ -331,6 +331,44 @@ function checkTowerDefenseSandboxCoverage() {
   }
 }
 
+function checkVampireDirectorLoopCoverage() {
+  const game = fs.readFileSync(path.join(root, 'public/arcade/vampire/game.js'), 'utf8');
+  const css = fs.readFileSync(path.join(root, 'public/arcade/vampire/style.css'), 'utf8');
+  const admob = fs.readFileSync(path.join(root, 'public/js/admob.js'), 'utf8');
+
+  const requiredGameMarkers = [
+    'CHARACTER_DEFS',
+    'DIFFICULTY_DEFS',
+    'META_KEY',
+    'selectedCharacterId',
+    'selectedDifficultyId',
+    'function setPaused',
+    "state = 'paused'",
+    'visibilitychange',
+    'elapsed >= getSurviveGoal()',
+    'awardRunRewards',
+    'reviveRun',
+    'showRewardedRevive',
+    'character.startWeapons.forEach',
+    'runDifficulty.enemyHpMult',
+    'runDifficulty.spawnMult',
+  ];
+  const missingGameMarkers = requiredGameMarkers.filter((marker) => !game.includes(marker));
+  if (missingGameMarkers.length) {
+    throw new Error(`Vampire Survivors loop coverage missing: ${missingGameMarkers.join(', ')}`);
+  }
+
+  const requiredCssMarkers = ['.meta-panel', '.start-card', '.pause-overlay', '.end-actions'];
+  const missingCssMarkers = requiredCssMarkers.filter((marker) => !css.includes(marker));
+  if (missingCssMarkers.length) {
+    throw new Error(`Vampire Survivors UI CSS missing: ${missingCssMarkers.join(', ')}`);
+  }
+
+  if (!admob.includes('REWARDED_ID') || !admob.includes('showRewardedRevive')) {
+    throw new Error('AdMob helper should expose a rewarded revive hook');
+  }
+}
+
 async function checkVersionBadgeUi() {
   const elements = new Map();
 
@@ -576,6 +614,7 @@ async function main() {
     checkServiceWorkerUpdateCoverage();
     checkVersionBadgeCoverage();
     checkTowerDefenseSandboxCoverage();
+    checkVampireDirectorLoopCoverage();
     await checkVersionBadgeUi();
     runSyntaxCheck();
     console.log(`Smoke check passed: ${baseUrl}`);

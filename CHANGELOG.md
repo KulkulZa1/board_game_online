@@ -1,5 +1,15 @@
 # Changelog
 
+## [Unreleased] - Vampire Survivors director-loop readiness
+
+### Added
+- Character selection, difficulty selection, local meta progression, pause UI, survival win resolution, and rewarded-revive hook for `/arcade/vampire/`.
+- Smoke-check coverage for Vampire Survivors character/difficulty/meta/pause/revive markers.
+- `docs/vampire-survivors-director-loop.md` with verification targets and remaining design work.
+
+### Changed
+- Vampire Survivors enemy spawn pressure, enemy stats, boss interval, and rewards now scale from the selected difficulty.
+
 이 프로젝트의 모든 주요 변경사항을 기록합니다.
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.0.0/) 를 따릅니다.
 

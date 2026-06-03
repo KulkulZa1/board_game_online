@@ -3,6 +3,7 @@ window.AdMobHelper = (function () {
   // TODO: 프로덕션 시 자신의 AdMob 광고 단위 ID로 교체
   // Google 테스트 ID (개발·QA용, 앱 심사 전 반드시 실제 ID로 교체):
   const INTERSTITIAL_ID = 'ca-app-pub-3940256099942544/1033173712';
+  const REWARDED_ID     = 'ca-app-pub-3940256099942544/5224354917';
 
   let _initialized  = false;
   let _adReady      = false;
@@ -40,6 +41,19 @@ window.AdMobHelper = (function () {
     } catch (e) { _preload(); }
   }
 
+  async function showRewardedRevive() {
+    if (!_isNative()) return false;
+    try {
+      const { AdMob } = window.Capacitor.Plugins;
+      if (!AdMob || typeof AdMob.prepareRewardVideoAd !== 'function' || typeof AdMob.showRewardVideoAd !== 'function') return false;
+      await AdMob.prepareRewardVideoAd({ adId: REWARDED_ID });
+      await AdMob.showRewardVideoAd();
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
   function _isNative() {
     return !!(
       window.Capacitor &&
@@ -48,5 +62,5 @@ window.AdMobHelper = (function () {
     );
   }
 
-  return { init, showAfterGame };
+  return { init, showAfterGame, showRewardedRevive };
 })();

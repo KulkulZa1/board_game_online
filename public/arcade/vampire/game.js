@@ -69,6 +69,53 @@
 
   // 신규 획득 가능한 기본 무기 목록
   const WEAPON_POOL = ['orb', 'arrow', 'nova', 'shield', 'laser'];
+  const META_KEY = 'vps_meta_v2';
+  const CHARACTER_DEFS = [
+    {
+      id: 'knight',
+      name: 'Chess Knight',
+      icon: 'N',
+      desc: 'Fast starter with bow pressure.',
+      startWeapons: ['arrow'],
+      speedMult: 1.08,
+      hpBonus: 0,
+      dmgMult: 1,
+      cdMult: 1,
+      xpRangeMult: 1,
+      unlock: { type: 'free' },
+    },
+    {
+      id: 'omok',
+      name: 'Omok Stone',
+      icon: 'O',
+      desc: 'Tougher bruiser with stone orbit.',
+      startWeapons: ['orb', 'nova'],
+      speedMult: 0.94,
+      hpBonus: 25,
+      dmgMult: 1.1,
+      cdMult: 1.04,
+      xpRangeMult: 0.95,
+      unlock: { achievement: 'survive180', cost: 350, label: 'Survive 3:00 or pay 350 coins' },
+    },
+    {
+      id: 'reversi',
+      name: 'Reversi Mage',
+      icon: 'R',
+      desc: 'Cooldown specialist with late-game scaling.',
+      startWeapons: ['shield', 'laser'],
+      speedMult: 1,
+      hpBonus: 10,
+      dmgMult: 0.95,
+      cdMult: 0.9,
+      xpRangeMult: 1.12,
+      unlock: { achievement: 'evolve1', cost: 600, label: 'Evolve a weapon or pay 600 coins' },
+    },
+  ];
+  const DIFFICULTY_DEFS = [
+    { id: 'easy', name: 'Easy', desc: 'Practice run.', enemyHpMult: 0.78, enemySpeedMult: 0.92, enemyDmgMult: 0.75, spawnMult: 0.82, bossInterval: 150, coinMult: 0.75 },
+    { id: 'normal', name: 'Normal', desc: 'Balanced 10 minute run.', enemyHpMult: 1, enemySpeedMult: 1, enemyDmgMult: 1, spawnMult: 1, bossInterval: 120, coinMult: 1 },
+    { id: 'hard', name: 'Hard', desc: 'Higher pressure and rewards.', enemyHpMult: 1.28, enemySpeedMult: 1.1, enemyDmgMult: 1.22, spawnMult: 1.22, bossInterval: 105, coinMult: 1.45 },
+  ];
 
   // 랜덤 아이템 박스 — 40초마다 맵에 등장, 플레이어가 수집
   const ITEM_BOX_POOL = [
@@ -90,7 +137,7 @@
   ];
 
   // ── 게임 상태 ───────────────────────────────────────────────────
-  let state = 'idle'; // idle | playing | levelup | itembox | dead | win
+  let state = 'idle'; // idle | playing | paused | levelup | itembox | dead | win
   let player = null;
   let enemies = [];
   let projectiles = [];
@@ -121,6 +168,11 @@
   let waveCount          = 0;     // 총 웨이브 카운터 (horde 판정)
   let freeRerollUsed     = false; // 현재 선택창 무료 리롤 사용 여부 (창마다 초기화)
   let currentChoiceBuilder = null; // 현재 선택지 생성 함수 (리롤 시 재호출)
+
+  let meta = loadMeta();
+  let selectedCharacterId = meta.lastCharacter || 'knight';
+  let selectedDifficultyId = meta.lastDifficulty || 'normal';
+  let runRewardsGranted = false;
 
   const SANDBOX_CONFIG = window.VS_CONFIG || null;
   const ENEMY_COLORS = {
@@ -188,24 +240,31 @@
 
   function initGame() {
     syncSandboxWeaponStats();
+    ensureMetaAchievements();
+    const character = currentCharacter();
+    const difficulty = currentDifficulty();
+    const maxHp = BASE_HP + (character.hpBonus || 0);
     player = {
       x: 0, y: 0,
-      hp: BASE_HP, maxHp: BASE_HP,
-      speed: PLAYER_SPEED,
+      hp: maxHp, maxHp,
+      speed: PLAYER_SPEED * character.speedMult,
       level: 1, xp: 0,
       weapons: [],       // 보유 무기 id 목록
       weaponLevels: {},  // 무기별 레벨 (1~MAX_WEAPON_LEVEL)
       weaponCDs: {},     // 무기별 쿨다운 잔여 시간
       passives: {},      // 보유 패시브 id → 스택 수 (진화 조건 판정)
-      dmgMult: 1,
-      cdMult:  1,
-      xpRange: 80,
+      dmgMult: character.dmgMult,
+      cdMult:  character.cdMult,
+      xpRange: 80 * character.xpRangeMult,
       invincible: 0,     // 무적 시간(초)
       shieldTimer: 0,
       tempDmgMult:  1,     // 임시 공격력 배율 (아이템 박스)
       tempDmgTimer: 0,
       tempSpeedMult: 1,    // 임시 속도 배율 (아이템 박스)
       tempSpeedTimer: 0,
+      characterId: character.id,
+      difficultyId: difficulty.id,
+      revived: false,
       rerolls: 0,          // 추가 리롤권 (몬스터 드롭)
     };
     enemies    = [];
@@ -224,7 +283,7 @@
     lastMoveDir = { dx: 1, dy: 0 };
     itemBoxes     = [];
     itemBoxTimer  = 0;
-    nextBossTime  = BOSS_INTERVAL;
+    nextBossTime  = difficulty.bossInterval || BOSS_INTERVAL;
     bossActive    = false;
     bossWarning   = 0;
     damageNumbers = [];
@@ -233,10 +292,10 @@
     comboTimer    = 0;
     milestones    = new Set();
     waveCount     = 0;
+    runRewardsGranted = false;
 
     // 시작 무기
-    addWeapon('orb');
-    addWeapon('arrow');
+    character.startWeapons.forEach(id => addWeapon(id));
     spawnWave();
     updateHUD();
   }
@@ -265,6 +324,11 @@
     player.weaponCDs[evo.id] = 0;
     for (let i = 0; i < 30; i++) spawnParticle(player.x, player.y, '#f1c40f', 6 + Math.random() * 6, 0.9);
     renderWeaponSlots();
+    if (!meta.achievements.evolve1) {
+      meta.achievements.evolve1 = true;
+      ensureMetaAchievements();
+      saveMeta();
+    }
   }
 
   // 패시브 적용 + 보유 기록 (진화 조건 판정용)
@@ -298,10 +362,332 @@
     if (el) el.textContent = text;
   }
 
+  function loadMeta() {
+    const fallback = {
+      coins: 0,
+      bestTime: 0,
+      bestKills: 0,
+      unlockedCharacters: ['knight'],
+      achievements: {},
+      lastCharacter: 'knight',
+      lastDifficulty: 'normal',
+    };
+    try {
+      const raw = localStorage.getItem(META_KEY);
+      if (!raw) return fallback;
+      const saved = JSON.parse(raw);
+      return {
+        ...fallback,
+        ...saved,
+        unlockedCharacters: Array.isArray(saved.unlockedCharacters) && saved.unlockedCharacters.length ? saved.unlockedCharacters : fallback.unlockedCharacters,
+        achievements: saved.achievements && typeof saved.achievements === 'object' ? saved.achievements : fallback.achievements,
+      };
+    } catch (_err) {
+      return fallback;
+    }
+  }
+
+  function saveMeta() {
+    try { localStorage.setItem(META_KEY, JSON.stringify(meta)); } catch (_err) {}
+  }
+
+  function currentCharacter() {
+    return CHARACTER_DEFS.find(ch => ch.id === selectedCharacterId) || CHARACTER_DEFS[0];
+  }
+
+  function currentDifficulty() {
+    return DIFFICULTY_DEFS.find(diff => diff.id === selectedDifficultyId) || DIFFICULTY_DEFS[1];
+  }
+
+  function isCharacterUnlocked(def) {
+    if (!def || !def.unlock || def.unlock.type === 'free') return true;
+    if (meta.unlockedCharacters.includes(def.id)) return true;
+    return !!(def.unlock.achievement && meta.achievements[def.unlock.achievement]);
+  }
+
+  function unlockCharacter(id) {
+    if (!meta.unlockedCharacters.includes(id)) meta.unlockedCharacters.push(id);
+  }
+
+  function ensureMetaAchievements() {
+    CHARACTER_DEFS.forEach(def => {
+      if (isCharacterUnlocked(def)) unlockCharacter(def.id);
+    });
+  }
+
+  function ensureStartPanels() {
+    const overlayBox = document.getElementById('overlayBox');
+    if (!overlayBox) return;
+
+    const headerStats = document.getElementById('hdr-stats');
+    if (headerStats && !document.getElementById('pauseBtn')) {
+      const pauseBtn = document.createElement('button');
+      pauseBtn.id = 'pauseBtn';
+      pauseBtn.className = 'guide-btn pause-btn';
+      pauseBtn.type = 'button';
+      pauseBtn.title = 'Pause (P)';
+      pauseBtn.textContent = 'II';
+      pauseBtn.style.display = 'none';
+      pauseBtn.addEventListener('click', () => togglePause());
+      const guideBtn = document.getElementById('guideBtn');
+      headerStats.insertBefore(pauseBtn, guideBtn || null);
+    }
+
+    if (!document.getElementById('metaPanel')) {
+      const metaPanel = document.createElement('div');
+      metaPanel.id = 'metaPanel';
+      metaPanel.className = 'meta-panel';
+      overlayBox.insertBefore(metaPanel, document.getElementById('overlaySub') || document.getElementById('startBtn'));
+    }
+
+    if (!document.getElementById('characterSelect')) {
+      const wrap = document.createElement('div');
+      wrap.id = 'characterSelect';
+      wrap.className = 'start-select-wrap';
+      const title = document.createElement('div');
+      title.className = 'start-select-title';
+      title.textContent = 'Character';
+      const grid = document.createElement('div');
+      grid.className = 'start-select-grid';
+      wrap.append(title, grid);
+      overlayBox.insertBefore(wrap, document.getElementById('overlaySub') || document.getElementById('startBtn'));
+    }
+
+    if (!document.getElementById('difficultySelect')) {
+      const wrap = document.createElement('div');
+      wrap.id = 'difficultySelect';
+      wrap.className = 'start-select-wrap';
+      const title = document.createElement('div');
+      title.className = 'start-select-title';
+      title.textContent = 'Difficulty';
+      const grid = document.createElement('div');
+      grid.className = 'start-select-grid difficulty-grid';
+      wrap.append(title, grid);
+      overlayBox.insertBefore(wrap, document.getElementById('overlaySub') || document.getElementById('startBtn'));
+    }
+
+    const wrapper = document.getElementById('gameWrapper');
+    if (wrapper && !document.getElementById('pauseOverlay')) {
+      const pauseOverlay = document.createElement('div');
+      pauseOverlay.id = 'pauseOverlay';
+      pauseOverlay.className = 'pause-overlay';
+      pauseOverlay.style.display = 'none';
+      const box = document.createElement('div');
+      box.id = 'pauseBox';
+      const title = document.createElement('div');
+      title.className = 'pause-title';
+      title.textContent = 'Paused';
+      const detail = document.createElement('p');
+      detail.id = 'pauseDetail';
+      detail.textContent = 'Run is safely paused. Press P or resume to continue.';
+      const actions = document.createElement('div');
+      actions.className = 'pause-actions';
+      const resume = document.createElement('button');
+      resume.id = 'resumeBtn';
+      resume.type = 'button';
+      resume.textContent = 'Resume';
+      resume.addEventListener('click', () => setPaused(false));
+      const restart = document.createElement('button');
+      restart.id = 'restartBtn';
+      restart.type = 'button';
+      restart.className = 'secondary-btn';
+      restart.textContent = 'Restart';
+      restart.addEventListener('click', () => {
+        setPaused(false);
+        endGame('dead');
+      });
+      actions.append(resume, restart);
+      box.append(title, detail, actions);
+      pauseOverlay.appendChild(box);
+      wrapper.appendChild(pauseOverlay);
+    }
+  }
+
+  function renderStartOptions() {
+    ensureMetaAchievements();
+    const metaPanel = document.getElementById('metaPanel');
+    if (metaPanel) {
+      metaPanel.textContent = '';
+      const coins = document.createElement('span');
+      coins.textContent = `Coins ${Math.floor(meta.coins || 0)}`;
+      const best = document.createElement('span');
+      best.textContent = `Best ${fmtTime(meta.bestTime || 0)} / ${meta.bestKills || 0} K`;
+      metaPanel.append(coins, best);
+    }
+
+    const charGrid = document.querySelector('#characterSelect .start-select-grid');
+    if (charGrid) {
+      charGrid.textContent = '';
+      CHARACTER_DEFS.forEach(def => {
+        const unlocked = isCharacterUnlocked(def);
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = `start-card character-card${def.id === selectedCharacterId ? ' selected' : ''}${unlocked ? '' : ' locked'}`;
+        const title = document.createElement('div');
+        title.className = 'start-card-title';
+        title.textContent = `${def.icon} ${def.name}`;
+        const desc = document.createElement('div');
+        desc.className = 'start-card-desc';
+        desc.textContent = def.desc;
+        const metaText = document.createElement('div');
+        metaText.className = 'start-card-meta';
+        metaText.textContent = unlocked ? `Starts with ${def.startWeapons.join(', ')}` : (def.unlock && def.unlock.label ? def.unlock.label : 'Locked');
+        btn.append(title, desc, metaText);
+        btn.addEventListener('click', () => {
+          if (!isCharacterUnlocked(def)) {
+            const cost = def.unlock && def.unlock.cost ? def.unlock.cost : 0;
+            if (cost && meta.coins >= cost) {
+              meta.coins -= cost;
+              unlockCharacter(def.id);
+              saveMeta();
+            } else {
+              return;
+            }
+          }
+          selectedCharacterId = def.id;
+          meta.lastCharacter = def.id;
+          saveMeta();
+          renderStartOptions();
+        });
+        charGrid.appendChild(btn);
+      });
+    }
+
+    const diffGrid = document.querySelector('#difficultySelect .start-select-grid');
+    if (diffGrid) {
+      diffGrid.textContent = '';
+      DIFFICULTY_DEFS.forEach(def => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = `start-card difficulty-card${def.id === selectedDifficultyId ? ' selected' : ''}`;
+        const title = document.createElement('div');
+        title.className = 'start-card-title';
+        title.textContent = def.name;
+        const desc = document.createElement('div');
+        desc.className = 'start-card-desc';
+        desc.textContent = def.desc;
+        const metaText = document.createElement('div');
+        metaText.className = 'start-card-meta';
+        metaText.textContent = `${Math.round(def.coinMult * 100)}% coin reward`;
+        btn.append(title, desc, metaText);
+        btn.addEventListener('click', () => {
+          selectedDifficultyId = def.id;
+          meta.lastDifficulty = def.id;
+          saveMeta();
+          renderStartOptions();
+        });
+        diffGrid.appendChild(btn);
+      });
+    }
+  }
+
+  function setPaused(paused) {
+    const pauseOverlay = document.getElementById('pauseOverlay');
+    if (paused) {
+      if (state !== 'playing') return;
+      state = 'paused';
+      if (pauseOverlay) pauseOverlay.style.display = 'flex';
+      return;
+    }
+    if (state !== 'paused') return;
+    state = 'playing';
+    if (pauseOverlay) pauseOverlay.style.display = 'none';
+    lastTime = performance.now();
+  }
+
+  function togglePause() {
+    if (state === 'playing') setPaused(true);
+    else if (state === 'paused') setPaused(false);
+  }
+
+  function awardRunRewards(result) {
+    if (runRewardsGranted || !player) return { coins: 0, achievements: [] };
+    runRewardsGranted = true;
+    const diff = currentDifficulty();
+    const baseCoins = Math.max(1, Math.floor(kills / 12 + elapsed / 18 + player.level * 2));
+    const winBonus = result === 'win' ? 120 : 0;
+    const coins = Math.floor((baseCoins + winBonus) * diff.coinMult);
+    const achievements = [];
+    meta.coins = Math.max(0, Math.floor(meta.coins || 0) + coins);
+    if (elapsed > (meta.bestTime || 0)) meta.bestTime = Math.floor(elapsed);
+    if (kills > (meta.bestKills || 0)) meta.bestKills = kills;
+
+    if (elapsed >= 180 && !meta.achievements.survive180) {
+      meta.achievements.survive180 = true;
+      achievements.push('Survived 3:00');
+    }
+    if (result === 'win' && !meta.achievements.win1) {
+      meta.achievements.win1 = true;
+      achievements.push('First clear');
+    }
+    ensureMetaAchievements();
+    saveMeta();
+    return { coins, achievements };
+  }
+
+  async function reviveRun() {
+    if (!player || state !== 'dead' || player.revived) return;
+    const reviveCost = 120;
+    if ((meta.coins || 0) >= reviveCost) {
+      meta.coins -= reviveCost;
+      saveMeta();
+    } else {
+      const watched = window.AdMobHelper && typeof AdMobHelper.showRewardedRevive === 'function'
+        ? await AdMobHelper.showRewardedRevive()
+        : false;
+      if (!watched) return;
+    }
+    player.revived = true;
+    player.hp = Math.max(Math.floor(player.maxHp * 0.35), 1);
+    player.invincible = 3;
+    enemies = enemies.filter(e => dist(e, player) > 180);
+    enemyProjectiles = [];
+    document.getElementById('overlay').classList.remove('visible');
+    document.getElementById('levelOverlay').style.display = 'none';
+    state = 'playing';
+    lastTime = performance.now();
+    if (frameId) cancelAnimationFrame(frameId);
+    frameId = requestAnimationFrame(loop);
+    updateHUD();
+  }
+
+  function renderEndActions(result, reward) {
+    const overlayBox = document.getElementById('overlayBox');
+    if (!overlayBox) return;
+    const old = document.getElementById('runActions');
+    if (old) old.remove();
+    const actions = document.createElement('div');
+    actions.id = 'runActions';
+    actions.className = 'end-actions';
+    const rewardText = document.createElement('div');
+    rewardText.className = 'reward-line';
+    rewardText.textContent = `Earned ${reward.coins || 0} coins${reward.achievements && reward.achievements.length ? ` / ${reward.achievements.join(', ')}` : ''}`;
+    actions.appendChild(rewardText);
+    if (result === 'dead' && player && !player.revived) {
+      const revive = document.createElement('button');
+      revive.type = 'button';
+      revive.className = 'secondary-btn';
+      revive.textContent = (meta.coins || 0) >= 120 ? 'Revive -120 coins' : 'Revive with rewarded ad';
+      revive.addEventListener('click', () => reviveRun());
+      actions.appendChild(revive);
+    }
+    overlayBox.insertBefore(actions, document.getElementById('startBtn'));
+  }
+
+  function clearEndActions() {
+    const old = document.getElementById('runActions');
+    if (old) old.remove();
+  }
+
   // ── 입력 ────────────────────────────────────────────────────────
   const keys = {};
   document.addEventListener('keydown', e => {
     keys[e.key] = true;
+    if (e.key === 'p' || e.key === 'P') {
+      e.preventDefault();
+      togglePause();
+      return;
+    }
     // 레벨업 / 아이템 선택 화면에서 숫자키로 선택 / 리롤
     if (state === 'levelup' || state === 'itembox') {
       if (['1','2','3'].includes(e.key)) {
@@ -316,9 +702,16 @@
     // ? 키로 조합 가이드 토글
     if (e.key === '?' || e.key === 'h') toggleComboGuide();
     // ESC로 조합 가이드 닫기
-    if (e.key === 'Escape') closeComboGuide();
+    if (e.key === 'Escape') {
+      const guide = document.getElementById('comboGuide');
+      if (guide && guide.style.display === 'flex') closeComboGuide();
+      else togglePause();
+    }
   });
   document.addEventListener('keyup', e => { keys[e.key] = false; });
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden && state === 'playing') setPaused(true);
+  });
 
   // 조이스틱
   let joyActive = false, joyDx = 0, joyDy = 0;
@@ -374,11 +767,12 @@
 
   // ── 적 생성 ─────────────────────────────────────────────────────
   function spawnWave() {
+    const runDifficulty = currentDifficulty();
     const stage = sandboxStage();
     if (stage && Array.isArray(stage.waveSchedule) && stage.waveSchedule.length) {
       const active = stage.waveSchedule.filter(wave => elapsed >= (Number(wave.atSecond) || 0));
       const wave = active.length ? active[active.length - 1] : stage.waveSchedule[0];
-      const count = Math.min(Number(wave.count) || 1, 20);
+      const count = Math.min(Math.ceil((Number(wave.count) || 1) * runDifficulty.spawnMult), 24);
       for (let i = 0; i < count; i++) {
         if (enemies.length >= MAX_ENEMIES) break;
         spawnSandboxEnemy(wave.enemyType || 'zombie');
@@ -393,7 +787,7 @@
     //   1분=1.87, 3분=3.97, 5분=6.25, 10분=13.0, 15분=21.75
     const m = elapsed / 60;
     const difficulty = 1 + 0.9 * m + 0.03 * m * m;
-    const baseCount = isHorde ? Math.min(20 + Math.floor(elapsed / 10), 60) : Math.min(8 + Math.floor(elapsed / 12), 38);
+    const baseCount = Math.ceil((isHorde ? Math.min(20 + Math.floor(elapsed / 10), 60) : Math.min(8 + Math.floor(elapsed / 12), 38)) * runDifficulty.spawnMult);
     for (let i = 0; i < baseCount; i++) {
       if (enemies.length >= MAX_ENEMIES) break;
       const angle = Math.random() * Math.PI * 2;
@@ -412,9 +806,9 @@
       enemies.push({
         x: player.x + Math.cos(angle) * spawnDist,
         y: player.y + Math.sin(angle) * spawnDist,
-        hp:    [30, 80, 200][tier] * difficulty,
-        maxHp: [30, 80, 200][tier] * difficulty,
-        speed: [75, 55, 35][tier] + Math.random() * 20,
+        hp:    [30, 80, 200][tier] * difficulty * runDifficulty.enemyHpMult,
+        maxHp: [30, 80, 200][tier] * difficulty * runDifficulty.enemyHpMult,
+        speed: ([75, 55, 35][tier] + Math.random() * 20) * runDifficulty.enemySpeedMult,
         size:  [10, 15, 22][tier],
         color: ['#e74c3c', behavior === 'archer' ? '#1abc9c' : '#9b59b6', '#c0392b'][tier],
         xpVal: Math.round([5, 13, 30][tier] * (1 + elapsed / 300)),  // XP 보상 증가 → 무기 레벨 빠른 성장으로 난이도 완화
@@ -425,7 +819,7 @@
         attackCd: Math.random() * attackBase,   // 초기 공격 시간 분산
         attackBase,
         attackRange: behavior === 'archer' ? (tier === 2 ? 280 : 220) : 0,
-        attackDmg: Math.round([10, 20, 38][tier] * (1 + elapsed / 500)),  // 적 공격력 완만 상승 (후반 위협 유지)
+        attackDmg: Math.round([10, 20, 38][tier] * (1 + elapsed / 500) * runDifficulty.enemyDmgMult),  // 적 공격력 완만 상승 (후반 위협 유지)
       });
     }
   }
@@ -433,18 +827,19 @@
   function spawnSandboxEnemy(typeKey) {
     const def = sandboxEnemy(typeKey) || sandboxEnemy('zombie');
     if (!def) return;
+    const runDifficulty = currentDifficulty();
     const angle = Math.random() * Math.PI * 2;
     const distFromPlayer = 350 + Math.random() * 150;
     const difficulty = 1 + elapsed / 120;
     const isBoss = def.isBoss || typeKey === 'boss' || def.behavior === 'boss_chase';
     const tier = isBoss ? 2 : (def.hp > 100 ? 1 : 0);
-    const hp = (Number(def.hp) || [30, 80, 250][tier]) * difficulty;
+    const hp = (Number(def.hp) || [30, 80, 250][tier]) * difficulty * runDifficulty.enemyHpMult;
     enemies.push({
       x: player.x + Math.cos(angle) * distFromPlayer,
       y: player.y + Math.sin(angle) * distFromPlayer,
       hp,
       maxHp: hp,
-      speed: Number(def.speed) || [75, 55, 35][tier],
+      speed: (Number(def.speed) || [75, 55, 35][tier]) * runDifficulty.enemySpeedMult,
       size: Math.max(8, (Number(def.size) || [20, 30, 44][tier]) / 2),
       color: ENEMY_COLORS[typeKey] || ENEMY_COLORS.zombie,
       xpVal: Number(def.xpValue) || [3, 8, 20][tier],
@@ -588,18 +983,19 @@
   }
 
   function spawnBoss() {
+    const runDifficulty = currentDifficulty();
     bossActive  = true;
     bossWarning = 2.5;
-    const bossNum = Math.floor(elapsed / BOSS_INTERVAL);
+    const bossNum = Math.floor(elapsed / (runDifficulty.bossInterval || BOSS_INTERVAL));
     // 보스 HP는 경과 시간에 비례해 스케일 — 해당 시점 플레이어 DPS로 약 15~25초 교전이 되도록 설계
     //   1번째(5분)≈22.5k, 2번째(10분)≈52k, 3번째(15분)≈93.5k
-    const hp = Math.round((5000 + bossNum * 4000) * (1 + elapsed / 200));
+    const hp = Math.round((5000 + bossNum * 4000) * (1 + elapsed / 200) * runDifficulty.enemyHpMult);
     const ang = Math.random() * Math.PI * 2;
     enemies.push({
       x: player.x + Math.cos(ang) * 430,
       y: player.y + Math.sin(ang) * 430,
       hp, maxHp: hp,
-      speed: 44 + bossNum * 3,
+      speed: (44 + bossNum * 3) * runDifficulty.enemySpeedMult,
       size: 36,
       color: '#f1c40f',
       xpVal: 80 + bossNum * 25,
@@ -610,7 +1006,7 @@
       attackCd: 0.6,
       attackBase: 2.5,
       attackRange: 390,
-      attackDmg: 40 + bossNum * 15,
+      attackDmg: Math.round((40 + bossNum * 15) * runDifficulty.enemyDmgMult),
       bossPhase: 0,
       frozen: 0,
       faceAngle: 0,
@@ -841,6 +1237,10 @@
 
     elapsed += dt;
     document.getElementById('timeDisp').textContent = fmtTime(elapsed);
+    if (elapsed >= getSurviveGoal()) {
+      endGame('win');
+      return;
+    }
 
     // 1분마다 마일스톤 알림 (무한 모드)
     const mins = Math.floor(elapsed / 60);
@@ -894,7 +1294,7 @@
 
     // 보스 등장 체크
     if (!bossActive && elapsed >= nextBossTime) {
-      nextBossTime += BOSS_INTERVAL;
+      nextBossTime += currentDifficulty().bossInterval || BOSS_INTERVAL;
       spawnBoss();
     }
     if (bossWarning > 0) bossWarning -= dt;
@@ -1515,6 +1915,7 @@
   function endGame(result) {
     state = result;
     cancelAnimationFrame(frameId);
+    const reward = awardRunRewards(result);
     const icon  = document.getElementById('overlayIcon');
     const msg   = document.getElementById('overlayMsg');
     const sub   = document.getElementById('overlaySub');
@@ -1530,6 +1931,11 @@
     }
     sub.textContent = `Lv.${player.level}  ·  ${fmtTime(elapsed)}  ·  ${kills}마리 처치`;
     btn.textContent = '다시하기';
+    sub.textContent = `Lv.${player.level}  -  ${fmtTime(elapsed)}  -  ${kills} kills  -  ${currentCharacter().name} / ${currentDifficulty().name}`;
+    renderEndActions(result, reward);
+    renderStartOptions();
+    const pauseBtn = document.getElementById('pauseBtn');
+    if (pauseBtn) pauseBtn.style.display = 'none';
     ov.classList.add('visible');
 
     if (window.AdMobHelper) AdMobHelper.showAfterGame();
@@ -1640,10 +2046,20 @@
 
   // ── 버튼 연결 ───────────────────────────────────────────────────
   document.getElementById('startBtn').addEventListener('click', () => {
+    ensureStartPanels();
+    clearEndActions();
+    if (!isCharacterUnlocked(currentCharacter())) selectedCharacterId = 'knight';
+    meta.lastCharacter = selectedCharacterId;
+    meta.lastDifficulty = selectedDifficultyId;
+    saveMeta();
     const select = document.getElementById('stageSelect');
     if (select) selectedStageIdx = parseInt(select.value, 10) || 0;
     if (frameId) cancelAnimationFrame(frameId);
     document.getElementById('overlay').classList.remove('visible');
+    const pauseOverlay = document.getElementById('pauseOverlay');
+    if (pauseOverlay) pauseOverlay.style.display = 'none';
+    const pauseBtn = document.getElementById('pauseBtn');
+    if (pauseBtn) pauseBtn.style.display = '';
     document.getElementById('levelOverlay').style.display = 'none';
     initGame();
     state = 'playing';
@@ -1652,6 +2068,8 @@
   });
 
   // 첫 프레임 시작
+  ensureStartPanels();
+  renderStartOptions();
   renderStageSelect();
   frameId = requestAnimationFrame(loop);
 })();
