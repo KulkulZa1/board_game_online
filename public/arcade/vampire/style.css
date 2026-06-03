@@ -627,6 +627,25 @@ html, body {
   text-align: center;
 }
 
+.run-report {
+  flex-basis: 100%;
+  max-width: 560px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(255,255,255,0.05);
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.35;
+  text-align: left;
+}
+
+.run-report-title {
+  margin-top: 5px;
+  color: #f1c40f;
+  font-weight: 800;
+}
+
 .daily-panel {
   width: min(640px, 92vw);
   display: flex;

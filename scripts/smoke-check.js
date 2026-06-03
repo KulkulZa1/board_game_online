@@ -344,6 +344,7 @@ function checkVampireDirectorLoopCoverage() {
     'START_BOOST_COST',
     'HYBRID_TOWER_TYPES',
     'MAX_HYBRID_TOWERS',
+    'ACHIEVEMENT_REWARDS',
     'META_KEY',
     'selectedCharacterId',
     'selectedDifficultyId',
@@ -366,13 +367,17 @@ function checkVampireDirectorLoopCoverage() {
     'updateHybridTowers',
     'fireHybridTower',
     'towerCharges',
+    'missedEvolutionHints',
+    'evolvedWeaponCount',
+    'nearMissClear',
+    'towerBuilder',
   ];
   const missingGameMarkers = requiredGameMarkers.filter((marker) => !game.includes(marker));
   if (missingGameMarkers.length) {
     throw new Error(`Vampire Survivors loop coverage missing: ${missingGameMarkers.join(', ')}`);
   }
 
-  const requiredCssMarkers = ['.meta-panel', '.start-card', '.pause-overlay', '.end-actions', '.daily-panel', '.upgrade-grid'];
+  const requiredCssMarkers = ['.meta-panel', '.start-card', '.pause-overlay', '.end-actions', '.daily-panel', '.upgrade-grid', '.run-report'];
   const missingCssMarkers = requiredCssMarkers.filter((marker) => !css.includes(marker));
   if (missingCssMarkers.length) {
     throw new Error(`Vampire Survivors UI CSS missing: ${missingCssMarkers.join(', ')}`);

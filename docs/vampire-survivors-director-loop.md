@@ -32,6 +32,9 @@ This note records the launch-readiness work for `/arcade/vampire/`.
   - During a run, `T` places the selected tower at the player position and `Y` cycles Cannon/Frost/Tesla.
   - Tower charges recover over time and from kills, creating a small defend-or-save decision layer inside the survival loop.
   - Towers expire after a limited lifetime and the oldest tower is replaced when the cap is reached.
+- Achievement and run report layer.
+  - One-time achievements grant coin rewards for survival milestones, first clear, hard clear, triple evolution, near-miss clear, defense-line tower play, and no-revive clear.
+  - The end screen reports evolved weapon count, tower placements, lowest HP, and missed evolution hints so failed evolution attempts become readable next-run plans.
 
 ## Verification targets
 
@@ -47,6 +50,7 @@ This note records the launch-readiness work for `/arcade/vampire/`.
   - pause overlay appears with `P` and resumes without time jump.
   - death screen shows coin rewards and a revive action.
   - `T` places a tower, tower projectiles damage enemies, Frost freezes enemies, and Tesla chains to nearby enemies.
+  - end screen displays evolution count and missed evolution hints when a run ends without all possible evolutions.
   - mobile viewport stacks selection cards without covering controls.
 
 ## Remaining design work

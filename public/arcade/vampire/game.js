@@ -135,6 +135,16 @@
   ];
   const MAX_HYBRID_TOWERS = 8;
   const TOWER_RECHARGE_SECONDS = 45;
+  const ACHIEVEMENT_REWARDS = {
+    survive180: 120,
+    win1: 250,
+    clearHard: 350,
+    dailyClear: 160,
+    evolve3: 260,
+    nearMissClear: 220,
+    towerBuilder: 180,
+    noReviveClear: 180,
+  };
 
   // 랜덤 아이템 박스 — 40초마다 맵에 등장, 플레이어가 수집
   const ITEM_BOX_POOL = [
@@ -299,6 +309,8 @@
       dailyKey: daily ? daily.key : null,
       towerCharges: 2,
       maxTowerCharges: 4,
+      towersPlaced: 0,
+      lowestHpPct: 1,
       rerolls: 0,          // 추가 리롤권 (몬스터 드롭)
     };
     enemies    = [];
@@ -391,6 +403,31 @@
       player.passives[evo.req] &&
       !player.weapons.includes(evo.id)
     );
+  }
+
+  function evolvedWeaponCount() {
+    if (!player) return 0;
+    return player.weapons.filter(id => WEAPON_DEFS[id] && WEAPON_DEFS[id].evolved).length;
+  }
+
+  function missedEvolutionHints() {
+    if (!player) return [];
+    const hints = [];
+    for (const evo of EVOLUTION_DEFS) {
+      if (player.weapons.includes(evo.id)) continue;
+      const base = WEAPON_DEFS[evo.base];
+      const evolved = WEAPON_DEFS[evo.id];
+      const hasBase = player.weapons.includes(evo.base);
+      const baseMaxed = hasBase && (player.weaponLevels[evo.base] || 1) >= MAX_WEAPON_LEVEL;
+      const hasPassive = !!player.passives[evo.req];
+      if (baseMaxed && !hasPassive) {
+        hints.push(`${base.name} Lv.5 needed ${evo.reqName} for ${evolved.name}`);
+      } else if (hasPassive && hasBase && !baseMaxed) {
+        hints.push(`${base.name} needed Lv.5 to evolve with ${evo.reqName}`);
+      }
+      if (hints.length >= 3) break;
+    }
+    return hints;
   }
 
   // 이지스 진화 효과: 보호막 발동 시 주변 적에게 반사 피해
@@ -672,7 +709,9 @@
       coins.textContent = `Coins ${Math.floor(meta.coins || 0)}`;
       const best = document.createElement('span');
       best.textContent = `Best ${fmtTime(meta.bestTime || 0)} / ${meta.bestKills || 0} K`;
-      metaPanel.append(coins, best);
+      const badges = document.createElement('span');
+      badges.textContent = `Achievements ${Object.keys(meta.achievements || {}).filter(id => meta.achievements[id]).length}`;
+      metaPanel.append(coins, best, badges);
     }
 
     const charGrid = document.querySelector('#characterSelect .start-select-grid');
@@ -897,28 +936,30 @@
     const baseCoins = Math.max(1, Math.floor(kills / 12 + elapsed / 18 + player.level * 2));
     const winBonus = result === 'win' ? 120 : 0;
     const dailyBonus = result === 'win' && daily && !meta.dailyCompletions[daily.key] ? daily.coinBonus : 0;
-    const coins = Math.floor((baseCoins + winBonus + dailyBonus) * diff.coinMult * map.coinMult);
+    let coins = Math.floor((baseCoins + winBonus + dailyBonus) * diff.coinMult * map.coinMult);
     const achievements = [];
-    meta.coins = Math.max(0, Math.floor(meta.coins || 0) + coins);
+    const grantAchievement = (id, label) => {
+      if (meta.achievements[id]) return;
+      meta.achievements[id] = true;
+      const reward = ACHIEVEMENT_REWARDS[id] || 0;
+      coins += reward;
+      achievements.push(`${label}${reward ? ` +${reward}c` : ''}`);
+    };
     if (elapsed > (meta.bestTime || 0)) meta.bestTime = Math.floor(elapsed);
     if (kills > (meta.bestKills || 0)) meta.bestKills = kills;
 
-    if (elapsed >= 180 && !meta.achievements.survive180) {
-      meta.achievements.survive180 = true;
-      achievements.push('Survived 3:00');
-    }
-    if (result === 'win' && !meta.achievements.win1) {
-      meta.achievements.win1 = true;
-      achievements.push('First clear');
-    }
-    if (result === 'win' && selectedDifficultyId === 'hard' && !meta.achievements.clearHard) {
-      meta.achievements.clearHard = true;
-      achievements.push('Hard clear');
-    }
+    if (elapsed >= 180) grantAchievement('survive180', 'Survived 3:00');
+    if (result === 'win') grantAchievement('win1', 'First clear');
+    if (result === 'win' && selectedDifficultyId === 'hard') grantAchievement('clearHard', 'Hard clear');
+    if (result === 'win' && evolvedWeaponCount() >= 3) grantAchievement('evolve3', 'Triple evolution');
+    if (result === 'win' && (player.lowestHpPct || 1) <= 0.1) grantAchievement('nearMissClear', 'Near miss clear');
+    if ((player.towersPlaced || 0) >= 5) grantAchievement('towerBuilder', 'Defense line');
+    if (result === 'win' && !player.revived) grantAchievement('noReviveClear', 'No-revive clear');
     if (result === 'win' && daily && !meta.dailyCompletions[daily.key]) {
       meta.dailyCompletions[daily.key] = true;
-      achievements.push('Daily clear');
+      grantAchievement('dailyClear', 'Daily clear');
     }
+    meta.coins = Math.max(0, Math.floor(meta.coins || 0) + coins);
     ensureMetaAchievements();
     saveMeta();
     return { coins, achievements };
@@ -962,6 +1003,24 @@
     rewardText.className = 'reward-line';
     rewardText.textContent = `Earned ${reward.coins || 0} coins${reward.achievements && reward.achievements.length ? ` / ${reward.achievements.join(', ')}` : ''}`;
     actions.appendChild(rewardText);
+    const runReport = document.createElement('div');
+    runReport.className = 'run-report';
+    const summary = document.createElement('div');
+    summary.textContent = `Evolutions ${evolvedWeaponCount()} / ${EVOLUTION_DEFS.length} - Towers placed ${player.towersPlaced || 0} - Lowest HP ${Math.round((player.lowestHpPct || 0) * 100)}%`;
+    runReport.appendChild(summary);
+    const misses = missedEvolutionHints();
+    if (misses.length) {
+      const hintTitle = document.createElement('div');
+      hintTitle.className = 'run-report-title';
+      hintTitle.textContent = 'Next-run evolution plan';
+      runReport.appendChild(hintTitle);
+      misses.forEach(text => {
+        const row = document.createElement('div');
+        row.textContent = text;
+        runReport.appendChild(row);
+      });
+    }
+    actions.appendChild(runReport);
     if (result === 'dead' && player && !player.revived) {
       const revive = document.createElement('button');
       revive.type = 'button';
@@ -1012,6 +1071,7 @@
       kills: 0,
     });
     player.towerCharges--;
+    player.towersPlaced = (player.towersPlaced || 0) + 1;
     for (let i = 0; i < 10; i++) spawnParticle(player.x, player.y, def.color, 4 + Math.random() * 4, 0.35);
     floatTexts.push({ x: player.x, y: player.y - 34, text: `${def.name} placed`, life: 1.4, maxLife: 1.4, color: def.color, size: 13 });
     updateTowerButton();
@@ -1648,6 +1708,7 @@
   // ── HUD 업데이트 ────────────────────────────────────────────────
   function updateHUD() {
     const hpPct = player.hp / player.maxHp * 100;
+    player.lowestHpPct = Math.min(player.lowestHpPct ?? 1, Math.max(0, player.hp / player.maxHp));
     document.getElementById('hpFill').style.width  = hpPct + '%';
     document.getElementById('hpText').textContent   = `${Math.ceil(player.hp)}/${player.maxHp}`;
     const xpPct = player.xp / xpNeeded(player.level) * 100;
