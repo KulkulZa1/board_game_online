@@ -5,20 +5,36 @@
 
 ---
 
-## [Unreleased]
+## [Unreleased] — 게임 재미·완성도 강화
 
-### Added
+### 추가
 
-- Live multiplayer chat now shows temporary speech bubbles above the sending host/guest player bar.
-- Smoke coverage now checks chat broadcast trimming and the client bubble behavior for live messages versus history replay.
-- Shared service-worker update helper is loaded by root, game, arcade, 3D, and sandbox HTML pages.
-- New game candidate review documents safe next games and defers full Japanese riichi mahjong behind smaller rule/scoring trainer steps.
+**뱀파이어 서바이버 (아케이드, `/arcade/vampire/`)**
+- 무기 레벨 시스템: 같은 무기를 다시 고르면 최대 5레벨까지 강화 (데미지·투사체 증가)
+- 무기 진화 시스템: 최대 레벨 무기 + 필요 패시브 조합 시 진화 무기로 변신
+  - 🌀 블랙홀(에너지 구+자석), 🌩 폭풍의 활(화살+쿨다운), ☀ 슈퍼노바(폭발+공격력),
+    ☠ 데스레이(레이저+이동속도), 🛡 이지스(방패+체력)
+- 레벨업 화면에 황금색 진화 카드 우선 표시, 무기 슬롯에 레벨·진화 상태 표시
 
-### Changed
+**타워 디펜스 (샌드박스, `sandbox/tower-defense/`)**
+- 타워 타입 추가: ❄️ 프로스트(광역 둔화), ⚡ 테슬라(즉시 연쇄 번개) — 기존 🏰 캐논과 함께 3종
+- 인접 시너지 시스템: 인접한 타워 조합으로 보너스 발동
+  - 💥 Shatter(프로스트+캐논), 🌩️ Overload(테슬라+테슬라), ❄️⚡ Cryo-Charge(프로스트+테슬라)
+- UI: 타워 타입 선택기 + 실시간 시너지 표시 패널
 
-- Launch-readiness docs now separate current production observations from branch-only behavior that still requires a Render redeploy.
-- Roadmap now prioritizes shared arcade/sandbox systems before adding more prototype games.
-- Service worker JS/CSS handling is now network-first instead of stale-first, and deploy-sensitive assets send no-store cache headers.
+**기타**
+- 실시간 멀티플레이 채팅: 보낸 플레이어 바 위에 임시 말풍선 표시
+- 스모크 테스트: 채팅 브로드캐스트 트리밍 + 라이브/히스토리 말풍선 동작 검증 추가
+
+### 수정
+- 뱀파이어 서바이버: `fireWeapon`의 잘못된 조기 반환 조건으로 무기가 발사되지 않던 버그 수정
+
+### 변경
+- 런치 준비 문서: 현재 프로덕션 동작과 Render 재배포가 필요한 브랜치 전용 동작을 분리
+- 로드맵: 신규 프로토타입 게임 추가보다 공유 arcade/sandbox 시스템을 우선
+
+### 문서
+- `CODEX_TASKS.md`: 코어/폴리시 분업 핸드오프 문서 (샌드박스 VPS 진화 미러, TD 추가 타워/시너지)
 
 ---
 

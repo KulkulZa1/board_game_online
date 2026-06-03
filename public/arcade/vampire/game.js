@@ -18,32 +18,52 @@
   const PLAYER_SPEED   = 160;  // px/s
   const BASE_HP        = 100;
   const XP_PER_LEVEL   = [0, 30, 60, 100, 150, 220, 300, 400, 520, 660, 820];
-  const WAVE_INTERVAL  = 8;    // 초마다 적 추가 웨이브
-  const MAX_ENEMIES    = 120;
+  const WAVE_INTERVAL  = 5;    // 초마다 적 추가 웨이브
+  const MAX_ENEMIES    = 200;
+  const DASH_COOLDOWN  = 1.8;  // 대쉬 공격 쿨다운(초)
+  const DASH_DMG       = 50;   // 대쉬 공격 데미지
+  const DASH_RANGE     = 75;   // 대쉬 공격 범위(px)
   const SURVIVE_GOAL   = 600;  // 10분 생존 시 승리
 
-  // 무기 정의
+  // 무기 강화 한계
+  const MAX_WEAPON_LEVEL = 5;   // 같은 무기를 다시 고르면 레벨업 (최대 5)
+  const MAX_WEAPONS      = 6;   // 보유 가능한 무기 슬롯 수
+
+  // 무기 정의 (기본 무기 + 진화 무기)
   const WEAPON_DEFS = {
     orb:    { name: '에너지 구', icon: '🔵', desc: '주위를 회전하며 공격', dmg: 15, cd: 0.8,  range: 80 },
     arrow:  { name: '화살',     icon: '🏹', desc: '가장 가까운 적 관통', dmg: 22, cd: 0.6,  range: 320 },
     nova:   { name: '폭발',     icon: '💥', desc: '범위 폭발 공격',       dmg: 40, cd: 2.5,  range: 100 },
     shield: { name: '방패',     icon: '🛡', desc: '주기적 피해 감소',     dmg: 0,  cd: 8,    range: 0 },
     laser:  { name: '레이저',   icon: '⚡', desc: '전방 레이저 빔',       dmg: 30, cd: 1.2,  range: 280 },
+    // ── 진화 무기 (evolved) — 기본 무기 최대레벨 + 필요 패시브로 진화 ──
+    blackhole: { name: '블랙홀',    icon: '🌀', desc: '적을 끌어당기는 거대 궤도', dmg: 28, cd: 0.7,  range: 120, evolved: true },
+    stormbow:  { name: '폭풍의 활', icon: '🌩', desc: '5연발 강화 관통 화살',     dmg: 30, cd: 0.45, range: 360, evolved: true },
+    supernova: { name: '슈퍼노바',  icon: '☀', desc: '연쇄 대폭발',              dmg: 70, cd: 2.0,  range: 150, evolved: true },
+    deathray:  { name: '데스레이',  icon: '☠', desc: '관통 즉사 광선',           dmg: 60, cd: 1.0,  range: 360, evolved: true },
+    aegis:     { name: '이지스',    icon: '🛡', desc: '반사 보호막',              dmg: 30, cd: 6,    range: 140, evolved: true },
   };
 
-  // 업그레이드 풀
-  const UPGRADE_POOL = [
-    { id: 'hp_up',     name: '❤ 체력 회복',    desc: '최대 체력 +20, 현재 체력 회복',  apply: (p) => { p.maxHp += 20; p.hp = Math.min(p.hp + 30, p.maxHp); } },
-    { id: 'spd_up',    name: '👟 이동 속도',    desc: '이동 속도 +15%',                  apply: (p) => { p.speed *= 1.15; } },
-    { id: 'orb',       name: '🔵 에너지 구',    desc: '에너지 구 획득',                  weapon: 'orb' },
-    { id: 'arrow',     name: '🏹 화살',          desc: '화살 획득',                       weapon: 'arrow' },
-    { id: 'nova',      name: '💥 폭발',          desc: '범위 폭발 획득',                  weapon: 'nova' },
-    { id: 'shield',    name: '🛡 방패',          desc: '방어막 획득 (피격 시 잠시 무적)', weapon: 'shield' },
-    { id: 'laser',     name: '⚡ 레이저',        desc: '레이저 빔 획득',                  weapon: 'laser' },
-    { id: 'dmg_up',    name: '⚔ 공격력',        desc: '모든 무기 데미지 +20%',           apply: (p) => { p.dmgMult *= 1.2; } },
-    { id: 'cd_up',     name: '⏩ 쿨다운 감소',  desc: '모든 무기 쿨다운 -15%',          apply: (p) => { p.cdMult  *= 0.85; } },
-    { id: 'magnet',    name: '🧲 경험치 자석',  desc: 'XP 획득 반경 2배',               apply: (p) => { p.xpRange *= 2; } },
+  // 진화 규칙: base 무기가 최대 레벨 + req 패시브 보유 시 evolved(id) 무기로 진화
+  const EVOLUTION_DEFS = [
+    { id: 'blackhole', base: 'orb',    req: 'magnet', reqName: '🧲 경험치 자석' },
+    { id: 'stormbow',  base: 'arrow',  req: 'cd_up',  reqName: '⏩ 쿨다운 감소' },
+    { id: 'supernova', base: 'nova',   req: 'dmg_up', reqName: '⚔ 공격력' },
+    { id: 'deathray',  base: 'laser',  req: 'spd_up', reqName: '👟 이동 속도' },
+    { id: 'aegis',     base: 'shield', req: 'hp_up',  reqName: '❤ 체력 회복' },
   ];
+
+  // 패시브(능력치) 업그레이드 — 진화 재료로도 사용됨
+  const PASSIVE_POOL = [
+    { id: 'hp_up',  name: '❤ 체력 회복',   desc: '최대 체력 +20, 체력 회복',  apply: (p) => { p.maxHp += 20; p.hp = Math.min(p.hp + 30, p.maxHp); } },
+    { id: 'spd_up', name: '👟 이동 속도',   desc: '이동 속도 +12%',            apply: (p) => { p.speed *= 1.12; } },
+    { id: 'dmg_up', name: '⚔ 공격력',      desc: '모든 무기 데미지 +18%',     apply: (p) => { p.dmgMult *= 1.18; } },
+    { id: 'cd_up',  name: '⏩ 쿨다운 감소', desc: '모든 무기 쿨다운 -12%',     apply: (p) => { p.cdMult  *= 0.88; } },
+    { id: 'magnet', name: '🧲 경험치 자석', desc: 'XP 획득 반경 +60%',         apply: (p) => { p.xpRange *= 1.6; } },
+  ];
+
+  // 신규 획득 가능한 기본 무기 목록
+  const WEAPON_POOL = ['orb', 'arrow', 'nova', 'shield', 'laser'];
 
   // ── 게임 상태 ───────────────────────────────────────────────────
   let state = 'idle'; // idle | playing | levelup | dead | win
@@ -52,12 +72,18 @@
   let projectiles = [];
   let xpGems = [];
   let particles = [];
+  let chainExplosions = [];
+  let enemyProjectiles = [];   // 적이 발사한 투사체
   let elapsed = 0;
   let kills = 0;
   let waveTimer = 0;
   let frameId;
   let camera = { x: 0, y: 0 };
   let selectedStageIdx = 0;
+  let dashCd = 0;              // 대쉬 잔여 쿨다운
+  let dashEffect = null;       // 대쉬 슬래시 시각 효과
+  let screenShake = 0;         // 화면 흔들림 강도
+  let lastMoveDir = { dx: 1, dy: 0 }; // 마지막 이동 방향 (대쉬 방향 결정)
 
   const SANDBOX_CONFIG = window.VS_CONFIG || null;
   const ENEMY_COLORS = {
@@ -131,7 +157,9 @@
       speed: PLAYER_SPEED,
       level: 1, xp: 0,
       weapons: [],       // 보유 무기 id 목록
+      weaponLevels: {},  // 무기별 레벨 (1~MAX_WEAPON_LEVEL)
       weaponCDs: {},     // 무기별 쿨다운 잔여 시간
+      passives: {},      // 보유 패시브 id → 스택 수 (진화 조건 판정)
       dmgMult: 1,
       cdMult:  1,
       xpRange: 80,
@@ -142,10 +170,16 @@
     projectiles= [];
     xpGems     = [];
     particles  = [];
+    chainExplosions = [];
+    enemyProjectiles = [];
     elapsed    = 0;
     kills      = 0;
     waveTimer  = 0;
     camera     = { x: 0, y: 0 };
+    dashCd     = 0;
+    dashEffect = null;
+    screenShake = 0;
+    lastMoveDir = { dx: 1, dy: 0 };
 
     // 시작 무기
     addWeapon('orb');
@@ -155,10 +189,54 @@
   }
 
   function addWeapon(id) {
-    if (player.weapons.includes(id)) return;
+    if (player.weapons.includes(id)) {
+      // 이미 보유 → 레벨업 (최대 레벨까지)
+      if ((player.weaponLevels[id] || 1) < MAX_WEAPON_LEVEL) player.weaponLevels[id]++;
+      renderWeaponSlots();
+      return;
+    }
     player.weapons.push(id);
+    player.weaponLevels[id] = 1;
     player.weaponCDs[id] = 0;
     renderWeaponSlots();
+  }
+
+  // 진화: 기본 무기를 진화 무기로 교체 (최대 레벨 상태 유지)
+  function evolveWeapon(evo) {
+    const baseIdx = player.weapons.indexOf(evo.base);
+    if (baseIdx === -1) return;
+    player.weapons[baseIdx] = evo.id;
+    player.weaponLevels[evo.id] = MAX_WEAPON_LEVEL;
+    delete player.weaponLevels[evo.base];
+    delete player.weaponCDs[evo.base];
+    player.weaponCDs[evo.id] = 0;
+    for (let i = 0; i < 30; i++) spawnParticle(player.x, player.y, '#f1c40f', 6 + Math.random() * 6, 0.9);
+    renderWeaponSlots();
+  }
+
+  // 패시브 적용 + 보유 기록 (진화 조건 판정용)
+  function applyPassive(pv) {
+    pv.apply(player);
+    player.passives[pv.id] = (player.passives[pv.id] || 0) + 1;
+  }
+
+  // 현재 진화 가능한 조합 목록
+  function availableEvolutions() {
+    return EVOLUTION_DEFS.filter(evo =>
+      player.weapons.includes(evo.base) &&
+      (player.weaponLevels[evo.base] || 1) >= MAX_WEAPON_LEVEL &&
+      player.passives[evo.req] &&
+      !player.weapons.includes(evo.id)
+    );
+  }
+
+  // 이지스 진화 효과: 보호막 발동 시 주변 적에게 반사 피해
+  function aegisReflect(dmg, range) {
+    for (let i = enemies.length - 1; i >= 0; i--) {
+      const e = enemies[i];
+      if (dist(e, player) < range) dealDamage(e, dmg);
+    }
+    spawnParticle(player.x, player.y, '#5dade2', 30, 0.6);
   }
 
   // ── 입력 ────────────────────────────────────────────────────────
@@ -233,23 +311,32 @@
     }
 
     const difficulty = 1 + elapsed / 120;
-    const count = Math.min(5 + Math.floor(elapsed / 20), 20);
+    const count = Math.min(8 + Math.floor(elapsed / 12), 35);
     for (let i = 0; i < count; i++) {
       if (enemies.length >= MAX_ENEMIES) break;
       const angle = Math.random() * Math.PI * 2;
-      const dist  = 350 + Math.random() * 150;
+      const spawnDist = 350 + Math.random() * 150;
       const tier  = elapsed < 60 ? 0 : elapsed < 180 ? (Math.random() < 0.3 ? 1 : 0) : (Math.random() < 0.15 ? 2 : Math.random() < 0.35 ? 1 : 0);
+      // 원거리 공격형(archer): tier1 40%, tier2 100%
+      const bRoll = Math.random();
+      const behavior = (tier === 2 || (tier === 1 && bRoll < 0.4)) ? 'archer' : 'chase';
+      const attackBase = behavior === 'archer' ? (tier === 2 ? 3.5 : 2.5) : 0;
       enemies.push({
-        x: player.x + Math.cos(angle) * dist,
-        y: player.y + Math.sin(angle) * dist,
+        x: player.x + Math.cos(angle) * spawnDist,
+        y: player.y + Math.sin(angle) * spawnDist,
         hp:    [30, 80, 250][tier] * difficulty,
         maxHp: [30, 80, 250][tier] * difficulty,
         speed: [75, 55, 35][tier] + Math.random() * 20,
         size:  [10, 15, 22][tier],
-        color: ['#e74c3c', '#9b59b6', '#c0392b'][tier],
+        color: ['#e74c3c', behavior === 'archer' ? '#1abc9c' : '#9b59b6', '#c0392b'][tier],
         xpVal: [3, 8, 20][tier],
         tier,
         hurtFlash: 0,
+        behavior,
+        attackCd: Math.random() * attackBase,   // 초기 공격 시간 분산
+        attackBase,
+        attackRange: behavior === 'archer' ? (tier === 2 ? 280 : 220) : 0,
+        attackDmg: [10, 20, 38][tier],
       });
     }
   }
@@ -279,35 +366,48 @@
 
   // ── 투사체 발사 ─────────────────────────────────────────────────
   function fireWeapon(id, dt) {
-    if (player.weaponCDs[id] === undefined) return;
+    if (player.weaponCDs[id] === undefined) return;   // 미보유 무기 무시
     player.weaponCDs[id] -= dt;
     if (player.weaponCDs[id] > 0) return;
 
-    const def = WEAPON_DEFS[id];
-    const cd  = def.cd * player.cdMult;
-    const dmg = def.dmg * player.dmgMult;
+    const def    = WEAPON_DEFS[id];
+    const lvl    = player.weaponLevels[id] || 1;
+    const lvlMul = 1 + 0.22 * (lvl - 1);              // 레벨당 데미지 +22%
+    const cd     = def.cd * player.cdMult;
+    const dmg    = def.dmg * player.dmgMult * lvlMul;
     player.weaponCDs[id] = cd;
 
-    if (id === 'orb') {
-      const orbCount = 3;
+    if (id === 'orb' || id === 'blackhole') {
+      const evolved  = id === 'blackhole';
+      const orbCount = (evolved ? 5 : 3) + Math.floor((lvl - 1) / 2); // 레벨업 시 궤도 추가
+      const R = def.range;
       for (let i = 0; i < orbCount; i++) {
         const baseAngle = (elapsed * 1.8) + (i / orbCount) * Math.PI * 2;
-        projectiles.push({ type: 'orb', x: player.x, y: player.y, angle: baseAngle, speed: 0, r: 8, dmg, life: cd + 0.05, orbIdx: i, orbTotal: orbCount });
+        projectiles.push({ type: evolved ? 'blackhole' : 'orb', x: player.x, y: player.y, angle: baseAngle, r: evolved ? 12 : 8, dmg, life: cd + 0.05, orbIdx: i, orbTotal: orbCount, R });
       }
-    } else if (id === 'arrow') {
-      const target = nearestEnemy();
+    } else if (id === 'arrow' || id === 'stormbow') {
+      const evolved = id === 'stormbow';
+      const shots   = evolved ? 5 : 1 + Math.floor((lvl - 1) / 2);
+      const target  = nearestEnemy();
       if (!target) return;
-      const ang = Math.atan2(target.y - player.y, target.x - player.x);
-      projectiles.push({ type: 'arrow', x: player.x, y: player.y, vx: Math.cos(ang) * 400, vy: Math.sin(ang) * 400, r: 5, dmg, life: def.range / 400, pierce: 3 });
-    } else if (id === 'nova') {
-      spawnExplosion(player.x, player.y, def.range, dmg);
-    } else if (id === 'shield') {
-      player.invincible = Math.max(player.invincible, 1.5);
+      const baseAng = Math.atan2(target.y - player.y, target.x - player.x);
+      for (let s = 0; s < shots; s++) {
+        const spread = (s - (shots - 1) / 2) * 0.12;
+        const ang = baseAng + spread;
+        projectiles.push({ type: 'arrow', x: player.x, y: player.y, vx: Math.cos(ang) * 420, vy: Math.sin(ang) * 420, r: 5, dmg, life: def.range / 420, pierce: (evolved ? 6 : 3) + lvl });
+      }
+    } else if (id === 'nova' || id === 'supernova') {
+      spawnExplosion(player.x, player.y, def.range, dmg, id === 'supernova');
+    } else if (id === 'shield' || id === 'aegis') {
+      const dur = (id === 'aegis' ? 2.2 : 1.5) + 0.15 * (lvl - 1);
+      player.invincible = Math.max(player.invincible, dur);
+      if (id === 'aegis') aegisReflect(dmg, def.range);
       spawnParticle(player.x, player.y, '#3498db', 24, 0.8);
-    } else if (id === 'laser') {
-      const target = nearestEnemy();
+    } else if (id === 'laser' || id === 'deathray') {
+      const evolved = id === 'deathray';
+      const target  = nearestEnemy();
       const ang = target ? Math.atan2(target.y - player.y, target.x - player.x) : 0;
-      projectiles.push({ type: 'laser', x: player.x, y: player.y, angle: ang, r: 6, dmg, life: 0.35, length: def.range });
+      projectiles.push({ type: evolved ? 'deathray' : 'laser', x: player.x, y: player.y, angle: ang, r: 6, dmg, life: 0.35, length: def.range });
     }
   }
 
@@ -320,18 +420,37 @@
     return best;
   }
 
-  function spawnExplosion(x, y, range, dmg) {
-    for (let i = 0; i < 12; i++) spawnParticle(x, y, '#e74c3c', 6 + Math.random() * 8, 0.5 + Math.random() * 0.4);
+  function spawnExplosion(x, y, range, dmg, evolved) {
+    const col = evolved ? '#f1c40f' : '#e74c3c';
+    for (let i = 0; i < 12; i++) spawnParticle(x, y, col, 6 + Math.random() * 8, 0.5 + Math.random() * 0.4);
     for (const e of enemies) {
       if (dist({ x, y }, e) < range) dealDamage(e, dmg);
     }
-    projectiles.push({ type: 'explosion', x, y, r: 0, maxR: range, life: 0.4, dmg: 0 });
+    projectiles.push({ type: 'explosion', x, y, r: 0, maxR: range, life: 0.4, dmg: 0, evolved });
+    // 슈퍼노바: 주변에 연쇄 2차 폭발 큐 등록 (게임 루프에서 처리)
+    if (evolved) {
+      for (let i = 0; i < 3; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const d = range * 0.7;
+        chainExplosions.push({ x: x + Math.cos(a) * d, y: y + Math.sin(a) * d, range: range * 0.6, dmg: dmg * 0.6, delay: 0.09 + i * 0.07 });
+      }
+    }
   }
 
   function spawnParticle(x, y, color, size, life) {
     const angle = Math.random() * Math.PI * 2;
     const spd   = 40 + Math.random() * 80;
     particles.push({ x, y, vx: Math.cos(angle)*spd, vy: Math.sin(angle)*spd, color, size, maxLife: life, life });
+  }
+
+  // 적 투사체 발사 — 플레이어 방향 + spread 각도
+  function fireEnemyProjectile(enemy, spread) {
+    spread = spread || 0;
+    const ang = Math.atan2(player.y - enemy.y, player.x - enemy.x) + spread;
+    const spd = [220, 260, 190][enemy.tier] || 220;
+    const r   = 5 + enemy.tier * 2;
+    enemyProjectiles.push({ x: enemy.x, y: enemy.y, vx: Math.cos(ang) * spd, vy: Math.sin(ang) * spd, r, dmg: enemy.attackDmg, life: 1.6 });
+    for (let i = 0; i < 2; i++) spawnParticle(enemy.x, enemy.y, '#ff6b35', 3, 0.2);
   }
 
   // ── 데미지 처리 ─────────────────────────────────────────────────
@@ -367,17 +486,15 @@
   function showLevelUp() {
     state = 'levelup';
     document.getElementById('lvDisp').textContent = player.level;
-    const pool  = UPGRADE_POOL.filter(u => !u.weapon || !player.weapons.includes(u.weapon));
-    const picks = shuffled(pool).slice(0, 3);
+    const picks = buildChoices();
     const list  = document.getElementById('upgradeList');
     list.innerHTML = '';
-    for (const u of picks) {
+    for (const c of picks) {
       const btn = document.createElement('button');
-      btn.className = 'upgrade-btn';
-      btn.innerHTML = `<div class="upgrade-name">${u.name}</div><div class="upgrade-desc">${u.desc}</div>`;
+      btn.className = 'upgrade-btn' + (c.kind === 'evolve' ? ' evolution' : '');
+      btn.innerHTML = `<div class="upgrade-name">${c.name}</div><div class="upgrade-desc">${c.desc}</div>`;
       btn.onclick = () => {
-        if (u.weapon) addWeapon(u.weapon);
-        else if (u.apply) u.apply(player);
+        c.choose();
         document.getElementById('levelOverlay').style.display = 'none';
         state = 'playing';
         updateHUD();
@@ -385,6 +502,73 @@
       list.appendChild(btn);
     }
     document.getElementById('levelOverlay').style.display = 'flex';
+  }
+
+  // 레벨업 선택지 3개 구성: 진화(최우선) → 무기 레벨업 / 신규 무기 / 패시브
+  function buildChoices() {
+    // 1) 진화 가능 조합 (있으면 반드시 1개 포함)
+    const evoChoices = availableEvolutions().map(evo => {
+      const w = WEAPON_DEFS[evo.id];
+      return {
+        kind: 'evolve',
+        name: `✨ 진화: ${w.icon} ${w.name}`,
+        desc: `${WEAPON_DEFS[evo.base].name} + ${evo.reqName} → ${w.desc}`,
+        choose: () => evolveWeapon(evo),
+      };
+    });
+
+    // 2) 보유 무기 레벨업 (진화 무기는 제외)
+    const levelable = [];
+    for (const id of player.weapons) {
+      const lvl = player.weaponLevels[id] || 1;
+      if (lvl < MAX_WEAPON_LEVEL && !WEAPON_DEFS[id].evolved) {
+        const w = WEAPON_DEFS[id];
+        levelable.push({
+          kind: 'weapon-lv',
+          name: `${w.icon} ${w.name} Lv.${lvl}→${lvl + 1}`,
+          desc: w.desc + ' 강화',
+          choose: () => addWeapon(id),
+        });
+      }
+    }
+
+    // 3) 신규 무기 (슬롯 여유 시)
+    const newWeapons = [];
+    if (player.weapons.length < MAX_WEAPONS) {
+      for (const id of WEAPON_POOL) {
+        if (!player.weapons.includes(id)) {
+          const w = WEAPON_DEFS[id];
+          newWeapons.push({
+            kind: 'weapon-new',
+            name: `${w.icon} ${w.name} (신규)`,
+            desc: w.desc,
+            choose: () => addWeapon(id),
+          });
+        }
+      }
+    }
+
+    // 4) 패시브 (항상 후보)
+    const passives = PASSIVE_POOL.map(pv => ({
+      kind: 'passive',
+      name: pv.name,
+      desc: pv.desc,
+      choose: () => applyPassive(pv),
+    }));
+
+    const result = [];
+    if (evoChoices.length) result.push(evoChoices[0]);   // 진화 1개 보장
+    const rest = shuffled([...levelable, ...newWeapons, ...passives]);
+    for (const c of rest) {
+      if (result.length >= 3) break;
+      result.push(c);
+    }
+    // 항상 3개 보장 (부족 시 첫 패시브로 채움)
+    while (result.length < 3) {
+      const pv = PASSIVE_POOL[0];
+      result.push({ kind: 'passive', name: pv.name, desc: pv.desc, choose: () => applyPassive(pv) });
+    }
+    return result.slice(0, 3);
   }
 
   // ── HUD 업데이트 ────────────────────────────────────────────────
@@ -401,8 +585,11 @@
   function renderWeaponSlots() {
     const el = document.getElementById('weaponSlots');
     el.innerHTML = player.weapons.map(id => {
-      const d = WEAPON_DEFS[id];
-      return `<span class="weapon-slot">${d.icon} ${d.name}</span>`;
+      const d   = WEAPON_DEFS[id];
+      const lvl = player.weaponLevels[id] || 1;
+      const star = d.evolved ? '✨' : '';
+      const maxed = !d.evolved && lvl >= MAX_WEAPON_LEVEL ? ' weapon-maxed' : '';
+      return `<span class="weapon-slot${d.evolved ? ' weapon-evolved' : ''}${maxed}">${star}${d.icon} ${d.name} <b>Lv.${lvl}</b></span>`;
     }).join('');
   }
 
@@ -432,8 +619,29 @@
   function update(dt) {
     // 이동
     const { dx, dy } = getMoveDir();
+    if (dx !== 0 || dy !== 0) lastMoveDir = { dx, dy };
     player.x += dx * player.speed * dt;
     player.y += dy * player.speed * dt;
+
+    // 대쉬 공격 (Space / X)
+    if (dashCd > 0) dashCd -= dt;
+    if ((keys[' '] || keys['x'] || keys['X']) && dashCd <= 0) {
+      const da = Math.atan2(lastMoveDir.dy, lastMoveDir.dx);
+      dashEffect = { x: player.x, y: player.y, angle: da, life: 0.3, maxLife: 0.3 };
+      dashCd = DASH_COOLDOWN;
+      player.x += Math.cos(da) * 55;
+      player.y += Math.sin(da) * 55;
+      for (const e of enemies) {
+        if (dist(e, player) < DASH_RANGE) {
+          dealDamage(e, DASH_DMG * player.dmgMult);
+          for (let k = 0; k < 3; k++) spawnParticle(e.x, e.y, '#f8c8ff', 5, 0.25);
+        }
+      }
+    }
+    if (dashEffect) { dashEffect.life -= dt; if (dashEffect.life <= 0) dashEffect = null; }
+
+    // 화면 흔들림 감쇠
+    if (screenShake > 0) screenShake = Math.max(0, screenShake - dt * 2.5);
 
     // 카메라
     camera.x = player.x - canvas.width  / 2;
@@ -455,13 +663,19 @@
       p.life -= dt;
       if (p.life <= 0) { projectiles.splice(i, 1); continue; }
 
-      if (p.type === 'orb') {
+      if (p.type === 'orb' || p.type === 'blackhole') {
         const baseAngle = (elapsed * 1.8) + (p.orbIdx / p.orbTotal) * Math.PI * 2;
-        const R = WEAPON_DEFS.orb.range;
+        const R = p.R || WEAPON_DEFS.orb.range;
         p.x = player.x + Math.cos(baseAngle) * R;
         p.y = player.y + Math.sin(baseAngle) * R;
+        const evolved = p.type === 'blackhole';
         for (const e of enemies) {
           if (dist(p, e) < p.r + e.size) dealDamage(e, p.dmg * dt * 3);
+          if (evolved) {   // 블랙홀: 주변 적을 플레이어 쪽으로 끌어당김
+            const a = Math.atan2(player.y - e.y, player.x - e.x);
+            e.x += Math.cos(a) * 45 * dt;
+            e.y += Math.sin(a) * 45 * dt;
+          }
         }
       } else if (p.type === 'arrow') {
         p.x += p.vx * dt;
@@ -474,12 +688,15 @@
             if (p.pierce <= 0) { projectiles.splice(i, 1); break; }
           }
         }
-      } else if (p.type === 'laser') {
+      } else if (p.type === 'laser' || p.type === 'deathray') {
+        const evolved = p.type === 'deathray';
         const ex = p.x + Math.cos(p.angle) * p.length;
         const ey = p.y + Math.sin(p.angle) * p.length;
+        const mult = evolved ? 9 : 5;          // 데스레이는 훨씬 강한 지속 피해
+        const hitW = evolved ? 8 : 4;
         for (const e of enemies) {
-          if (distToSegment(e, p, { x: ex, y: ey }) < e.size + 4) {
-            dealDamage(e, p.dmg * dt * 5);
+          if (distToSegment(e, p, { x: ex, y: ey }) < e.size + hitW) {
+            dealDamage(e, p.dmg * dt * mult);
           }
         }
       } else if (p.type === 'explosion') {
@@ -487,18 +704,75 @@
       }
     }
 
-    // 적 이동 + 플레이어 충돌
+    // 슈퍼노바 연쇄 폭발 처리
+    for (let i = chainExplosions.length - 1; i >= 0; i--) {
+      const c = chainExplosions[i];
+      c.delay -= dt;
+      if (c.delay <= 0) {
+        spawnExplosion(c.x, c.y, c.range, c.dmg, false);
+        chainExplosions.splice(i, 1);
+      }
+    }
+
+    // 적 이동 + 행동 + 플레이어 충돌
     for (let i = enemies.length - 1; i >= 0; i--) {
       const e = enemies[i];
       if (e.hurtFlash > 0) e.hurtFlash -= dt;
       const ang = Math.atan2(player.y - e.y, player.x - e.x);
-      e.x += Math.cos(ang) * e.speed * dt;
-      e.y += Math.sin(ang) * e.speed * dt;
+      const d   = dist(e, player);
+      e.faceAngle = ang;   // 렌더링용 방향
 
-      if (player.invincible <= 0 && dist(e, player) < e.size + 12) {
-        const dmg = [8, 16, 35][e.tier] * dt;
+      // 분노 상태(HP 30% 이하): 속도 50% 증가, 공격 쿨다운 단축
+      const rageActive = e.hp < e.maxHp * 0.3;
+      const rageMult   = rageActive ? 1.5 : 1.0;
+
+      if (e.behavior === 'archer') {
+        // 원거리: 적정 거리 유지하며 투사체 발사
+        const prefDist = e.tier === 2 ? 200 : 170;
+        if (d > prefDist * 1.3) {
+          e.x += Math.cos(ang) * e.speed * rageMult * dt;
+          e.y += Math.sin(ang) * e.speed * rageMult * dt;
+        } else if (d < prefDist * 0.7) {
+          e.x -= Math.cos(ang) * e.speed * 0.55 * dt;
+          e.y -= Math.sin(ang) * e.speed * 0.55 * dt;
+        }
+        if (e.attackCd > 0) e.attackCd -= dt;
+        if (e.attackCd <= 0 && d < e.attackRange) {
+          // tier2: 분산 3연발; tier1: 단발 (분노 시 2연발)
+          const shots = (e.tier === 2 ? 3 : (rageActive ? 2 : 1));
+          for (let s = 0; s < shots; s++) {
+            const spread = shots > 1 ? (s - (shots - 1) / 2) * 0.22 : 0;
+            fireEnemyProjectile(e, spread);
+          }
+          e.attackCd = e.attackBase * (rageActive ? 0.55 : 1.0);
+        }
+      } else {
+        // 추적 이동
+        e.x += Math.cos(ang) * e.speed * rageMult * dt;
+        e.y += Math.sin(ang) * e.speed * rageMult * dt;
+      }
+
+      if (player.invincible <= 0 && d < e.size + 12) {
+        const dmg = [8, 18, 38][e.tier] * dt;
         player.hp -= dmg;
+        screenShake = Math.min(screenShake + 0.15, 0.35);
         player.invincible = 0.15;
+        if (player.hp <= 0) { endGame('dead'); return; }
+      }
+    }
+
+    // 적 투사체 업데이트
+    for (let i = enemyProjectiles.length - 1; i >= 0; i--) {
+      const ep = enemyProjectiles[i];
+      ep.life -= dt;
+      if (ep.life <= 0) { enemyProjectiles.splice(i, 1); continue; }
+      ep.x += ep.vx * dt;
+      ep.y += ep.vy * dt;
+      if (player.invincible <= 0 && dist(ep, player) < ep.r + 12) {
+        player.hp -= ep.dmg;
+        screenShake = Math.min(screenShake + 0.22, 0.45);
+        player.invincible = 0.1;
+        enemyProjectiles.splice(i, 1);
         if (player.hp <= 0) { endGame('dead'); return; }
       }
     }
@@ -526,6 +800,13 @@
   function render() {
     const W = canvas.width, H = canvas.height;
     ctx.clearRect(0, 0, W, H);
+
+    // 화면 흔들기 (최외곽 save)
+    ctx.save();
+    if (screenShake > 0) {
+      const mag = screenShake * 14;
+      ctx.translate((Math.random() - 0.5) * mag, (Math.random() - 0.5) * mag);
+    }
 
     // 배경 그리드
     ctx.save();
@@ -569,13 +850,21 @@
 
     // 투사체
     for (const p of projectiles) {
-      if (p.type === 'orb') {
+      if (p.type === 'orb' || p.type === 'blackhole') {
+        const evolved = p.type === 'blackhole';
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-        ctx.fillStyle = '#3498db';
-        ctx.shadowBlur = 12;
-        ctx.shadowColor = '#3498db';
+        ctx.fillStyle  = evolved ? '#8e44ad' : '#3498db';
+        ctx.shadowBlur = evolved ? 22 : 12;
+        ctx.shadowColor = evolved ? '#9b59b6' : '#3498db';
         ctx.fill();
+        if (evolved) {   // 블랙홀 소용돌이 링
+          ctx.strokeStyle = 'rgba(155,89,182,0.6)';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.r + 5, 0, Math.PI * 2);
+          ctx.stroke();
+        }
         ctx.shadowBlur = 0;
       } else if (p.type === 'arrow') {
         ctx.save();
@@ -584,15 +873,16 @@
         ctx.fillStyle = '#f39c12';
         ctx.fillRect(-12, -2, 24, 4);
         ctx.restore();
-      } else if (p.type === 'laser') {
+      } else if (p.type === 'laser' || p.type === 'deathray') {
+        const evolved = p.type === 'deathray';
         const ex = p.x + Math.cos(p.angle) * p.length;
         const ey = p.y + Math.sin(p.angle) * p.length;
         const alpha = p.life / 0.35;
         ctx.globalAlpha = alpha;
-        ctx.strokeStyle = '#f1c40f';
-        ctx.lineWidth = 4;
-        ctx.shadowBlur = 14;
-        ctx.shadowColor = '#f1c40f';
+        ctx.strokeStyle = evolved ? '#e74c3c' : '#f1c40f';
+        ctx.lineWidth  = evolved ? 7 : 4;
+        ctx.shadowBlur = evolved ? 20 : 14;
+        ctx.shadowColor = evolved ? '#e74c3c' : '#f1c40f';
         ctx.beginPath();
         ctx.moveTo(p.x, p.y);
         ctx.lineTo(ex, ey);
@@ -600,30 +890,74 @@
         ctx.shadowBlur = 0;
         ctx.globalAlpha = 1;
       } else if (p.type === 'explosion') {
+        const col = p.evolved ? '#f1c40f' : '#e74c3c';
         const alpha = p.life / 0.4;
         ctx.globalAlpha = alpha * 0.35;
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-        ctx.fillStyle = '#e74c3c';
+        ctx.fillStyle = col;
         ctx.fill();
         ctx.globalAlpha = alpha;
-        ctx.strokeStyle = '#e74c3c';
+        ctx.strokeStyle = col;
         ctx.lineWidth = 2;
         ctx.stroke();
         ctx.globalAlpha = 1;
       }
     }
 
+    // 적 투사체 (오렌지-빨강 발광 구슬)
+    for (const ep of enemyProjectiles) {
+      ctx.beginPath();
+      ctx.arc(ep.x, ep.y, ep.r, 0, Math.PI * 2);
+      ctx.fillStyle = '#ff6b35';
+      ctx.shadowBlur = 14;
+      ctx.shadowColor = '#e74c3c';
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      // 궤적 효과
+      ctx.globalAlpha = 0.3;
+      ctx.beginPath();
+      ctx.arc(ep.x - ep.vx * 0.025, ep.y - ep.vy * 0.025, ep.r * 0.7, 0, Math.PI * 2);
+      ctx.fillStyle = '#ff6b35';
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+
+    // 대쉬 슬래시 효과
+    if (dashEffect) {
+      const alpha = dashEffect.life / dashEffect.maxLife;
+      ctx.globalAlpha = alpha * 0.85;
+      ctx.strokeStyle = '#f0d0ff';
+      ctx.shadowBlur = 18;
+      ctx.shadowColor = '#d7a3f5';
+      const sa = dashEffect.angle;
+      for (let sl = 0; sl < 4; sl++) {
+        const offset = (sl - 1.5) * 12;
+        const ox = Math.cos(sa + Math.PI / 2) * offset;
+        const oy = Math.sin(sa + Math.PI / 2) * offset;
+        ctx.lineWidth = 2 - sl * 0.3;
+        ctx.beginPath();
+        ctx.moveTo(dashEffect.x + ox - Math.cos(sa) * 20, dashEffect.y + oy - Math.sin(sa) * 20);
+        ctx.lineTo(dashEffect.x + ox + Math.cos(sa) * DASH_RANGE, dashEffect.y + oy + Math.sin(sa) * DASH_RANGE);
+        ctx.stroke();
+      }
+      ctx.shadowBlur = 0;
+      ctx.globalAlpha = 1;
+    }
+
     // 적
     for (const e of enemies) {
       ctx.save();
       ctx.translate(e.x, e.y);
+      // 플레이어 방향 회전
+      if (e.faceAngle !== undefined) ctx.rotate(e.faceAngle + Math.PI / 2);
       const flash = e.hurtFlash > 0;
+      const rageActive = e.hp < e.maxHp * 0.3;
       ctx.fillStyle = flash ? '#ffffff' : e.color;
-      ctx.shadowBlur = flash ? 20 : 8;
-      ctx.shadowColor = e.color;
+      ctx.shadowBlur = flash ? 20 : (rageActive ? 14 : 8);
+      ctx.shadowColor = rageActive ? '#ff4500' : e.color;
 
-      // 적 모양: tier별
+      // 적 모양: tier2=육각형, tier1 archer=마름모, tier1=사각형, tier0=원
       if (e.tier === 2) {
         ctx.beginPath();
         for (let i = 0; i < 6; i++) {
@@ -631,6 +965,12 @@
           i === 0 ? ctx.moveTo(Math.cos(a)*e.size, Math.sin(a)*e.size)
                   : ctx.lineTo(Math.cos(a)*e.size, Math.sin(a)*e.size);
         }
+        ctx.closePath();
+      } else if (e.tier === 1 && e.behavior === 'archer') {
+        // 마름모 (원거리 유형 구별)
+        ctx.beginPath();
+        ctx.moveTo(0, -e.size); ctx.lineTo(e.size, 0);
+        ctx.lineTo(0, e.size);  ctx.lineTo(-e.size, 0);
         ctx.closePath();
       } else if (e.tier === 1) {
         ctx.beginPath();
@@ -640,13 +980,22 @@
         ctx.arc(0, 0, e.size, 0, Math.PI*2);
       }
       ctx.fill();
+      // 분노 상태: 적색 테두리
+      if (rageActive && !flash) {
+        ctx.strokeStyle = '#ff4500';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
       ctx.shadowBlur = 0;
+      ctx.restore();
 
-      // HP 바
+      // HP 바 (회전 없이 별도로)
+      ctx.save();
+      ctx.translate(e.x, e.y);
       const bw = e.size * 2.2, bh = 3;
       ctx.fillStyle = '#333';
       ctx.fillRect(-bw/2, -e.size - 7, bw, bh);
-      ctx.fillStyle = e.color;
+      ctx.fillStyle = rageActive ? '#ff4500' : e.color;
       ctx.fillRect(-bw/2, -e.size - 7, bw * (e.hp/e.maxHp), bh);
       ctx.restore();
     }
@@ -682,6 +1031,37 @@
       ctx.lineWidth = 6;
       ctx.strokeRect(0, 0, W, H);
     }
+
+    // 대쉬 쿨다운 표시 (우하단)
+    if (state === 'playing') {
+      const dcRatio = dashCd > 0 ? dashCd / DASH_COOLDOWN : 0;
+      const cx = W - 36, cy = H - 36, rad = 18;
+      ctx.beginPath();
+      ctx.arc(cx, cy, rad, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      ctx.fill();
+      if (dcRatio > 0) {
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.arc(cx, cy, rad, -Math.PI / 2, -Math.PI / 2 + (1 - dcRatio) * Math.PI * 2);
+        ctx.fillStyle = 'rgba(215,163,245,0.7)';
+        ctx.fill();
+      } else {
+        ctx.beginPath();
+        ctx.arc(cx, cy, rad, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(215,163,245,0.9)';
+        ctx.fill();
+      }
+      ctx.fillStyle = '#fff';
+      ctx.font = '11px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('DASH', cx, cy);
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'alphabetic';
+    }
+
+    ctx.restore(); // 화면 흔들기 종료
   }
 
   // ── 게임 종료 ───────────────────────────────────────────────────

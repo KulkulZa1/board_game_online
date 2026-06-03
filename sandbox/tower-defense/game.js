@@ -27,6 +27,7 @@ window.TDGame = (function () {
     bossActive: false,
     bossTimerFull: 30,
     placingMode: false,
+    placingType: 'cannon',
     chosenPassives: [],
     baseFlash: 0,
     bossSlayerTimer: 0,
@@ -90,27 +91,90 @@ window.TDGame = (function () {
   }
 
   // ── Tower helpers ────────────────────────────────────────────────
-  function getTowerEmoji(level) {
-    return tokenEmoji('tower_lv' + (level + 1));
+  // 타워 타입별 설정 반환 (cannon → TD_CONFIG.TOWER, 그 외 → TOWER_TYPES[type])
+  function getTowerCfg(tower) {
+    var t = tower && tower.type;
+    if (t && t !== 'cannon' && TD_CONFIG.TOWER_TYPES && TD_CONFIG.TOWER_TYPES[t]) {
+      return TD_CONFIG.TOWER_TYPES[t];
+    }
+    return TD_CONFIG.TOWER;
+  }
+  function getTowerTypeCfg(type) {
+    return getTowerCfg({ type: type });
+  }
+  function getTowerEmoji(tower) {
+    // 캐논은 레벨별 이모지, 그 외 타입은 고정 이모지
+    if (tower && tower.type && tower.type !== 'cannon') {
+      var c = getTowerCfg(tower);
+      return c.emoji || '🗼';
+    }
+    var lvl = tower && typeof tower === 'object' ? tower.level : tower;
+    return tokenEmoji('tower_lv' + (lvl + 1));
   }
   function getTowerRange(tower) {
-    var cfg = TD_CONFIG.TOWER;
+    var cfg = getTowerCfg(tower);
     var lvl = cfg.upgradeLevels[tower.level];
     return cfg.range * lvl.rangeMult * (1 + getPassiveAdd('range'));
   }
   function getTowerDamage(tower) {
-    var cfg = TD_CONFIG.TOWER;
+    var cfg = getTowerCfg(tower);
     var lvl = cfg.upgradeLevels[tower.level];
-    return cfg.damage * lvl.damageMult * (1 + getPassiveAdd('damage'));
+    var dmg = cfg.damage * lvl.damageMult * (1 + getPassiveAdd('damage'));
+    return dmg;
   }
   function getTowerFireRate(tower) {
-    var cfg = TD_CONFIG.TOWER;
+    var cfg = getTowerCfg(tower);
     return cfg.fireRateMs * (1 + getPassiveAdd('firerate'));
   }
-  function getTowerCost() {
-    var base = TD_CONFIG.TOWER.cost;
+  function getTowerCost(type) {
+    var cfg = getTowerTypeCfg(type || 'cannon');
     var mult = 1 + (passiveStacks['costMult'] || 0);
-    return Math.max(10, Math.round(base * mult));
+    return Math.max(10, Math.round(cfg.cost * mult));
+  }
+
+  // ── Adjacency synergy ────────────────────────────────────────────
+  // towers 배치/판매/업그레이드 변경 시 호출하여 각 타워의 synergy 보너스를 재계산.
+  function recomputeSynergies() {
+    var defs = TD_CONFIG.SYNERGIES || [];
+    // 초기화
+    towers.forEach(function (t) {
+      t.synergy = { shatterDmg: 0, teslaChainAdd: 0, teslaSlow: false };
+      t.synergyIds = [];
+    });
+    if (!defs.length) return;
+    towers.forEach(function (t) {
+      var tType = t.type || 'cannon';
+      defs.forEach(function (def) {
+        // 이 타워가 def.a 또는 def.b 역할인지 확인 → 보너스는 항상 a 역할 타워에 부여
+        var myRole = null;
+        if (tType === def.a) myRole = 'a';
+        else if (tType === def.b) myRole = 'b';
+        if (!myRole) return;
+        var partnerType = (myRole === 'a') ? def.b : def.a;
+        // 같은 타입 시너지(예: tesla+tesla)는 자기 자신 제외 동일 타입 파트너 필요
+        var hasPartner = towers.some(function (o) {
+          if (o.id === t.id) return false;
+          var oType = o.type || 'cannon';
+          return oType === partnerType && dist(t, o) <= def.radius;
+        });
+        if (!hasPartner) return;
+        // 보너스 적용 (a/b 양쪽 모두 효과 부여 — 효과 키별로 의미가 다름)
+        var b = def.bonus || {};
+        if (b.shatterDmg && tType === 'cannon') t.synergy.shatterDmg += b.shatterDmg;
+        if (b.teslaChainAdd && tType === 'tesla') t.synergy.teslaChainAdd += b.teslaChainAdd;
+        if (b.teslaSlow && tType === 'tesla') t.synergy.teslaSlow = true;
+        if (t.synergyIds.indexOf(def.id) < 0) t.synergyIds.push(def.id);
+      });
+    });
+  }
+
+  // 현재 활성화된 시너지 id 집합 (UI 표시용)
+  function getActiveSynergies() {
+    var active = {};
+    towers.forEach(function (t) {
+      (t.synergyIds || []).forEach(function (id) { active[id] = true; });
+    });
+    return Object.keys(active);
   }
 
   // ── Dist / collision ─────────────────────────────────────────────
@@ -120,15 +184,17 @@ window.TDGame = (function () {
   }
 
   // ── Tower placement ──────────────────────────────────────────────
-  function placeTower(x, y) {
-    var cost = getTowerCost();
+  function placeTower(x, y, type) {
+    type = type || state.placingType || 'cannon';
+    var cost = getTowerCost(type);
     if (state.gold < cost) return false;
     if (dist({x: x, y: y}, BASE) < TD_CONFIG.BASE_RADIUS + 20) return false;
     for (var i = 0; i < towers.length; i++) {
       if (dist({x: x, y: y}, towers[i]) < 30) return false;
     }
-    towers.push({ id: nextTowerId++, x: x, y: y, level: 0, cd: 0, voidCount: 0 });
+    towers.push({ id: nextTowerId++, x: x, y: y, type: type, level: 0, cd: 0, voidCount: 0, synergy: { shatterDmg: 0, teslaChainAdd: 0, teslaSlow: false }, synergyIds: [] });
     state.gold -= cost;
+    recomputeSynergies();
     if (window.TDUI && TDUI.markUnsaved) TDUI.markUnsaved();
     return true;
   }
@@ -137,25 +203,29 @@ window.TDGame = (function () {
     var idx = towers.findIndex(function (t) { return t.id === id; });
     if (idx < 0) return;
     var t = towers[idx];
-    var totalSpent = TD_CONFIG.TOWER.cost;
+    var cfg = getTowerCfg(t);
+    var totalSpent = cfg.cost;
     for (var lv = 1; lv <= t.level; lv++) {
-      totalSpent += TD_CONFIG.TOWER.upgradeLevels[lv].cost;
+      totalSpent += cfg.upgradeLevels[lv].cost;
     }
-    var refund = Math.round(totalSpent * TD_CONFIG.TOWER.sellRatio);
+    var refund = Math.round(totalSpent * cfg.sellRatio);
     state.gold += refund;
     towers.splice(idx, 1);
     if (selectedTower && selectedTower.id === id) selectedTower = null;
+    recomputeSynergies();
     closeContextMenu();
   }
 
   function upgradeTower(id) {
     var t = towers.find(function (x) { return x.id === id; });
     if (!t) return;
-    if (t.level >= TD_CONFIG.TOWER.upgradeLevels.length - 1) return;
-    var cost = TD_CONFIG.TOWER.upgradeLevels[t.level + 1].cost;
+    var cfg = getTowerCfg(t);
+    if (t.level >= cfg.upgradeLevels.length - 1) return;
+    var cost = cfg.upgradeLevels[t.level + 1].cost;
     if (state.gold < cost) return;
     state.gold -= cost;
     t.level++;
+    recomputeSynergies();
     closeContextMenu();
     if (window.TDUI) TDUI.refresh();
   }
@@ -327,13 +397,22 @@ window.TDGame = (function () {
 
   // ── Projectile firing ─────────────────────────────────────────────
   function fireTower(tower, target, dt) {
-    var cfg = TD_CONFIG.TOWER;
+    var cfg = getTowerCfg(tower);
+    var mode = cfg.attack || 'projectile';
+    if (mode === 'frost') { fireFrost(tower, target, cfg); return; }
+    if (mode === 'tesla') { fireTesla(tower, target, cfg); return; }
+
     var lvlCfg = cfg.upgradeLevels[tower.level];
     var special = lvlCfg.special;
     var dmg = getTowerDamage(tower);
     var spd = cfg.projectileSpeed;
     var critRoll = Math.random() < (getPassiveAdd('crit') || 0);
     if (critRoll) dmg *= 2;
+    // Shatter 시너지: 둔화/빙결된 적에게 추가 데미지
+    var syn = tower.synergy || {};
+    if (syn.shatterDmg && (target.slowed > 0 || target.frozen > 0)) {
+      dmg *= (1 + syn.shatterDmg);
+    }
 
     var dx = target.x - tower.x;
     var dy = target.y - tower.y;
@@ -372,6 +451,67 @@ window.TDGame = (function () {
     tower.voidCount = ((tower.voidCount || 0) + 1);
   }
 
+  // Frost 타워: 둔화 투사체 발사 (명중 시 주변 둔화)
+  function fireFrost(tower, target, cfg) {
+    var dmg = getTowerDamage(tower);
+    var spd = cfg.projectileSpeed;
+    var dx = target.x - tower.x, dy = target.y - tower.y;
+    var len = Math.sqrt(dx * dx + dy * dy) || 1;
+    projectiles.push({
+      id: nextProjId++,
+      x: tower.x, y: tower.y,
+      vx: dx / len * spd, vy: dy / len * spd,
+      dmg: dmg,
+      pierce: 0, pierced: 0,
+      splash: 0,
+      special: 'frost',
+      frostSlowFactor: cfg.frostSlowFactor,
+      frostSlowDur: cfg.frostSlowDur,
+      frostSplashRadius: cfg.frostSplashRadius,
+      arcChain: 0,
+      hitSet: {},
+      towerId: tower.id,
+      life: 2.0
+    });
+  }
+
+  // Tesla 타워: 즉시 연쇄 번개 (투사체 없음)
+  function fireTesla(tower, target, cfg) {
+    var syn = tower.synergy || {};
+    var baseDmg = getTowerDamage(tower);
+    var critRoll = Math.random() < (getPassiveAdd('crit') || 0);
+    if (critRoll) baseDmg *= 2;
+    var chainTotal = cfg.teslaChainCount + (passiveStacks['chain'] || 0) + (syn.teslaChainAdd || 0);
+    var falloff = cfg.teslaChainFalloff;
+    var radius = cfg.teslaChainRadius;
+    var applySlow = !!syn.teslaSlow;
+
+    var current = target;
+    var prev = tower;
+    var hit = {};
+    var dmg = baseDmg;
+    for (var c = 0; c <= chainTotal && current; c++) {
+      hit[current.id] = true;
+      drawLightning(prev, current);
+      current.hp -= dmg;
+      if (applySlow) { current.slowed = Math.max(current.slowed, 1.2); current.slowFactor = 0.55; }
+      spawnParticle(current.x, current.y, tokenColor('proj_chain'), 8, 0.35);
+      var src = current;
+      if (current.hp <= 0) killEnemy(current, { towerId: tower.id });
+      // 다음 연쇄 대상 탐색
+      prev = src;
+      dmg *= falloff;
+      current = enemies
+        .filter(function (e) { return !hit[e.id] && dist(e, src) < radius; })
+        .sort(function (a, b) { return dist(a, src) - dist(b, src); })[0];
+    }
+  }
+
+  // 번개 시각 효과 (particles 에 line 타입 추가)
+  function drawLightning(a, b) {
+    particles.push({ type: 'lightning', x1: a.x, y1: a.y, x2: b.x, y2: b.y, life: 0.18, maxLife: 0.18, color: tokenColor('proj_chain') });
+  }
+
   // ── Hit enemy ────────────────────────────────────────────────────
   function hitEnemy(proj, enemy) {
     if (proj.hitSet[enemy.id]) return false;
@@ -383,6 +523,22 @@ window.TDGame = (function () {
     if (proj.slowChance > 0 && Math.random() < proj.slowChance) {
       enemy.slowed = 2.0;
       enemy.slowFactor = 0.5;
+    }
+
+    // frost 타워: 명중 시 둔화 + 주변 둔화 splash
+    if (proj.special === 'frost') {
+      enemy.slowed = Math.max(enemy.slowed, proj.frostSlowDur);
+      enemy.slowFactor = proj.frostSlowFactor;
+      var fr = proj.frostSplashRadius || 0;
+      if (fr > 0) {
+        enemies.forEach(function (e) {
+          if (e.id !== enemy.id && !e.isBoss && dist(e, enemy) < fr) {
+            e.slowed = Math.max(e.slowed, proj.frostSlowDur * 0.7);
+            e.slowFactor = proj.frostSlowFactor;
+          }
+        });
+      }
+      spawnParticle(enemy.x, enemy.y, tokenColor('proj_void') || '#5dade2', 8, 0.4);
     }
 
     // freeze passive
@@ -697,6 +853,20 @@ window.TDGame = (function () {
         ctx.strokeStyle = pt.color;
         ctx.lineWidth = 3;
         ctx.stroke();
+      } else if (pt.type === 'lightning') {
+        ctx.beginPath();
+        ctx.moveTo(pt.x1, pt.y1);
+        // 지그재그 번개
+        var mx = (pt.x1 + pt.x2) / 2 + (Math.random() - 0.5) * 18;
+        var my = (pt.y1 + pt.y2) / 2 + (Math.random() - 0.5) * 18;
+        ctx.lineTo(mx, my);
+        ctx.lineTo(pt.x2, pt.y2);
+        ctx.strokeStyle = pt.color;
+        ctx.lineWidth = 2.5;
+        ctx.shadowBlur = 8;
+        ctx.shadowColor = pt.color;
+        ctx.stroke();
+        ctx.shadowBlur = 0;
       }
       ctx.globalAlpha = 1;
     });
@@ -739,11 +909,22 @@ window.TDGame = (function () {
     });
 
     // Towers
+    var TYPE_FILL = { cannon: 'rgba(52,152,219,', frost: 'rgba(93,173,226,', tesla: 'rgba(241,196,15,' };
     towers.forEach(function (t) {
       var isHovered = (t === hoveredTower);
+      var tType = t.type || 'cannon';
+      var fillBase = TYPE_FILL[tType] || TYPE_FILL.cannon;
+      // 시너지 활성 시 황금 링
+      if (t.synergyIds && t.synergyIds.length) {
+        ctx.beginPath();
+        ctx.arc(t.x, t.y, 18, 0, Math.PI * 2);
+        ctx.strokeStyle = 'rgba(241,196,15,0.8)';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
       ctx.beginPath();
       ctx.arc(t.x, t.y, 14, 0, Math.PI * 2);
-      ctx.fillStyle = isHovered ? 'rgba(52,152,219,0.35)' : 'rgba(52,152,219,0.2)';
+      ctx.fillStyle = fillBase + (isHovered ? '0.4)' : '0.22)');
       ctx.fill();
       ctx.strokeStyle = tokenColor('tower_color');
       ctx.lineWidth = isHovered ? 2.5 : 1.5;
@@ -751,7 +932,7 @@ window.TDGame = (function () {
       ctx.font = '18px serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(getTowerEmoji(t.level), t.x, t.y);
+      ctx.fillText(getTowerEmoji(t), t.x, t.y);
     });
 
     // Base
@@ -789,7 +970,10 @@ window.TDGame = (function () {
       ctx.font = '13px sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText('Click to place tower (' + getTowerCost() + 'g) — Right-click to cancel', W / 2, H - 15);
+      var pType = state.placingType || 'cannon';
+      var pCfg = getTowerTypeCfg(pType);
+      var pEmoji = (pType === 'cannon') ? '🏰' : (pCfg.emoji || '🏰');
+      ctx.fillText('Place ' + pEmoji + ' ' + (pCfg.name || 'Cannon') + ' (' + getTowerCost(pType) + 'g) — Right-click to cancel', W / 2, H - 15);
     }
 
     // Toasts
@@ -988,14 +1172,16 @@ window.TDGame = (function () {
     div.style.left = clientX + 'px';
     div.style.top = clientY + 'px';
 
-    var lvlCfg = TD_CONFIG.TOWER.upgradeLevels[tower.level];
+    var tcfg = getTowerCfg(tower);
+    var lvlCfg = tcfg.upgradeLevels[tower.level];
     var info = document.createElement('div');
     info.style.cssText = 'color:#aaa;font-size:0.75rem;padding:3px 6px 6px;border-bottom:1px solid #2a2a3a;margin-bottom:4px;';
-    info.textContent = 'Lv' + (tower.level + 1) + ' ' + lvlCfg.label;
+    var synTxt = (tower.synergyIds && tower.synergyIds.length) ? ' ✨' + tower.synergyIds.join('+') : '';
+    info.textContent = (tcfg.emoji || '🏰') + ' Lv' + (tower.level + 1) + ' ' + lvlCfg.label + synTxt;
     div.appendChild(info);
 
-    if (tower.level < TD_CONFIG.TOWER.upgradeLevels.length - 1) {
-      var nextCost = TD_CONFIG.TOWER.upgradeLevels[tower.level + 1].cost;
+    if (tower.level < tcfg.upgradeLevels.length - 1) {
+      var nextCost = tcfg.upgradeLevels[tower.level + 1].cost;
       var canUpgrade = state.gold >= nextCost;
       var upBtn = document.createElement('button');
       upBtn.textContent = '⬆ Upgrade (' + nextCost + 'g)';
@@ -1006,7 +1192,7 @@ window.TDGame = (function () {
       div.appendChild(upBtn);
     }
 
-    var sellRefund = Math.round(TD_CONFIG.TOWER.cost * TD_CONFIG.TOWER.sellRatio);
+    var sellRefund = Math.round(tcfg.cost * tcfg.sellRatio);
     var sellBtn = document.createElement('button');
     sellBtn.textContent = '💸 Sell (+' + sellRefund + 'g)';
     sellBtn.style.cssText = 'display:block;width:100%;background:rgba(231,76,60,0.1);border:1px solid #e74c3c44;border-radius:5px;color:#e74c3c;padding:5px 8px;cursor:pointer;font-size:0.8rem;text-align:left;';
@@ -1094,6 +1280,7 @@ window.TDGame = (function () {
   function onConfigChange() {
     computeSpawnPoints();
     state.capacity = TD_CONFIG.BASE_CAPACITY;
+    recomputeSynergies();
   }
 
   function getState() {
@@ -1112,9 +1299,11 @@ window.TDGame = (function () {
       bossTimeLeft: state.bossTimeLeft,
       bossActive: state.bossActive,
       placingMode: state.placingMode,
+      placingType: state.placingType,
       towers: towers,
       passiveStacks: passiveStacks,
-      chosenPassives: state.chosenPassives
+      chosenPassives: state.chosenPassives,
+      activeSynergies: getActiveSynergies()
     };
   }
 
@@ -1130,8 +1319,12 @@ window.TDGame = (function () {
     };
   }
 
-  function setPlacingMode(on) {
+  function setPlacingMode(on, type) {
     state.placingMode = on;
+    if (type) state.placingType = type;
+  }
+  function setPlacingType(type) {
+    state.placingType = type;
   }
 
   function resumeFromPassive() {
@@ -1166,9 +1359,12 @@ window.TDGame = (function () {
     getState: getState,
     getStats: getStats,
     setPlacingMode: setPlacingMode,
+    setPlacingType: setPlacingType,
     resumeFromPassive: resumeFromPassive,
     advanceStage: advanceStage,
     addToast: addToast,
-    getTowerCost: getTowerCost
+    getTowerCost: getTowerCost,
+    getActiveSynergies: getActiveSynergies,
+    recomputeSynergies: recomputeSynergies
   };
 })();

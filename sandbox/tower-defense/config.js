@@ -146,8 +146,82 @@
       voidInterval: 4,
       voidSlowDur: 2.0,
       voidSplashRadius: 70,
-      voidDamageMult: 3.0
+      voidDamageMult: 3.0,
+      attack: 'projectile'   // 기본 캐논: 투사체 발사
     },
+
+    // ── Tower types (캐논 외 추가 타워) ─────────────────────────────
+    // 각 타입은 TOWER 와 동일한 필드 구조 + attack 모드로 동작한다.
+    // attack: 'projectile'(캐논) | 'frost'(둔화 투사체) | 'tesla'(즉시 연쇄 번개)
+    TOWER_TYPES: {
+      frost: {
+        name: 'Frost Tower',
+        type: 'frost',
+        emoji: '❄️',
+        cost: 70,
+        sellRatio: 0.7,
+        range: 100,
+        damage: 8,
+        fireRateMs: 900,
+        projectileSpeed: 280,
+        attack: 'frost',
+        frostSlowFactor: 0.5,   // 적 속도 50%로 둔화
+        frostSlowDur: 1.6,      // 둔화 지속(초)
+        frostSplashRadius: 45,  // 명중 지점 주변 둔화 반경
+        upgradeLevels: [
+          { cost: 0,   damageMult: 1.0, rangeMult: 1.0,  label: 'Frost Spire',   special: null },
+          { cost: 90,  damageMult: 1.2, rangeMult: 1.1,  label: 'Ice Spire',     special: null },
+          { cost: 140, damageMult: 1.5, rangeMult: 1.2,  label: 'Glacier Spire', special: null },
+          { cost: 200, damageMult: 1.9, rangeMult: 1.3,  label: 'Blizzard',      special: 'deepfreeze' },
+          { cost: 320, damageMult: 2.4, rangeMult: 1.4,  label: 'Absolute Zero', special: 'deepfreeze' }
+        ]
+      },
+      tesla: {
+        name: 'Tesla Tower',
+        type: 'tesla',
+        emoji: '⚡',
+        cost: 110,
+        sellRatio: 0.7,
+        range: 120,
+        damage: 16,
+        fireRateMs: 700,
+        projectileSpeed: 0,        // 즉시 명중(투사체 없음)
+        attack: 'tesla',
+        teslaChainCount: 3,        // 기본 연쇄 대상 수
+        teslaChainRadius: 90,
+        teslaChainFalloff: 0.75,   // 연쇄마다 데미지 75%
+        upgradeLevels: [
+          { cost: 0,   damageMult: 1.0, rangeMult: 1.0,  label: 'Spark Coil',   special: null },
+          { cost: 120, damageMult: 1.3, rangeMult: 1.1,  label: 'Arc Coil',     special: null },
+          { cost: 170, damageMult: 1.7, rangeMult: 1.2,  label: 'Storm Coil',   special: null },
+          { cost: 240, damageMult: 2.2, rangeMult: 1.3,  label: 'Tempest Coil', special: 'megachain' },
+          { cost: 380, damageMult: 3.0, rangeMult: 1.45, label: 'Thunder God',  special: 'megachain' }
+        ]
+      }
+    },
+
+    // ── Adjacency Synergies (인접 타워 조합 보너스) ────────────────
+    // 서로 다른(또는 같은) 타입의 타워가 radius 안에 함께 있으면 발동.
+    SYNERGIES: [
+      {
+        id: 'shatter', name: 'Shatter', icon: '💥',
+        a: 'frost', b: 'cannon', radius: 130,
+        desc: 'Cannons next to a Frost tower deal +60% damage to slowed/frozen enemies.',
+        bonus: { shatterDmg: 0.6 }
+      },
+      {
+        id: 'overload', name: 'Overload', icon: '🌩️',
+        a: 'tesla', b: 'tesla', radius: 150,
+        desc: 'Two Tesla towers near each other chain to +2 extra targets.',
+        bonus: { teslaChainAdd: 2 }
+      },
+      {
+        id: 'cryocharge', name: 'Cryo-Charge', icon: '❄️⚡',
+        a: 'frost', b: 'tesla', radius: 130,
+        desc: 'Tesla near Frost: lightning chains also slow every enemy they hit.',
+        bonus: { teslaSlow: true }
+      }
+    ],
 
     // ── Enemy types ───────────────────────────────────────────────
     ENEMY_TYPES: {

@@ -198,6 +198,23 @@ html, body {
   font-size: 0.78rem;
 }
 
+/* 진화 선택지 — 황금 강조 */
+.upgrade-btn.evolution {
+  background: linear-gradient(135deg, rgba(241,196,15,0.22), rgba(230,126,34,0.18));
+  border: 1px solid #f1c40f;
+  box-shadow: 0 0 14px rgba(241,196,15,0.35);
+  animation: evo-glow 1.2s ease-in-out infinite alternate;
+}
+.upgrade-btn.evolution:hover, .upgrade-btn.evolution:active {
+  background: linear-gradient(135deg, rgba(241,196,15,0.38), rgba(230,126,34,0.3));
+  border-color: #f39c12;
+}
+.upgrade-btn.evolution .upgrade-name { color: #f1c40f; }
+@keyframes evo-glow {
+  from { box-shadow: 0 0 10px rgba(241,196,15,0.25); }
+  to   { box-shadow: 0 0 20px rgba(241,196,15,0.55); }
+}
+
 /* ── HP Bar ─────────────────────────────────────── */
 #hpBar {
   display: flex;
@@ -268,6 +285,14 @@ html, body {
   font-size: 0.7rem;
   color: #d7a3f5;
   white-space: nowrap;
+}
+.weapon-slot b { color: #fff; font-size: 0.66rem; }
+.weapon-slot.weapon-maxed { border-color: #8e44ad; color: #c39bf0; }
+.weapon-slot.weapon-evolved {
+  background: linear-gradient(135deg, rgba(241,196,15,0.18), rgba(142,68,173,0.18));
+  border-color: #f1c40f;
+  color: #f1c40f;
+  box-shadow: 0 0 8px rgba(241,196,15,0.3);
 }
 
 /* ── Joystick ─────────────────────────────────────── */
