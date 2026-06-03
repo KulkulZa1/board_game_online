@@ -35,6 +35,9 @@ This note records the launch-readiness work for `/arcade/vampire/`.
 - Achievement and run report layer.
   - One-time achievements grant coin rewards for survival milestones, first clear, hard clear, triple evolution, near-miss clear, defense-line tower play, and no-revive clear.
   - The end screen reports evolved weapon count, tower placements, lowest HP, and missed evolution hints so failed evolution attempts become readable next-run plans.
+- Sandbox evolution mirror.
+  - `sandbox/vampire-survivors/` now stores evolved skills and `EVOLUTIONS` recipes in `VS_CONFIG`, exposes editable base/passive/result rows, shows golden evolution cards, and swaps max-level base skills into evolved skills at runtime.
+  - Old local sandbox saves are migrated by appending missing default evolved skills and recipes.
 
 ## Verification targets
 
@@ -43,6 +46,7 @@ This note records the launch-readiness work for `/arcade/vampire/`.
 - `npm run test:full`
 - `npm run check`
 - `npm run build`
+- `npm run test:full` includes a VM-level sandbox check that forces `orb` level 5 plus `spinach`, verifies the `blackhole` evolution card is offered, then selects it and checks the weapon swap.
 - Manual browser check at `/arcade/vampire/`:
   - start overlay shows character, difficulty, and meta chips.
   - start overlay shows map selection, daily challenge, permanent upgrades, and start boost controls.
@@ -56,6 +60,6 @@ This note records the launch-readiness work for `/arcade/vampire/`.
 ## Remaining design work
 
 - Premium character purchase and ad-removal IAP are not implemented; current rewarded hooks use test ad IDs and must be replaced before store submission.
-- The sandbox version still needs a full mirror of the production evolution/meta loop if sandbox editing is expected to tune every production rule.
+- The sandbox version now mirrors skill leveling and evolution recipes, but it does not yet mirror the full production meta loop: character unlocks, difficulty/map selection, daily modifiers, coins, achievements, and TD hybrid tuning remain arcade-side.
 - Two-player cooperative Vampire Survivors mode remains a larger architecture task because it needs deterministic state sync or authoritative server simulation.
 - The TD hybrid currently ships as an in-run tower-placement layer, not a full sandbox-authored premium TD stage publishing system.

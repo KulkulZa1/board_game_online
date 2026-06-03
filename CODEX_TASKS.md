@@ -32,7 +32,14 @@
 
 ## TASK A — Mirror evolution system into Sandbox VPS
 
-**Goal:** Bring weapon leveling + evolution to the config-driven sandbox version so it can be
+**Status:** DONE on `audit/vps-director-loop`.
+
+- `sandbox/vampire-survivors/config.js` now defines `maxSkillLevel`, evolved skills, and `EVOLUTIONS`.
+- `sandbox/vampire-survivors/game.js` tracks `skillLevels` and `ownedPassives`, offers golden evolution choices, applies passives, and swaps base skills into evolved skills.
+- `sandbox/vampire-survivors/ui.js` exposes editable evolution base/passive/result rows.
+- `scripts/smoke-check.js` includes a VM-level runtime check for `orb + spinach -> blackhole`.
+
+**Original goal:** Bring weapon leveling + evolution to the config-driven sandbox version so it can be
 designed/tuned there, matching the arcade behavior.
 
 **Files:** `sandbox/vampire-survivors/{config.js, game.js, ui.js}`

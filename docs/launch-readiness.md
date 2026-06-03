@@ -30,6 +30,7 @@ This launch-readiness pass found and fixed:
 - `npm run dev` was missing; it now starts the local server like `npm start`.
 - Multiplayer chat now shows short speech bubbles above host/guest player bars while preserving the existing chat log.
 - The smoke test now covers chat payload trimming plus client-side bubble behavior for live messages versus history replay.
+- Vampire Survivors sandbox now mirrors the production skill-level/evolution loop with editable evolution recipes and a runtime smoke check for `orb + spinach -> blackhole`.
 - Service worker caching no longer serves old JS/CSS before checking the network; this prevents deployed game logic from appearing stale after Render deploys.
 - All HTML pages now load `/js/sw-update.js`, which registers the service worker consistently and reloads controlled pages once after an updated worker takes control.
 - Server responses for HTML, `sw.js`, JS, CSS, and `manifest.json` now send `Cache-Control: no-cache, no-store, must-revalidate`.
@@ -62,6 +63,8 @@ Sandbox editors save same-origin `localStorage` configuration. Main arcade games
 | `/sandbox/tower-defense/` | `sandbox_td_config` | `/arcade/tower-defense/` |
 
 Local and production browser storage are separate. A stage created on localhost will not appear on Render unless it is also created on the production origin or exported into source code.
+
+The Vampire Survivors sandbox now edits skill evolutions as config data, but arcade-only meta systems such as coins, achievements, character unlocks, daily challenge, map unlocks, and the in-run TD hybrid still need a shared schema before the sandbox can tune every production rule.
 
 ## Verification checklist
 

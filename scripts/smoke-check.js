@@ -388,6 +388,144 @@ function checkVampireDirectorLoopCoverage() {
   }
 }
 
+function checkVampireSandboxEvolutionCoverage() {
+  const config = fs.readFileSync(path.join(root, 'sandbox/vampire-survivors/config.js'), 'utf8');
+  const game = fs.readFileSync(path.join(root, 'sandbox/vampire-survivors/game.js'), 'utf8');
+  const ui = fs.readFileSync(path.join(root, 'sandbox/vampire-survivors/ui.js'), 'utf8');
+  const page = fs.readFileSync(path.join(root, 'sandbox/vampire-survivors/index.html'), 'utf8');
+
+  const configMarkers = ['maxSkillLevel', 'EVOLUTIONS', 'blackhole', 'stormbow', 'supernova', 'deathray', 'aegis', 'evolved: true'];
+  const missingConfig = configMarkers.filter((marker) => !config.includes(marker));
+  if (missingConfig.length) {
+    throw new Error(`Vampire sandbox evolution config missing: ${missingConfig.join(', ')}`);
+  }
+
+  const gameMarkers = [
+    'skillLevels',
+    'ownedPassives',
+    'availableEvolutions',
+    'evolveSkill',
+    'applyPassive',
+    'configuredMaxSkillLevel',
+    'blackhole',
+    'stormbow',
+    'supernova',
+    'deathray',
+    'aegis',
+  ];
+  const missingGame = gameMarkers.filter((marker) => !game.includes(marker));
+  if (missingGame.length) {
+    throw new Error(`Vampire sandbox evolution runtime missing: ${missingGame.join(', ')}`);
+  }
+
+  const uiMarkers = ['renderEvolutionEditor', 'evolution-base', 'evolution-result', 'syncLegacyEvolutionLinks', 'mergeMissingDefaultRows'];
+  const missingUi = uiMarkers.filter((marker) => !ui.includes(marker));
+  if (missingUi.length) {
+    throw new Error(`Vampire sandbox evolution editor missing: ${missingUi.join(', ')}`);
+  }
+
+  if (!page.includes('.levelup-choice.evolution') || !page.includes('.evolution-editor')) {
+    throw new Error('Vampire sandbox should style golden evolution cards and the evolution editor');
+  }
+
+  checkVampireSandboxEvolutionRuntime(config, game);
+}
+
+function checkVampireSandboxEvolutionRuntime(configScript, gameScript) {
+  let rafCallback = null;
+  let capturedChoices = null;
+  let capturedSelect = null;
+
+  const canvasContext = {
+    fillStyle: '',
+    strokeStyle: '',
+    lineWidth: 1,
+    globalAlpha: 1,
+    shadowColor: '',
+    shadowBlur: 0,
+    font: '',
+    textAlign: '',
+    textBaseline: '',
+    fillRect() {},
+    strokeRect() {},
+    clearRect() {},
+    beginPath() {},
+    moveTo() {},
+    lineTo() {},
+    stroke() {},
+    fill() {},
+    arc() {},
+    save() {},
+    restore() {},
+    fillText() {},
+    translate() {},
+    rotate() {},
+  };
+
+  const context = {
+    console,
+    Math,
+    Date,
+    JSON,
+    Set,
+    Object,
+    Array,
+    Number,
+    String,
+    parseInt,
+    parseFloat,
+    isFinite,
+    requestAnimationFrame(cb) {
+      rafCallback = cb;
+      return 1;
+    },
+    cancelAnimationFrame() {},
+    addEventListener() {},
+    tokenColor() { return '#ffffff'; },
+    tokenEmoji(key) { return key; },
+  };
+  context.window = context;
+  context.VSUI = {
+    showLevelUpModal(choices, onSelect) {
+      capturedChoices = choices;
+      capturedSelect = onSelect;
+    },
+    onGameEnd() {},
+  };
+  vm.createContext(context);
+
+  vm.runInContext(configScript, context, { filename: 'sandbox/vampire-survivors/config.js' });
+  vm.runInContext(gameScript, context, { filename: 'sandbox/vampire-survivors/game.js' });
+
+  const canvas = {
+    width: 800,
+    height: 600,
+    style: {},
+    parentElement: { clientWidth: 800, clientHeight: 600 },
+    getContext() { return canvasContext; },
+  };
+  context.VSGame.init(canvas);
+  context.VSGame.startStage(0);
+  const player = context.VSGame.getPlayer();
+  player.skillLevels.orb = 5;
+  player.appliedSkills.orb = 5;
+  player.ownedPassives.push('spinach');
+  player.xp = 9999;
+  if (typeof rafCallback !== 'function') {
+    throw new Error('Vampire sandbox runtime did not schedule a frame');
+  }
+  rafCallback(16);
+
+  const evolution = capturedChoices && capturedChoices.find((choice) => choice.kind === 'evolve' && choice.id === 'blackhole');
+  if (!evolution) {
+    throw new Error('Vampire sandbox runtime did not offer blackhole as a golden evolution choice');
+  }
+  capturedSelect('blackhole');
+  if (!player.weapons.includes('blackhole') || player.weapons.includes('orb')) {
+    throw new Error('Vampire sandbox evolution choice should swap orb into blackhole');
+  }
+}
+
 async function checkVersionBadgeUi() {
   const elements = new Map();
 
@@ -634,6 +772,7 @@ async function main() {
     checkVersionBadgeCoverage();
     checkTowerDefenseSandboxCoverage();
     checkVampireDirectorLoopCoverage();
+    checkVampireSandboxEvolutionCoverage();
     await checkVersionBadgeUi();
     runSyntaxCheck();
     console.log(`Smoke check passed: ${baseUrl}`);

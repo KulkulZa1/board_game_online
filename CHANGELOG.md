@@ -6,6 +6,7 @@
 - Character selection, difficulty selection, local meta progression, permanent upgrades, daily challenge, map unlocks, pause UI, survival win resolution, and rewarded ad hooks for `/arcade/vampire/`.
 - Tower Defense hybrid loop for `/arcade/vampire/`: players can place Cannon/Frost/Tesla towers during runs with rechargeable tower charges.
 - Achievement coin rewards and end-run evolution reports that show missed evolution plans, lowest HP, and tower placements.
+- Sandbox Vampire Survivors evolution mirror: `sandbox/vampire-survivors/` now has config-driven evolved skills, editable evolution recipes, golden evolution level-up cards, passive prerequisites, and a runtime smoke check that verifies `orb + spinach -> blackhole`.
 - Smoke-check coverage for Vampire Survivors character/difficulty/meta/pause/revive markers.
 - `docs/vampire-survivors-director-loop.md` with verification targets and remaining design work.
 
