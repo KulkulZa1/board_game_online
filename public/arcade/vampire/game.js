@@ -17,7 +17,7 @@
   // ── 게임 상수 ───────────────────────────────────────────────────
   const PLAYER_SPEED   = 160;  // px/s
   const BASE_HP        = 100;
-  const XP_PER_LEVEL   = [0, 30, 60, 100, 150, 220, 300, 400, 520, 660, 820];
+  // 레벨업 필요 XP는 xpNeeded() 의 다항식 곡선으로 계산 (무한 레벨 지원)
   const WAVE_INTERVAL  = 5;    // 초마다 적 추가 웨이브
   const MAX_ENEMIES    = 200;
   const DASH_COOLDOWN  = 1.8;  // 대쉬 공격 쿨다운(초)
@@ -363,8 +363,11 @@
     waveCount++;
     const isHorde = (waveCount % HORDE_WAVE_EVERY === 0);
     if (isHorde) floatTexts.push({ text: '🔥 HORDE WAVE!', life: 2.0, maxLife: 2.0, screenSpace: true, color: '#e74c3c', size: 20 });
-    const difficulty = 1 + elapsed / 100;
-    const baseCount = isHorde ? Math.min(20 + Math.floor(elapsed / 10), 55) : Math.min(8 + Math.floor(elapsed / 12), 35);
+    // 난이도 곡선: 분(m) 기준 가속 성장 — 초반 완만, 후반 급증 (플레이어 DPS 가속에 대응)
+    //   1분=1.96, 3분=4.24, 5분=7.0, 10분=16.0, 15분=28.0
+    const m = elapsed / 60;
+    const difficulty = 1 + 0.9 * m + 0.06 * m * m;
+    const baseCount = isHorde ? Math.min(20 + Math.floor(elapsed / 10), 60) : Math.min(8 + Math.floor(elapsed / 12), 38);
     for (let i = 0; i < baseCount; i++) {
       if (enemies.length >= MAX_ENEMIES) break;
       const angle = Math.random() * Math.PI * 2;
@@ -387,7 +390,7 @@
         speed: [75, 55, 35][tier] + Math.random() * 20,
         size:  [10, 15, 22][tier],
         color: ['#e74c3c', behavior === 'archer' ? '#1abc9c' : '#9b59b6', '#c0392b'][tier],
-        xpVal: [3, 8, 20][tier],
+        xpVal: Math.round([3, 8, 20][tier] * (1 + elapsed / 300)),  // XP 보상도 시간에 따라 증가 (레벨 페이스 유지)
         tier,
         hurtFlash: 0,
         frozen: 0,
@@ -395,7 +398,7 @@
         attackCd: Math.random() * attackBase,   // 초기 공격 시간 분산
         attackBase,
         attackRange: behavior === 'archer' ? (tier === 2 ? 280 : 220) : 0,
-        attackDmg: [10, 20, 38][tier],
+        attackDmg: Math.round([10, 20, 38][tier] * (1 + elapsed / 500)),  // 적 공격력 완만 상승 (후반 위협 유지)
       });
     }
   }
@@ -556,7 +559,9 @@
     bossActive  = true;
     bossWarning = 2.5;
     const bossNum = Math.floor(elapsed / BOSS_INTERVAL);
-    const hp = 2800 + bossNum * 900;
+    // 보스 HP는 경과 시간에 비례해 스케일 — 해당 시점 플레이어 DPS로 약 15~25초 교전이 되도록 설계
+    //   1번째(5분)≈22.5k, 2번째(10분)≈52k, 3번째(15분)≈93.5k
+    const hp = Math.round((5000 + bossNum * 4000) * (1 + elapsed / 200));
     const ang = Math.random() * Math.PI * 2;
     enemies.push({
       x: player.x + Math.cos(ang) * 430,
@@ -573,7 +578,7 @@
       attackCd: 0.6,
       attackBase: 2.5,
       attackRange: 390,
-      attackDmg: 45 + bossNum * 12,
+      attackDmg: 40 + bossNum * 15,
       bossPhase: 0,
       frozen: 0,
       faceAngle: 0,
@@ -592,8 +597,10 @@
     }
   }
 
+  // XP 곡선: 초반 빠른 성장 → 후반 완만 (lv^1.8). 무한 모드까지 매끄럽게 증가.
+  //   Lv1=32, Lv5=237, Lv10=777, Lv15=1571, Lv20=2631, Lv30=5456
   function xpNeeded(lv) {
-    return XP_PER_LEVEL[Math.min(lv, XP_PER_LEVEL.length - 1)] || (lv * 100);
+    return Math.round(20 + 12 * Math.pow(lv, 1.8));
   }
 
   function showLevelUp() {

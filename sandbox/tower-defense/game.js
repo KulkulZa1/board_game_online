@@ -300,7 +300,11 @@ window.TDGame = (function () {
     state.infinityWave++;
     var wv = state.infinityWave;
     var isBoss = (wv % inf.bossEveryNWaves === 0);
-    var hpMult = 1 + wv * inf.hpScalePerWave;
+    // 무한 모드 HP 곡선: 선형 + 완만한 복리(1.5%/웨이브)로 후반에도 위협 유지
+    //   wv10≈2.4×, wv25≈4.3×, wv50≈14.7× (복리 가속)
+    var hpMult = (1 + wv * inf.hpScalePerWave) * Math.pow(1.015, wv);
+    // 보스 웨이브는 bossHpScale 추가 적용 (기존엔 미적용 버그)
+    if (isBoss) hpMult *= (1 + wv * inf.bossHpScale);
     var speedMult = 1 + wv * inf.speedScalePerWave;
     var count = inf.countBase + wv * inf.countPerWave;
     var interval = Math.max(inf.intervalMinMs, inf.intervalMs - wv * 20);
