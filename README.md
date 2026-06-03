@@ -46,11 +46,51 @@ https://board-game-online.onrender.com
 git clone https://github.com/KulkulZa1/board_game_online.git
 cd board_game_online
 npm install
-node server.js
+npm run dev  # 또는 npm start
 # → http://localhost:3000
 ```
 
 **Node.js 18 이상** 필요
+
+### 검증 명령
+
+```bash
+npm run lint   # 모든 JS 파일 문법 검사
+npm test       # 로컬 서버 기동 + 핵심 라우트/정적 자산/핸들러 스모크 테스트
+npm run check  # lint + test
+npm run build  # 별도 빌드 단계 없음 안내
+npm run dev    # 로컬 개발 서버 실행
+```
+
+이 프로젝트는 번들러 없는 Node/Express + 정적 HTML/CSS/JS 앱입니다. Render.com 배포도 `npm install` 후 `node server.js`로 실행됩니다.
+
+---
+
+## Sandbox to main-game content flow
+
+The sandbox editors save their live config to browser `localStorage` on the same origin:
+
+| Sandbox | Storage key | Main game using it |
+|---|---|---|
+| `/sandbox/vampire-survivors/` | `sandbox_vs_config` | `/arcade/vampire/` |
+| `/sandbox/plant-growing/` | `sandbox_pg_config` | `/arcade/plant/` |
+| `/sandbox/tower-defense/` | `sandbox_td_config` | `/arcade/tower-defense/` |
+
+For a real deployment check, edit and save a sandbox stage on the production origin, then open the matching `/arcade/.../` page on the same origin. Local `localStorage` and Render production `localStorage` are separate browser origins, so local sandbox edits do not automatically appear on production.
+
+See `docs/launch-readiness.md` for the current security, deployment, and manual verification checklist.
+
+---
+
+## Chat speech bubbles
+
+In multiplayer rooms, live chat messages still appear in the normal chat log and now also show a short speech bubble above the sending player's bar.
+
+- Bubbles use the existing `chat:send` / `chat:message` Socket.io flow.
+- History replay does not recreate old bubbles after refresh or reconnect.
+- One bubble is shown per player at a time; a newer message replaces the older bubble.
+- Bubble text is inserted with `textContent`, visually truncated, and hidden automatically after a short delay.
+- Spectator-authored chat remains in the chat log only because there is no stable spectator avatar/player bar in the shared game shell yet.
 
 ---
 
@@ -68,6 +108,7 @@ node server.js
 - 개인 전적 기록 (게임별 승/패/무 통계)
 - PC + Android 모바일 지원
 - PWA (홈 화면 추가 지원)
+- `/sandbox/` 신규 게임 실험실 (Render에서도 정적 라우트로 제공)
 
 ---
 
@@ -99,5 +140,6 @@ main    ← 안정 배포 버전 (Render.com 자동 배포)
 | 서버 | Express 4, Socket.io 4 |
 | 체스 검증 | chess.js 0.12.0 |
 | 프론트엔드 | Vanilla HTML/CSS/JS |
+| 정적 파일 | `public/` + `/sandbox/` |
 | 배포 | Render.com |
 | 형상 관리 | GitHub |

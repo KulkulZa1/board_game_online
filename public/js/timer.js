@@ -94,5 +94,16 @@ window.Timer = (function () {
     }
   }
 
-  return { update, formatTime, startLoop, stopLoop };
+  function setTime(color, seconds) {
+    const ms = Math.max(0, Number(seconds) || 0) * 1000;
+    if (color === 'white') _white = ms;
+    if (color === 'black') _black = ms;
+    if (!_myColor) _myColor = color;
+
+    const targetId = color === _myColor ? 'my-timer' : 'opponent-timer';
+    const target = document.getElementById(targetId);
+    if (target) target.textContent = formatTime(ms);
+  }
+
+  return { update, setTime, formatTime, startLoop, stopLoop };
 })();

@@ -100,6 +100,7 @@ window.PGUI = (function () {
     var stages = PG_CONFIG.GROWTH_STAGES || [];
     var gameState = PGGame.getState();
     var html = '<div class="tab-section"><h3>Growth Stages</h3>';
+    html += '<button class="btn-small stage-add" style="margin-bottom:8px">+ Stage</button>';
 
     // XP bar chart (draggable concept — editable inputs)
     html += '<div class="field-label">XP to Next Stage</div>';
@@ -119,7 +120,9 @@ window.PGUI = (function () {
       html += '<div class="stage-block' + (isCurrent ? ' current-stage' : '') + '">';
       html += '<div class="stage-header">';
       html += '<span>' + tokenEmoji(s.spriteToken || 'plant_seed') + '</span>';
-      html += '<span class="stage-name">' + esc(s.name) + '</span>';
+      html += '<input type="text" class="stage-name-input" data-si="' + si + '" value="' + esc(s.name || ('Stage ' + (si + 1))) + '" style="flex:1;min-width:0;background:#111827;color:#fff;border:1px solid #2a3344;border-radius:5px;padding:3px 6px;">';
+      html += '<button class="btn-small stage-duplicate" data-si="' + si + '">Copy</button>';
+      if (stages.length > 1) html += '<button class="btn-small stage-delete" data-si="' + si + '">Del</button>';
       html += '<button class="btn-small btn-jump" data-si="' + si + '">Jump</button>';
       html += '</div>';
 
@@ -520,6 +523,38 @@ window.PGUI = (function () {
       });
     });
 
+    content.querySelectorAll('.stage-name-input').forEach(function (el) {
+      el.addEventListener('change', function () {
+        PG_CONFIG.GROWTH_STAGES[parseInt(el.dataset.si)].name = el.value || ('Stage ' + (parseInt(el.dataset.si) + 1));
+        scheduleSave();
+        renderActiveTab();
+      });
+    });
+
+    content.querySelectorAll('.stage-add').forEach(function (el) {
+      el.addEventListener('click', function () {
+        addGrowthStage();
+        scheduleSave();
+        renderActiveTab();
+      });
+    });
+
+    content.querySelectorAll('.stage-duplicate').forEach(function (el) {
+      el.addEventListener('click', function () {
+        duplicateGrowthStage(parseInt(el.dataset.si));
+        scheduleSave();
+        renderActiveTab();
+      });
+    });
+
+    content.querySelectorAll('.stage-delete').forEach(function (el) {
+      el.addEventListener('click', function () {
+        removeGrowthStage(parseInt(el.dataset.si));
+        scheduleSave();
+        renderActiveTab();
+      });
+    });
+
     // XP curve inputs
     content.querySelectorAll('.xp-input').forEach(function (el) {
       el.addEventListener('change', function () {
@@ -778,6 +813,67 @@ window.PGUI = (function () {
       var dot = document.getElementById('unsaved-dot');
       if (dot) dot.style.display = 'none';
     } catch (e) { /* storage full */ }
+  }
+
+  function clone(obj) {
+    return JSON.parse(JSON.stringify(obj));
+  }
+
+  function addGrowthStage() {
+    PG_CONFIG.GROWTH_STAGES = PG_CONFIG.GROWTH_STAGES || [];
+    var stages = PG_CONFIG.GROWTH_STAGES;
+    var prev = stages[stages.length - 1] || {};
+    var nextXp = lastXpStep();
+    var stage = clone(prev);
+    stage.id = 'custom_' + Date.now();
+    stage.name = 'Custom Stage ' + (stages.length + 1);
+    stage.xpRequired = (Number(prev.xpRequired) || 0) + nextXp;
+    stage.idleIncomePerSec = Math.max(1, Number(prev.idleIncomePerSec) || 1);
+    stage.offlineIncomePerSec = Math.max(0.5, Number(prev.offlineIncomePerSec) || 0.5);
+    stage.tapValue = Math.max(1, Number(prev.tapValue) || 1);
+    stage.unlocks = [];
+    stages.push(stage);
+    PG_CONFIG.XP_TO_NEXT = PG_CONFIG.XP_TO_NEXT || [];
+    PG_CONFIG.XP_TO_NEXT.push(nextXp);
+    normalizeGrowthCurve();
+  }
+
+  function duplicateGrowthStage(idx) {
+    var stages = PG_CONFIG.GROWTH_STAGES || [];
+    var src = stages[idx];
+    if (!src) return;
+    var copy = clone(src);
+    copy.id = 'custom_' + Date.now();
+    copy.name = (src.name || 'Stage') + ' Copy';
+    stages.splice(idx + 1, 0, copy);
+    PG_CONFIG.XP_TO_NEXT = PG_CONFIG.XP_TO_NEXT || [];
+    PG_CONFIG.XP_TO_NEXT.splice(idx + 1, 0, lastXpStep());
+    normalizeGrowthCurve();
+  }
+
+  function removeGrowthStage(idx) {
+    var stages = PG_CONFIG.GROWTH_STAGES || [];
+    if (stages.length <= 1) return;
+    stages.splice(idx, 1);
+    if (PG_CONFIG.XP_TO_NEXT && PG_CONFIG.XP_TO_NEXT.length) {
+      PG_CONFIG.XP_TO_NEXT.splice(Math.min(idx, PG_CONFIG.XP_TO_NEXT.length - 1), 1);
+    }
+    normalizeGrowthCurve();
+    if (window.PGGame) PGGame.jumpToStage(Math.min(idx, stages.length - 1));
+  }
+
+  function lastXpStep() {
+    var curve = PG_CONFIG.XP_TO_NEXT || [];
+    return Math.max(1, Number(curve[curve.length - 1]) || 100);
+  }
+
+  function normalizeGrowthCurve() {
+    var stages = PG_CONFIG.GROWTH_STAGES || [];
+    PG_CONFIG.XP_TO_NEXT = PG_CONFIG.XP_TO_NEXT || [];
+    while (PG_CONFIG.XP_TO_NEXT.length < Math.max(0, stages.length - 1)) PG_CONFIG.XP_TO_NEXT.push(lastXpStep());
+    if (PG_CONFIG.XP_TO_NEXT.length > Math.max(0, stages.length - 1)) {
+      PG_CONFIG.XP_TO_NEXT.length = Math.max(0, stages.length - 1);
+    }
   }
 
   function startAutosave() {

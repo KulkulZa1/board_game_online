@@ -48,8 +48,8 @@ app.use('/.well-known', express.static(
   { setHeaders: (res) => res.set('Content-Type', 'application/json') }
 ));
 app.use(express.static(path.join(__dirname, '..', 'public')));
-// sandbox/ is a developer-only design tool — not served in production.
-// To use locally: serve sandbox/ directly via a separate static server.
+// sandbox/ is a developer-only design tool — NOT served in production.
+// Local dev: npm run sandbox (serves on port 3001 via npx serve)
 
 // Cloudflare Tunnel 경유 시 실제 클라이언트 IP를 X-Forwarded-For / CF-Connecting-IP 로 전달
 // trust proxy 활성화로 req.ip 가 실제 IP를 반환

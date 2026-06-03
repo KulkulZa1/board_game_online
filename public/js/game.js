@@ -35,6 +35,7 @@
   let chess        = null;
   let drawOfferPending = false;
   let pendingSpectatorSocketId = null;
+  const MULTIPLAYER_UNDO_ENABLED = false;
 
   // ========== 버튼 중복/도배 방지 ==========
   let drawOfferCount    = 0;
@@ -152,16 +153,19 @@
     }
 
     const _isCardGame = gameType === 'indianpoker' || gameType === 'texasholdem';
-    const UNDO_SUPPORTED_MULTI = ['chess', 'omok', 'othello', 'checkers'];
     // 플레이어 전용 컨트롤 표시
     document.getElementById('resign-btn').style.display = '';
     document.getElementById('draw-btn').style.display   = gameType === 'chess' ? '' : 'none';
-    document.getElementById('undo-btn').style.display   = UNDO_SUPPORTED_MULTI.includes(gameType) ? '' : 'none';
+    document.getElementById('undo-btn').style.display   = MULTIPLAYER_UNDO_ENABLED ? '' : 'none';
     // 수 기록/복기 패널 — 체스는 SAN 복기 지원
     document.getElementById('moves-panel').style.display = _isCardGame ? 'none' : '';
-    // 자동 거절 패널 표시 (관전자 제외, 카드게임 제외)
+    // 자동 거절 패널 표시. 멀티 무르기는 서버 미구현이므로 draw 설정만 노출한다.
     const autoDeclinePanel = document.getElementById('auto-decline-panel');
-    if (autoDeclinePanel && !_isCardGame) autoDeclinePanel.style.display = '';
+    const autoDeclineUndo = document.getElementById('auto-decline-undo');
+    const autoDeclineDraw = document.getElementById('auto-decline-draw');
+    if (autoDeclineUndo) autoDeclineUndo.closest('label').style.display = MULTIPLAYER_UNDO_ENABLED ? '' : 'none';
+    if (autoDeclineDraw) autoDeclineDraw.closest('label').style.display = gameType === 'chess' ? '' : 'none';
+    if (autoDeclinePanel) autoDeclinePanel.style.display = gameType === 'chess' ? '' : 'none';
 
     if (state.status === 'active') {
       gameStatus = 'active';
@@ -1018,7 +1022,7 @@
   });
 
   // 멀티플레이어 무르기 버튼 (비솔로)
-  if (!isSoloMode) {
+  if (!isSoloMode && MULTIPLAYER_UNDO_ENABLED) {
     let undoReqTime = 0;
     let undoRequested = false;
     const undoBtnMulti = document.getElementById('undo-btn');
