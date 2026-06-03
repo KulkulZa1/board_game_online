@@ -445,7 +445,7 @@ All arcade games: standalone IIFE in `public/arcade/<name>/game.js`, no server e
 |------|------|----------|---------------|---------------|
 | **snake** | `/arcade/snake/` | Grid snake; grow by eating apples | `GRID=20, TICK=120ms` | `arcade_snake_high` |
 | **breakout** | `/arcade/breakout/` | Ball + paddle; power-ups (multi-ball, wide, laser) | `BRICK_ROWS=6, BALL_SPEED_INIT=5` | `arcade_breakout_high` |
-| **vampire** | `/arcade/vampire/` | Top-down survivor; 5 weapons; level-up picks | `SURVIVE_GOAL=600s, MAX_ENEMIES=120` | — (win/lose only) |
+| **vampire** | `/arcade/vampire/` | Top-down survivor; **weapon leveling (1-5) + evolution** (max weapon + passive → evolved super-weapon); 5 base + 5 evolved weapons | `SURVIVE_GOAL=600s, MAX_ENEMIES=120, MAX_WEAPON_LEVEL=5`; `EVOLUTION_DEFS` | — (win/lose only) |
 | **plant** | `/arcade/plant/` | Clicker idle; 9 growth stages; 5 upgrade types | `STAGES[9], UPGRADES[5]` | — (AdMob on stage 9) |
 
 **Adding a new arcade game:** See `ADDING_AN_ARCADE_GAME.md`
@@ -462,7 +462,7 @@ All sandboxes: config-driven, dev-only (`npm run sandbox` → `http://localhost:
 |---------|------|-------------|---------------|-----------------|
 | **vampire-survivors** | `sandbox/vampire-survivors/` | Top-down survivor | `window.VS_CONFIG` | Stage editor, skill designer, enemy types, probability curves |
 | **plant-growing** | `sandbox/plant-growing/` | Idle clicker | `window.PG_CONFIG` | Growth stages, upgrade tree, idle income curves, visitor system |
-| **tower-defense** | `sandbox/tower-defense/` | Center-defense TD | `window.TD_CONFIG` | 10 stages + infinity, 5-level cannon (Lv4: arc, Lv5: void), 12 passives |
+| **tower-defense** | `sandbox/tower-defense/` | Center-defense TD | `window.TD_CONFIG` | 10 stages + infinity; **3 tower types** (cannon/frost/tesla); **adjacency synergies** (Shatter/Overload/Cryo-Charge); 5-level upgrades, 12 passives |
 
 **Sandbox architecture (all three):**
 
@@ -488,11 +488,16 @@ sandbox/<name>/
 **Tower Defense specifics (`TD_CONFIG`):**
 ```
 TD_CONFIG.STAGES[10]           — each has waves[] array
-TD_CONFIG.TOWER.upgradeLevels[5] — Lv4 special='arc', Lv5 special='void'
+TD_CONFIG.TOWER.upgradeLevels[5] — cannon; Lv4 special='arc', Lv5 special='void'
+TD_CONFIG.TOWER_TYPES          — { frost, tesla } extra tower types (attack: 'frost'|'tesla')
+TD_CONFIG.SYNERGIES[3]         — adjacency combos { id, a, b, radius, bonus }
 TD_CONFIG.PASSIVES[12]         — stackable, multiplicative
 TD_CONFIG.BASE_CAPACITY        — 20 (lose when mobs reaching base >= this)
 TD_CONFIG.BASE_RADIUS          — 35px (exclusion zone = BASE_RADIUS + 20)
 ```
+Engine: `getTowerCfg(tower)` resolves per-type config; `recomputeSynergies()` runs on
+place/sell/upgrade and stamps each tower's `.synergy` bonus + `.synergyIds`.
+`placeTower(x, y, type)`, `setPlacingMode(on, type)`, `getActiveSynergies()`.
 
 ---
 

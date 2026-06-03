@@ -376,8 +376,34 @@ window.TDUI = (function () {
     html += '<span style="display:inline-block;width:8px;height:8px;background:rgba(52,152,219,0.5);border-radius:50%;margin-right:4px"></span>Towers';
     html += '</div>';
 
-    html += '<h3>Placement</h3>';
-    html += '<button class="btn-small" id="td-place-btn">🏰 Place Tower (' + (TDGame ? TDGame.getTowerCost() : '?') + 'g)</button>';
+    html += '<h3>Place Tower</h3>';
+    html += '<div class="td-towerpick" style="display:flex;flex-direction:column;gap:6px;">';
+    var TYPES = [
+      { type: 'cannon', emoji: '🏰', name: 'Cannon', note: 'Single-target burst' },
+      { type: 'frost',  emoji: '❄️', name: 'Frost',  note: 'Slows enemies in area' },
+      { type: 'tesla',  emoji: '⚡', name: 'Tesla',  note: 'Instant chain lightning' }
+    ];
+    TYPES.forEach(function (t) {
+      var cost = TDGame ? TDGame.getTowerCost(t.type) : '?';
+      html += '<button class="btn-small td-place-type" data-place-type="' + t.type + '" ' +
+        'style="text-align:left;display:flex;justify-content:space-between;align-items:center;">' +
+        '<span>' + t.emoji + ' ' + t.name + '<br><span style="font-size:0.66rem;color:var(--muted)">' + t.note + '</span></span>' +
+        '<b style="color:#f1c40f">' + cost + 'g</b></button>';
+    });
+    html += '</div>';
+
+    // Synergy legend
+    html += '<h3 style="margin-top:14px;">Adjacency Synergies</h3>';
+    var active = TDGame ? TDGame.getActiveSynergies() : [];
+    html += '<div style="font-size:0.72rem;color:var(--muted);line-height:1.5;">';
+    (TD_CONFIG.SYNERGIES || []).forEach(function (s) {
+      var on = active.indexOf(s.id) >= 0;
+      html += '<div style="margin-bottom:5px;padding:5px 7px;border-radius:6px;border:1px solid ' +
+        (on ? '#f1c40f' : 'var(--border)') + ';background:' + (on ? 'rgba(241,196,15,0.12)' : 'transparent') + ';">' +
+        (on ? '✨ ' : '○ ') + '<b style="color:' + (on ? '#f1c40f' : 'var(--text)') + '">' + esc(s.name) + '</b>' +
+        ' <span style="opacity:0.6">[' + esc(s.a) + '+' + esc(s.b) + ']</span><br>' + esc(s.desc) + '</div>';
+    });
+    html += '</div>';
     html += '</div>';
     return html;
   }
@@ -412,7 +438,14 @@ window.TDUI = (function () {
         refresh();
       });
     });
-    // Place tower button
+    // Place tower buttons (per type)
+    tabContent.querySelectorAll('[data-place-type]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        TDGame.setPlacingMode(true, btn.dataset.placeType);
+        refresh();
+      });
+    });
+    // Legacy single place button (if present)
     var placeBtn = document.getElementById('td-place-btn');
     if (placeBtn) {
       placeBtn.addEventListener('click', function () {
