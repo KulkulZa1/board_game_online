@@ -18,8 +18,11 @@
   const PLAYER_SPEED   = 160;  // px/s
   const BASE_HP        = 100;
   const XP_PER_LEVEL   = [0, 30, 60, 100, 150, 220, 300, 400, 520, 660, 820];
-  const WAVE_INTERVAL  = 8;    // 초마다 적 추가 웨이브
-  const MAX_ENEMIES    = 120;
+  const WAVE_INTERVAL  = 5;    // 초마다 적 추가 웨이브
+  const MAX_ENEMIES    = 200;
+  const DASH_COOLDOWN  = 1.8;  // 대쉬 공격 쿨다운(초)
+  const DASH_DMG       = 50;   // 대쉬 공격 데미지
+  const DASH_RANGE     = 75;   // 대쉬 공격 범위(px)
   const SURVIVE_GOAL   = 600;  // 10분 생존 시 승리
 
   // 무기 강화 한계
@@ -70,12 +73,17 @@
   let xpGems = [];
   let particles = [];
   let chainExplosions = [];
+  let enemyProjectiles = [];   // 적이 발사한 투사체
   let elapsed = 0;
   let kills = 0;
   let waveTimer = 0;
   let frameId;
   let camera = { x: 0, y: 0 };
   let selectedStageIdx = 0;
+  let dashCd = 0;              // 대쉬 잔여 쿨다운
+  let dashEffect = null;       // 대쉬 슬래시 시각 효과
+  let screenShake = 0;         // 화면 흔들림 강도
+  let lastMoveDir = { dx: 1, dy: 0 }; // 마지막 이동 방향 (대쉬 방향 결정)
 
   const SANDBOX_CONFIG = window.VS_CONFIG || null;
   const ENEMY_COLORS = {
@@ -163,10 +171,15 @@
     xpGems     = [];
     particles  = [];
     chainExplosions = [];
+    enemyProjectiles = [];
     elapsed    = 0;
     kills      = 0;
     waveTimer  = 0;
     camera     = { x: 0, y: 0 };
+    dashCd     = 0;
+    dashEffect = null;
+    screenShake = 0;
+    lastMoveDir = { dx: 1, dy: 0 };
 
     // 시작 무기
     addWeapon('orb');
@@ -298,23 +311,32 @@
     }
 
     const difficulty = 1 + elapsed / 120;
-    const count = Math.min(5 + Math.floor(elapsed / 20), 20);
+    const count = Math.min(8 + Math.floor(elapsed / 12), 35);
     for (let i = 0; i < count; i++) {
       if (enemies.length >= MAX_ENEMIES) break;
       const angle = Math.random() * Math.PI * 2;
-      const dist  = 350 + Math.random() * 150;
+      const spawnDist = 350 + Math.random() * 150;
       const tier  = elapsed < 60 ? 0 : elapsed < 180 ? (Math.random() < 0.3 ? 1 : 0) : (Math.random() < 0.15 ? 2 : Math.random() < 0.35 ? 1 : 0);
+      // 원거리 공격형(archer): tier1 40%, tier2 100%
+      const bRoll = Math.random();
+      const behavior = (tier === 2 || (tier === 1 && bRoll < 0.4)) ? 'archer' : 'chase';
+      const attackBase = behavior === 'archer' ? (tier === 2 ? 3.5 : 2.5) : 0;
       enemies.push({
-        x: player.x + Math.cos(angle) * dist,
-        y: player.y + Math.sin(angle) * dist,
+        x: player.x + Math.cos(angle) * spawnDist,
+        y: player.y + Math.sin(angle) * spawnDist,
         hp:    [30, 80, 250][tier] * difficulty,
         maxHp: [30, 80, 250][tier] * difficulty,
         speed: [75, 55, 35][tier] + Math.random() * 20,
         size:  [10, 15, 22][tier],
-        color: ['#e74c3c', '#9b59b6', '#c0392b'][tier],
+        color: ['#e74c3c', behavior === 'archer' ? '#1abc9c' : '#9b59b6', '#c0392b'][tier],
         xpVal: [3, 8, 20][tier],
         tier,
         hurtFlash: 0,
+        behavior,
+        attackCd: Math.random() * attackBase,   // 초기 공격 시간 분산
+        attackBase,
+        attackRange: behavior === 'archer' ? (tier === 2 ? 280 : 220) : 0,
+        attackDmg: [10, 20, 38][tier],
       });
     }
   }
@@ -419,6 +441,16 @@
     const angle = Math.random() * Math.PI * 2;
     const spd   = 40 + Math.random() * 80;
     particles.push({ x, y, vx: Math.cos(angle)*spd, vy: Math.sin(angle)*spd, color, size, maxLife: life, life });
+  }
+
+  // 적 투사체 발사 — 플레이어 방향 + spread 각도
+  function fireEnemyProjectile(enemy, spread) {
+    spread = spread || 0;
+    const ang = Math.atan2(player.y - enemy.y, player.x - enemy.x) + spread;
+    const spd = [220, 260, 190][enemy.tier] || 220;
+    const r   = 5 + enemy.tier * 2;
+    enemyProjectiles.push({ x: enemy.x, y: enemy.y, vx: Math.cos(ang) * spd, vy: Math.sin(ang) * spd, r, dmg: enemy.attackDmg, life: 1.6 });
+    for (let i = 0; i < 2; i++) spawnParticle(enemy.x, enemy.y, '#ff6b35', 3, 0.2);
   }
 
   // ── 데미지 처리 ─────────────────────────────────────────────────
@@ -587,8 +619,29 @@
   function update(dt) {
     // 이동
     const { dx, dy } = getMoveDir();
+    if (dx !== 0 || dy !== 0) lastMoveDir = { dx, dy };
     player.x += dx * player.speed * dt;
     player.y += dy * player.speed * dt;
+
+    // 대쉬 공격 (Space / X)
+    if (dashCd > 0) dashCd -= dt;
+    if ((keys[' '] || keys['x'] || keys['X']) && dashCd <= 0) {
+      const da = Math.atan2(lastMoveDir.dy, lastMoveDir.dx);
+      dashEffect = { x: player.x, y: player.y, angle: da, life: 0.3, maxLife: 0.3 };
+      dashCd = DASH_COOLDOWN;
+      player.x += Math.cos(da) * 55;
+      player.y += Math.sin(da) * 55;
+      for (const e of enemies) {
+        if (dist(e, player) < DASH_RANGE) {
+          dealDamage(e, DASH_DMG * player.dmgMult);
+          for (let k = 0; k < 3; k++) spawnParticle(e.x, e.y, '#f8c8ff', 5, 0.25);
+        }
+      }
+    }
+    if (dashEffect) { dashEffect.life -= dt; if (dashEffect.life <= 0) dashEffect = null; }
+
+    // 화면 흔들림 감쇠
+    if (screenShake > 0) screenShake = Math.max(0, screenShake - dt * 2.5);
 
     // 카메라
     camera.x = player.x - canvas.width  / 2;
@@ -661,18 +714,65 @@
       }
     }
 
-    // 적 이동 + 플레이어 충돌
+    // 적 이동 + 행동 + 플레이어 충돌
     for (let i = enemies.length - 1; i >= 0; i--) {
       const e = enemies[i];
       if (e.hurtFlash > 0) e.hurtFlash -= dt;
       const ang = Math.atan2(player.y - e.y, player.x - e.x);
-      e.x += Math.cos(ang) * e.speed * dt;
-      e.y += Math.sin(ang) * e.speed * dt;
+      const d   = dist(e, player);
+      e.faceAngle = ang;   // 렌더링용 방향
 
-      if (player.invincible <= 0 && dist(e, player) < e.size + 12) {
-        const dmg = [8, 16, 35][e.tier] * dt;
+      // 분노 상태(HP 30% 이하): 속도 50% 증가, 공격 쿨다운 단축
+      const rageActive = e.hp < e.maxHp * 0.3;
+      const rageMult   = rageActive ? 1.5 : 1.0;
+
+      if (e.behavior === 'archer') {
+        // 원거리: 적정 거리 유지하며 투사체 발사
+        const prefDist = e.tier === 2 ? 200 : 170;
+        if (d > prefDist * 1.3) {
+          e.x += Math.cos(ang) * e.speed * rageMult * dt;
+          e.y += Math.sin(ang) * e.speed * rageMult * dt;
+        } else if (d < prefDist * 0.7) {
+          e.x -= Math.cos(ang) * e.speed * 0.55 * dt;
+          e.y -= Math.sin(ang) * e.speed * 0.55 * dt;
+        }
+        if (e.attackCd > 0) e.attackCd -= dt;
+        if (e.attackCd <= 0 && d < e.attackRange) {
+          // tier2: 분산 3연발; tier1: 단발 (분노 시 2연발)
+          const shots = (e.tier === 2 ? 3 : (rageActive ? 2 : 1));
+          for (let s = 0; s < shots; s++) {
+            const spread = shots > 1 ? (s - (shots - 1) / 2) * 0.22 : 0;
+            fireEnemyProjectile(e, spread);
+          }
+          e.attackCd = e.attackBase * (rageActive ? 0.55 : 1.0);
+        }
+      } else {
+        // 추적 이동
+        e.x += Math.cos(ang) * e.speed * rageMult * dt;
+        e.y += Math.sin(ang) * e.speed * rageMult * dt;
+      }
+
+      if (player.invincible <= 0 && d < e.size + 12) {
+        const dmg = [8, 18, 38][e.tier] * dt;
         player.hp -= dmg;
+        screenShake = Math.min(screenShake + 0.15, 0.35);
         player.invincible = 0.15;
+        if (player.hp <= 0) { endGame('dead'); return; }
+      }
+    }
+
+    // 적 투사체 업데이트
+    for (let i = enemyProjectiles.length - 1; i >= 0; i--) {
+      const ep = enemyProjectiles[i];
+      ep.life -= dt;
+      if (ep.life <= 0) { enemyProjectiles.splice(i, 1); continue; }
+      ep.x += ep.vx * dt;
+      ep.y += ep.vy * dt;
+      if (player.invincible <= 0 && dist(ep, player) < ep.r + 12) {
+        player.hp -= ep.dmg;
+        screenShake = Math.min(screenShake + 0.22, 0.45);
+        player.invincible = 0.1;
+        enemyProjectiles.splice(i, 1);
         if (player.hp <= 0) { endGame('dead'); return; }
       }
     }
@@ -700,6 +800,13 @@
   function render() {
     const W = canvas.width, H = canvas.height;
     ctx.clearRect(0, 0, W, H);
+
+    // 화면 흔들기 (최외곽 save)
+    ctx.save();
+    if (screenShake > 0) {
+      const mag = screenShake * 14;
+      ctx.translate((Math.random() - 0.5) * mag, (Math.random() - 0.5) * mag);
+    }
 
     // 배경 그리드
     ctx.save();
@@ -798,16 +905,59 @@
       }
     }
 
+    // 적 투사체 (오렌지-빨강 발광 구슬)
+    for (const ep of enemyProjectiles) {
+      ctx.beginPath();
+      ctx.arc(ep.x, ep.y, ep.r, 0, Math.PI * 2);
+      ctx.fillStyle = '#ff6b35';
+      ctx.shadowBlur = 14;
+      ctx.shadowColor = '#e74c3c';
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      // 궤적 효과
+      ctx.globalAlpha = 0.3;
+      ctx.beginPath();
+      ctx.arc(ep.x - ep.vx * 0.025, ep.y - ep.vy * 0.025, ep.r * 0.7, 0, Math.PI * 2);
+      ctx.fillStyle = '#ff6b35';
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+
+    // 대쉬 슬래시 효과
+    if (dashEffect) {
+      const alpha = dashEffect.life / dashEffect.maxLife;
+      ctx.globalAlpha = alpha * 0.85;
+      ctx.strokeStyle = '#f0d0ff';
+      ctx.shadowBlur = 18;
+      ctx.shadowColor = '#d7a3f5';
+      const sa = dashEffect.angle;
+      for (let sl = 0; sl < 4; sl++) {
+        const offset = (sl - 1.5) * 12;
+        const ox = Math.cos(sa + Math.PI / 2) * offset;
+        const oy = Math.sin(sa + Math.PI / 2) * offset;
+        ctx.lineWidth = 2 - sl * 0.3;
+        ctx.beginPath();
+        ctx.moveTo(dashEffect.x + ox - Math.cos(sa) * 20, dashEffect.y + oy - Math.sin(sa) * 20);
+        ctx.lineTo(dashEffect.x + ox + Math.cos(sa) * DASH_RANGE, dashEffect.y + oy + Math.sin(sa) * DASH_RANGE);
+        ctx.stroke();
+      }
+      ctx.shadowBlur = 0;
+      ctx.globalAlpha = 1;
+    }
+
     // 적
     for (const e of enemies) {
       ctx.save();
       ctx.translate(e.x, e.y);
+      // 플레이어 방향 회전
+      if (e.faceAngle !== undefined) ctx.rotate(e.faceAngle + Math.PI / 2);
       const flash = e.hurtFlash > 0;
+      const rageActive = e.hp < e.maxHp * 0.3;
       ctx.fillStyle = flash ? '#ffffff' : e.color;
-      ctx.shadowBlur = flash ? 20 : 8;
-      ctx.shadowColor = e.color;
+      ctx.shadowBlur = flash ? 20 : (rageActive ? 14 : 8);
+      ctx.shadowColor = rageActive ? '#ff4500' : e.color;
 
-      // 적 모양: tier별
+      // 적 모양: tier2=육각형, tier1 archer=마름모, tier1=사각형, tier0=원
       if (e.tier === 2) {
         ctx.beginPath();
         for (let i = 0; i < 6; i++) {
@@ -815,6 +965,12 @@
           i === 0 ? ctx.moveTo(Math.cos(a)*e.size, Math.sin(a)*e.size)
                   : ctx.lineTo(Math.cos(a)*e.size, Math.sin(a)*e.size);
         }
+        ctx.closePath();
+      } else if (e.tier === 1 && e.behavior === 'archer') {
+        // 마름모 (원거리 유형 구별)
+        ctx.beginPath();
+        ctx.moveTo(0, -e.size); ctx.lineTo(e.size, 0);
+        ctx.lineTo(0, e.size);  ctx.lineTo(-e.size, 0);
         ctx.closePath();
       } else if (e.tier === 1) {
         ctx.beginPath();
@@ -824,13 +980,22 @@
         ctx.arc(0, 0, e.size, 0, Math.PI*2);
       }
       ctx.fill();
+      // 분노 상태: 적색 테두리
+      if (rageActive && !flash) {
+        ctx.strokeStyle = '#ff4500';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
       ctx.shadowBlur = 0;
+      ctx.restore();
 
-      // HP 바
+      // HP 바 (회전 없이 별도로)
+      ctx.save();
+      ctx.translate(e.x, e.y);
       const bw = e.size * 2.2, bh = 3;
       ctx.fillStyle = '#333';
       ctx.fillRect(-bw/2, -e.size - 7, bw, bh);
-      ctx.fillStyle = e.color;
+      ctx.fillStyle = rageActive ? '#ff4500' : e.color;
       ctx.fillRect(-bw/2, -e.size - 7, bw * (e.hp/e.maxHp), bh);
       ctx.restore();
     }
@@ -866,6 +1031,37 @@
       ctx.lineWidth = 6;
       ctx.strokeRect(0, 0, W, H);
     }
+
+    // 대쉬 쿨다운 표시 (우하단)
+    if (state === 'playing') {
+      const dcRatio = dashCd > 0 ? dashCd / DASH_COOLDOWN : 0;
+      const cx = W - 36, cy = H - 36, rad = 18;
+      ctx.beginPath();
+      ctx.arc(cx, cy, rad, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      ctx.fill();
+      if (dcRatio > 0) {
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.arc(cx, cy, rad, -Math.PI / 2, -Math.PI / 2 + (1 - dcRatio) * Math.PI * 2);
+        ctx.fillStyle = 'rgba(215,163,245,0.7)';
+        ctx.fill();
+      } else {
+        ctx.beginPath();
+        ctx.arc(cx, cy, rad, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(215,163,245,0.9)';
+        ctx.fill();
+      }
+      ctx.fillStyle = '#fff';
+      ctx.font = '11px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('DASH', cx, cy);
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'alphabetic';
+    }
+
+    ctx.restore(); // 화면 흔들기 종료
   }
 
   // ── 게임 종료 ───────────────────────────────────────────────────
