@@ -1175,8 +1175,20 @@
       ctx.shadowBlur = flash ? 20 : (rageActive ? 14 : 8);
       ctx.shadowColor = rageActive ? '#ff4500' : e.color;
 
-      // 적 모양: tier2=육각형, tier1 archer=마름모, tier1=사각형, tier0=원
-      if (e.tier === 2) {
+      // 적 모양: boss=특수 별형, tier2=육각형, tier1 archer=마름모, tier1=사각형, tier0=원
+      if (e.isBoss) {
+        // 보스: 8각 별 모양 + 이중 링
+        ctx.beginPath();
+        for (let i = 0; i < 8; i++) {
+          const a1 = (i / 8) * Math.PI * 2 - Math.PI / 2;
+          const a2 = ((i + 0.5) / 8) * Math.PI * 2 - Math.PI / 2;
+          const outerR = e.size * (1 + Math.sin(elapsed * 3) * 0.06);
+          i === 0 ? ctx.moveTo(Math.cos(a1) * outerR, Math.sin(a1) * outerR)
+                  : ctx.lineTo(Math.cos(a1) * outerR, Math.sin(a1) * outerR);
+          ctx.lineTo(Math.cos(a2) * e.size * 0.55, Math.sin(a2) * e.size * 0.55);
+        }
+        ctx.closePath();
+      } else if (e.tier === 2) {
         ctx.beginPath();
         for (let i = 0; i < 6; i++) {
           const a = (i / 6) * Math.PI * 2 - Math.PI / 2;
@@ -1203,6 +1215,15 @@
         ctx.strokeStyle = '#ff4500';
         ctx.lineWidth = 2;
         ctx.stroke();
+      }
+      // 빙결 상태 오버레이
+      if (e.frozen > 0 && !flash) {
+        ctx.globalAlpha = 0.55;
+        ctx.fillStyle = '#87ceeb';
+        ctx.beginPath();
+        ctx.arc(0, 0, e.size, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
       }
       ctx.shadowBlur = 0;
       ctx.restore();
@@ -1270,6 +1291,68 @@
     ctx.restore();
 
     ctx.restore(); // camera
+
+    // 보스 경고 화면 플래시
+    if (bossWarning > 0) {
+      const wAlpha = (Math.sin(bossWarning * 9) * 0.5 + 0.5) * 0.35;
+      ctx.fillStyle = `rgba(231,76,60,${wAlpha})`;
+      ctx.fillRect(0, 0, W, H);
+      ctx.strokeStyle = `rgba(231,76,60,${wAlpha * 2})`;
+      ctx.lineWidth = 8;
+      ctx.strokeRect(0, 0, W, H);
+    }
+
+    // 보스 체력 바 (상단)
+    const bossEnemy = enemies.find(e => e.isBoss);
+    if (bossEnemy) {
+      const bw = W * 0.55, bh = 14;
+      const bx = (W - bw) / 2, by = 12;
+      ctx.fillStyle = 'rgba(0,0,0,0.65)';
+      ctx.fillRect(bx - 3, by - 3, bw + 6, bh + 6);
+      ctx.fillStyle = bossEnemy.bossPhase === 1 ? '#e74c3c' : '#c0392b';
+      ctx.fillRect(bx, by, bw * Math.max(0, bossEnemy.hp / bossEnemy.maxHp), bh);
+      ctx.strokeStyle = '#f1c40f';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(bx, by, bw, bh);
+      // 50% 페이즈 선
+      ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(bx + bw * 0.5, by); ctx.lineTo(bx + bw * 0.5, by + bh); ctx.stroke();
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 11px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.shadowBlur = 4; ctx.shadowColor = '#000';
+      ctx.fillText(`⚠ BOSS  ${Math.ceil(bossEnemy.hp)} / ${bossEnemy.maxHp}`, W / 2, by + bh + 14);
+      ctx.shadowBlur = 0;
+      ctx.textAlign = 'left';
+    }
+
+    // 콤보 표시
+    if (comboCount >= 5 && comboTimer > 0) {
+      const cPulse = 1 + Math.sin(elapsed * 14) * 0.08;
+      ctx.font = `bold ${Math.floor(26 * cPulse)}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.fillStyle = comboCount >= 20 ? '#e74c3c' : comboCount >= 10 ? '#f39c12' : '#f1c40f';
+      ctx.shadowBlur = 14; ctx.shadowColor = ctx.fillStyle;
+      ctx.fillText(`COMBO ×${comboCount}!`, W / 2, 92);
+      ctx.shadowBlur = 0; ctx.textAlign = 'left';
+    }
+
+    // 화면 공간 부유 텍스트
+    let ftY = H / 2 - 55;
+    for (const ft of floatTexts) {
+      if (!ft.screenSpace) continue;
+      const ftAlpha = Math.min((ft.life / ft.maxLife) * 2, 1);
+      ctx.globalAlpha = ftAlpha;
+      ctx.fillStyle = ft.color || '#fff';
+      ctx.font = `bold ${ft.size || 16}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.shadowBlur = 10; ctx.shadowColor = ft.color || '#fff';
+      ctx.fillText(ft.text, W / 2, ftY);
+      ctx.shadowBlur = 0;
+      ftY += (ft.size || 16) + 10;
+    }
+    ctx.globalAlpha = 1; ctx.textAlign = 'left';
 
     // 무적 중 화면 가장자리 효과
     if (player.invincible > 0.3) {
