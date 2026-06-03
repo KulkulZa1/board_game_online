@@ -197,6 +197,27 @@
           { cost: 240, damageMult: 2.2, rangeMult: 1.3,  label: 'Tempest Coil', special: 'megachain' },
           { cost: 380, damageMult: 3.0, rangeMult: 1.45, label: 'Thunder God',  special: 'megachain' }
         ]
+      },
+      amplifier: {
+        name: 'Amplifier Tower',
+        type: 'amplifier',
+        emoji: 'AMP',
+        cost: 130,
+        sellRatio: 0.7,
+        range: 135,
+        damage: 0,
+        fireRateMs: 1000,
+        projectileSpeed: 0,
+        attack: 'support',
+        auraDamageMult: 0.25,
+        auraRangeMult: 0.15,
+        upgradeLevels: [
+          { cost: 0,   damageMult: 1.0, rangeMult: 1.0,  label: 'Signal Post', special: null },
+          { cost: 120, damageMult: 1.0, rangeMult: 1.1,  label: 'Relay Post',  special: null },
+          { cost: 180, damageMult: 1.0, rangeMult: 1.2,  label: 'Relay Grid',  special: null },
+          { cost: 260, damageMult: 1.0, rangeMult: 1.3,  label: 'Overclock',   special: 'strong-aura' },
+          { cost: 400, damageMult: 1.0, rangeMult: 1.45, label: 'Command Hub', special: 'wide-aura' }
+        ]
       }
     },
 
@@ -220,6 +241,18 @@
         a: 'frost', b: 'tesla', radius: 130,
         desc: 'Tesla near Frost: lightning chains also slow every enemy they hit.',
         bonus: { teslaSlow: true }
+      },
+      {
+        id: 'barrage', name: 'Barrage', icon: 'BRG',
+        a: 'cannon', b: 'cannon', radius: 120,
+        desc: 'Cannons placed in pairs reload 18% faster.',
+        bonus: { fireRateMult: -0.18 }
+      },
+      {
+        id: 'supercharge', name: 'Supercharge', icon: 'AMP',
+        a: 'amplifier', b: 'tesla', radius: 145,
+        desc: 'Amplifiers near Tesla towers increase chain damage and add one chain.',
+        bonus: { teslaDamageMult: 0.25, teslaChainAdd: 1 }
       }
     ],
 

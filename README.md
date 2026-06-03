@@ -66,17 +66,35 @@ npm run dev    # 로컬 개발 서버 실행
 
 ---
 
-## Sandbox to main-game content flow
+## Render deploy/version diagnostics
 
-The sandbox editors save their live config to browser `localStorage` on the same origin:
+The lobby and admin pages show a small build-version badge loaded from `/js/version-badge.js`.
+It fetches `/api/version` with `cache: no-store` and displays the branch plus short commit currently served by the running server.
+
+Use this after a Render deploy:
+
+```bash
+npm run verify:production
+# or, when checking a specific expected Render commit:
+EXPECTED_COMMIT=<commit-sha> npm run verify:production
+```
+
+See `docs/render-version-verification.md` for failure meanings and the post-merge verification runbook.
+
+---
+
+## Sandbox to arcade content flow
+
+Sandbox editors are developer tools. They are not served by the production Express server; run them locally with `npm run sandbox`.
+They save their live config to browser `localStorage`:
 
 | Sandbox | Storage key | Main game using it |
 |---|---|---|
-| `/sandbox/vampire-survivors/` | `sandbox_vs_config` | `/arcade/vampire/` |
-| `/sandbox/plant-growing/` | `sandbox_pg_config` | `/arcade/plant/` |
-| `/sandbox/tower-defense/` | `sandbox_td_config` | `/arcade/tower-defense/` |
+| `sandbox/vampire-survivors/` | `sandbox_vs_config` | `/arcade/vampire/` via `public/js/sandbox-config.js` |
+| `sandbox/plant-growing/` | `sandbox_pg_config` | `/arcade/plant/` via `public/js/sandbox-config.js` |
+| `sandbox/tower-defense/` | `sandbox_td_config` | no production arcade implementation yet |
 
-For a real deployment check, edit and save a sandbox stage on the production origin, then open the matching `/arcade/.../` page on the same origin. Local `localStorage` and Render production `localStorage` are separate browser origins, so local sandbox edits do not automatically appear on production.
+Because production does not serve `/sandbox/`, production checks should verify that arcade pages still load and that `/sandbox/` returns 404. Sandbox-to-arcade promotion is currently local/design-time only unless a future publishing flow copies validated config into production assets.
 
 See `docs/launch-readiness.md` for the current security, deployment, and manual verification checklist.
 
