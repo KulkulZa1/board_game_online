@@ -4,6 +4,7 @@
 window.TDUI = (function () {
   var panel, tabContent;
   var activeTab = 'stages';
+  var selectedTowerType = 'cannon';
   var unsavedDot;
   var saveTimer = null;
   var STORAGE_KEY = 'sandbox_td_config';
@@ -106,6 +107,7 @@ window.TDUI = (function () {
     { id: 'tower',    label: 'Tower' },
     { id: 'enemies',  label: 'Enemies' },
     { id: 'passives', label: 'Passives' },
+    { id: 'synergies',label: 'Synergies' },
     { id: 'economy',  label: 'Economy' },
     { id: 'analytics',label: 'Analytics' },
     { id: 'map',      label: 'Map' }
@@ -155,25 +157,53 @@ window.TDUI = (function () {
   }
 
   function renderTower() {
-    var cfg = TD_CONFIG.TOWER;
+    var type = selectedTowerType || 'cannon';
+    var cfg = type === 'cannon' ? TD_CONFIG.TOWER : (TD_CONFIG.TOWER_TYPES && TD_CONFIG.TOWER_TYPES[type]);
+    if (!cfg) { type = 'cannon'; selectedTowerType = 'cannon'; cfg = TD_CONFIG.TOWER; }
+    var prefix = type === 'cannon' ? 'TD_CONFIG.TOWER' : ('TD_CONFIG.TOWER_TYPES.' + type);
     var html = '<div class="tab-section">';
+    html += '<h3>Tower Type</h3>';
+    html += '<div class="field-row"><label>Type</label><select id="td-tower-type-select">';
+    var towerTypes = ['cannon'].concat(Object.keys(TD_CONFIG.TOWER_TYPES || {}));
+    towerTypes.forEach(function (key) {
+      var tc = key === 'cannon' ? TD_CONFIG.TOWER : TD_CONFIG.TOWER_TYPES[key];
+      html += '<option value="' + esc(key) + '"' + (key === type ? ' selected' : '') + '>' + esc((tc && tc.name) || key) + '</option>';
+    });
+    html += '</select></div>';
+
     html += '<h3>Base Stats</h3>';
-    html += sliderField('Cost', cfg.cost, 20, 300, 5, 'TD_CONFIG.TOWER.cost');
-    html += sliderField('Range', cfg.range, 50, 250, 5, 'TD_CONFIG.TOWER.range');
-    html += sliderField('Damage', cfg.damage, 5, 100, 1, 'TD_CONFIG.TOWER.damage');
-    html += sliderField('Fire Rate ms', cfg.fireRateMs, 200, 3000, 50, 'TD_CONFIG.TOWER.fireRateMs');
-    html += sliderField('Sell Ratio', cfg.sellRatio, 0.3, 1.0, 0.05, 'TD_CONFIG.TOWER.sellRatio', 100);
-    html += sliderField('Proj Speed', cfg.projectileSpeed, 100, 600, 10, 'TD_CONFIG.TOWER.projectileSpeed');
+    html += sliderField('Cost', cfg.cost, 20, 400, 5, prefix + '.cost');
+    html += sliderField('Range', cfg.range, 50, 300, 5, prefix + '.range');
+    html += sliderField('Damage', cfg.damage, 0, 120, 1, prefix + '.damage');
+    html += sliderField('Fire Rate ms', cfg.fireRateMs, 200, 3000, 50, prefix + '.fireRateMs');
+    html += sliderField('Sell Ratio', cfg.sellRatio, 0.3, 1.0, 0.05, prefix + '.sellRatio', 100);
+    html += sliderField('Proj Speed', cfg.projectileSpeed || 0, 0, 700, 10, prefix + '.projectileSpeed');
 
-    html += '<h3>Arc Cannon (Lv4)</h3>';
-    html += sliderField('Chain Count', cfg.arcChainCount, 1, 6, 1, 'TD_CONFIG.TOWER.arcChainCount');
-    html += sliderField('Chain Radius', cfg.arcChainRadius, 40, 160, 5, 'TD_CONFIG.TOWER.arcChainRadius');
+    if (type === 'cannon') {
+      html += '<h3>Arc Cannon (Lv4)</h3>';
+      html += sliderField('Chain Count', cfg.arcChainCount, 1, 6, 1, prefix + '.arcChainCount');
+      html += sliderField('Chain Radius', cfg.arcChainRadius, 40, 160, 5, prefix + '.arcChainRadius');
 
-    html += '<h3>Void Cannon (Lv5)</h3>';
-    html += sliderField('Void Every N', cfg.voidInterval, 1, 8, 1, 'TD_CONFIG.TOWER.voidInterval');
-    html += sliderField('Void Splash R', cfg.voidSplashRadius, 30, 150, 5, 'TD_CONFIG.TOWER.voidSplashRadius');
-    html += sliderField('Void Dmg Mult', cfg.voidDamageMult, 1, 6, 0.1, 'TD_CONFIG.TOWER.voidDamageMult', 10);
-    html += sliderField('Void Slow Dur', cfg.voidSlowDur, 0.5, 5, 0.5, 'TD_CONFIG.TOWER.voidSlowDur', 10);
+      html += '<h3>Void Cannon (Lv5)</h3>';
+      html += sliderField('Void Every N', cfg.voidInterval, 1, 8, 1, prefix + '.voidInterval');
+      html += sliderField('Void Splash R', cfg.voidSplashRadius, 30, 150, 5, prefix + '.voidSplashRadius');
+      html += sliderField('Void Dmg Mult', cfg.voidDamageMult, 1, 6, 0.1, prefix + '.voidDamageMult', 10);
+      html += sliderField('Void Slow Dur', cfg.voidSlowDur, 0.5, 5, 0.5, prefix + '.voidSlowDur', 10);
+    } else if (type === 'frost') {
+      html += '<h3>Frost Effects</h3>';
+      html += sliderField('Slow Factor', cfg.frostSlowFactor, 0.2, 0.9, 0.05, prefix + '.frostSlowFactor', 100);
+      html += sliderField('Slow Duration', cfg.frostSlowDur, 0.5, 5, 0.1, prefix + '.frostSlowDur', 10);
+      html += sliderField('Splash Radius', cfg.frostSplashRadius, 0, 120, 5, prefix + '.frostSplashRadius');
+    } else if (type === 'tesla') {
+      html += '<h3>Tesla Effects</h3>';
+      html += sliderField('Chain Count', cfg.teslaChainCount, 1, 8, 1, prefix + '.teslaChainCount');
+      html += sliderField('Chain Radius', cfg.teslaChainRadius, 40, 180, 5, prefix + '.teslaChainRadius');
+      html += sliderField('Chain Falloff', cfg.teslaChainFalloff, 0.3, 1, 0.05, prefix + '.teslaChainFalloff', 100);
+    } else if (type === 'amplifier') {
+      html += '<h3>Support Aura</h3>';
+      html += sliderField('Damage Bonus %', cfg.auraDamageMult, 0, 1, 0.01, prefix + '.auraDamageMult', 100);
+      html += sliderField('Range Bonus %', cfg.auraRangeMult, 0, 0.6, 0.01, prefix + '.auraRangeMult', 100);
+    }
 
     html += '<h3>Upgrade Levels</h3>';
     cfg.upgradeLevels.forEach(function (lv, i) {
@@ -253,6 +283,31 @@ window.TDUI = (function () {
       });
       html += '</select></div>';
       html += sliderField('Value', p.effectVal, -1, 2, 0.01, 'TD_CONFIG.PASSIVES[' + pi + '].effectVal', 100);
+      html += '</div>';
+    });
+    html += '</div>';
+    return html;
+  }
+
+  function renderSynergies() {
+    var html = '<div class="tab-section">';
+    html += '<h3>Adjacency Synergies</h3>';
+    (TD_CONFIG.SYNERGIES || []).forEach(function (s, si) {
+      var prefix = 'TD_CONFIG.SYNERGIES[' + si + ']';
+      html += '<div class="item-block">';
+      html += '<div class="item-header"><span style="font-size:1.1rem">' + esc(s.icon || '*') + '</span>';
+      html += '<span class="item-name">' + esc(s.name || s.id) + '</span>';
+      html += '<span style="font-size:0.7rem;color:var(--muted)">' + esc(s.a) + ' + ' + esc(s.b) + '</span></div>';
+      html += '<div style="font-size:0.72rem;color:var(--muted);margin-bottom:6px">' + esc(s.desc || '') + '</div>';
+      html += sliderField('Radius', s.radius || 100, 40, 260, 5, prefix + '.radius');
+      Object.keys(s.bonus || {}).forEach(function (key) {
+        var value = s.bonus[key];
+        if (typeof value === 'boolean') {
+          html += '<div class="field-row"><label>' + esc(key) + '</label><input type="checkbox" data-synergy-bool="' + si + '" data-bonus-key="' + esc(key) + '"' + (value ? ' checked' : '') + '></div>';
+        } else {
+          html += sliderField(key, value, key.indexOf('Mult') >= 0 || key.indexOf('Dmg') >= 0 ? -1 : 0, key.indexOf('Add') >= 0 ? 5 : 2, key.indexOf('Add') >= 0 ? 1 : 0.01, prefix + '.bonus.' + key, key.indexOf('Add') >= 0 ? 1 : 100);
+        }
+      });
       html += '</div>';
     });
     html += '</div>';
@@ -394,6 +449,7 @@ window.TDUI = (function () {
       { type: 'frost',  emoji: '❄️', name: 'Frost',  note: 'Slows enemies in area' },
       { type: 'tesla',  emoji: '⚡', name: 'Tesla',  note: 'Instant chain lightning' }
     ];
+    TYPES.push({ type: 'amplifier', emoji: 'AMP', name: 'Amplifier', note: 'Buffs nearby towers' });
     TYPES.forEach(function (t) {
       var cost = TDGame ? TDGame.getTowerCost(t.type) : '?';
       html += '<button class="btn-small td-place-type" data-place-type="' + t.type + '" ' +
@@ -426,6 +482,7 @@ window.TDUI = (function () {
       case 'tower':    return renderTower();
       case 'enemies':  return renderEnemies();
       case 'passives': return renderPassives();
+      case 'synergies':return renderSynergies();
       case 'economy':  return renderEconomy();
       case 'analytics':return renderAnalytics();
       case 'map':      return renderMap();
@@ -527,6 +584,24 @@ window.TDUI = (function () {
         var idx = parseInt(btn.dataset.playStage);
         TDGame.startStage(idx);
         refresh();
+      });
+    });
+    var towerTypeSelect = document.getElementById('td-tower-type-select');
+    if (towerTypeSelect) {
+      towerTypeSelect.addEventListener('change', function () {
+        selectedTowerType = towerTypeSelect.value || 'cannon';
+        refresh();
+      });
+    }
+    tabContent.querySelectorAll('[data-synergy-bool]').forEach(function (el) {
+      el.addEventListener('change', function () {
+        var idx = parseInt(el.dataset.synergyBool);
+        var key = el.dataset.bonusKey;
+        if (TD_CONFIG.SYNERGIES[idx] && TD_CONFIG.SYNERGIES[idx].bonus) {
+          TD_CONFIG.SYNERGIES[idx].bonus[key] = el.checked;
+          if (window.TDGame) TDGame.onConfigChange();
+          markUnsaved();
+        }
       });
     });
     // Place tower buttons (per type)

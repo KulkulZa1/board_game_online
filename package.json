@@ -5,8 +5,14 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
+    "dev": "node server.js",
     "test": "node scripts/smoke-test.js",
-    "sandbox": "npx serve sandbox -l 3001"
+    "test:full": "node scripts/smoke-check.js",
+    "sandbox": "npx serve sandbox -l 3001",
+    "build": "node scripts/no-build.js",
+    "lint": "node scripts/check-js.js",
+    "check": "npm run lint && npm test && npm run test:full",
+    "verify:production": "node scripts/verify-production-version.js"
   },
   "engines": {
     "node": ">=18.0.0"
@@ -15,6 +21,6 @@
     "chess.js": "0.12.0",
     "express": "^4.18.2",
     "socket.io": "^4.7.2",
-    "uuid": "^9.0.0"
+    "uuid": "^11.1.1"
   }
 }
