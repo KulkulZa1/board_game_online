@@ -38,6 +38,8 @@ window.TDGame = (function () {
   var enemies = [];
   var projectiles = [];
   var particles = [];
+  var damageNums = [];   // 플로팅 데미지 숫자
+  var coins = [];  // 적 처치 시 가끔 드롭되는 추가 골드 코인
   var toasts = [];
   var spawnQueue = [];
   var spawnTimer = 0;
@@ -323,6 +325,22 @@ window.TDGame = (function () {
     state.wavesCleared++;
     state.totalWavesCleared++;
     checkLiveEvents();
+    // 20% 확률 보너스 이벤트
+    if (Math.random() < 0.20) {
+      var bonusRoll = Math.random();
+      if (bonusRoll < 0.4) {
+        var bonusGold = 60 + Math.floor(state.stageIdx * 15);
+        state.gold += bonusGold;
+        state.goldEarned += bonusGold;
+        addToast('💰 Supply Drop! +' + bonusGold + 'g', '#f1c40f', 2500);
+      } else if (bonusRoll < 0.7) {
+        state.capacity = Math.min(state.capacity + 2, state.capacity + 2);
+        addToast('🛡 Repair! +2 Capacity', '#27ae60', 2500);
+      } else {
+        state.mobsReached = Math.max(0, state.mobsReached - 3);
+        addToast('✨ Mend! −3 Absorbed', '#3498db', 2500);
+      }
+    }
 
     var waves = getCurrentWaves();
     var stageComplete = !waves || state.waveIdx >= waves.length;
@@ -494,6 +512,7 @@ window.TDGame = (function () {
       hit[current.id] = true;
       drawLightning(prev, current);
       current.hp -= dmg;
+      spawnDmgNum(current.x, current.y, dmg, dmg >= 40);
       if (applySlow) { current.slowed = Math.max(current.slowed, 1.2); current.slowFactor = 0.55; }
       spawnParticle(current.x, current.y, tokenColor('proj_chain'), 8, 0.35);
       var src = current;
@@ -518,6 +537,7 @@ window.TDGame = (function () {
     proj.hitSet[enemy.id] = true;
 
     enemy.hp -= proj.dmg;
+    spawnDmgNum(enemy.x, enemy.y, proj.dmg, proj.dmg >= 60);
 
     // slow
     if (proj.slowChance > 0 && Math.random() < proj.slowChance) {
@@ -567,8 +587,22 @@ window.TDGame = (function () {
     state.goldEarned += earned;
     state.kills++;
     state.waveKills++;
-    spawnParticle(enemy.x, enemy.y, tokenColor('particle_gold'), 12, 0.6);
-    if (enemy.isBoss) onBossKilled();
+    var pCount = enemy.isBoss ? 28 : (enemy.tier === 'boss' ? 28 : 10 + (enemy.size || 10));
+    spawnParticle(enemy.x, enemy.y, tokenColor('particle_gold'), pCount, 0.6);
+    // 20% 확률 추가 골드 코인 드롭
+    if (Math.random() < 0.20) {
+      var bonus = Math.round(enemy.reward * 0.5 * goldMult) + 5;
+      coins.push({ x: enemy.x + (Math.random()-0.5)*20, y: enemy.y + (Math.random()-0.5)*20, bonus: bonus, life: 3.5, maxLife: 3.5, r: 7 });
+    }
+    // 보스 사망: 추가 폭발 파티클
+    if (enemy.isBoss) {
+      spawnParticle(enemy.x, enemy.y, '#f1c40f', 30, 1.0);
+      spawnParticle(enemy.x, enemy.y, '#e74c3c', 20, 0.7);
+      particles.push({ type: 'ring', x: enemy.x, y: enemy.y, r: 0, maxR: 80, life: 0.6, maxLife: 0.6, color: '#f1c40f' });
+      particles.push({ type: 'ring', x: enemy.x, y: enemy.y, r: 0, maxR: 50, life: 0.4, maxLife: 0.4, color: '#e74c3c' });
+      addToast('🏆 BOSS SLAIN! +' + Math.round(enemy.reward * goldMult) + 'g', '#f1c40f', 3000);
+      onBossKilled();
+    }
     enemies = enemies.filter(function (e) { return e.id !== enemy.id; });
   }
 
@@ -619,6 +653,18 @@ window.TDGame = (function () {
         life: life, maxLife: life, color: color, r: 2 + Math.random() * 2
       });
     }
+  }
+
+  function spawnDmgNum(x, y, val, crit) {
+    if (val < 1) return;
+    damageNums.push({
+      x: x + (Math.random() - 0.5) * 8,
+      y: y - 16,
+      val: Math.round(val),
+      life: 0.7, maxLife: 0.7,
+      vy: -42,
+      crit: !!crit
+    });
   }
 
   // ── Toasts ───────────────────────────────────────────────────────
@@ -739,6 +785,15 @@ window.TDGame = (function () {
       }
     }
 
+    // Damage numbers
+    for (var di = damageNums.length - 1; di >= 0; di--) {
+      var dn = damageNums[di];
+      dn.life -= dt;
+      if (dn.life <= 0) { damageNums.splice(di, 1); continue; }
+      dn.y += dn.vy * dt;
+      dn.vy += 30 * dt; // slight gravity
+    }
+
     // Particles
     for (var pi = particles.length - 1; pi >= 0; pi--) {
       var pt = particles[pi];
@@ -756,6 +811,18 @@ window.TDGame = (function () {
     for (var ti = toasts.length - 1; ti >= 0; ti--) {
       toasts[ti].life -= dt;
       if (toasts[ti].life <= 0) toasts.splice(ti, 1);
+    }
+
+    // 코인 자동 수집 (일정 시간 후)
+    for (var ci = coins.length - 1; ci >= 0; ci--) {
+      coins[ci].life -= dt;
+      if (coins[ci].life <= 0) {
+        state.gold += coins[ci].bonus;
+        state.goldEarned += coins[ci].bonus;
+        spawnParticle(coins[ci].x, coins[ci].y, '#f1c40f', 6, 0.4);
+        if (window.TDUI) TDUI.refresh();
+        coins.splice(ci, 1);
+      }
     }
 
     if (state.baseFlash > 0) state.baseFlash -= dt;
@@ -821,12 +888,21 @@ window.TDGame = (function () {
 
     // Projectiles
     projectiles.forEach(function (p) {
-      var col = p.special === 'void' ? tokenColor('proj_void') :
-                (p.special === 'arc'  ? tokenColor('proj_arc') : tokenColor('proj_cannon'));
+      var isVoid = p.special === 'void';
+      var isArc  = p.special === 'arc';
+      var isFrost = p.special === 'frost';
+      var col = isVoid  ? tokenColor('proj_void') :
+                isArc   ? tokenColor('proj_arc')  :
+                isFrost ? '#5dade2'                :
+                          tokenColor('proj_cannon');
+      var pr = isVoid ? 6 : isFrost ? 5 : 4;
       ctx.beginPath();
-      ctx.arc(p.x, p.y, p.special === 'void' ? 6 : 4, 0, Math.PI * 2);
+      ctx.arc(p.x, p.y, pr, 0, Math.PI * 2);
       ctx.fillStyle = col;
+      ctx.shadowBlur = isVoid ? 14 : isArc ? 10 : isFrost ? 8 : 6;
+      ctx.shadowColor = col;
       ctx.fill();
+      ctx.shadowBlur = 0;
       if (p.special === 'void') {
         ctx.beginPath();
         ctx.arc(p.x, p.y, 10, 0, Math.PI * 2);
@@ -887,8 +963,23 @@ window.TDGame = (function () {
       ctx.fillStyle = col + '44';
       ctx.fill();
       ctx.strokeStyle = col;
-      ctx.lineWidth = e.isBoss ? 3 : 2;
+      ctx.lineWidth = e.isBoss ? 4 : 2;
+      if (e.isBoss) {
+        ctx.shadowBlur = 18;
+        ctx.shadowColor = col;
+      }
       ctx.stroke();
+      ctx.shadowBlur = 0;
+      // 보스 추가 링
+      if (e.isBoss) {
+        ctx.beginPath();
+        ctx.arc(e.x, e.y, e.size + 6 + Math.sin(Date.now() * 0.004) * 2, 0, Math.PI * 2);
+        ctx.strokeStyle = col;
+        ctx.globalAlpha = 0.4;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
       // emoji
       ctx.font = e.size + 'px serif';
       ctx.textAlign = 'center';
@@ -906,6 +997,25 @@ window.TDGame = (function () {
         ctx.fillStyle = e.isBoss ? '#e74c3c' : col;
         ctx.fillRect(bx, by, bw * (e.hp / e.maxHp), bh);
       }
+    });
+
+    // Coins (골드 코인 드롭 — 자동 수집 대기 중)
+    coins.forEach(function (coin) {
+      var a = coin.life / coin.maxLife;
+      ctx.globalAlpha = Math.min(a * 3, 1);
+      ctx.beginPath();
+      ctx.arc(coin.x, coin.y, coin.r, 0, Math.PI * 2);
+      ctx.fillStyle = '#f1c40f';
+      ctx.shadowBlur = 10;
+      ctx.shadowColor = '#f39c12';
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 8px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('$', coin.x, coin.y);
+      ctx.globalAlpha = 1;
     });
 
     // Towers
@@ -939,7 +1049,8 @@ window.TDGame = (function () {
     var baseR = TD_CONFIG.BASE_RADIUS;
     // Glow
     var gradient = ctx.createRadialGradient(BASE.x, BASE.y, 0, BASE.x, BASE.y, baseR * 2.5);
-    var flashColor = state.baseFlash > 0 ? 'rgba(231,76,60,' + Math.min(state.baseFlash * 3, 0.6) + ')' : tokenColor('base_glow');
+    var flashIntensity = state.baseFlash > 0 ? Math.min(state.baseFlash * 4, 0.85) : 0;
+    var flashColor = flashIntensity > 0 ? 'rgba(231,76,60,' + flashIntensity + ')' : tokenColor('base_glow');
     gradient.addColorStop(0, flashColor);
     gradient.addColorStop(1, 'transparent');
     ctx.beginPath();
@@ -949,7 +1060,7 @@ window.TDGame = (function () {
     // Base circle
     ctx.beginPath();
     ctx.arc(BASE.x, BASE.y, baseR, 0, Math.PI * 2);
-    ctx.fillStyle = state.baseFlash > 0 ? 'rgba(180,30,30,0.5)' : 'rgba(30,30,60,0.8)';
+    ctx.fillStyle = state.baseFlash > 0 ? 'rgba(200,20,20,' + Math.min(state.baseFlash * 2, 0.75) + ')' : 'rgba(30,30,60,0.8)';
     ctx.fill();
     ctx.strokeStyle = tokenColor('base_color');
     ctx.lineWidth = 3;
@@ -992,6 +1103,21 @@ window.TDGame = (function () {
       ctx.globalAlpha = 1;
       ty += 36;
     });
+
+    // 데미지 숫자 (플로팅)
+    damageNums.forEach(function (dn) {
+      var a = dn.life / dn.maxLife;
+      ctx.globalAlpha = a;
+      ctx.fillStyle  = dn.crit ? '#f1c40f' : '#ffffff';
+      ctx.font = 'bold ' + (dn.crit ? 14 : 11) + 'px sans-serif';
+      ctx.textAlign  = 'center';
+      ctx.shadowBlur = dn.crit ? 8 : 0;
+      ctx.shadowColor = '#f39c12';
+      ctx.fillText(dn.val, dn.x, dn.y);
+      ctx.shadowBlur = 0;
+      ctx.globalAlpha = 1;
+    });
+    ctx.textAlign = 'left';
 
     // Title screen
     if (phase === 'title') drawTitleScreen();
@@ -1065,6 +1191,31 @@ window.TDGame = (function () {
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText('▶ Start Wave', W / 2, H - 24);
+    }
+
+    // 보스 HP 바 (보스 웨이브 중)
+    if (state.bossActive && enemies.some(function(e){ return e.isBoss; })) {
+      var bossE = enemies.find(function(e){ return e.isBoss; });
+      if (bossE) {
+        var bhW = 300, bhH = 14;
+        var bhX = (W - bhW) / 2, bhY = pad;
+        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+        ctx.fillRect(bhX - 3, bhY - 3, bhW + 6, bhH + 20);
+        ctx.fillStyle = bossE.hp < bossE.maxHp * 0.5 ? '#e74c3c' : '#c0392b';
+        ctx.fillRect(bhX, bhY, bhW * Math.max(0, bossE.hp / bossE.maxHp), bhH);
+        ctx.strokeStyle = '#f1c40f';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(bhX, bhY, bhW, bhH);
+        // phase line
+        ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(bhX + bhW * 0.5, bhY); ctx.lineTo(bhX + bhW * 0.5, bhY + bhH); ctx.stroke();
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 10px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('⚠ BOSS  ' + Math.ceil(bossE.hp) + ' / ' + bossE.maxHp, W/2, bhY + bhH + 12);
+        ctx.textAlign = 'left';
+      }
     }
   }
 

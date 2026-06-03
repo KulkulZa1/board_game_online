@@ -25,6 +25,11 @@
   const DASH_RANGE     = 75;   // 대쉬 공격 범위(px)
   const SURVIVE_GOAL   = 600;  // 10분 생존 시 승리
 
+  const BOSS_INTERVAL      = 300;  // 5분마다 보스 등장
+  const ITEM_BOX_INTERVAL  = 40;   // 40초마다 아이템 박스
+  const ITEM_BOX_LIFETIME  = 28;   // 아이템 박스 수명(초)
+  const HORDE_WAVE_EVERY   = 3;    // N번째 웨이브마다 대규모 하드 웨이브
+
   // 무기 강화 한계
   const MAX_WEAPON_LEVEL = 5;   // 같은 무기를 다시 고르면 레벨업 (최대 5)
   const MAX_WEAPONS      = 6;   // 보유 가능한 무기 슬롯 수
@@ -65,6 +70,25 @@
   // 신규 획득 가능한 기본 무기 목록
   const WEAPON_POOL = ['orb', 'arrow', 'nova', 'shield', 'laser'];
 
+  // 랜덤 아이템 박스 — 40초마다 맵에 등장, 플레이어가 수집
+  const ITEM_BOX_POOL = [
+    { id: 'medkit',  icon: '💊', name: '긴급 치료',   apply: (p) => { p.hp = Math.min(p.hp + p.maxHp * 0.5, p.maxHp); } },
+    { id: 'barrier', icon: '🔰', name: '무적 방패',   apply: (p) => { p.invincible = 5.0; } },
+    { id: 'freeze',  icon: '🧊', name: '빙결 폭탄',   apply: ()  => { enemies.forEach(e => { e.frozen = 3.0; }); } },
+    { id: 'turbo',   icon: '⚡', name: '급가속',       apply: (p) => { p.tempSpeedMult = 1.5; p.tempSpeedTimer = 20; } },
+    { id: 'power',   icon: '🎯', name: '정밀 조준',   apply: (p) => { p.tempDmgMult  = 1.5; p.tempDmgTimer  = 20; } },
+    { id: 'hpmax',   icon: '❤',  name: '체력 강화',   apply: (p) => { p.maxHp += 30; p.hp = Math.min(p.hp + 30, p.maxHp); } },
+    { id: 'dmgperm', icon: '✨', name: '공격력 강화', apply: (p) => { p.dmgMult *= 1.2; } },
+    { id: 'nuke',    icon: '💥', name: '핵폭탄',      apply: ()  => {
+        spawnExplosion(player.x, player.y, 230, 120 * player.dmgMult, false);
+        for (let _i = 0; _i < 3; _i++) {
+          const _a = Math.random() * Math.PI * 2;
+          chainExplosions.push({ x: player.x + Math.cos(_a)*90, y: player.y + Math.sin(_a)*90, range: 120, dmg: 60 * player.dmgMult, delay: 0.1 + _i * 0.08 });
+        }
+      }
+    },
+  ];
+
   // ── 게임 상태 ───────────────────────────────────────────────────
   let state = 'idle'; // idle | playing | levelup | dead | win
   let player = null;
@@ -84,6 +108,17 @@
   let dashEffect = null;       // 대쉬 슬래시 시각 효과
   let screenShake = 0;         // 화면 흔들림 강도
   let lastMoveDir = { dx: 1, dy: 0 }; // 마지막 이동 방향 (대쉬 방향 결정)
+  let itemBoxes     = [];        // 월드에 존재하는 아이템 박스
+  let itemBoxTimer  = 0;
+  let nextBossTime  = BOSS_INTERVAL;
+  let bossActive    = false;
+  let bossWarning   = 0;         // 보스 경고 효과 잔여 시간
+  let damageNumbers = [];        // 플로팅 데미지 숫자
+  let floatTexts    = [];        // 플로팅 텍스트 (알림, 아이템 이름 등)
+  let comboCount    = 0;
+  let comboTimer    = 0;
+  let milestones    = new Set(); // 이미 알림한 분 단위 마일스톤
+  let waveCount     = 0;         // 총 웨이브 카운터 (horde 판정)
 
   const SANDBOX_CONFIG = window.VS_CONFIG || null;
   const ENEMY_COLORS = {
@@ -165,6 +200,10 @@
       xpRange: 80,
       invincible: 0,     // 무적 시간(초)
       shieldTimer: 0,
+      tempDmgMult:  1,     // 임시 공격력 배율 (아이템 박스)
+      tempDmgTimer: 0,
+      tempSpeedMult: 1,    // 임시 속도 배율 (아이템 박스)
+      tempSpeedTimer: 0,
     };
     enemies    = [];
     projectiles= [];
@@ -176,10 +215,21 @@
     kills      = 0;
     waveTimer  = 0;
     camera     = { x: 0, y: 0 };
-    dashCd     = 0;
-    dashEffect = null;
+    dashCd      = 0;
+    dashEffect  = null;
     screenShake = 0;
     lastMoveDir = { dx: 1, dy: 0 };
+    itemBoxes     = [];
+    itemBoxTimer  = 0;
+    nextBossTime  = BOSS_INTERVAL;
+    bossActive    = false;
+    bossWarning   = 0;
+    damageNumbers = [];
+    floatTexts    = [];
+    comboCount    = 0;
+    comboTimer    = 0;
+    milestones    = new Set();
+    waveCount     = 0;
 
     // 시작 무기
     addWeapon('orb');
@@ -310,13 +360,21 @@
       return;
     }
 
-    const difficulty = 1 + elapsed / 120;
-    const count = Math.min(8 + Math.floor(elapsed / 12), 35);
-    for (let i = 0; i < count; i++) {
+    waveCount++;
+    const isHorde = (waveCount % HORDE_WAVE_EVERY === 0);
+    if (isHorde) floatTexts.push({ text: '🔥 HORDE WAVE!', life: 2.0, maxLife: 2.0, screenSpace: true, color: '#e74c3c', size: 20 });
+    const difficulty = 1 + elapsed / 100;
+    const baseCount = isHorde ? Math.min(20 + Math.floor(elapsed / 10), 55) : Math.min(8 + Math.floor(elapsed / 12), 35);
+    for (let i = 0; i < baseCount; i++) {
       if (enemies.length >= MAX_ENEMIES) break;
       const angle = Math.random() * Math.PI * 2;
       const spawnDist = 350 + Math.random() * 150;
-      const tier  = elapsed < 60 ? 0 : elapsed < 180 ? (Math.random() < 0.3 ? 1 : 0) : (Math.random() < 0.15 ? 2 : Math.random() < 0.35 ? 1 : 0);
+      const tierRoll = Math.random();
+      const tier = elapsed < 45  ? 0
+                 : elapsed < 120 ? (tierRoll < 0.25 ? 1 : 0)
+                 : elapsed < 240 ? (tierRoll < 0.2 ? 2 : tierRoll < 0.5 ? 1 : 0)
+                 : elapsed < 400 ? (tierRoll < 0.3 ? 2 : tierRoll < 0.55 ? 1 : 0)
+                 :                 (tierRoll < 0.4 ? 2 : tierRoll < 0.6 ? 1 : 0);
       // 원거리 공격형(archer): tier1 40%, tier2 100%
       const bRoll = Math.random();
       const behavior = (tier === 2 || (tier === 1 && bRoll < 0.4)) ? 'archer' : 'chase';
@@ -332,6 +390,7 @@
         xpVal: [3, 8, 20][tier],
         tier,
         hurtFlash: 0,
+        frozen: 0,
         behavior,
         attackCd: Math.random() * attackBase,   // 초기 공격 시간 분산
         attackBase,
@@ -374,7 +433,7 @@
     const lvl    = player.weaponLevels[id] || 1;
     const lvlMul = 1 + 0.22 * (lvl - 1);              // 레벨당 데미지 +22%
     const cd     = def.cd * player.cdMult;
-    const dmg    = def.dmg * player.dmgMult * lvlMul;
+    const dmg    = def.dmg * player.dmgMult * (player.tempDmgMult || 1) * lvlMul;
     player.weaponCDs[id] = cd;
 
     if (id === 'orb' || id === 'blackhole') {
@@ -457,15 +516,69 @@
   function dealDamage(enemy, dmg) {
     enemy.hp -= dmg;
     enemy.hurtFlash = 0.12;
+    if (dmg >= 8) {
+      const rounded = Math.round(dmg);
+      damageNumbers.push({
+        x: enemy.x + (Math.random() - 0.5) * 10,
+        y: enemy.y - enemy.size - 4,
+        val: rounded,
+        life: 0.65, maxLife: 0.65,
+        crit: dmg >= 60,
+      });
+    }
     if (enemy.hp <= 0) killEnemy(enemy);
   }
 
   function killEnemy(enemy) {
     kills++;
-    for (let i = 0; i < 3; i++) spawnParticle(enemy.x, enemy.y, enemy.color, 4, 0.35);
+    comboCount++;
+    comboTimer = 1.5;
+    const pCount = enemy.isBoss ? 30 : 3 + enemy.tier * 3;
+    for (let i = 0; i < pCount; i++) {
+      spawnParticle(enemy.x, enemy.y, enemy.color, (enemy.tier + 1) * 4 + Math.random() * 5, 0.3 + Math.random() * 0.4);
+    }
+    if (enemy.isBoss) {
+      bossActive = false;
+      for (let k = 0; k < 4; k++) {
+        const ba = (k / 4) * Math.PI * 2;
+        itemBoxes.push({ x: enemy.x + Math.cos(ba) * 55, y: enemy.y + Math.sin(ba) * 55, life: ITEM_BOX_LIFETIME, pulseT: 0 });
+      }
+      spawnExplosion(enemy.x, enemy.y, 200, 0, true);
+      screenShake = Math.min(screenShake + 0.5, 0.7);
+      floatTexts.push({ text: '🏆 BOSS SLAIN!', life: 3.5, maxLife: 3.5, screenSpace: true, color: '#f1c40f', size: 26 });
+    }
     xpGems.push({ x: enemy.x, y: enemy.y, val: enemy.xpVal });
     enemies.splice(enemies.indexOf(enemy), 1);
     document.getElementById('killDisp').textContent = kills;
+  }
+
+  function spawnBoss() {
+    bossActive  = true;
+    bossWarning = 2.5;
+    const bossNum = Math.floor(elapsed / BOSS_INTERVAL);
+    const hp = 2800 + bossNum * 900;
+    const ang = Math.random() * Math.PI * 2;
+    enemies.push({
+      x: player.x + Math.cos(ang) * 430,
+      y: player.y + Math.sin(ang) * 430,
+      hp, maxHp: hp,
+      speed: 44 + bossNum * 3,
+      size: 36,
+      color: '#f1c40f',
+      xpVal: 80 + bossNum * 25,
+      tier: 3,
+      isBoss: true,
+      hurtFlash: 0,
+      behavior: 'boss',
+      attackCd: 0.6,
+      attackBase: 2.5,
+      attackRange: 390,
+      attackDmg: 45 + bossNum * 12,
+      bossPhase: 0,
+      frozen: 0,
+      faceAngle: 0,
+    });
+    floatTexts.push({ text: '⚠ BOSS APPROACHING ⚠', life: 2.5, maxLife: 2.5, screenSpace: true, color: '#e74c3c', size: 22 });
   }
 
   // ── XP / 레벨업 ─────────────────────────────────────────────────
@@ -609,7 +722,12 @@
     elapsed += dt;
     document.getElementById('timeDisp').textContent = fmtTime(elapsed);
 
-    if (elapsed >= getSurviveGoal()) { endGame('win'); return; }
+    // 1분마다 마일스톤 알림 (무한 모드)
+    const mins = Math.floor(elapsed / 60);
+    if (mins > 0 && !milestones.has(mins)) {
+      milestones.add(mins);
+      floatTexts.push({ text: `⏱ ${mins}분 생존!`, life: 2.5, maxLife: 2.5, screenSpace: true, color: '#2ecc71', size: 18 });
+    }
 
     update(dt);
     render(dt);
@@ -620,8 +738,8 @@
     // 이동
     const { dx, dy } = getMoveDir();
     if (dx !== 0 || dy !== 0) lastMoveDir = { dx, dy };
-    player.x += dx * player.speed * dt;
-    player.y += dy * player.speed * dt;
+    player.x += dx * player.speed * (player.tempSpeedMult || 1) * dt;
+    player.y += dy * player.speed * (player.tempSpeedMult || 1) * dt;
 
     // 대쉬 공격 (Space / X)
     if (dashCd > 0) dashCd -= dt;
@@ -653,6 +771,42 @@
     // 웨이브 생성
     waveTimer += dt;
     if (waveTimer >= WAVE_INTERVAL) { waveTimer = 0; spawnWave(); }
+
+    // 보스 등장 체크
+    if (!bossActive && elapsed >= nextBossTime) {
+      nextBossTime += BOSS_INTERVAL;
+      spawnBoss();
+    }
+    if (bossWarning > 0) bossWarning -= dt;
+
+    // 아이템 박스 생성
+    itemBoxTimer += dt;
+    if (itemBoxTimer >= ITEM_BOX_INTERVAL) {
+      itemBoxTimer = 0;
+      const _ba = Math.random() * Math.PI * 2;
+      const _bd = 240 + Math.random() * 180;
+      itemBoxes.push({ x: player.x + Math.cos(_ba) * _bd, y: player.y + Math.sin(_ba) * _bd, life: ITEM_BOX_LIFETIME, pulseT: 0 });
+    }
+
+    // 아이템 박스 업데이트 및 수집
+    for (let i = itemBoxes.length - 1; i >= 0; i--) {
+      const box = itemBoxes[i];
+      box.life -= dt;
+      box.pulseT = (box.pulseT || 0) + dt;
+      if (box.life <= 0) { itemBoxes.splice(i, 1); continue; }
+      if (dist(box, player) < 26) {
+        const item = ITEM_BOX_POOL[Math.floor(Math.random() * ITEM_BOX_POOL.length)];
+        item.apply(player);
+        floatTexts.push({ x: box.x, y: box.y - 10, text: item.icon + ' ' + item.name + '!', life: 2.0, maxLife: 2.0, color: '#f1c40f', size: 15 });
+        for (let k = 0; k < 10; k++) spawnParticle(box.x, box.y, '#f1c40f', 5 + Math.random() * 5, 0.5);
+        itemBoxes.splice(i, 1);
+        updateHUD();
+      }
+    }
+
+    // 임시 버프 타이머
+    if (player.tempDmgTimer > 0) { player.tempDmgTimer -= dt; if (player.tempDmgTimer <= 0) { player.tempDmgMult = 1; player.tempDmgTimer = 0; } }
+    if (player.tempSpeedTimer > 0) { player.tempSpeedTimer -= dt; if (player.tempSpeedTimer <= 0) { player.tempSpeedMult = 1; player.tempSpeedTimer = 0; } }
 
     // 무기 발사
     for (const id of player.weapons) fireWeapon(id, dt);
@@ -720,14 +874,39 @@
       if (e.hurtFlash > 0) e.hurtFlash -= dt;
       const ang = Math.atan2(player.y - e.y, player.x - e.x);
       const d   = dist(e, player);
-      e.faceAngle = ang;   // 렌더링용 방향
+      e.faceAngle = ang;
 
-      // 분노 상태(HP 30% 이하): 속도 50% 증가, 공격 쿨다운 단축
-      const rageActive = e.hp < e.maxHp * 0.3;
+      // 보스 페이즈 전환 체크 (HP 50% 이하 → 격노)
+      if (e.isBoss) {
+        const expectedPhase = e.hp < e.maxHp * 0.5 ? 1 : 0;
+        if (expectedPhase !== (e.bossPhase || 0)) {
+          e.bossPhase = expectedPhase;
+          floatTexts.push({ x: e.x, y: e.y - 50, text: '⚡ ENRAGE!', life: 1.8, maxLife: 1.8, color: '#e74c3c', size: 18 });
+          for (let k = 0; k < 20; k++) spawnParticle(e.x, e.y, '#e74c3c', 8 + Math.random() * 6, 0.6);
+          screenShake = Math.min(screenShake + 0.4, 0.5);
+        }
+      }
+
+      const rageActive = !e.isBoss && e.hp < e.maxHp * 0.3;
       const rageMult   = rageActive ? 1.5 : 1.0;
 
-      if (e.behavior === 'archer') {
-        // 원거리: 적정 거리 유지하며 투사체 발사
+      if (e.frozen > 0) {
+        // 빙결 상태: 이동·공격 없음
+        e.frozen -= dt;
+      } else if (e.isBoss) {
+        // 보스: 추적 + 원형 폭발 발사
+        const bSpeed = e.bossPhase === 1 ? e.speed * 1.4 : e.speed;
+        e.x += Math.cos(ang) * bSpeed * dt;
+        e.y += Math.sin(ang) * bSpeed * dt;
+        if (e.attackCd > 0) e.attackCd -= dt;
+        if (e.attackCd <= 0) {
+          const shots = (e.bossPhase || 0) === 1 ? 12 : 8;
+          for (let b = 0; b < shots; b++) {
+            fireEnemyProjectile(e, (b / shots) * Math.PI * 2 - ang);
+          }
+          e.attackCd = (e.bossPhase || 0) === 1 ? 1.5 : 2.5;
+        }
+      } else if (e.behavior === 'archer') {
         const prefDist = e.tier === 2 ? 200 : 170;
         if (d > prefDist * 1.3) {
           e.x += Math.cos(ang) * e.speed * rageMult * dt;
@@ -738,23 +917,20 @@
         }
         if (e.attackCd > 0) e.attackCd -= dt;
         if (e.attackCd <= 0 && d < e.attackRange) {
-          // tier2: 분산 3연발; tier1: 단발 (분노 시 2연발)
-          const shots = (e.tier === 2 ? 3 : (rageActive ? 2 : 1));
+          const shots = e.tier === 2 ? 3 : (rageActive ? 2 : 1);
           for (let s = 0; s < shots; s++) {
-            const spread = shots > 1 ? (s - (shots - 1) / 2) * 0.22 : 0;
-            fireEnemyProjectile(e, spread);
+            fireEnemyProjectile(e, shots > 1 ? (s - (shots - 1) / 2) * 0.22 : 0);
           }
           e.attackCd = e.attackBase * (rageActive ? 0.55 : 1.0);
         }
       } else {
-        // 추적 이동
         e.x += Math.cos(ang) * e.speed * rageMult * dt;
         e.y += Math.sin(ang) * e.speed * rageMult * dt;
       }
 
       if (player.invincible <= 0 && d < e.size + 12) {
-        const dmg = [8, 18, 38][e.tier] * dt;
-        player.hp -= dmg;
+        const contactDmg = e.isBoss ? 55 : [8, 18, 38][Math.min(e.tier, 2)];
+        player.hp -= contactDmg * dt;
         screenShake = Math.min(screenShake + 0.15, 0.35);
         player.invincible = 0.15;
         if (player.hp <= 0) { endGame('dead'); return; }
@@ -775,6 +951,26 @@
         enemyProjectiles.splice(i, 1);
         if (player.hp <= 0) { endGame('dead'); return; }
       }
+    }
+
+    // 콤보 타이머 감쇠
+    if (comboTimer > 0) comboTimer -= dt;
+    else if (comboCount > 0) comboCount = 0;
+
+    // 부유 텍스트 업데이트
+    for (let i = floatTexts.length - 1; i >= 0; i--) {
+      const ft = floatTexts[i];
+      ft.life -= dt;
+      if (ft.life <= 0) { floatTexts.splice(i, 1); continue; }
+      if (!ft.screenSpace) ft.y -= 32 * dt;
+    }
+
+    // 데미지 숫자 업데이트
+    for (let i = damageNumbers.length - 1; i >= 0; i--) {
+      const dn = damageNumbers[i];
+      dn.life -= dt;
+      if (dn.life <= 0) { damageNumbers.splice(i, 1); continue; }
+      dn.y -= 40 * dt;
     }
 
     // XP 수집
@@ -835,6 +1031,28 @@
       ctx.strokeStyle = '#f1c40f';
       ctx.lineWidth = 1;
       ctx.stroke();
+    }
+
+    // 아이템 박스 렌더
+    for (const box of itemBoxes) {
+      const pulse = 0.7 + Math.sin((box.pulseT || 0) * 3.5) * 0.3;
+      const fadeAlpha = Math.min(box.life * 0.4, 1);
+      ctx.save();
+      ctx.translate(box.x, box.y);
+      ctx.rotate((box.pulseT || 0) * 0.6);
+      ctx.globalAlpha = fadeAlpha * pulse;
+      ctx.shadowBlur = 18;
+      ctx.shadowColor = '#f1c40f';
+      ctx.fillStyle = '#f1c40f';
+      ctx.fillRect(-11, -11, 22, 22);
+      ctx.shadowBlur = 0;
+      ctx.globalAlpha = fadeAlpha;
+      ctx.fillStyle = '#fff';
+      ctx.font = '14px serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('📦', 0, 0);
+      ctx.restore();
     }
 
     // 파티클
