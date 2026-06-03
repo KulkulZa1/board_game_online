@@ -116,6 +116,18 @@
     { id: 'normal', name: 'Normal', desc: 'Balanced 10 minute run.', enemyHpMult: 1, enemySpeedMult: 1, enemyDmgMult: 1, spawnMult: 1, bossInterval: 120, coinMult: 1 },
     { id: 'hard', name: 'Hard', desc: 'Higher pressure and rewards.', enemyHpMult: 1.28, enemySpeedMult: 1.1, enemyDmgMult: 1.22, spawnMult: 1.22, bossInterval: 105, coinMult: 1.45 },
   ];
+  const META_UPGRADE_DEFS = [
+    { id: 'might', name: 'Might', desc: '+4% weapon damage per rank.', max: 5, baseCost: 120, apply: (stats, level) => { stats.dmgMult *= 1 + level * 0.04; } },
+    { id: 'vitality', name: 'Vitality', desc: '+8 max HP per rank.', max: 5, baseCost: 110, apply: (stats, level) => { stats.hpBonus += level * 8; } },
+    { id: 'magnet', name: 'Magnet', desc: '+8% XP pickup range per rank.', max: 5, baseCost: 100, apply: (stats, level) => { stats.xpRangeMult *= 1 + level * 0.08; } },
+    { id: 'haste', name: 'Haste', desc: '-3% cooldown per rank.', max: 5, baseCost: 140, apply: (stats, level) => { stats.cdMult *= Math.max(0.75, 1 - level * 0.03); } },
+  ];
+  const MAP_DEFS = [
+    { id: 'meadow', name: 'Meadow', desc: 'Balanced 10 minute field.', durationSeconds: 600, enemyHpMult: 1, spawnMult: 1, coinMult: 1, bg: '#101827', unlock: { type: 'free' } },
+    { id: 'night', name: 'Night Board', desc: 'More enemies after your first clear.', durationSeconds: 600, enemyHpMult: 1.08, spawnMult: 1.12, coinMult: 1.15, bg: '#101222', unlock: { achievement: 'win1', label: 'Clear one run' } },
+    { id: 'snow', name: 'Snow Endgame', desc: 'Longer, harder, better payout.', durationSeconds: 720, enemyHpMult: 1.18, spawnMult: 1.18, coinMult: 1.35, bg: '#13212b', unlock: { achievement: 'clearHard', cost: 900, label: 'Clear Hard or pay 900 coins' } },
+  ];
+  const START_BOOST_COST = 90;
 
   // 랜덤 아이템 박스 — 40초마다 맵에 등장, 플레이어가 수집
   const ITEM_BOX_POOL = [
@@ -172,6 +184,8 @@
   let meta = loadMeta();
   let selectedCharacterId = meta.lastCharacter || 'knight';
   let selectedDifficultyId = meta.lastDifficulty || 'normal';
+  let selectedMapId = meta.lastMap || 'meadow';
+  let dailyChallengeEnabled = !!meta.dailyChallengeEnabled;
   let runRewardsGranted = false;
 
   const SANDBOX_CONFIG = window.VS_CONFIG || null;
@@ -215,7 +229,9 @@
 
   function getSurviveGoal() {
     const stage = sandboxStage();
-    return stage && stage.durationSeconds ? stage.durationSeconds : SURVIVE_GOAL;
+    if (stage && stage.durationSeconds) return stage.durationSeconds;
+    const map = currentMap();
+    return map.durationSeconds || SURVIVE_GOAL;
   }
 
   function renderStageSelect() {
@@ -243,7 +259,11 @@
     ensureMetaAchievements();
     const character = currentCharacter();
     const difficulty = currentDifficulty();
-    const maxHp = BASE_HP + (character.hpBonus || 0);
+    const map = currentMap();
+    const daily = dailyChallengeEnabled ? dailyChallenge() : null;
+    const metaStats = { hpBonus: 0, dmgMult: 1, cdMult: 1, xpRangeMult: 1 };
+    META_UPGRADE_DEFS.forEach(def => def.apply(metaStats, upgradeLevel(def.id)));
+    const maxHp = BASE_HP + (character.hpBonus || 0) + metaStats.hpBonus + (meta.pendingStartBoost ? 20 : 0);
     player = {
       x: 0, y: 0,
       hp: maxHp, maxHp,
@@ -253,9 +273,9 @@
       weaponLevels: {},  // 무기별 레벨 (1~MAX_WEAPON_LEVEL)
       weaponCDs: {},     // 무기별 쿨다운 잔여 시간
       passives: {},      // 보유 패시브 id → 스택 수 (진화 조건 판정)
-      dmgMult: character.dmgMult,
-      cdMult:  character.cdMult,
-      xpRange: 80 * character.xpRangeMult,
+      dmgMult: character.dmgMult * metaStats.dmgMult,
+      cdMult:  character.cdMult * metaStats.cdMult,
+      xpRange: 80 * character.xpRangeMult * metaStats.xpRangeMult,
       invincible: 0,     // 무적 시간(초)
       shieldTimer: 0,
       tempDmgMult:  1,     // 임시 공격력 배율 (아이템 박스)
@@ -265,6 +285,8 @@
       characterId: character.id,
       difficultyId: difficulty.id,
       revived: false,
+      mapId: map.id,
+      dailyKey: daily ? daily.key : null,
       rerolls: 0,          // 추가 리롤권 (몬스터 드롭)
     };
     enemies    = [];
@@ -296,6 +318,14 @@
 
     // 시작 무기
     character.startWeapons.forEach(id => addWeapon(id));
+    if (daily && !player.weapons.includes(daily.forcedWeapon)) addWeapon(daily.forcedWeapon);
+    if (meta.pendingStartBoost) {
+      player.rerolls += 1;
+      const bonusWeapon = WEAPON_POOL.find(id => !player.weapons.includes(id));
+      if (bonusWeapon && player.weapons.length < MAX_WEAPONS) addWeapon(bonusWeapon);
+      meta.pendingStartBoost = false;
+      saveMeta();
+    }
     spawnWave();
     updateHUD();
   }
@@ -369,8 +399,14 @@
       bestKills: 0,
       unlockedCharacters: ['knight'],
       achievements: {},
+      upgrades: {},
+      unlockedMaps: ['meadow'],
       lastCharacter: 'knight',
       lastDifficulty: 'normal',
+      lastMap: 'meadow',
+      dailyChallengeEnabled: false,
+      dailyCompletions: {},
+      pendingStartBoost: false,
     };
     try {
       const raw = localStorage.getItem(META_KEY);
@@ -381,6 +417,9 @@
         ...saved,
         unlockedCharacters: Array.isArray(saved.unlockedCharacters) && saved.unlockedCharacters.length ? saved.unlockedCharacters : fallback.unlockedCharacters,
         achievements: saved.achievements && typeof saved.achievements === 'object' ? saved.achievements : fallback.achievements,
+        upgrades: saved.upgrades && typeof saved.upgrades === 'object' ? saved.upgrades : fallback.upgrades,
+        unlockedMaps: Array.isArray(saved.unlockedMaps) && saved.unlockedMaps.length ? saved.unlockedMaps : fallback.unlockedMaps,
+        dailyCompletions: saved.dailyCompletions && typeof saved.dailyCompletions === 'object' ? saved.dailyCompletions : fallback.dailyCompletions,
       };
     } catch (_err) {
       return fallback;
@@ -399,6 +438,55 @@
     return DIFFICULTY_DEFS.find(diff => diff.id === selectedDifficultyId) || DIFFICULTY_DEFS[1];
   }
 
+  function currentMap() {
+    return MAP_DEFS.find(map => map.id === selectedMapId) || MAP_DEFS[0];
+  }
+
+  function todayKey() {
+    return new Date().toISOString().slice(0, 10);
+  }
+
+  function seededIndex(seed, length) {
+    let hash = 0;
+    for (let i = 0; i < seed.length; i++) hash = ((hash << 5) - hash + seed.charCodeAt(i)) | 0;
+    return Math.abs(hash) % length;
+  }
+
+  function dailyChallenge() {
+    const key = todayKey();
+    const forcedWeapon = WEAPON_POOL[seededIndex(`${key}:weapon`, WEAPON_POOL.length)];
+    const difficulty = DIFFICULTY_DEFS[1 + seededIndex(`${key}:difficulty`, DIFFICULTY_DEFS.length - 1)];
+    return {
+      key,
+      name: `Daily ${key}`,
+      desc: `Forced ${WEAPON_DEFS[forcedWeapon].name}, ${difficulty.name} pressure, +75 coins on clear.`,
+      forcedWeapon,
+      enemyHpMult: 1.08,
+      spawnMult: 1.12,
+      coinBonus: 75,
+    };
+  }
+
+  function isMapUnlocked(def) {
+    if (!def || !def.unlock || def.unlock.type === 'free') return true;
+    if (meta.unlockedMaps.includes(def.id)) return true;
+    return !!(def.unlock.achievement && meta.achievements[def.unlock.achievement]);
+  }
+
+  function unlockMap(id) {
+    if (!meta.unlockedMaps.includes(id)) meta.unlockedMaps.push(id);
+  }
+
+  function upgradeLevel(id) {
+    return Math.max(0, Math.min(Number(meta.upgrades[id]) || 0, (META_UPGRADE_DEFS.find(def => def.id === id) || {}).max || 0));
+  }
+
+  function upgradeCost(def) {
+    const level = upgradeLevel(def.id);
+    if (level >= def.max) return null;
+    return def.baseCost + level * 80;
+  }
+
   function isCharacterUnlocked(def) {
     if (!def || !def.unlock || def.unlock.type === 'free') return true;
     if (meta.unlockedCharacters.includes(def.id)) return true;
@@ -412,6 +500,9 @@
   function ensureMetaAchievements() {
     CHARACTER_DEFS.forEach(def => {
       if (isCharacterUnlocked(def)) unlockCharacter(def.id);
+    });
+    MAP_DEFS.forEach(def => {
+      if (isMapUnlocked(def)) unlockMap(def.id);
     });
   }
 
@@ -464,6 +555,46 @@
       grid.className = 'start-select-grid difficulty-grid';
       wrap.append(title, grid);
       overlayBox.insertBefore(wrap, document.getElementById('overlaySub') || document.getElementById('startBtn'));
+    }
+
+    if (!document.getElementById('mapSelect')) {
+      const wrap = document.createElement('div');
+      wrap.id = 'mapSelect';
+      wrap.className = 'start-select-wrap';
+      const title = document.createElement('div');
+      title.className = 'start-select-title';
+      title.textContent = 'Map';
+      const grid = document.createElement('div');
+      grid.className = 'start-select-grid map-grid';
+      wrap.append(title, grid);
+      overlayBox.insertBefore(wrap, document.getElementById('overlaySub') || document.getElementById('startBtn'));
+    }
+
+    if (!document.getElementById('dailyPanel')) {
+      const panel = document.createElement('div');
+      panel.id = 'dailyPanel';
+      panel.className = 'daily-panel';
+      overlayBox.insertBefore(panel, document.getElementById('overlaySub') || document.getElementById('startBtn'));
+    }
+
+    if (!document.getElementById('upgradePanel')) {
+      const wrap = document.createElement('div');
+      wrap.id = 'upgradePanel';
+      wrap.className = 'start-select-wrap upgrade-panel';
+      const title = document.createElement('div');
+      title.className = 'start-select-title';
+      title.textContent = 'Permanent Upgrades';
+      const grid = document.createElement('div');
+      grid.className = 'start-select-grid upgrade-grid';
+      wrap.append(title, grid);
+      overlayBox.insertBefore(wrap, document.getElementById('overlaySub') || document.getElementById('startBtn'));
+    }
+
+    if (!document.getElementById('startBoostPanel')) {
+      const panel = document.createElement('div');
+      panel.id = 'startBoostPanel';
+      panel.className = 'daily-panel start-boost-panel';
+      overlayBox.insertBefore(panel, document.getElementById('startBtn'));
     }
 
     const wrapper = document.getElementById('gameWrapper');
@@ -579,6 +710,134 @@
         diffGrid.appendChild(btn);
       });
     }
+
+    const mapGrid = document.querySelector('#mapSelect .start-select-grid');
+    if (mapGrid) {
+      mapGrid.textContent = '';
+      MAP_DEFS.forEach(def => {
+        const unlocked = isMapUnlocked(def);
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = `start-card map-card${def.id === selectedMapId ? ' selected' : ''}${unlocked ? '' : ' locked'}`;
+        const title = document.createElement('div');
+        title.className = 'start-card-title';
+        title.textContent = def.name;
+        const desc = document.createElement('div');
+        desc.className = 'start-card-desc';
+        desc.textContent = def.desc;
+        const metaText = document.createElement('div');
+        metaText.className = 'start-card-meta';
+        metaText.textContent = unlocked ? `${fmtTime(def.durationSeconds)} / ${Math.round(def.coinMult * 100)}% coins` : (def.unlock && def.unlock.label ? def.unlock.label : 'Locked');
+        btn.append(title, desc, metaText);
+        btn.addEventListener('click', () => {
+          if (!isMapUnlocked(def)) {
+            const cost = def.unlock && def.unlock.cost ? def.unlock.cost : 0;
+            if (cost && meta.coins >= cost) {
+              meta.coins -= cost;
+              unlockMap(def.id);
+              saveMeta();
+            } else {
+              return;
+            }
+          }
+          selectedMapId = def.id;
+          meta.lastMap = def.id;
+          saveMeta();
+          renderStartOptions();
+        });
+        mapGrid.appendChild(btn);
+      });
+    }
+
+    const dailyPanel = document.getElementById('dailyPanel');
+    if (dailyPanel) {
+      const daily = dailyChallenge();
+      dailyPanel.textContent = '';
+      const text = document.createElement('div');
+      text.className = 'daily-text';
+      const completed = !!meta.dailyCompletions[daily.key];
+      text.textContent = `${daily.name}: ${daily.desc}${completed ? ' Completed today.' : ''}`;
+      const toggle = document.createElement('button');
+      toggle.type = 'button';
+      toggle.className = `secondary-btn${dailyChallengeEnabled ? ' selected-lite' : ''}`;
+      toggle.textContent = dailyChallengeEnabled ? 'Daily On' : 'Daily Off';
+      toggle.addEventListener('click', () => {
+        dailyChallengeEnabled = !dailyChallengeEnabled;
+        meta.dailyChallengeEnabled = dailyChallengeEnabled;
+        saveMeta();
+        renderStartOptions();
+      });
+      dailyPanel.append(text, toggle);
+    }
+
+    const upgradeGrid = document.querySelector('#upgradePanel .start-select-grid');
+    if (upgradeGrid) {
+      upgradeGrid.textContent = '';
+      META_UPGRADE_DEFS.forEach(def => {
+        const level = upgradeLevel(def.id);
+        const cost = upgradeCost(def);
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'start-card upgrade-card';
+        const title = document.createElement('div');
+        title.className = 'start-card-title';
+        title.textContent = `${def.name} ${level}/${def.max}`;
+        const desc = document.createElement('div');
+        desc.className = 'start-card-desc';
+        desc.textContent = def.desc;
+        const metaText = document.createElement('div');
+        metaText.className = 'start-card-meta';
+        metaText.textContent = cost === null ? 'Max rank' : `Buy: ${cost} coins`;
+        btn.append(title, desc, metaText);
+        btn.addEventListener('click', () => {
+          const nextCost = upgradeCost(def);
+          if (nextCost === null || (meta.coins || 0) < nextCost) return;
+          meta.coins -= nextCost;
+          meta.upgrades[def.id] = upgradeLevel(def.id) + 1;
+          saveMeta();
+          renderStartOptions();
+        });
+        upgradeGrid.appendChild(btn);
+      });
+    }
+
+    const startBoostPanel = document.getElementById('startBoostPanel');
+    if (startBoostPanel) {
+      startBoostPanel.textContent = '';
+      const label = document.createElement('div');
+      label.className = 'daily-text';
+      label.textContent = meta.pendingStartBoost
+        ? 'Start boost armed: +20 HP, +1 reroll, and one bonus starter weapon.'
+        : `Start boost: +20 HP, +1 reroll, bonus starter weapon. Cost ${START_BOOST_COST} coins or rewarded ad.`;
+      const coinBtn = document.createElement('button');
+      coinBtn.type = 'button';
+      coinBtn.className = 'secondary-btn';
+      coinBtn.textContent = meta.pendingStartBoost ? 'Boost Ready' : `Buy Boost (${START_BOOST_COST})`;
+      coinBtn.disabled = !!meta.pendingStartBoost;
+      coinBtn.addEventListener('click', () => {
+        if (meta.pendingStartBoost || (meta.coins || 0) < START_BOOST_COST) return;
+        meta.coins -= START_BOOST_COST;
+        meta.pendingStartBoost = true;
+        saveMeta();
+        renderStartOptions();
+      });
+      const adBtn = document.createElement('button');
+      adBtn.type = 'button';
+      adBtn.className = 'secondary-btn';
+      adBtn.textContent = 'Ad Boost';
+      adBtn.disabled = !!meta.pendingStartBoost;
+      adBtn.addEventListener('click', async () => {
+        if (meta.pendingStartBoost) return;
+        const watched = window.AdMobHelper && typeof AdMobHelper.showRewardedStartBoost === 'function'
+          ? await AdMobHelper.showRewardedStartBoost()
+          : false;
+        if (!watched) return;
+        meta.pendingStartBoost = true;
+        saveMeta();
+        renderStartOptions();
+      });
+      startBoostPanel.append(label, coinBtn, adBtn);
+    }
   }
 
   function setPaused(paused) {
@@ -604,9 +863,12 @@
     if (runRewardsGranted || !player) return { coins: 0, achievements: [] };
     runRewardsGranted = true;
     const diff = currentDifficulty();
+    const map = currentMap();
+    const daily = dailyChallengeEnabled ? dailyChallenge() : null;
     const baseCoins = Math.max(1, Math.floor(kills / 12 + elapsed / 18 + player.level * 2));
     const winBonus = result === 'win' ? 120 : 0;
-    const coins = Math.floor((baseCoins + winBonus) * diff.coinMult);
+    const dailyBonus = result === 'win' && daily && !meta.dailyCompletions[daily.key] ? daily.coinBonus : 0;
+    const coins = Math.floor((baseCoins + winBonus + dailyBonus) * diff.coinMult * map.coinMult);
     const achievements = [];
     meta.coins = Math.max(0, Math.floor(meta.coins || 0) + coins);
     if (elapsed > (meta.bestTime || 0)) meta.bestTime = Math.floor(elapsed);
@@ -619,6 +881,14 @@
     if (result === 'win' && !meta.achievements.win1) {
       meta.achievements.win1 = true;
       achievements.push('First clear');
+    }
+    if (result === 'win' && selectedDifficultyId === 'hard' && !meta.achievements.clearHard) {
+      meta.achievements.clearHard = true;
+      achievements.push('Hard clear');
+    }
+    if (result === 'win' && daily && !meta.dailyCompletions[daily.key]) {
+      meta.dailyCompletions[daily.key] = true;
+      achievements.push('Daily clear');
     }
     ensureMetaAchievements();
     saveMeta();
@@ -768,11 +1038,15 @@
   // ── 적 생성 ─────────────────────────────────────────────────────
   function spawnWave() {
     const runDifficulty = currentDifficulty();
+    const map = currentMap();
+    const daily = dailyChallengeEnabled ? dailyChallenge() : null;
+    const hpMult = runDifficulty.enemyHpMult * map.enemyHpMult * (daily ? daily.enemyHpMult : 1);
+    const spawnMult = runDifficulty.spawnMult * map.spawnMult * (daily ? daily.spawnMult : 1);
     const stage = sandboxStage();
     if (stage && Array.isArray(stage.waveSchedule) && stage.waveSchedule.length) {
       const active = stage.waveSchedule.filter(wave => elapsed >= (Number(wave.atSecond) || 0));
       const wave = active.length ? active[active.length - 1] : stage.waveSchedule[0];
-      const count = Math.min(Math.ceil((Number(wave.count) || 1) * runDifficulty.spawnMult), 24);
+      const count = Math.min(Math.ceil((Number(wave.count) || 1) * spawnMult), 24);
       for (let i = 0; i < count; i++) {
         if (enemies.length >= MAX_ENEMIES) break;
         spawnSandboxEnemy(wave.enemyType || 'zombie');
@@ -787,7 +1061,7 @@
     //   1분=1.87, 3분=3.97, 5분=6.25, 10분=13.0, 15분=21.75
     const m = elapsed / 60;
     const difficulty = 1 + 0.9 * m + 0.03 * m * m;
-    const baseCount = Math.ceil((isHorde ? Math.min(20 + Math.floor(elapsed / 10), 60) : Math.min(8 + Math.floor(elapsed / 12), 38)) * runDifficulty.spawnMult);
+    const baseCount = Math.ceil((isHorde ? Math.min(20 + Math.floor(elapsed / 10), 60) : Math.min(8 + Math.floor(elapsed / 12), 38)) * spawnMult);
     for (let i = 0; i < baseCount; i++) {
       if (enemies.length >= MAX_ENEMIES) break;
       const angle = Math.random() * Math.PI * 2;
@@ -806,8 +1080,8 @@
       enemies.push({
         x: player.x + Math.cos(angle) * spawnDist,
         y: player.y + Math.sin(angle) * spawnDist,
-        hp:    [30, 80, 200][tier] * difficulty * runDifficulty.enemyHpMult,
-        maxHp: [30, 80, 200][tier] * difficulty * runDifficulty.enemyHpMult,
+        hp:    [30, 80, 200][tier] * difficulty * hpMult,
+        maxHp: [30, 80, 200][tier] * difficulty * hpMult,
         speed: ([75, 55, 35][tier] + Math.random() * 20) * runDifficulty.enemySpeedMult,
         size:  [10, 15, 22][tier],
         color: ['#e74c3c', behavior === 'archer' ? '#1abc9c' : '#9b59b6', '#c0392b'][tier],
@@ -828,12 +1102,14 @@
     const def = sandboxEnemy(typeKey) || sandboxEnemy('zombie');
     if (!def) return;
     const runDifficulty = currentDifficulty();
+    const map = currentMap();
+    const daily = dailyChallengeEnabled ? dailyChallenge() : null;
     const angle = Math.random() * Math.PI * 2;
     const distFromPlayer = 350 + Math.random() * 150;
     const difficulty = 1 + elapsed / 120;
     const isBoss = def.isBoss || typeKey === 'boss' || def.behavior === 'boss_chase';
     const tier = isBoss ? 2 : (def.hp > 100 ? 1 : 0);
-    const hp = (Number(def.hp) || [30, 80, 250][tier]) * difficulty * runDifficulty.enemyHpMult;
+    const hp = (Number(def.hp) || [30, 80, 250][tier]) * difficulty * runDifficulty.enemyHpMult * map.enemyHpMult * (daily ? daily.enemyHpMult : 1);
     enemies.push({
       x: player.x + Math.cos(angle) * distFromPlayer,
       y: player.y + Math.sin(angle) * distFromPlayer,
@@ -984,12 +1260,14 @@
 
   function spawnBoss() {
     const runDifficulty = currentDifficulty();
+    const map = currentMap();
+    const daily = dailyChallengeEnabled ? dailyChallenge() : null;
     bossActive  = true;
     bossWarning = 2.5;
     const bossNum = Math.floor(elapsed / (runDifficulty.bossInterval || BOSS_INTERVAL));
     // 보스 HP는 경과 시간에 비례해 스케일 — 해당 시점 플레이어 DPS로 약 15~25초 교전이 되도록 설계
     //   1번째(5분)≈22.5k, 2번째(10분)≈52k, 3번째(15분)≈93.5k
-    const hp = Math.round((5000 + bossNum * 4000) * (1 + elapsed / 200) * runDifficulty.enemyHpMult);
+    const hp = Math.round((5000 + bossNum * 4000) * (1 + elapsed / 200) * runDifficulty.enemyHpMult * map.enemyHpMult * (daily ? daily.enemyHpMult : 1));
     const ang = Math.random() * Math.PI * 2;
     enemies.push({
       x: player.x + Math.cos(ang) * 430,
@@ -1514,6 +1792,8 @@
   function render() {
     const W = canvas.width, H = canvas.height;
     ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = currentMap().bg || '#101827';
+    ctx.fillRect(0, 0, W, H);
 
     // 화면 흔들기 (최외곽 save)
     ctx.save();
@@ -2049,8 +2329,11 @@
     ensureStartPanels();
     clearEndActions();
     if (!isCharacterUnlocked(currentCharacter())) selectedCharacterId = 'knight';
+    if (!isMapUnlocked(currentMap())) selectedMapId = 'meadow';
     meta.lastCharacter = selectedCharacterId;
     meta.lastDifficulty = selectedDifficultyId;
+    meta.lastMap = selectedMapId;
+    meta.dailyChallengeEnabled = dailyChallengeEnabled;
     saveMeta();
     const select = document.getElementById('stageSelect');
     if (select) selectedStageIdx = parseInt(select.value, 10) || 0;

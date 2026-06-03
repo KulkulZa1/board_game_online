@@ -339,9 +339,16 @@ function checkVampireDirectorLoopCoverage() {
   const requiredGameMarkers = [
     'CHARACTER_DEFS',
     'DIFFICULTY_DEFS',
+    'META_UPGRADE_DEFS',
+    'MAP_DEFS',
+    'START_BOOST_COST',
     'META_KEY',
     'selectedCharacterId',
     'selectedDifficultyId',
+    'selectedMapId',
+    'dailyChallengeEnabled',
+    'dailyChallenge',
+    'upgradeCost',
     'function setPaused',
     "state = 'paused'",
     'visibilitychange',
@@ -351,21 +358,22 @@ function checkVampireDirectorLoopCoverage() {
     'showRewardedRevive',
     'character.startWeapons.forEach',
     'runDifficulty.enemyHpMult',
-    'runDifficulty.spawnMult',
+    'spawnMult',
+    'showRewardedStartBoost',
   ];
   const missingGameMarkers = requiredGameMarkers.filter((marker) => !game.includes(marker));
   if (missingGameMarkers.length) {
     throw new Error(`Vampire Survivors loop coverage missing: ${missingGameMarkers.join(', ')}`);
   }
 
-  const requiredCssMarkers = ['.meta-panel', '.start-card', '.pause-overlay', '.end-actions'];
+  const requiredCssMarkers = ['.meta-panel', '.start-card', '.pause-overlay', '.end-actions', '.daily-panel', '.upgrade-grid'];
   const missingCssMarkers = requiredCssMarkers.filter((marker) => !css.includes(marker));
   if (missingCssMarkers.length) {
     throw new Error(`Vampire Survivors UI CSS missing: ${missingCssMarkers.join(', ')}`);
   }
 
-  if (!admob.includes('REWARDED_ID') || !admob.includes('showRewardedRevive')) {
-    throw new Error('AdMob helper should expose a rewarded revive hook');
+  if (!admob.includes('REWARDED_ID') || !admob.includes('showRewardedRevive') || !admob.includes('showRewardedStartBoost')) {
+    throw new Error('AdMob helper should expose rewarded revive and start boost hooks');
   }
 }
 

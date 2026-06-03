@@ -627,9 +627,52 @@ html, body {
   text-align: center;
 }
 
+.daily-panel {
+  width: min(640px, 92vw);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 10px auto;
+  padding: 9px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(255,255,255,0.05);
+  text-align: left;
+}
+
+.daily-text {
+  color: var(--muted);
+  font-size: 0.74rem;
+  line-height: 1.35;
+}
+
+.upgrade-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.selected-lite {
+  border-color: #f1c40f;
+  color: #f1c40f;
+}
+
+.secondary-btn:disabled {
+  opacity: 0.58;
+  cursor: default;
+}
+
 @media (max-width: 640px) {
   .start-select-grid {
     grid-template-columns: 1fr;
+  }
+
+  .upgrade-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .daily-panel {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .start-card {

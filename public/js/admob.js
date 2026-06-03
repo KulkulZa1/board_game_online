@@ -54,6 +54,10 @@ window.AdMobHelper = (function () {
     }
   }
 
+  async function showRewardedStartBoost() {
+    return showRewardedRevive();
+  }
+
   function _isNative() {
     return !!(
       window.Capacitor &&
@@ -62,5 +66,5 @@ window.AdMobHelper = (function () {
     );
   }
 
-  return { init, showAfterGame, showRewardedRevive };
+  return { init, showAfterGame, showRewardedRevive, showRewardedStartBoost };
 })();
