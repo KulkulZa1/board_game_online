@@ -118,7 +118,9 @@
   let comboCount    = 0;
   let comboTimer    = 0;
   let milestones    = new Set(); // 이미 알림한 분 단위 마일스톤
-  let waveCount     = 0;         // 총 웨이브 카운터 (horde 판정)
+  let waveCount          = 0;     // 총 웨이브 카운터 (horde 판정)
+  let freeRerollUsed     = false; // 현재 선택창 무료 리롤 사용 여부 (창마다 초기화)
+  let currentChoiceBuilder = null; // 현재 선택지 생성 함수 (리롤 시 재호출)
 
   const SANDBOX_CONFIG = window.VS_CONFIG || null;
   const ENEMY_COLORS = {
@@ -204,6 +206,7 @@
       tempDmgTimer: 0,
       tempSpeedMult: 1,    // 임시 속도 배율 (아이템 박스)
       tempSpeedTimer: 0,
+      rerolls: 0,          // 추가 리롤권 (몬스터 드롭)
     };
     enemies    = [];
     projectiles= [];
@@ -299,11 +302,16 @@
   const keys = {};
   document.addEventListener('keydown', e => {
     keys[e.key] = true;
-    // 레벨업 / 아이템 선택 화면에서 숫자키로 선택
-    if ((state === 'levelup' || state === 'itembox') && ['1','2','3'].includes(e.key)) {
-      const btns = document.querySelectorAll('#upgradeList .upgrade-btn');
-      const idx  = parseInt(e.key) - 1;
-      if (btns[idx]) { e.preventDefault(); btns[idx].click(); }
+    // 레벨업 / 아이템 선택 화면에서 숫자키로 선택 / 리롤
+    if (state === 'levelup' || state === 'itembox') {
+      if (['1','2','3'].includes(e.key)) {
+        const btns = document.querySelectorAll('#upgradeList .upgrade-btn');
+        const idx  = parseInt(e.key) - 1;
+        if (btns[idx]) { e.preventDefault(); btns[idx].click(); }
+      } else if (e.key === '0') {
+        e.preventDefault();
+        doReroll();
+      }
     }
     // ? 키로 조합 가이드 토글
     if (e.key === '?' || e.key === 'h') toggleComboGuide();
@@ -393,9 +401,10 @@
       const tierRoll = Math.random();
       const tier = elapsed < 45  ? 0
                  : elapsed < 120 ? (tierRoll < 0.25 ? 1 : 0)
-                 : elapsed < 240 ? (tierRoll < 0.2 ? 2 : tierRoll < 0.5 ? 1 : 0)
-                 : elapsed < 400 ? (tierRoll < 0.3 ? 2 : tierRoll < 0.55 ? 1 : 0)
-                 :                 (tierRoll < 0.4 ? 2 : tierRoll < 0.6 ? 1 : 0);
+                 : elapsed < 180 ? (tierRoll < 0.35 ? 1 : 0)
+                 : elapsed < 300 ? (tierRoll < 0.12 ? 2 : tierRoll < 0.45 ? 1 : 0)
+                 : elapsed < 450 ? (tierRoll < 0.22 ? 2 : tierRoll < 0.5  ? 1 : 0)
+                 :                 (tierRoll < 0.32 ? 2 : tierRoll < 0.55 ? 1 : 0);
       // 원거리 공격형(archer): tier1 40%, tier2 100%
       const bRoll = Math.random();
       const behavior = (tier === 2 || (tier === 1 && bRoll < 0.4)) ? 'archer' : 'chase';
@@ -403,12 +412,12 @@
       enemies.push({
         x: player.x + Math.cos(angle) * spawnDist,
         y: player.y + Math.sin(angle) * spawnDist,
-        hp:    [30, 80, 250][tier] * difficulty,
-        maxHp: [30, 80, 250][tier] * difficulty,
+        hp:    [30, 80, 200][tier] * difficulty,
+        maxHp: [30, 80, 200][tier] * difficulty,
         speed: [75, 55, 35][tier] + Math.random() * 20,
         size:  [10, 15, 22][tier],
         color: ['#e74c3c', behavior === 'archer' ? '#1abc9c' : '#9b59b6', '#c0392b'][tier],
-        xpVal: Math.round([3, 8, 20][tier] * (1 + elapsed / 300)),  // XP 보상도 시간에 따라 증가 (레벨 페이스 유지)
+        xpVal: Math.round([5, 13, 30][tier] * (1 + elapsed / 300)),  // XP 보상 증가 → 무기 레벨 빠른 성장으로 난이도 완화
         tier,
         hurtFlash: 0,
         frozen: 0,
@@ -569,6 +578,11 @@
       floatTexts.push({ text: '🏆 BOSS SLAIN!', life: 3.5, maxLife: 3.5, screenSpace: true, color: '#f1c40f', size: 26 });
     }
     xpGems.push({ x: enemy.x, y: enemy.y, val: enemy.xpVal });
+    // 일반 몬스터 5% 확률로 리롤권 드롭 (최대 9개 보유)
+    if (!enemy.isBoss && Math.random() < 0.05 && player.rerolls < 9) {
+      player.rerolls++;
+      floatTexts.push({ x: enemy.x, y: enemy.y - 20, text: '🎲 리롤권 획득!', life: 1.8, maxLife: 1.8, color: '#a29bfe', size: 13 });
+    }
     enemies.splice(enemies.indexOf(enemy), 1);
     document.getElementById('killDisp').textContent = kills;
   }
@@ -625,23 +639,26 @@
     state = 'levelup';
     document.getElementById('lvDisp').textContent = player.level;
     setText('levelTitle', '⬆ 레벨 업!');
-    showChoiceOverlay(buildChoices());
+    const builder = () => buildChoices();
+    showChoiceOverlay(builder(), builder);
   }
 
   // 아이템 박스 선택 화면 — 3가지 중 선택
   function showItemBoxChoices() {
     state = 'itembox';
     setText('levelTitle', '📦 아이템 선택!');
-    const picks = shuffled(ITEM_BOX_POOL).slice(0, 3).map(item => ({
+    const makeItemPicks = () => shuffled(ITEM_BOX_POOL).slice(0, 3).map(item => ({
       kind: 'item',
       name: item.icon + ' ' + item.name,
       desc: '',
       choose: () => { item.apply(player); updateHUD(); },
     }));
-    showChoiceOverlay(picks);
+    showChoiceOverlay(makeItemPicks(), makeItemPicks);
   }
 
-  function showChoiceOverlay(picks) {
+  function showChoiceOverlay(picks, builder) {
+    freeRerollUsed       = false;
+    currentChoiceBuilder = builder || null;
     const list = document.getElementById('upgradeList');
     list.innerHTML = '';
     picks.forEach((c, i) => {
@@ -657,7 +674,67 @@
       };
       list.appendChild(btn);
     });
+    // 리롤 버튼
+    const rerollBtn = document.createElement('button');
+    rerollBtn.id        = 'rerollBtn';
+    rerollBtn.className = 'reroll-btn';
+    rerollBtn.onclick   = doReroll;
+    updateRerollBtn(rerollBtn);
+    list.appendChild(rerollBtn);
+
     document.getElementById('levelOverlay').style.display = 'flex';
+  }
+
+  function updateRerollBtn(btnEl) {
+    const btn = btnEl || document.getElementById('rerollBtn');
+    if (!btn) return;
+    if (!freeRerollUsed) {
+      btn.innerHTML   = '<span class="key-badge">0</span>🎲 리롤 <span class="reroll-tag free">무료</span>';
+      btn.disabled    = false;
+      btn.classList.remove('reroll-used');
+    } else if (player.rerolls > 0) {
+      btn.innerHTML   = `<span class="key-badge">0</span>🎲 리롤 <span class="reroll-tag owned">🎲 ${player.rerolls}개 보유</span>`;
+      btn.disabled    = false;
+      btn.classList.remove('reroll-used');
+    } else {
+      btn.innerHTML   = '<span class="key-badge muted">0</span>🎲 리롤 <span class="reroll-tag none">없음</span>';
+      btn.disabled    = true;
+      btn.classList.add('reroll-used');
+    }
+  }
+
+  function doReroll() {
+    if (!currentChoiceBuilder) return;
+    if (!freeRerollUsed) {
+      freeRerollUsed = true;
+    } else if (player.rerolls > 0) {
+      player.rerolls--;
+    } else {
+      return;
+    }
+    // 새 선택지로 다시 렌더 (리롤 버튼 유지)
+    const newPicks = currentChoiceBuilder();
+    const list     = document.getElementById('upgradeList');
+    list.innerHTML = '';
+    newPicks.forEach((c, i) => {
+      const btn = document.createElement('button');
+      btn.className = 'upgrade-btn' + (c.kind === 'evolve' ? ' evolution' : '');
+      btn.innerHTML = `<div class="upgrade-name"><span class="key-badge">${i + 1}</span>${c.name}</div>`
+        + (c.desc ? `<div class="upgrade-desc">${c.desc}</div>` : '');
+      btn.onclick = () => {
+        c.choose();
+        document.getElementById('levelOverlay').style.display = 'none';
+        state = 'playing';
+        updateHUD();
+      };
+      list.appendChild(btn);
+    });
+    const rerollBtn = document.createElement('button');
+    rerollBtn.id        = 'rerollBtn';
+    rerollBtn.className = 'reroll-btn';
+    rerollBtn.onclick   = doReroll;
+    updateRerollBtn(rerollBtn);
+    list.appendChild(rerollBtn);
   }
 
   // 레벨업 선택지 3개 구성: 진화(최우선) → 무기 레벨업 / 신규 무기 / 패시브

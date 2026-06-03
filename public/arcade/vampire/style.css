@@ -366,6 +366,37 @@ html, body {
   color: #f1c40f;
 }
 
+/* ── Reroll button ──────────────────────────────────── */
+.reroll-btn {
+  background: rgba(162,155,254,0.12);
+  border: 1px dashed #a29bfe88;
+  border-radius: 10px;
+  padding: 8px 14px;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+  font-size: 0.84rem;
+  width: 100%;
+  transition: background 0.15s;
+  margin-top: 4px;
+}
+.reroll-btn:hover:not(:disabled) { background: rgba(162,155,254,0.25); }
+.reroll-btn:disabled, .reroll-btn.reroll-used {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+.reroll-tag {
+  font-size: 0.72rem;
+  border-radius: 4px;
+  padding: 1px 6px;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+.reroll-tag.free  { background: rgba(241,196,15,0.22); color: #f1c40f; border: 1px solid #f1c40f66; }
+.reroll-tag.owned { background: rgba(162,155,254,0.22); color: #a29bfe; border: 1px solid #a29bfe66; }
+.reroll-tag.none  { background: rgba(127,140,141,0.18); color: #7f8c8d; border: 1px solid #7f8c8d44; }
+.key-badge.muted  { opacity: 0.4; }
+
 /* ── Guide button in header ─────────────────────────── */
 .guide-btn {
   background: none;
