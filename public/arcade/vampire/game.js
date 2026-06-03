@@ -1218,6 +1218,34 @@
       ctx.restore();
     }
 
+    // 데미지 숫자 (월드 공간)
+    ctx.textAlign = 'center';
+    for (const dn of damageNumbers) {
+      const alpha = dn.life / dn.maxLife;
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle  = dn.crit ? '#f1c40f' : '#ffffff';
+      ctx.font = `bold ${dn.crit ? 16 : 12}px sans-serif`;
+      ctx.shadowBlur  = dn.crit ? 8 : 0;
+      ctx.shadowColor = '#f39c12';
+      ctx.fillText(dn.val, dn.x, dn.y);
+      ctx.shadowBlur = 0;
+    }
+    ctx.globalAlpha = 1;
+    ctx.textAlign = 'left';
+
+    // 부유 텍스트 (월드 공간)
+    ctx.textAlign = 'center';
+    for (const ft of floatTexts) {
+      if (ft.screenSpace) continue;
+      const alpha = Math.min(ft.life / ft.maxLife * 2, 1);
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = ft.color || '#fff';
+      ctx.font = `bold ${ft.size || 14}px sans-serif`;
+      ctx.fillText(ft.text, ft.x, ft.y);
+    }
+    ctx.globalAlpha = 1;
+    ctx.textAlign = 'left';
+
     // 플레이어
     ctx.save();
     ctx.translate(player.x, player.y);
