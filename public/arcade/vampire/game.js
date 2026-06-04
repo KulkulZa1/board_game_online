@@ -33,6 +33,7 @@
   // 무기 강화 한계
   const MAX_WEAPON_LEVEL = 5;   // 같은 무기를 다시 고르면 레벨업 (최대 5)
   const MAX_WEAPONS      = 6;   // 보유 가능한 무기 슬롯 수
+  const COMBO_MILESTONES = [10, 25, 50, 100, 200];  // 콤보 보너스 지급 구간
 
   // 무기 정의 (기본 무기 + 진화 무기)
   const WEAPON_DEFS = {
@@ -65,15 +66,18 @@
   ];
 
   // 패시브(능력치) 업그레이드 — 진화 재료로도 사용됨
+  // max: 최대 스택 수. 도달 시 선택지에서 자동 제외. max:null = 무제한(성장 판타지 핵심 스탯)
+  //   무제한: 공격력·체력·관통 → 끝없이 강해지는 재미
+  //   상한:   쿨다운(0 방지)·치명타(100%↑ 무의미)·이속(조작 불가 방지)·자석(지수 폭주)·재생(무적 방지)
   const PASSIVE_POOL = [
-    { id: 'hp_up',    name: '❤ 체력 회복',   desc: '최대 체력 +20, 체력 회복',     apply: (p) => { p.maxHp += 20; p.hp = Math.min(p.hp + 30, p.maxHp); } },
-    { id: 'spd_up',   name: '👟 이동 속도',   desc: '이동 속도 +12%',               apply: (p) => { p.speed *= 1.12; } },
-    { id: 'dmg_up',   name: '⚔ 공격력',      desc: '모든 무기 데미지 +18%',         apply: (p) => { p.dmgMult *= 1.18; } },
-    { id: 'cd_up',    name: '⏩ 쿨다운 감소', desc: '모든 무기 쿨다운 -12%',         apply: (p) => { p.cdMult  *= 0.88; } },
-    { id: 'magnet',   name: '🧲 경험치 자석', desc: 'XP 획득 반경 +60%',             apply: (p) => { p.xpRange *= 1.6; } },
-    { id: 'crit',     name: '⚡ 치명타',       desc: '15% 확률 2배 피해 (중첩 가능)',  apply: (p) => { p.critChance = (p.critChance || 0) + 0.15; } },
-    { id: 'pierce_up',name: '🔱 관통 강화',   desc: '화살·부메랑 관통 +2',           apply: (p) => { p.pierceBonus = (p.pierceBonus || 0) + 2; } },
-    { id: 'regen',    name: '💚 체력 재생',   desc: '초당 최대 체력 2% 자동 회복',    apply: (p) => { p.regenRate = (p.regenRate || 0) + 0.02; } },
+    { id: 'hp_up',    name: '❤ 체력 회복',   desc: '최대 체력 +20, 체력 회복',     max: null, apply: (p) => { p.maxHp += 20; p.hp = Math.min(p.hp + 30, p.maxHp); } },
+    { id: 'spd_up',   name: '👟 이동 속도',   desc: '이동 속도 +12%',               max: 5,    apply: (p) => { p.speed *= 1.12; } },
+    { id: 'dmg_up',   name: '⚔ 공격력',      desc: '모든 무기 데미지 +18%',         max: null, apply: (p) => { p.dmgMult *= 1.18; } },
+    { id: 'cd_up',    name: '⏩ 쿨다운 감소', desc: '모든 무기 쿨다운 -12%',         max: 5,    apply: (p) => { p.cdMult  *= 0.88; } },
+    { id: 'magnet',   name: '🧲 경험치 자석', desc: 'XP 획득 반경 +60%',             max: 4,    apply: (p) => { p.xpRange *= 1.6; } },
+    { id: 'crit',     name: '⚡ 치명타',       desc: '15% 확률 2배 피해 (중첩 가능)',  max: 6,    apply: (p) => { p.critChance = (p.critChance || 0) + 0.15; } },
+    { id: 'pierce_up',name: '🔱 관통 강화',   desc: '화살·부메랑 관통 +2',           max: null, apply: (p) => { p.pierceBonus = (p.pierceBonus || 0) + 2; } },
+    { id: 'regen',    name: '💚 체력 재생',   desc: '초당 최대 체력 2% 자동 회복',    max: 5,    apply: (p) => { p.regenRate = (p.regenRate || 0) + 0.02; } },
   ];
 
   // 신규 획득 가능한 기본 무기 목록
@@ -177,6 +181,53 @@
     },
   ];
 
+  // ── 사운드 (경량 Web Audio 절차적 효과음) ───────────────────────
+  // 사용자 제스처(시작 버튼)에서 init() 호출로 AudioContext 생성. M키로 음소거 토글.
+  const SFX = (() => {
+    let actx = null;
+    let muted = false;
+    let lastPickup = 0, lastHurt = 0;
+    try { muted = localStorage.getItem('vps_muted') === '1'; } catch (_) {}
+    function ensure() {
+      if (!actx) {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (AC) { try { actx = new AC(); } catch (_) {} }
+      }
+      if (actx && actx.state === 'suspended') actx.resume();
+      return actx;
+    }
+    function tone(freq, dur, type, gain, slideTo) {
+      if (muted) return;
+      const ac = ensure(); if (!ac) return;
+      const t = ac.currentTime;
+      const osc = ac.createOscillator();
+      const g = ac.createGain();
+      osc.type = type || 'square';
+      osc.frequency.setValueAtTime(freq, t);
+      if (slideTo) osc.frequency.exponentialRampToValueAtTime(slideTo, t + dur);
+      g.gain.setValueAtTime(gain || 0.1, t);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      osc.connect(g); g.connect(ac.destination);
+      osc.start(t); osc.stop(t + dur);
+    }
+    return {
+      init() { ensure(); },
+      toggleMute() {
+        muted = !muted;
+        try { localStorage.setItem('vps_muted', muted ? '1' : '0'); } catch (_) {}
+        return muted;
+      },
+      isMuted() { return muted; },
+      crit()    { tone(540, 0.12, 'sawtooth', 0.10, 220); },
+      combo()   { tone(880, 0.09, 'square', 0.09, 1320); },
+      levelup() { tone(523, 0.12, 'triangle', 0.12, 784); setTimeout(() => tone(784, 0.18, 'triangle', 0.12, 1046), 90); },
+      boss()    { tone(110, 0.45, 'sawtooth', 0.16, 55); },
+      pickup()  { const n = performance.now(); if (n - lastPickup < 55) return; lastPickup = n; tone(660, 0.05, 'sine', 0.05, 920); },
+      hurt()    { const n = performance.now(); if (n - lastHurt < 200) return; lastHurt = n; tone(170, 0.13, 'sawtooth', 0.10, 70); },
+      dash()    { tone(420, 0.16, 'sine', 0.07, 120); },
+    };
+  })();
+
   // ── 게임 상태 ───────────────────────────────────────────────────
   let state = 'idle'; // idle | playing | paused | levelup | itembox | dead | win
   let player = null;
@@ -184,6 +235,7 @@
   let projectiles = [];
   let xpGems = [];
   let particles = [];
+  let playerTrail = [];        // 플레이어 이동 잔상 (질주감 연출, 최대 10개)
   let chainExplosions = [];
   let enemyProjectiles = [];   // 적이 발사한 투사체
   let elapsed = 0;
@@ -195,6 +247,9 @@
   let dashCd = 0;              // 대쉬 잔여 쿨다운
   let dashEffect = null;       // 대쉬 슬래시 시각 효과
   let screenShake = 0;         // 화면 흔들림 강도
+  let hitStop = 0;             // 히트스톱(타격 정지) 잔여 시간 — 큰 타격 순간 짧게 정지
+  let hurtScreenFlash = 0;     // 피격 시 화면 붉은 플래시 잔여 시간
+  let evolveFlash = 0;         // 무기 진화 시 화면 금빛 섬광 잔여 시간
   let lastMoveDir = { dx: 1, dy: 0 }; // 마지막 이동 방향 (대쉬 방향 결정)
   let itemBoxes     = [];        // 월드에 존재하는 아이템 박스
   let hybridTowers  = [];
@@ -208,6 +263,8 @@
   let floatTexts    = [];        // 플로팅 텍스트 (알림, 아이템 이름 등)
   let comboCount    = 0;
   let comboTimer    = 0;
+  let comboMilestoneIdx = 0;     // 현재 콤보 스트릭에서 지급한 마일스톤 인덱스
+  let comboBonusCoins   = 0;     // 콤보 마일스톤 누적 보너스 코인 (런 종료 시 정산)
   let milestones    = new Set(); // 이미 알림한 분 단위 마일스톤
   let waveCount          = 0;     // 총 웨이브 카운터 (horde 판정)
   let freeRerollUsed     = false; // 현재 선택창 무료 리롤 사용 여부 (창마다 초기화)
@@ -352,6 +409,7 @@
     projectiles= [];
     xpGems     = [];
     particles  = [];
+    playerTrail = [];
     chainExplosions = [];
     enemyProjectiles = [];
     elapsed    = 0;
@@ -361,6 +419,9 @@
     dashCd      = 0;
     dashEffect  = null;
     screenShake = 0;
+    hitStop = 0;
+    hurtScreenFlash = 0;
+    evolveFlash = 0;
     lastMoveDir = { dx: 1, dy: 0 };
     itemBoxes     = [];
     hybridTowers  = [];
@@ -377,6 +438,8 @@
     lowHpPulse = 0;
     comboCount    = 0;
     comboTimer    = 0;
+    comboMilestoneIdx = 0;
+    comboBonusCoins   = 0;
     milestones    = new Set();
     waveCount     = 0;
     runRewardsGranted = false;
@@ -468,6 +531,8 @@
       spawnParticle(player.x, player.y, ring === 0 ? '#f1c40f' : (ring === 1 ? '#ffffff' : '#8e44ad'), 5 + Math.random() * 10, 0.7 + Math.random() * 0.5);
     }
     screenShake = Math.min(screenShake + 0.65, 0.9);
+    hitStop = Math.max(hitStop, 0.16);   // 진화 순간 극적인 정지
+    evolveFlash = 0.55;                  // 금빛 섬광 (정지 동안 유지 후 페이드)
     floatTexts.push({
       text: `EVOLVED: ${evolved.icon} ${evolved.name}`,
       life: 3.0,
@@ -493,6 +558,15 @@
   function applyPassive(pv) {
     pv.apply(player);
     player.passives[pv.id] = (player.passives[pv.id] || 0) + 1;
+  }
+
+  // 패시브 현재 스택 수
+  function passiveLevel(id) {
+    return (player && player.passives[id]) || 0;
+  }
+  // 패시브가 최대 스택에 도달했는지 — 도달하면 선택지에서 제외
+  function isPassiveMaxed(pv) {
+    return pv.max != null && passiveLevel(pv.id) >= pv.max;
   }
 
   // 현재 진화 가능한 조합 목록
@@ -707,6 +781,8 @@
       bossWarning,
       comboCount,
       comboTimer,
+      comboMilestoneIdx,
+      comboBonusCoins,
       milestones: Array.from(milestones),
       waveCount,
     };
@@ -777,6 +853,8 @@
     bossWarning = Number(snapshot.bossWarning) || 0;
     comboCount = Number(snapshot.comboCount) || 0;
     comboTimer = Number(snapshot.comboTimer) || 0;
+    comboMilestoneIdx = Number(snapshot.comboMilestoneIdx) || 0;
+    comboBonusCoins = Number(snapshot.comboBonusCoins) || 0;
     milestones = new Set(Array.isArray(snapshot.milestones) ? snapshot.milestones : []);
     waveCount = Number(snapshot.waveCount) || 0;
     runRewardsGranted = false;
@@ -1630,6 +1708,7 @@
     const winBonus = result === 'win' ? 120 : 0;
     const dailyBonus = result === 'win' && daily && !meta.dailyCompletions[daily.key] ? daily.coinBonus : 0;
     let coins = Math.floor((baseCoins + winBonus + dailyBonus) * diff.coinMult * map.coinMult);
+    coins += Math.floor(comboBonusCoins || 0);   // 콤보 마일스톤 누적 보너스 정산
     const achievements = [];
     const grantAchievement = (id, label) => {
       if (meta.achievements[id]) return;
@@ -1930,6 +2009,12 @@
       placeHybridTower();
       return;
     }
+    if (e.key === 'm' || e.key === 'M') {
+      e.preventDefault();
+      const muted = SFX.toggleMute();
+      floatTexts.push({ text: muted ? '🔇 음소거' : '🔊 사운드 ON', life: 1.2, maxLife: 1.2, screenSpace: true, color: '#9fb4d8', size: 16 });
+      return;
+    }
     if (e.key === 'y' || e.key === 'Y') {
       e.preventDefault();
       cycleHybridTowerType();
@@ -2069,6 +2154,7 @@
         tier,
         hurtFlash: 0,
         frozen: 0,
+        spawnT: 0.35,   // 등장 연출(확대·페이드인) 잔여 시간
         behavior,
         attackCd: Math.random() * attackBase,   // 초기 공격 시간 분산
         attackBase,
@@ -2101,6 +2187,7 @@
       xpVal: Number(def.xpValue) || [3, 8, 20][tier],
       tier,
       hurtFlash: 0,
+      spawnT: 0.35,
     });
   }
 
@@ -2248,15 +2335,38 @@
     enemy.hurtFlash = 0.12;
     if (dmg >= 8) {
       const rounded = Math.round(dmg);
+      const isCrit = dmg >= 80;
+      // 데미지 등급: 0=소(흰색) 1=중(노랑) 2=치명타(주황·대형)
+      const tier = isCrit ? 2 : (rounded >= 25 ? 1 : 0);
       damageNumbers.push({
         x: enemy.x + (Math.random() - 0.5) * 10,
         y: enemy.y - enemy.size - 4,
         val: rounded,
         life: 0.65, maxLife: 0.65,
-        crit: dmg >= 80,
+        crit: isCrit,
+        tier,
       });
+      // 큰 치명타 → 짧은 히트스톱 + 효과음 (살아있지 않은 적엔 생략)
+      if (isCrit && enemy.hp > 0) {
+        hitStop = Math.max(hitStop, 0.045);
+        screenShake = Math.min(screenShake + 0.2, 0.5);
+        SFX.crit();
+      }
     }
     if (enemy.hp <= 0) killEnemy(enemy);
+  }
+
+  // 콤보 마일스톤 보상 — 데미지/처치 경로를 다시 타지 않는 안전한 보상(XP·코인)만 지급
+  function awardComboMilestone(enemy) {
+    if (comboMilestoneIdx >= COMBO_MILESTONES.length) return;
+    if (comboCount < COMBO_MILESTONES[comboMilestoneIdx]) return;
+    const reached = COMBO_MILESTONES[comboMilestoneIdx];
+    comboMilestoneIdx++;
+    const bonusCoins = Math.floor(reached / 5);
+    comboBonusCoins += bonusCoins;
+    xpGems.push({ x: enemy.x, y: enemy.y, val: Math.round(reached * 0.6) });
+    floatTexts.push({ x: enemy.x, y: enemy.y - 28, text: `🔥 ${reached} COMBO! +${bonusCoins}c`, life: 1.6, maxLife: 1.6, color: '#f1c40f', size: 15 });
+    SFX.combo();
   }
 
   function killEnemy(enemy) {
@@ -2265,6 +2375,7 @@
     kills++;
     comboCount++;
     comboTimer = 1.5;
+    awardComboMilestone(enemy);
     const pCount = enemy.isBoss ? 30 : 3 + enemy.tier * 3;
     for (let i = 0; i < pCount; i++) {
       spawnParticle(enemy.x, enemy.y, enemy.color, (enemy.tier + 1) * 4 + Math.random() * 5, 0.3 + Math.random() * 0.4);
@@ -2277,6 +2388,8 @@
       }
       spawnExplosion(enemy.x, enemy.y, 200, 0, true);
       screenShake = Math.min(screenShake + 0.5, 0.7);
+      hitStop = Math.max(hitStop, 0.13);   // 보스 처치 임팩트
+      SFX.boss();
       floatTexts.push({ text: '🏆 BOSS SLAIN!', life: 3.5, maxLife: 3.5, screenSpace: true, color: '#f1c40f', size: 26 });
     }
     xpGems.push({ x: enemy.x, y: enemy.y, val: enemy.xpVal });
@@ -2316,6 +2429,7 @@
       tier: 3,
       isBoss: true,
       hurtFlash: 0,
+      spawnT: 0.5,   // 보스는 더 극적인 등장
       behavior: 'boss',
       attackCd: 0.6,
       attackBase: 2.5,
@@ -2326,6 +2440,7 @@
       faceAngle: 0,
     });
     floatTexts.push({ text: '⚠ BOSS APPROACHING ⚠', life: 2.5, maxLife: 2.5, screenSpace: true, color: '#e74c3c', size: 22 });
+    SFX.boss();
   }
 
   // ── XP / 레벨업 ─────────────────────────────────────────────────
@@ -2347,17 +2462,26 @@
 
   function showLevelUp() {
     state = 'levelup';
+    SFX.levelup();
     document.getElementById('lvDisp').textContent = player.level;
     setText('levelTitle', '⬆ 레벨 업!');
     const builder = () => buildChoices();
     showChoiceOverlay(builder(), builder);
   }
 
+  // 즉시 효과가 무의미한 아이템 제외 (예: 체력 가득일 때 치료킷)
+  function usableItemBoxes() {
+    return ITEM_BOX_POOL.filter(item => {
+      if (item.id === 'medkit' && player.hp >= player.maxHp) return false;
+      return true;
+    });
+  }
+
   // 아이템 박스 선택 화면 — 3가지 중 선택
   function showItemBoxChoices() {
     state = 'itembox';
     setText('levelTitle', '📦 아이템 선택!');
-    const makeItemPicks = () => shuffled(ITEM_BOX_POOL).slice(0, 3).map(item => ({
+    const makeItemPicks = () => shuffled(usableItemBoxes()).slice(0, 3).map(item => ({
       kind: 'item',
       name: item.icon + ' ' + item.name,
       desc: '',
@@ -2522,10 +2646,10 @@
     list.appendChild(rerollBtn);
   }
 
-  // 레벨업 선택지 3개 구성: 진화(최우선) → 무기 레벨업 / 신규 무기 / 패시브
-  function buildChoices() {
-    // 1) 진화 가능 조합 (있으면 반드시 1개 포함)
-    const evoChoices = availableEvolutions().map(evo => {
+  // ── 레벨업 선택지 빌더 (모듈화) ───────────────────────────────────
+  // 1) 진화 가능 조합 → 선택지
+  function evolutionChoices() {
+    return availableEvolutions().map(evo => {
       const w = WEAPON_DEFS[evo.id];
       return {
         kind: 'evolve',
@@ -2534,60 +2658,84 @@
         choose: () => evolveWeapon(evo),
       };
     });
+  }
 
-    // 2) 보유 무기 레벨업 (진화 무기는 제외)
-    const levelable = [];
+  // 2) 보유 무기 레벨업 — 최대 레벨·진화 무기는 제외
+  function weaponLevelChoices() {
+    const out = [];
     for (const id of player.weapons) {
       const lvl = player.weaponLevels[id] || 1;
-      if (lvl < MAX_WEAPON_LEVEL && !WEAPON_DEFS[id].evolved) {
-        const w = WEAPON_DEFS[id];
-        levelable.push({
-          kind: 'weapon-lv',
-          weaponId: id,
-          tag: lvl >= MAX_WEAPON_LEVEL - 1 ? 'Near evolution' : 'Power up',
-          name: `${w.icon} ${w.name} Lv.${lvl}→${lvl + 1}`,
-          desc: w.desc + ' 강화',
-          choose: () => addWeapon(id),
-        });
-      }
+      if (lvl >= MAX_WEAPON_LEVEL || WEAPON_DEFS[id].evolved) continue;
+      const w = WEAPON_DEFS[id];
+      out.push({
+        kind: 'weapon-lv',
+        weaponId: id,
+        tag: lvl >= MAX_WEAPON_LEVEL - 1 ? 'Near evolution' : 'Power up',
+        name: `${w.icon} ${w.name} Lv.${lvl}→${lvl + 1}`,
+        desc: w.desc + ' 강화',
+        choose: () => addWeapon(id),
+      });
     }
+    return out;
+  }
 
-    // 3) 신규 무기 (슬롯 여유 시)
-    const newWeapons = [];
-    if (player.weapons.length < MAX_WEAPONS) {
-      for (const id of WEAPON_POOL) {
-        if (!player.weapons.includes(id)) {
-          const w = WEAPON_DEFS[id];
-          newWeapons.push({
-            kind: 'weapon-new',
-            weaponId: id,
-            tag: player.weapons.length <= 2 ? 'Build starter' : 'New weapon',
-            name: `${w.icon} ${w.name} (신규)`,
-            desc: w.desc,
-            choose: () => addWeapon(id),
-          });
-        }
-      }
+  // 3) 신규 무기 — 슬롯 여유가 있을 때 미보유 무기만
+  function newWeaponChoices() {
+    if (player.weapons.length >= MAX_WEAPONS) return [];
+    const out = [];
+    for (const id of WEAPON_POOL) {
+      if (player.weapons.includes(id)) continue;
+      const w = WEAPON_DEFS[id];
+      out.push({
+        kind: 'weapon-new',
+        weaponId: id,
+        tag: player.weapons.length <= 2 ? 'Build starter' : 'New weapon',
+        name: `${w.icon} ${w.name} (신규)`,
+        desc: w.desc,
+        choose: () => addWeapon(id),
+      });
     }
+    return out;
+  }
 
-    // 4) 패시브 (항상 후보)
-    const passives = PASSIVE_POOL.map(pv => ({
+  // 4) 패시브 — 최대 스택에 도달한 항목은 제외 (무의미한 선택지 방지)
+  function passiveChoices() {
+    return PASSIVE_POOL.filter(pv => !isPassiveMaxed(pv)).map(pv => {
+      const lvl = passiveLevel(pv.id);
+      const stack = lvl > 0 ? (pv.max != null ? ` (Lv.${lvl}/${pv.max})` : ` (Lv.${lvl} · 무제한)`) : '';
+      return {
+        kind: 'passive',
+        passiveId: pv.id,
+        tag: EVOLUTION_DEFS.some(evo => evo.req === pv.id && player.weapons.includes(evo.base)) ? 'Combo passive' : 'Passive',
+        name: pv.name,
+        desc: pv.desc + stack,
+        choose: () => applyPassive(pv),
+      };
+    });
+  }
+
+  // 모든 항목이 최대치일 때를 위한 안전망 — 소프트락 방지용 보너스
+  function overflowBonusChoice() {
+    return {
       kind: 'passive',
-      passiveId: pv.id,
-      tag: EVOLUTION_DEFS.some(evo => evo.req === pv.id && player.weapons.includes(evo.base)) ? 'Combo passive' : 'Passive',
-      name: pv.name,
-      desc: pv.desc,
-      choose: () => applyPassive(pv),
-    }));
+      tag: 'Maxed out',
+      name: '💰 보너스 보상',
+      desc: '체력 전체 회복 + 코인 +15',
+      choose: () => { player.hp = player.maxHp; comboBonusCoins += 15; },
+    };
+  }
 
+  // 레벨업 선택지 3개 구성: 진화(최우선) → 무기 레벨업 / 신규 무기 / 패시브
+  function buildChoices() {
     const result = [];
-    if (evoChoices.length) result.push(evoChoices[0]);   // 진화 1개 보장
-    result.push(...takeWeightedChoices([...levelable, ...newWeapons, ...passives], 3 - result.length));
-    // 항상 3개 보장 (부족 시 첫 패시브로 채움)
-    while (result.length < 3) {
-      const pv = PASSIVE_POOL[0];
-      result.push({ kind: 'passive', passiveId: pv.id, name: pv.name, desc: pv.desc, tag: 'Fallback', choose: () => applyPassive(pv) });
-    }
+    const evos = evolutionChoices();
+    if (evos.length) result.push(evos[0]);   // 진화 1개 보장
+
+    const pool = [...weaponLevelChoices(), ...newWeaponChoices(), ...passiveChoices()];
+    result.push(...takeWeightedChoices(pool, 3 - result.length));
+
+    // 후보가 부족하면(전부 최대치) 안전망 보너스로 1개 이상 보장 → 소프트락 방지
+    if (!result.length) result.push(overflowBonusChoice());
     return result.slice(0, 3);
   }
 
@@ -2686,6 +2834,13 @@
       return;
     }
 
+    // 히트스톱 — 큰 타격 순간 아주 잠깐 전체 정지 → 타격감 강화
+    if (hitStop > 0) {
+      hitStop -= dt;
+      render(dt);
+      return;
+    }
+
     elapsed += dt;
     document.getElementById('timeDisp').textContent = fmtTime(elapsed);
     if (elapsed >= getSurviveGoal()) {
@@ -2716,12 +2871,28 @@
     player.x += dx * player.speed * (player.tempSpeedMult || 1) * dt;
     player.y += dy * player.speed * (player.tempSpeedMult || 1) * dt;
 
+    // 이동 잔상 — 움직일 때만 위치를 찍어 질주감 연출 (최대 10개로 제한)
+    if (dx !== 0 || dy !== 0) {
+      playerTrail.push({ x: player.x, y: player.y, life: 0.3 });
+      if (playerTrail.length > 10) playerTrail.shift();
+    }
+    for (let i = playerTrail.length - 1; i >= 0; i--) {
+      playerTrail[i].life -= dt;
+      if (playerTrail[i].life <= 0) playerTrail.splice(i, 1);
+    }
+
     // 대쉬 공격 (Space / X)
     if (dashCd > 0) dashCd -= dt;
     if ((keys[' '] || keys['x'] || keys['X']) && dashCd <= 0) {
       const da = Math.atan2(lastMoveDir.dy, lastMoveDir.dx);
       dashEffect = { x: player.x, y: player.y, angle: da, life: 0.3, maxLife: 0.3 };
       dashCd = DASH_COOLDOWN;
+      SFX.dash();
+      // 대쉬 경로에 잔상 5개 추가 → 질주 잔영 강조
+      for (let s = 1; s <= 5; s++) {
+        playerTrail.push({ x: player.x + Math.cos(da) * 11 * s, y: player.y + Math.sin(da) * 11 * s, life: 0.32 });
+      }
+      while (playerTrail.length > 16) playerTrail.shift();
       player.x += Math.cos(da) * 55;
       player.y += Math.sin(da) * 55;
       for (const e of enemies) {
@@ -2881,6 +3052,7 @@
     for (let i = enemies.length - 1; i >= 0; i--) {
       const e = enemies[i];
       if (e.hurtFlash > 0) e.hurtFlash -= dt;
+      if (e.spawnT > 0) e.spawnT = Math.max(0, e.spawnT - dt);
       const targetActor = allyPlayer && dist(e, allyPlayer) < dist(e, player) ? allyPlayer : player;
       const ang = Math.atan2(targetActor.y - e.y, targetActor.x - e.x);
       const d   = dist(e, targetActor);
@@ -2942,6 +3114,8 @@
         const contactDmg = e.isBoss ? 55 : [8, 18, 38][Math.min(e.tier, 2)];
         player.hp -= contactDmg * dt;
         screenShake = Math.min(screenShake + 0.15, 0.35);
+        hurtScreenFlash = 0.28;
+        SFX.hurt();
         player.invincible = 0.15;
         if (player.hp <= 0) { endGame('dead'); return; }
       }
@@ -2958,6 +3132,8 @@
       if (player.invincible <= 0 && dist(ep, projectileTarget) < ep.r + 12) {
         player.hp -= ep.dmg;
         screenShake = Math.min(screenShake + 0.22, 0.45);
+        hurtScreenFlash = 0.28;
+        SFX.hurt();
         player.invincible = 0.1;
         enemyProjectiles.splice(i, 1);
         if (player.hp <= 0) { endGame('dead'); return; }
@@ -2968,7 +3144,10 @@
     updateLowHpFeedback(dt);
 
     if (comboTimer > 0) comboTimer -= dt;
-    else if (comboCount > 0) comboCount = 0;
+    else if (comboCount > 0) { comboCount = 0; comboMilestoneIdx = 0; }
+
+    if (hurtScreenFlash > 0) hurtScreenFlash = Math.max(0, hurtScreenFlash - dt);
+    if (evolveFlash > 0) evolveFlash = Math.max(0, evolveFlash - dt);
 
     // 부유 텍스트 업데이트
     for (let i = floatTexts.length - 1; i >= 0; i--) {
@@ -2991,6 +3170,9 @@
       const g = xpGems[i];
       if (dist(g, player) < player.xpRange || (allyPlayer && dist(g, allyPlayer) < player.xpRange * 0.75)) {
         gainXP(g.val);
+        spawnParticle(g.x, g.y, '#f1c40f', 3, 0.22);
+        spawnParticle(g.x, g.y, '#ffe9a8', 2, 0.18);
+        SFX.pickup();
         xpGems.splice(i, 1);
       }
     }
@@ -3240,6 +3422,12 @@
     for (const e of enemies) {
       ctx.save();
       ctx.translate(e.x, e.y);
+      // 등장 연출: 작게 확대되며 페이드인 (적이 갑자기 튀어나오지 않음)
+      if (e.spawnT > 0) {
+        const s = 1 - e.spawnT / (e.isBoss ? 0.5 : 0.35);
+        ctx.globalAlpha = Math.max(0.15, s);
+        ctx.scale(0.4 + s * 0.6, 0.4 + s * 0.6);
+      }
       // 플레이어 방향 회전
       if (e.faceAngle !== undefined) ctx.rotate(e.faceAngle + Math.PI / 2);
       const flash = e.hurtFlash > 0;
@@ -3314,14 +3502,20 @@
 
     // 데미지 숫자 (월드 공간)
     ctx.textAlign = 'center';
+    const DN_SIZE  = [12, 15, 21];
+    const DN_COLOR = ['#ffffff', '#ffe27a', '#ff8c1a'];
+    ctx.textAlign = 'center';
     for (const dn of damageNumbers) {
-      const alpha = dn.life / dn.maxLife;
-      ctx.globalAlpha = alpha;
-      ctx.fillStyle  = dn.crit ? '#f1c40f' : '#ffffff';
-      ctx.font = `bold ${dn.crit ? 16 : 12}px sans-serif`;
-      ctx.shadowBlur  = dn.crit ? 8 : 0;
+      const t = dn.life / dn.maxLife;
+      const tier = dn.tier || 0;
+      // 등장 직후(수명 85%↑) 살짝 커졌다가 안정되는 팝 연출
+      const pop = t > 0.85 ? 1 + (t - 0.85) / 0.15 * 0.45 : 1;
+      ctx.globalAlpha = Math.min(1, t * 1.7);
+      ctx.fillStyle = DN_COLOR[tier];
+      ctx.font = `bold ${Math.round(DN_SIZE[tier] * pop)}px sans-serif`;
+      ctx.shadowBlur  = tier === 2 ? 10 : tier === 1 ? 4 : 0;
       ctx.shadowColor = '#f39c12';
-      ctx.fillText(dn.val, dn.x, dn.y);
+      ctx.fillText(tier === 2 ? `${dn.val}!` : dn.val, dn.x, dn.y);
       ctx.shadowBlur = 0;
     }
     ctx.globalAlpha = 1;
@@ -3340,10 +3534,34 @@
     ctx.globalAlpha = 1;
     ctx.textAlign = 'left';
 
+    // 플레이어 이동 잔상 (질주감)
+    for (const t of playerTrail) {
+      ctx.globalAlpha = Math.max(0, t.life / 0.3) * 0.22;
+      ctx.fillStyle = '#d7a3f5';
+      ctx.beginPath();
+      ctx.arc(t.x, t.y, 7, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+
     // 플레이어
     ctx.save();
     ctx.translate(player.x, player.y);
     const inv = player.invincible > 0;
+    // 콤보 오라 — 콤보가 쌓일수록 강하게 빛나는 링 (게임이 살아있는 느낌)
+    if (comboCount >= 10 && comboTimer > 0) {
+      const auraCol = comboCount >= 30 ? '#e74c3c' : comboCount >= 20 ? '#f39c12' : '#f1c40f';
+      const auraR = 20 + Math.sin(elapsed * 16) * 3 + Math.min(comboCount, 80) * 0.22;
+      ctx.globalAlpha = 0.55;
+      ctx.strokeStyle = auraCol;
+      ctx.lineWidth = 3;
+      ctx.shadowBlur = 16; ctx.shadowColor = auraCol;
+      ctx.beginPath();
+      ctx.arc(0, 0, auraR, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+      ctx.globalAlpha = 1;
+    }
     const hpRatio = getPlayerHpRatio();
     if (hpRatio <= LOW_HP_THRESHOLD) {
       const critical = hpRatio <= CRITICAL_HP_THRESHOLD;
@@ -3400,6 +3618,23 @@
 
     ctx.restore(); // camera
 
+    // 피격 화면 플래시 — 맞은 순간 붉게 번쩍 (즉각적 피드백)
+    if (hurtScreenFlash > 0) {
+      ctx.fillStyle = `rgba(231,76,60,${(hurtScreenFlash / 0.28) * 0.3})`;
+      ctx.fillRect(0, 0, W, H);
+    }
+
+    // 진화 금빛 섬광 — 화면 중앙에서 퍼지는 황금빛 (특별한 순간 강조)
+    if (evolveFlash > 0) {
+      const ef = evolveFlash / 0.55;
+      const grad = ctx.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, Math.max(W, H) * 0.7);
+      grad.addColorStop(0, `rgba(255,225,120,${ef * 0.5})`);
+      grad.addColorStop(0.5, `rgba(241,196,15,${ef * 0.25})`);
+      grad.addColorStop(1, 'rgba(241,196,15,0)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, W, H);
+    }
+
     // 보스 경고 화면 플래시
     if (bossWarning > 0) {
       const wAlpha = (Math.sin(bossWarning * 9) * 0.5 + 0.5) * 0.35;
@@ -3435,6 +3670,17 @@
       ctx.fillText(`⚠ BOSS  ${Math.ceil(bossEnemy.hp)} / ${bossEnemy.maxHp}`, W / 2, by + bh + 14);
       ctx.shadowBlur = 0;
       ctx.textAlign = 'left';
+    }
+
+    // 콤보 화면 비네트 — 높은 콤보에서 화면 가장자리가 발광하며 몰입감 상승
+    if (comboCount >= 15 && comboTimer > 0) {
+      const vCol = comboCount >= 30 ? '231,76,60' : comboCount >= 20 ? '243,156,18' : '241,196,15';
+      const vA = Math.min(0.26, 0.10 + comboCount * 0.0035) * (0.7 + Math.sin(elapsed * 10) * 0.3);
+      const grad = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.34, W / 2, H / 2, Math.max(W, H) * 0.62);
+      grad.addColorStop(0, 'rgba(0,0,0,0)');
+      grad.addColorStop(1, `rgba(${vCol},${vA})`);
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, W, H);
     }
 
     // 콤보 표시
@@ -3601,9 +3847,12 @@
     let passRows = PASSIVE_POOL.map(pv => {
       const forEvo = EVOLUTION_DEFS.find(e => e.req === pv.id);
       const evoTag = forEvo ? ` <span style="color:#f1c40f;font-size:0.7em">→ ${WEAPON_DEFS[forEvo.id].icon}${WEAPON_DEFS[forEvo.id].name}</span>` : '';
+      const maxTag = pv.max != null
+        ? ` <span style="color:#7f8c9b;font-size:0.7em">(최대 ${pv.max}중첩)</span>`
+        : ` <span style="color:#2ecc71;font-size:0.7em">(무제한 ∞)</span>`;
       return `<tr>
         <td>${pv.name}</td>
-        <td class="combo-desc">${pv.desc}${evoTag}</td>
+        <td class="combo-desc">${pv.desc}${maxTag}${evoTag}</td>
       </tr>`;
     }).join('');
 
@@ -3661,6 +3910,7 @@
 
   // ── 버튼 연결 ───────────────────────────────────────────────────
   document.getElementById('startBtn').addEventListener('click', () => {
+    SFX.init();   // 사용자 제스처 — 오디오 컨텍스트 활성화
     ensureStartPanels();
     clearEndActions();
     clearRunSnapshot();
