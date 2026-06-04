@@ -249,6 +249,7 @@
   let screenShake = 0;         // 화면 흔들림 강도
   let hitStop = 0;             // 히트스톱(타격 정지) 잔여 시간 — 큰 타격 순간 짧게 정지
   let hurtScreenFlash = 0;     // 피격 시 화면 붉은 플래시 잔여 시간
+  let evolveFlash = 0;         // 무기 진화 시 화면 금빛 섬광 잔여 시간
   let lastMoveDir = { dx: 1, dy: 0 }; // 마지막 이동 방향 (대쉬 방향 결정)
   let itemBoxes     = [];        // 월드에 존재하는 아이템 박스
   let hybridTowers  = [];
@@ -420,6 +421,7 @@
     screenShake = 0;
     hitStop = 0;
     hurtScreenFlash = 0;
+    evolveFlash = 0;
     lastMoveDir = { dx: 1, dy: 0 };
     itemBoxes     = [];
     hybridTowers  = [];
@@ -529,6 +531,8 @@
       spawnParticle(player.x, player.y, ring === 0 ? '#f1c40f' : (ring === 1 ? '#ffffff' : '#8e44ad'), 5 + Math.random() * 10, 0.7 + Math.random() * 0.5);
     }
     screenShake = Math.min(screenShake + 0.65, 0.9);
+    hitStop = Math.max(hitStop, 0.16);   // 진화 순간 극적인 정지
+    evolveFlash = 0.55;                  // 금빛 섬광 (정지 동안 유지 후 페이드)
     floatTexts.push({
       text: `EVOLVED: ${evolved.icon} ${evolved.name}`,
       life: 3.0,
@@ -3143,6 +3147,7 @@
     else if (comboCount > 0) { comboCount = 0; comboMilestoneIdx = 0; }
 
     if (hurtScreenFlash > 0) hurtScreenFlash = Math.max(0, hurtScreenFlash - dt);
+    if (evolveFlash > 0) evolveFlash = Math.max(0, evolveFlash - dt);
 
     // 부유 텍스트 업데이트
     for (let i = floatTexts.length - 1; i >= 0; i--) {
@@ -3616,6 +3621,17 @@
     // 피격 화면 플래시 — 맞은 순간 붉게 번쩍 (즉각적 피드백)
     if (hurtScreenFlash > 0) {
       ctx.fillStyle = `rgba(231,76,60,${(hurtScreenFlash / 0.28) * 0.3})`;
+      ctx.fillRect(0, 0, W, H);
+    }
+
+    // 진화 금빛 섬광 — 화면 중앙에서 퍼지는 황금빛 (특별한 순간 강조)
+    if (evolveFlash > 0) {
+      const ef = evolveFlash / 0.55;
+      const grad = ctx.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, Math.max(W, H) * 0.7);
+      grad.addColorStop(0, `rgba(255,225,120,${ef * 0.5})`);
+      grad.addColorStop(0.5, `rgba(241,196,15,${ef * 0.25})`);
+      grad.addColorStop(1, 'rgba(241,196,15,0)');
+      ctx.fillStyle = grad;
       ctx.fillRect(0, 0, W, H);
     }
 
