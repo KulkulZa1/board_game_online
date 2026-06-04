@@ -37,21 +37,21 @@
 
   // 무기 정의 (기본 무기 + 진화 무기)
   const WEAPON_DEFS = {
-    orb:       { name: '에너지 구',  icon: '🔵', desc: '주위를 회전하며 공격',             dmg: 15, cd: 0.8,  range: 80 },
+    orb:       { name: '에너지 구',  icon: '🔵', desc: '주위를 회전하며 공격',             dmg: 20, cd: 0.7,  range: 80 },
     arrow:     { name: '화살',       icon: '🏹', desc: '가장 가까운 적 관통',               dmg: 22, cd: 0.6,  range: 320 },
-    nova:      { name: '폭발',       icon: '💥', desc: '범위 폭발 공격',                   dmg: 40, cd: 2.5,  range: 100 },
+    nova:      { name: '폭발',       icon: '💥', desc: '범위 폭발 공격',                   dmg: 70, cd: 2.0,  range: 110 },
     shield:    { name: '방패',       icon: '🛡', desc: '주기적 피해 감소',                 dmg: 0,  cd: 8,    range: 0 },
-    laser:     { name: '레이저',     icon: '⚡', desc: '전방 레이저 빔',                   dmg: 30, cd: 1.2,  range: 280 },
-    boomerang: { name: '부메랑',     icon: '🪃', desc: '전방으로 발사 후 귀환, 왕복 타격', dmg: 26, cd: 1.5,  range: 300 },
-    chain:     { name: '번개 사슬',  icon: '🔗', desc: '최대 3연쇄 즉시 타격 번개',        dmg: 38, cd: 1.8,  range: 220 },
+    laser:     { name: '레이저',     icon: '⚡', desc: '전방 레이저 빔',                   dmg: 38, cd: 1.0,  range: 280 },
+    boomerang: { name: '부메랑',     icon: '🪃', desc: '전방으로 발사 후 귀환, 왕복 타격', dmg: 34, cd: 1.25, range: 300 },
+    chain:     { name: '번개 사슬',  icon: '🔗', desc: '최대 3연쇄 즉시 타격 번개',        dmg: 52, cd: 1.5,  range: 220 },
     // ── 진화 무기 (evolved) — 기본 무기 최대레벨 + 필요 패시브로 진화 ──
-    blackhole: { name: '블랙홀',    icon: '🌀', desc: '적을 끌어당기는 거대 궤도',   dmg: 28, cd: 0.7,  range: 120, evolved: true },
-    stormbow:  { name: '폭풍의 활', icon: '🌩', desc: '5연발 강화 관통 화살',        dmg: 30, cd: 0.45, range: 360, evolved: true },
-    supernova: { name: '슈퍼노바',  icon: '☀',  desc: '연쇄 대폭발',                dmg: 70, cd: 2.0,  range: 150, evolved: true },
-    deathray:  { name: '데스레이',  icon: '☠',  desc: '관통 즉사 광선',              dmg: 60, cd: 1.0,  range: 360, evolved: true },
+    blackhole: { name: '블랙홀',    icon: '🌀', desc: '적을 끌어당기는 거대 궤도',   dmg: 36, cd: 0.6,  range: 120, evolved: true },
+    stormbow:  { name: '폭풍의 활', icon: '🌩', desc: '5연발 강화 관통 화살',        dmg: 32, cd: 0.42, range: 360, evolved: true },
+    supernova: { name: '슈퍼노바',  icon: '☀',  desc: '연쇄 대폭발',                dmg: 95, cd: 1.8,  range: 150, evolved: true },
+    deathray:  { name: '데스레이',  icon: '☠',  desc: '관통 즉사 광선',              dmg: 82, cd: 0.9,  range: 360, evolved: true },
     aegis:     { name: '이지스',    icon: '🛡', desc: '반사 보호막',                 dmg: 30, cd: 6,    range: 140, evolved: true },
-    cyclone:   { name: '사이클론',  icon: '🌪', desc: '3방향 귀환 부메랑, 무한 관통', dmg: 40, cd: 1.1,  range: 360, evolved: true },
-    tempest:   { name: '폭풍 사슬', icon: '⛈',  desc: '5연쇄 번개, 적 빙결',         dmg: 55, cd: 1.4,  range: 260, evolved: true },
+    cyclone:   { name: '사이클론',  icon: '🌪', desc: '3방향 귀환 부메랑, 무한 관통', dmg: 55, cd: 1.0,  range: 360, evolved: true },
+    tempest:   { name: '폭풍 사슬', icon: '⛈',  desc: '5연쇄 번개, 적 빙결',         dmg: 75, cd: 1.2,  range: 260, evolved: true },
   };
 
   // 진화 규칙: base 무기가 최대 레벨 + req 패시브 보유 시 evolved(id) 무기로 진화
@@ -2234,7 +2234,7 @@
       const evolved = id === 'deathray';
       const target  = nearestEnemy();
       const ang = target ? Math.atan2(target.y - player.y, target.x - player.x) : 0;
-      projectiles.push({ type: evolved ? 'deathray' : 'laser', x: player.x, y: player.y, angle: ang, r: 6, dmg, life: 0.35, length: def.range });
+      projectiles.push({ type: evolved ? 'deathray' : 'laser', x: player.x, y: player.y, angle: ang, r: 6, dmg, life: 0.45, length: def.range });
     } else if (id === 'boomerang' || id === 'cyclone') {
       // 부메랑: 이동 방향(또는 가장 가까운 적 방향)으로 발사 후 반환, 왕복 타격
       const evolved = id === 'cyclone';
@@ -2436,6 +2436,8 @@
       attackRange: 390,
       attackDmg: Math.round((40 + bossNum * 15) * runDifficulty.enemyDmgMult),
       bossPhase: 0,
+      windupActive: false,  // 공격 예비 동작 상태
+      windupTimer: 0,
       frozen: 0,
       faceAngle: 0,
     });
@@ -2997,7 +2999,7 @@
         const ex = p.x + Math.cos(p.angle) * p.length;
         const ey = p.y + Math.sin(p.angle) * p.length;
         const mult = evolved ? 9 : 5;          // 데스레이는 훨씬 강한 지속 피해
-        const hitW = evolved ? 8 : 4;
+        const hitW = evolved ? 8 : 6;
         for (const e of enemies) {
           if (distToSegment(e, p, { x: ex, y: ey }) < e.size + hitW) {
             dealDamage(e, p.dmg * dt * mult);
@@ -3076,17 +3078,32 @@
         // 빙결 상태: 이동·공격 없음
         e.frozen -= dt;
       } else if (e.isBoss) {
-        // 보스: 추적 + 원형 폭발 발사
+        // 보스: 추적 + 예비 동작(telegraph) 후 원형 폭발 발사
         const bSpeed = e.bossPhase === 1 ? e.speed * 1.4 : e.speed;
-        e.x += Math.cos(ang) * bSpeed * dt;
-        e.y += Math.sin(ang) * bSpeed * dt;
-        if (e.attackCd > 0) e.attackCd -= dt;
-        if (e.attackCd <= 0) {
-          const shots = (e.bossPhase || 0) === 1 ? 12 : 8;
-          for (let b = 0; b < shots; b++) {
-            fireEnemyProjectile(e, (b / shots) * Math.PI * 2 - ang, targetActor);
+        // 예비 동작 중에는 속도 25%로 감속 (공격 전 기운 모으기 연출)
+        const windupSlow = e.windupActive ? 0.25 : 1.0;
+        e.x += Math.cos(ang) * bSpeed * windupSlow * dt;
+        e.y += Math.sin(ang) * bSpeed * windupSlow * dt;
+
+        if (e.attackCd > 0) {
+          e.attackCd -= dt;
+        } else if (!e.windupActive) {
+          // 쿨다운 만료 → 예비 동작 시작
+          e.windupActive = true;
+          e.windupTimer = e.bossPhase === 1 ? 0.5 : 0.75;
+        } else {
+          // 예비 동작 진행 중
+          e.windupTimer -= dt;
+          if (e.windupTimer <= 0) {
+            // 예비 동작 완료 → 발사
+            const shots = (e.bossPhase || 0) === 1 ? 12 : 8;
+            for (let b = 0; b < shots; b++) {
+              fireEnemyProjectile(e, (b / shots) * Math.PI * 2 - ang, targetActor);
+            }
+            e.attackCd = (e.bossPhase || 0) === 1 ? 1.5 : 2.5;
+            e.windupActive = false;
+            e.windupTimer = 0;
           }
-          e.attackCd = (e.bossPhase || 0) === 1 ? 1.5 : 2.5;
         }
       } else if (e.behavior === 'archer') {
         const prefDist = e.tier === 2 ? 200 : 170;
@@ -3488,6 +3505,37 @@
       }
       ctx.shadowBlur = 0;
       ctx.restore();
+
+      // 보스 공격 예비 동작 경고 (telegraph) — 팽창하는 붉은 경고원
+      if (e.isBoss && e.windupActive && e.windupTimer > 0) {
+        const dur = e.bossPhase === 1 ? 0.5 : 0.75;
+        const progress = 1 - e.windupTimer / dur;  // 0→1
+        const warningR  = e.size + 18 + progress * 85;
+        ctx.save();
+        ctx.translate(e.x, e.y);
+        ctx.globalAlpha = 0.25 + progress * 0.55;
+        ctx.strokeStyle = '#ff4500';
+        ctx.lineWidth = 2 + progress * 5;
+        ctx.shadowBlur = 24;
+        ctx.shadowColor = '#ff2200';
+        ctx.beginPath();
+        ctx.arc(0, 0, warningR, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.globalAlpha = 0.1 + progress * 0.22;
+        ctx.fillStyle = '#ff2200';
+        ctx.beginPath();
+        ctx.arc(0, 0, warningR * 0.72, 0, Math.PI * 2);
+        ctx.fill();
+        // 경고 느낌표 아이콘
+        ctx.globalAlpha = 0.7 + Math.sin(elapsed * 18) * 0.3;
+        ctx.fillStyle = '#ff4500';
+        ctx.font = `bold ${Math.round(16 + progress * 6)}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.shadowBlur = 10;
+        ctx.fillText('⚠', 0, -e.size - 16);
+        ctx.shadowBlur = 0;
+        ctx.restore();
+      }
 
       // HP 바 (회전 없이 별도로)
       ctx.save();
