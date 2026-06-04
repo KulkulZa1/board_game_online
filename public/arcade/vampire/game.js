@@ -224,6 +224,7 @@
       boss()    { tone(110, 0.45, 'sawtooth', 0.16, 55); },
       pickup()  { const n = performance.now(); if (n - lastPickup < 55) return; lastPickup = n; tone(660, 0.05, 'sine', 0.05, 920); },
       hurt()    { const n = performance.now(); if (n - lastHurt < 200) return; lastHurt = n; tone(170, 0.13, 'sawtooth', 0.10, 70); },
+      dash()    { tone(420, 0.16, 'sine', 0.07, 120); },
     };
   })();
 
@@ -2149,6 +2150,7 @@
         tier,
         hurtFlash: 0,
         frozen: 0,
+        spawnT: 0.35,   // 등장 연출(확대·페이드인) 잔여 시간
         behavior,
         attackCd: Math.random() * attackBase,   // 초기 공격 시간 분산
         attackBase,
@@ -2181,6 +2183,7 @@
       xpVal: Number(def.xpValue) || [3, 8, 20][tier],
       tier,
       hurtFlash: 0,
+      spawnT: 0.35,
     });
   }
 
@@ -2329,12 +2332,15 @@
     if (dmg >= 8) {
       const rounded = Math.round(dmg);
       const isCrit = dmg >= 80;
+      // 데미지 등급: 0=소(흰색) 1=중(노랑) 2=치명타(주황·대형)
+      const tier = isCrit ? 2 : (rounded >= 25 ? 1 : 0);
       damageNumbers.push({
         x: enemy.x + (Math.random() - 0.5) * 10,
         y: enemy.y - enemy.size - 4,
         val: rounded,
         life: 0.65, maxLife: 0.65,
         crit: isCrit,
+        tier,
       });
       // 큰 치명타 → 짧은 히트스톱 + 효과음 (살아있지 않은 적엔 생략)
       if (isCrit && enemy.hp > 0) {
@@ -2419,6 +2425,7 @@
       tier: 3,
       isBoss: true,
       hurtFlash: 0,
+      spawnT: 0.5,   // 보스는 더 극적인 등장
       behavior: 'boss',
       attackCd: 0.6,
       attackBase: 2.5,
@@ -2876,6 +2883,12 @@
       const da = Math.atan2(lastMoveDir.dy, lastMoveDir.dx);
       dashEffect = { x: player.x, y: player.y, angle: da, life: 0.3, maxLife: 0.3 };
       dashCd = DASH_COOLDOWN;
+      SFX.dash();
+      // 대쉬 경로에 잔상 5개 추가 → 질주 잔영 강조
+      for (let s = 1; s <= 5; s++) {
+        playerTrail.push({ x: player.x + Math.cos(da) * 11 * s, y: player.y + Math.sin(da) * 11 * s, life: 0.32 });
+      }
+      while (playerTrail.length > 16) playerTrail.shift();
       player.x += Math.cos(da) * 55;
       player.y += Math.sin(da) * 55;
       for (const e of enemies) {
@@ -3035,6 +3048,7 @@
     for (let i = enemies.length - 1; i >= 0; i--) {
       const e = enemies[i];
       if (e.hurtFlash > 0) e.hurtFlash -= dt;
+      if (e.spawnT > 0) e.spawnT = Math.max(0, e.spawnT - dt);
       const targetActor = allyPlayer && dist(e, allyPlayer) < dist(e, player) ? allyPlayer : player;
       const ang = Math.atan2(targetActor.y - e.y, targetActor.x - e.x);
       const d   = dist(e, targetActor);
@@ -3403,6 +3417,12 @@
     for (const e of enemies) {
       ctx.save();
       ctx.translate(e.x, e.y);
+      // 등장 연출: 작게 확대되며 페이드인 (적이 갑자기 튀어나오지 않음)
+      if (e.spawnT > 0) {
+        const s = 1 - e.spawnT / (e.isBoss ? 0.5 : 0.35);
+        ctx.globalAlpha = Math.max(0.15, s);
+        ctx.scale(0.4 + s * 0.6, 0.4 + s * 0.6);
+      }
       // 플레이어 방향 회전
       if (e.faceAngle !== undefined) ctx.rotate(e.faceAngle + Math.PI / 2);
       const flash = e.hurtFlash > 0;
@@ -3477,14 +3497,20 @@
 
     // 데미지 숫자 (월드 공간)
     ctx.textAlign = 'center';
+    const DN_SIZE  = [12, 15, 21];
+    const DN_COLOR = ['#ffffff', '#ffe27a', '#ff8c1a'];
+    ctx.textAlign = 'center';
     for (const dn of damageNumbers) {
-      const alpha = dn.life / dn.maxLife;
-      ctx.globalAlpha = alpha;
-      ctx.fillStyle  = dn.crit ? '#f1c40f' : '#ffffff';
-      ctx.font = `bold ${dn.crit ? 16 : 12}px sans-serif`;
-      ctx.shadowBlur  = dn.crit ? 8 : 0;
+      const t = dn.life / dn.maxLife;
+      const tier = dn.tier || 0;
+      // 등장 직후(수명 85%↑) 살짝 커졌다가 안정되는 팝 연출
+      const pop = t > 0.85 ? 1 + (t - 0.85) / 0.15 * 0.45 : 1;
+      ctx.globalAlpha = Math.min(1, t * 1.7);
+      ctx.fillStyle = DN_COLOR[tier];
+      ctx.font = `bold ${Math.round(DN_SIZE[tier] * pop)}px sans-serif`;
+      ctx.shadowBlur  = tier === 2 ? 10 : tier === 1 ? 4 : 0;
       ctx.shadowColor = '#f39c12';
-      ctx.fillText(dn.val, dn.x, dn.y);
+      ctx.fillText(tier === 2 ? `${dn.val}!` : dn.val, dn.x, dn.y);
       ctx.shadowBlur = 0;
     }
     ctx.globalAlpha = 1;
