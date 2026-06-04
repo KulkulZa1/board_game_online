@@ -36,39 +36,48 @@
 
   // 무기 정의 (기본 무기 + 진화 무기)
   const WEAPON_DEFS = {
-    orb:    { name: '에너지 구', icon: '🔵', desc: '주위를 회전하며 공격', dmg: 15, cd: 0.8,  range: 80 },
-    arrow:  { name: '화살',     icon: '🏹', desc: '가장 가까운 적 관통', dmg: 22, cd: 0.6,  range: 320 },
-    nova:   { name: '폭발',     icon: '💥', desc: '범위 폭발 공격',       dmg: 40, cd: 2.5,  range: 100 },
-    shield: { name: '방패',     icon: '🛡', desc: '주기적 피해 감소',     dmg: 0,  cd: 8,    range: 0 },
-    laser:  { name: '레이저',   icon: '⚡', desc: '전방 레이저 빔',       dmg: 30, cd: 1.2,  range: 280 },
+    orb:       { name: '에너지 구',  icon: '🔵', desc: '주위를 회전하며 공격',             dmg: 15, cd: 0.8,  range: 80 },
+    arrow:     { name: '화살',       icon: '🏹', desc: '가장 가까운 적 관통',               dmg: 22, cd: 0.6,  range: 320 },
+    nova:      { name: '폭발',       icon: '💥', desc: '범위 폭발 공격',                   dmg: 40, cd: 2.5,  range: 100 },
+    shield:    { name: '방패',       icon: '🛡', desc: '주기적 피해 감소',                 dmg: 0,  cd: 8,    range: 0 },
+    laser:     { name: '레이저',     icon: '⚡', desc: '전방 레이저 빔',                   dmg: 30, cd: 1.2,  range: 280 },
+    boomerang: { name: '부메랑',     icon: '🪃', desc: '전방으로 발사 후 귀환, 왕복 타격', dmg: 26, cd: 1.5,  range: 300 },
+    chain:     { name: '번개 사슬',  icon: '🔗', desc: '최대 3연쇄 즉시 타격 번개',        dmg: 38, cd: 1.8,  range: 220 },
     // ── 진화 무기 (evolved) — 기본 무기 최대레벨 + 필요 패시브로 진화 ──
-    blackhole: { name: '블랙홀',    icon: '🌀', desc: '적을 끌어당기는 거대 궤도', dmg: 28, cd: 0.7,  range: 120, evolved: true },
-    stormbow:  { name: '폭풍의 활', icon: '🌩', desc: '5연발 강화 관통 화살',     dmg: 30, cd: 0.45, range: 360, evolved: true },
-    supernova: { name: '슈퍼노바',  icon: '☀', desc: '연쇄 대폭발',              dmg: 70, cd: 2.0,  range: 150, evolved: true },
-    deathray:  { name: '데스레이',  icon: '☠', desc: '관통 즉사 광선',           dmg: 60, cd: 1.0,  range: 360, evolved: true },
-    aegis:     { name: '이지스',    icon: '🛡', desc: '반사 보호막',              dmg: 30, cd: 6,    range: 140, evolved: true },
+    blackhole: { name: '블랙홀',    icon: '🌀', desc: '적을 끌어당기는 거대 궤도',   dmg: 28, cd: 0.7,  range: 120, evolved: true },
+    stormbow:  { name: '폭풍의 활', icon: '🌩', desc: '5연발 강화 관통 화살',        dmg: 30, cd: 0.45, range: 360, evolved: true },
+    supernova: { name: '슈퍼노바',  icon: '☀',  desc: '연쇄 대폭발',                dmg: 70, cd: 2.0,  range: 150, evolved: true },
+    deathray:  { name: '데스레이',  icon: '☠',  desc: '관통 즉사 광선',              dmg: 60, cd: 1.0,  range: 360, evolved: true },
+    aegis:     { name: '이지스',    icon: '🛡', desc: '반사 보호막',                 dmg: 30, cd: 6,    range: 140, evolved: true },
+    cyclone:   { name: '사이클론',  icon: '🌪', desc: '3방향 귀환 부메랑, 무한 관통', dmg: 40, cd: 1.1,  range: 360, evolved: true },
+    tempest:   { name: '폭풍 사슬', icon: '⛈',  desc: '5연쇄 번개, 적 빙결',         dmg: 55, cd: 1.4,  range: 260, evolved: true },
   };
 
   // 진화 규칙: base 무기가 최대 레벨 + req 패시브 보유 시 evolved(id) 무기로 진화
   const EVOLUTION_DEFS = [
-    { id: 'blackhole', base: 'orb',    req: 'magnet', reqName: '🧲 경험치 자석' },
-    { id: 'stormbow',  base: 'arrow',  req: 'cd_up',  reqName: '⏩ 쿨다운 감소' },
-    { id: 'supernova', base: 'nova',   req: 'dmg_up', reqName: '⚔ 공격력' },
-    { id: 'deathray',  base: 'laser',  req: 'spd_up', reqName: '👟 이동 속도' },
-    { id: 'aegis',     base: 'shield', req: 'hp_up',  reqName: '❤ 체력 회복' },
+    { id: 'blackhole', base: 'orb',       req: 'magnet',    reqName: '🧲 경험치 자석' },
+    { id: 'stormbow',  base: 'arrow',     req: 'cd_up',     reqName: '⏩ 쿨다운 감소' },
+    { id: 'supernova', base: 'nova',      req: 'dmg_up',    reqName: '⚔ 공격력' },
+    { id: 'deathray',  base: 'laser',     req: 'spd_up',    reqName: '👟 이동 속도' },
+    { id: 'aegis',     base: 'shield',    req: 'hp_up',     reqName: '❤ 체력 회복' },
+    { id: 'cyclone',   base: 'boomerang', req: 'crit',      reqName: '⚡ 치명타' },
+    { id: 'tempest',   base: 'chain',     req: 'pierce_up', reqName: '🔱 관통 강화' },
   ];
 
   // 패시브(능력치) 업그레이드 — 진화 재료로도 사용됨
   const PASSIVE_POOL = [
-    { id: 'hp_up',  name: '❤ 체력 회복',   desc: '최대 체력 +20, 체력 회복',  apply: (p) => { p.maxHp += 20; p.hp = Math.min(p.hp + 30, p.maxHp); } },
-    { id: 'spd_up', name: '👟 이동 속도',   desc: '이동 속도 +12%',            apply: (p) => { p.speed *= 1.12; } },
-    { id: 'dmg_up', name: '⚔ 공격력',      desc: '모든 무기 데미지 +18%',     apply: (p) => { p.dmgMult *= 1.18; } },
-    { id: 'cd_up',  name: '⏩ 쿨다운 감소', desc: '모든 무기 쿨다운 -12%',     apply: (p) => { p.cdMult  *= 0.88; } },
-    { id: 'magnet', name: '🧲 경험치 자석', desc: 'XP 획득 반경 +60%',         apply: (p) => { p.xpRange *= 1.6; } },
+    { id: 'hp_up',    name: '❤ 체력 회복',   desc: '최대 체력 +20, 체력 회복',     apply: (p) => { p.maxHp += 20; p.hp = Math.min(p.hp + 30, p.maxHp); } },
+    { id: 'spd_up',   name: '👟 이동 속도',   desc: '이동 속도 +12%',               apply: (p) => { p.speed *= 1.12; } },
+    { id: 'dmg_up',   name: '⚔ 공격력',      desc: '모든 무기 데미지 +18%',         apply: (p) => { p.dmgMult *= 1.18; } },
+    { id: 'cd_up',    name: '⏩ 쿨다운 감소', desc: '모든 무기 쿨다운 -12%',         apply: (p) => { p.cdMult  *= 0.88; } },
+    { id: 'magnet',   name: '🧲 경험치 자석', desc: 'XP 획득 반경 +60%',             apply: (p) => { p.xpRange *= 1.6; } },
+    { id: 'crit',     name: '⚡ 치명타',       desc: '15% 확률 2배 피해 (중첩 가능)',  apply: (p) => { p.critChance = (p.critChance || 0) + 0.15; } },
+    { id: 'pierce_up',name: '🔱 관통 강화',   desc: '화살·부메랑 관통 +2',           apply: (p) => { p.pierceBonus = (p.pierceBonus || 0) + 2; } },
+    { id: 'regen',    name: '💚 체력 재생',   desc: '초당 최대 체력 2% 자동 회복',    apply: (p) => { p.regenRate = (p.regenRate || 0) + 0.02; } },
   ];
 
   // 신규 획득 가능한 기본 무기 목록
-  const WEAPON_POOL = ['orb', 'arrow', 'nova', 'shield', 'laser'];
+  const WEAPON_POOL = ['orb', 'arrow', 'nova', 'shield', 'laser', 'boomerang', 'chain'];
   const META_KEY = 'vps_meta_v2';
   const RUN_SNAPSHOT_KEY = 'vps_run_snapshot_v1';
   const RUN_SNAPSHOT_MAX_AGE_MS = 36 * 60 * 60 * 1000;
@@ -335,6 +344,9 @@
       towersPlaced: 0,
       lowestHpPct: 1,
       rerolls: 0,          // 추가 리롤권 (몬스터 드롭)
+      critChance: 0,        // 치명타 확률 (crit 패시브)
+      pierceBonus: 0,       // 화살·부메랑 추가 관통 (pierce_up 패시브)
+      regenRate: 0,         // 초당 체력 재생 비율 (regen 패시브)
     };
     enemies    = [];
     projectiles= [];
@@ -2122,7 +2134,7 @@
       for (let s = 0; s < shots; s++) {
         const spread = (s - (shots - 1) / 2) * 0.12;
         const ang = baseAng + spread;
-        projectiles.push({ type: 'arrow', x: player.x, y: player.y, vx: Math.cos(ang) * 420, vy: Math.sin(ang) * 420, r: 5, dmg, life: def.range / 420, pierce: (evolved ? 6 : 3) + lvl });
+        projectiles.push({ type: 'arrow', x: player.x, y: player.y, vx: Math.cos(ang) * 420, vy: Math.sin(ang) * 420, r: 5, dmg, life: def.range / 420, pierce: (evolved ? 6 : 3) + lvl + (player.pierceBonus || 0) });
       }
     } else if (id === 'nova' || id === 'supernova') {
       spawnExplosion(player.x, player.y, def.range, dmg, id === 'supernova');
@@ -2136,6 +2148,47 @@
       const target  = nearestEnemy();
       const ang = target ? Math.atan2(target.y - player.y, target.x - player.x) : 0;
       projectiles.push({ type: evolved ? 'deathray' : 'laser', x: player.x, y: player.y, angle: ang, r: 6, dmg, life: 0.35, length: def.range });
+    } else if (id === 'boomerang' || id === 'cyclone') {
+      // 부메랑: 이동 방향(또는 가장 가까운 적 방향)으로 발사 후 반환, 왕복 타격
+      const evolved = id === 'cyclone';
+      const count   = evolved ? 3 : 1;
+      const pierce  = (evolved ? 99 : 4) + (player.pierceBonus || 0);
+      const spd     = 320;
+      const halfLife = def.range / spd;
+      const baseAng  = nearestEnemy()
+        ? Math.atan2(nearestEnemy().y - player.y, nearestEnemy().x - player.x)
+        : Math.atan2(lastMoveDir.dy, lastMoveDir.dx);
+      for (let s = 0; s < count; s++) {
+        const ang = baseAng + (evolved ? (s / count) * Math.PI * 2 : 0);
+        projectiles.push({
+          type: 'boomerang', x: player.x, y: player.y,
+          vx: Math.cos(ang) * spd, vy: Math.sin(ang) * spd,
+          r: 7, dmg, life: halfLife * 2, halfLife, flipped: false,
+          pierceOut: pierce, pierceIn: pierce,   // 출·귀환 각각 관통 횟수
+          hitOut: new Set(), hitIn: new Set(),   // 이미 타격한 적 (방향별)
+        });
+      }
+    } else if (id === 'chain' || id === 'tempest') {
+      // 사슬 번개: 가장 가까운 적부터 연쇄 즉시 타격 + 시각적 아크 생성
+      const evolved  = id === 'tempest';
+      const bounces  = evolved ? 5 : 3;
+      let cx = player.x, cy = player.y;
+      const hit = new Set();
+      for (let b = 0; b < bounces; b++) {
+        let best = null, bd = Infinity;
+        for (const e of enemies) {
+          if (hit.has(e)) continue;
+          const d = dist({ x: cx, y: cy }, e);
+          if (d < def.range && d < bd) { bd = d; best = e; }
+        }
+        if (!best) break;
+        hit.add(best);
+        dealDamage(best, dmg);
+        if (evolved && best.hp > 0) best.frozen = Math.max(best.frozen || 0, 1.5);
+        projectiles.push({ type: 'arc', x: cx, y: cy, tx: best.x, ty: best.y, life: 0.22, dmg: 0 });
+        for (let k = 0; k < 3; k++) spawnParticle(best.x, best.y, evolved ? '#74b9ff' : '#a29bfe', 4, 0.2);
+        cx = best.x; cy = best.y;
+      }
     }
   }
 
@@ -2151,8 +2204,9 @@
   function spawnExplosion(x, y, range, dmg, evolved) {
     const col = evolved ? '#f1c40f' : '#e74c3c';
     for (let i = 0; i < 12; i++) spawnParticle(x, y, col, 6 + Math.random() * 8, 0.5 + Math.random() * 0.4);
-    for (const e of enemies) {
-      if (dist({ x, y }, e) < range) dealDamage(e, dmg);
+    for (let _i = enemies.length - 1; _i >= 0; _i--) {
+      const e = enemies[_i];
+      if (e && dist({ x, y }, e) < range) dealDamage(e, dmg);
     }
     projectiles.push({ type: 'explosion', x, y, r: 0, maxR: range, life: 0.4, dmg: 0, evolved });
     // 슈퍼노바: 주변에 연쇄 2차 폭발 큐 등록 (게임 루프에서 처리)
@@ -2184,6 +2238,12 @@
 
   // ── 데미지 처리 ─────────────────────────────────────────────────
   function dealDamage(enemy, dmg) {
+    // 0 이하 피해 무시 — 보스 사망 폭발(dmg=0)이 재귀 호출하는 버그 방지
+    if (dmg <= 0) return;
+    // 치명타: critChance 퍼센트로 2배 피해
+    if (player && (player.critChance || 0) > 0 && Math.random() < player.critChance) {
+      dmg *= 2;
+    }
     enemy.hp -= dmg;
     enemy.hurtFlash = 0.12;
     if (dmg >= 8) {
@@ -2193,13 +2253,15 @@
         y: enemy.y - enemy.size - 4,
         val: rounded,
         life: 0.65, maxLife: 0.65,
-        crit: dmg >= 60,
+        crit: dmg >= 80,
       });
     }
     if (enemy.hp <= 0) killEnemy(enemy);
   }
 
   function killEnemy(enemy) {
+    if (enemy.dying) return;  // 재진입 방지 — 동일 적 중복 처치 방지
+    enemy.dying = true;
     kills++;
     comboCount++;
     comboTimer = 1.5;
@@ -2718,6 +2780,10 @@
     // 임시 버프 타이머
     if (player.tempDmgTimer > 0) { player.tempDmgTimer -= dt; if (player.tempDmgTimer <= 0) { player.tempDmgMult = 1; player.tempDmgTimer = 0; } }
     if (player.tempSpeedTimer > 0) { player.tempSpeedTimer -= dt; if (player.tempSpeedTimer <= 0) { player.tempSpeedMult = 1; player.tempSpeedTimer = 0; } }
+    // regen 패시브: 초당 maxHp * regenRate 회복
+    if ((player.regenRate || 0) > 0 && player.hp < player.maxHp) {
+      player.hp = Math.min(player.hp + player.maxHp * player.regenRate * dt, player.maxHp);
+    }
 
     // 무기 발사
     for (const id of player.weapons) fireWeapon(id, dt);
@@ -2768,6 +2834,23 @@
         }
       } else if (p.type === 'explosion') {
         p.r = p.maxR * (1 - p.life / 0.4);
+      } else if (p.type === 'boomerang') {
+        // 반환점 도달 시 방향 반전 + 히트셋 초기화
+        if (!p.flipped && p.life < p.halfLife) {
+          p.vx = -p.vx; p.vy = -p.vy;
+          p.flipped = true;
+        }
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        const hitSet = p.flipped ? p.hitIn : p.hitOut;
+        for (let j = enemies.length - 1; j >= 0; j--) {
+          const e = enemies[j];
+          if (!hitSet.has(e) && dist(p, e) < p.r + e.size) {
+            hitSet.add(e);
+            dealDamage(e, p.dmg);
+            spawnParticle(p.x, p.y, '#27ae60', 5, 0.2);
+          }
+        }
       } else if (p.type === 'tower') {
         p.x += p.vx * dt;
         p.y += p.vy * dt;
@@ -2781,6 +2864,7 @@
           }
         }
       }
+      // 'arc' 타입은 시각 효과 전용 — life만 감소, 처리 없음
     }
 
     // 슈퍼노바 연쇄 폭발 처리
@@ -3084,6 +3168,31 @@
         ctx.lineWidth = 2;
         ctx.stroke();
         ctx.globalAlpha = 1;
+      } else if (p.type === 'boomerang') {
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(Math.atan2(p.vy, p.vx) + (p.flipped ? Math.PI : 0));
+        ctx.fillStyle = '#27ae60';
+        ctx.shadowBlur = 10; ctx.shadowColor = '#2ecc71';
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 10, 4, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.restore();
+      } else if (p.type === 'arc') {
+        // 번개 사슬 시각 효과 — 구불거리는 아크
+        const alpha = p.life / 0.22;
+        ctx.globalAlpha = alpha;
+        ctx.strokeStyle = '#a29bfe';
+        ctx.lineWidth   = 1.5 + alpha * 1.5;
+        ctx.shadowBlur  = 12; ctx.shadowColor = '#6c5ce7';
+        ctx.beginPath();
+        ctx.moveTo(p.x, p.y);
+        const mx = (p.x + p.tx) / 2 + (Math.random() - 0.5) * 18;
+        const my = (p.y + p.ty) / 2 + (Math.random() - 0.5) * 18;
+        ctx.quadraticCurveTo(mx, my, p.tx, p.ty);
+        ctx.stroke();
+        ctx.shadowBlur = 0; ctx.globalAlpha = 1;
       }
     }
 
