@@ -33,6 +33,7 @@
   // 무기 강화 한계
   const MAX_WEAPON_LEVEL = 5;   // 같은 무기를 다시 고르면 레벨업 (최대 5)
   const MAX_WEAPONS      = 6;   // 보유 가능한 무기 슬롯 수
+  const COMBO_MILESTONES = [10, 25, 50, 100, 200];  // 콤보 보너스 지급 구간
 
   // 무기 정의 (기본 무기 + 진화 무기)
   const WEAPON_DEFS = {
@@ -65,15 +66,16 @@
   ];
 
   // 패시브(능력치) 업그레이드 — 진화 재료로도 사용됨
+  // max: 최대 스택 수. 도달 시 레벨업/리롤 선택지에서 자동 제외 (무의미한 선택지 방지)
   const PASSIVE_POOL = [
-    { id: 'hp_up',    name: '❤ 체력 회복',   desc: '최대 체력 +20, 체력 회복',     apply: (p) => { p.maxHp += 20; p.hp = Math.min(p.hp + 30, p.maxHp); } },
-    { id: 'spd_up',   name: '👟 이동 속도',   desc: '이동 속도 +12%',               apply: (p) => { p.speed *= 1.12; } },
-    { id: 'dmg_up',   name: '⚔ 공격력',      desc: '모든 무기 데미지 +18%',         apply: (p) => { p.dmgMult *= 1.18; } },
-    { id: 'cd_up',    name: '⏩ 쿨다운 감소', desc: '모든 무기 쿨다운 -12%',         apply: (p) => { p.cdMult  *= 0.88; } },
-    { id: 'magnet',   name: '🧲 경험치 자석', desc: 'XP 획득 반경 +60%',             apply: (p) => { p.xpRange *= 1.6; } },
-    { id: 'crit',     name: '⚡ 치명타',       desc: '15% 확률 2배 피해 (중첩 가능)',  apply: (p) => { p.critChance = (p.critChance || 0) + 0.15; } },
-    { id: 'pierce_up',name: '🔱 관통 강화',   desc: '화살·부메랑 관통 +2',           apply: (p) => { p.pierceBonus = (p.pierceBonus || 0) + 2; } },
-    { id: 'regen',    name: '💚 체력 재생',   desc: '초당 최대 체력 2% 자동 회복',    apply: (p) => { p.regenRate = (p.regenRate || 0) + 0.02; } },
+    { id: 'hp_up',    name: '❤ 체력 회복',   desc: '최대 체력 +20, 체력 회복',     max: 6, apply: (p) => { p.maxHp += 20; p.hp = Math.min(p.hp + 30, p.maxHp); } },
+    { id: 'spd_up',   name: '👟 이동 속도',   desc: '이동 속도 +12%',               max: 5, apply: (p) => { p.speed *= 1.12; } },
+    { id: 'dmg_up',   name: '⚔ 공격력',      desc: '모든 무기 데미지 +18%',         max: 8, apply: (p) => { p.dmgMult *= 1.18; } },
+    { id: 'cd_up',    name: '⏩ 쿨다운 감소', desc: '모든 무기 쿨다운 -12%',         max: 5, apply: (p) => { p.cdMult  *= 0.88; } },
+    { id: 'magnet',   name: '🧲 경험치 자석', desc: 'XP 획득 반경 +60%',             max: 4, apply: (p) => { p.xpRange *= 1.6; } },
+    { id: 'crit',     name: '⚡ 치명타',       desc: '15% 확률 2배 피해 (중첩 가능)',  max: 6, apply: (p) => { p.critChance = (p.critChance || 0) + 0.15; } },
+    { id: 'pierce_up',name: '🔱 관통 강화',   desc: '화살·부메랑 관통 +2',           max: 5, apply: (p) => { p.pierceBonus = (p.pierceBonus || 0) + 2; } },
+    { id: 'regen',    name: '💚 체력 재생',   desc: '초당 최대 체력 2% 자동 회복',    max: 5, apply: (p) => { p.regenRate = (p.regenRate || 0) + 0.02; } },
   ];
 
   // 신규 획득 가능한 기본 무기 목록
@@ -208,6 +210,8 @@
   let floatTexts    = [];        // 플로팅 텍스트 (알림, 아이템 이름 등)
   let comboCount    = 0;
   let comboTimer    = 0;
+  let comboMilestoneIdx = 0;     // 현재 콤보 스트릭에서 지급한 마일스톤 인덱스
+  let comboBonusCoins   = 0;     // 콤보 마일스톤 누적 보너스 코인 (런 종료 시 정산)
   let milestones    = new Set(); // 이미 알림한 분 단위 마일스톤
   let waveCount          = 0;     // 총 웨이브 카운터 (horde 판정)
   let freeRerollUsed     = false; // 현재 선택창 무료 리롤 사용 여부 (창마다 초기화)
@@ -377,6 +381,8 @@
     lowHpPulse = 0;
     comboCount    = 0;
     comboTimer    = 0;
+    comboMilestoneIdx = 0;
+    comboBonusCoins   = 0;
     milestones    = new Set();
     waveCount     = 0;
     runRewardsGranted = false;
@@ -493,6 +499,15 @@
   function applyPassive(pv) {
     pv.apply(player);
     player.passives[pv.id] = (player.passives[pv.id] || 0) + 1;
+  }
+
+  // 패시브 현재 스택 수
+  function passiveLevel(id) {
+    return (player && player.passives[id]) || 0;
+  }
+  // 패시브가 최대 스택에 도달했는지 — 도달하면 선택지에서 제외
+  function isPassiveMaxed(pv) {
+    return pv.max != null && passiveLevel(pv.id) >= pv.max;
   }
 
   // 현재 진화 가능한 조합 목록
@@ -707,6 +722,8 @@
       bossWarning,
       comboCount,
       comboTimer,
+      comboMilestoneIdx,
+      comboBonusCoins,
       milestones: Array.from(milestones),
       waveCount,
     };
@@ -777,6 +794,8 @@
     bossWarning = Number(snapshot.bossWarning) || 0;
     comboCount = Number(snapshot.comboCount) || 0;
     comboTimer = Number(snapshot.comboTimer) || 0;
+    comboMilestoneIdx = Number(snapshot.comboMilestoneIdx) || 0;
+    comboBonusCoins = Number(snapshot.comboBonusCoins) || 0;
     milestones = new Set(Array.isArray(snapshot.milestones) ? snapshot.milestones : []);
     waveCount = Number(snapshot.waveCount) || 0;
     runRewardsGranted = false;
@@ -1630,6 +1649,7 @@
     const winBonus = result === 'win' ? 120 : 0;
     const dailyBonus = result === 'win' && daily && !meta.dailyCompletions[daily.key] ? daily.coinBonus : 0;
     let coins = Math.floor((baseCoins + winBonus + dailyBonus) * diff.coinMult * map.coinMult);
+    coins += Math.floor(comboBonusCoins || 0);   // 콤보 마일스톤 누적 보너스 정산
     const achievements = [];
     const grantAchievement = (id, label) => {
       if (meta.achievements[id]) return;
@@ -2259,12 +2279,25 @@
     if (enemy.hp <= 0) killEnemy(enemy);
   }
 
+  // 콤보 마일스톤 보상 — 데미지/처치 경로를 다시 타지 않는 안전한 보상(XP·코인)만 지급
+  function awardComboMilestone(enemy) {
+    if (comboMilestoneIdx >= COMBO_MILESTONES.length) return;
+    if (comboCount < COMBO_MILESTONES[comboMilestoneIdx]) return;
+    const reached = COMBO_MILESTONES[comboMilestoneIdx];
+    comboMilestoneIdx++;
+    const bonusCoins = Math.floor(reached / 5);
+    comboBonusCoins += bonusCoins;
+    xpGems.push({ x: enemy.x, y: enemy.y, val: Math.round(reached * 0.6) });
+    floatTexts.push({ x: enemy.x, y: enemy.y - 28, text: `🔥 ${reached} COMBO! +${bonusCoins}c`, life: 1.6, maxLife: 1.6, color: '#f1c40f', size: 15 });
+  }
+
   function killEnemy(enemy) {
     if (enemy.dying) return;  // 재진입 방지 — 동일 적 중복 처치 방지
     enemy.dying = true;
     kills++;
     comboCount++;
     comboTimer = 1.5;
+    awardComboMilestone(enemy);
     const pCount = enemy.isBoss ? 30 : 3 + enemy.tier * 3;
     for (let i = 0; i < pCount; i++) {
       spawnParticle(enemy.x, enemy.y, enemy.color, (enemy.tier + 1) * 4 + Math.random() * 5, 0.3 + Math.random() * 0.4);
@@ -2353,11 +2386,19 @@
     showChoiceOverlay(builder(), builder);
   }
 
+  // 즉시 효과가 무의미한 아이템 제외 (예: 체력 가득일 때 치료킷)
+  function usableItemBoxes() {
+    return ITEM_BOX_POOL.filter(item => {
+      if (item.id === 'medkit' && player.hp >= player.maxHp) return false;
+      return true;
+    });
+  }
+
   // 아이템 박스 선택 화면 — 3가지 중 선택
   function showItemBoxChoices() {
     state = 'itembox';
     setText('levelTitle', '📦 아이템 선택!');
-    const makeItemPicks = () => shuffled(ITEM_BOX_POOL).slice(0, 3).map(item => ({
+    const makeItemPicks = () => shuffled(usableItemBoxes()).slice(0, 3).map(item => ({
       kind: 'item',
       name: item.icon + ' ' + item.name,
       desc: '',
@@ -2522,10 +2563,10 @@
     list.appendChild(rerollBtn);
   }
 
-  // 레벨업 선택지 3개 구성: 진화(최우선) → 무기 레벨업 / 신규 무기 / 패시브
-  function buildChoices() {
-    // 1) 진화 가능 조합 (있으면 반드시 1개 포함)
-    const evoChoices = availableEvolutions().map(evo => {
+  // ── 레벨업 선택지 빌더 (모듈화) ───────────────────────────────────
+  // 1) 진화 가능 조합 → 선택지
+  function evolutionChoices() {
+    return availableEvolutions().map(evo => {
       const w = WEAPON_DEFS[evo.id];
       return {
         kind: 'evolve',
@@ -2534,60 +2575,83 @@
         choose: () => evolveWeapon(evo),
       };
     });
+  }
 
-    // 2) 보유 무기 레벨업 (진화 무기는 제외)
-    const levelable = [];
+  // 2) 보유 무기 레벨업 — 최대 레벨·진화 무기는 제외
+  function weaponLevelChoices() {
+    const out = [];
     for (const id of player.weapons) {
       const lvl = player.weaponLevels[id] || 1;
-      if (lvl < MAX_WEAPON_LEVEL && !WEAPON_DEFS[id].evolved) {
-        const w = WEAPON_DEFS[id];
-        levelable.push({
-          kind: 'weapon-lv',
-          weaponId: id,
-          tag: lvl >= MAX_WEAPON_LEVEL - 1 ? 'Near evolution' : 'Power up',
-          name: `${w.icon} ${w.name} Lv.${lvl}→${lvl + 1}`,
-          desc: w.desc + ' 강화',
-          choose: () => addWeapon(id),
-        });
-      }
+      if (lvl >= MAX_WEAPON_LEVEL || WEAPON_DEFS[id].evolved) continue;
+      const w = WEAPON_DEFS[id];
+      out.push({
+        kind: 'weapon-lv',
+        weaponId: id,
+        tag: lvl >= MAX_WEAPON_LEVEL - 1 ? 'Near evolution' : 'Power up',
+        name: `${w.icon} ${w.name} Lv.${lvl}→${lvl + 1}`,
+        desc: w.desc + ' 강화',
+        choose: () => addWeapon(id),
+      });
     }
+    return out;
+  }
 
-    // 3) 신규 무기 (슬롯 여유 시)
-    const newWeapons = [];
-    if (player.weapons.length < MAX_WEAPONS) {
-      for (const id of WEAPON_POOL) {
-        if (!player.weapons.includes(id)) {
-          const w = WEAPON_DEFS[id];
-          newWeapons.push({
-            kind: 'weapon-new',
-            weaponId: id,
-            tag: player.weapons.length <= 2 ? 'Build starter' : 'New weapon',
-            name: `${w.icon} ${w.name} (신규)`,
-            desc: w.desc,
-            choose: () => addWeapon(id),
-          });
-        }
-      }
+  // 3) 신규 무기 — 슬롯 여유가 있을 때 미보유 무기만
+  function newWeaponChoices() {
+    if (player.weapons.length >= MAX_WEAPONS) return [];
+    const out = [];
+    for (const id of WEAPON_POOL) {
+      if (player.weapons.includes(id)) continue;
+      const w = WEAPON_DEFS[id];
+      out.push({
+        kind: 'weapon-new',
+        weaponId: id,
+        tag: player.weapons.length <= 2 ? 'Build starter' : 'New weapon',
+        name: `${w.icon} ${w.name} (신규)`,
+        desc: w.desc,
+        choose: () => addWeapon(id),
+      });
     }
+    return out;
+  }
 
-    // 4) 패시브 (항상 후보)
-    const passives = PASSIVE_POOL.map(pv => ({
+  // 4) 패시브 — 최대 스택에 도달한 항목은 제외 (무의미한 선택지 방지)
+  function passiveChoices() {
+    return PASSIVE_POOL.filter(pv => !isPassiveMaxed(pv)).map(pv => {
+      const lvl = passiveLevel(pv.id);
+      return {
+        kind: 'passive',
+        passiveId: pv.id,
+        tag: EVOLUTION_DEFS.some(evo => evo.req === pv.id && player.weapons.includes(evo.base)) ? 'Combo passive' : 'Passive',
+        name: pv.name,
+        desc: lvl > 0 ? `${pv.desc} (Lv.${lvl}/${pv.max})` : pv.desc,
+        choose: () => applyPassive(pv),
+      };
+    });
+  }
+
+  // 모든 항목이 최대치일 때를 위한 안전망 — 소프트락 방지용 보너스
+  function overflowBonusChoice() {
+    return {
       kind: 'passive',
-      passiveId: pv.id,
-      tag: EVOLUTION_DEFS.some(evo => evo.req === pv.id && player.weapons.includes(evo.base)) ? 'Combo passive' : 'Passive',
-      name: pv.name,
-      desc: pv.desc,
-      choose: () => applyPassive(pv),
-    }));
+      tag: 'Maxed out',
+      name: '💰 보너스 보상',
+      desc: '체력 전체 회복 + 코인 +15',
+      choose: () => { player.hp = player.maxHp; comboBonusCoins += 15; },
+    };
+  }
 
+  // 레벨업 선택지 3개 구성: 진화(최우선) → 무기 레벨업 / 신규 무기 / 패시브
+  function buildChoices() {
     const result = [];
-    if (evoChoices.length) result.push(evoChoices[0]);   // 진화 1개 보장
-    result.push(...takeWeightedChoices([...levelable, ...newWeapons, ...passives], 3 - result.length));
-    // 항상 3개 보장 (부족 시 첫 패시브로 채움)
-    while (result.length < 3) {
-      const pv = PASSIVE_POOL[0];
-      result.push({ kind: 'passive', passiveId: pv.id, name: pv.name, desc: pv.desc, tag: 'Fallback', choose: () => applyPassive(pv) });
-    }
+    const evos = evolutionChoices();
+    if (evos.length) result.push(evos[0]);   // 진화 1개 보장
+
+    const pool = [...weaponLevelChoices(), ...newWeaponChoices(), ...passiveChoices()];
+    result.push(...takeWeightedChoices(pool, 3 - result.length));
+
+    // 후보가 부족하면(전부 최대치) 안전망 보너스로 1개 이상 보장 → 소프트락 방지
+    if (!result.length) result.push(overflowBonusChoice());
     return result.slice(0, 3);
   }
 
@@ -2968,7 +3032,7 @@
     updateLowHpFeedback(dt);
 
     if (comboTimer > 0) comboTimer -= dt;
-    else if (comboCount > 0) comboCount = 0;
+    else if (comboCount > 0) { comboCount = 0; comboMilestoneIdx = 0; }
 
     // 부유 텍스트 업데이트
     for (let i = floatTexts.length - 1; i >= 0; i--) {
@@ -3601,9 +3665,10 @@
     let passRows = PASSIVE_POOL.map(pv => {
       const forEvo = EVOLUTION_DEFS.find(e => e.req === pv.id);
       const evoTag = forEvo ? ` <span style="color:#f1c40f;font-size:0.7em">→ ${WEAPON_DEFS[forEvo.id].icon}${WEAPON_DEFS[forEvo.id].name}</span>` : '';
+      const maxTag = pv.max != null ? ` <span style="color:#7f8c9b;font-size:0.7em">(최대 ${pv.max}중첩)</span>` : '';
       return `<tr>
         <td>${pv.name}</td>
-        <td class="combo-desc">${pv.desc}${evoTag}</td>
+        <td class="combo-desc">${pv.desc}${maxTag}${evoTag}</td>
       </tr>`;
     }).join('');
 
