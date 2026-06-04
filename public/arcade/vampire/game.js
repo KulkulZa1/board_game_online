@@ -181,6 +181,52 @@
     },
   ];
 
+  // ── 사운드 (경량 Web Audio 절차적 효과음) ───────────────────────
+  // 사용자 제스처(시작 버튼)에서 init() 호출로 AudioContext 생성. M키로 음소거 토글.
+  const SFX = (() => {
+    let actx = null;
+    let muted = false;
+    let lastPickup = 0, lastHurt = 0;
+    try { muted = localStorage.getItem('vps_muted') === '1'; } catch (_) {}
+    function ensure() {
+      if (!actx) {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (AC) { try { actx = new AC(); } catch (_) {} }
+      }
+      if (actx && actx.state === 'suspended') actx.resume();
+      return actx;
+    }
+    function tone(freq, dur, type, gain, slideTo) {
+      if (muted) return;
+      const ac = ensure(); if (!ac) return;
+      const t = ac.currentTime;
+      const osc = ac.createOscillator();
+      const g = ac.createGain();
+      osc.type = type || 'square';
+      osc.frequency.setValueAtTime(freq, t);
+      if (slideTo) osc.frequency.exponentialRampToValueAtTime(slideTo, t + dur);
+      g.gain.setValueAtTime(gain || 0.1, t);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      osc.connect(g); g.connect(ac.destination);
+      osc.start(t); osc.stop(t + dur);
+    }
+    return {
+      init() { ensure(); },
+      toggleMute() {
+        muted = !muted;
+        try { localStorage.setItem('vps_muted', muted ? '1' : '0'); } catch (_) {}
+        return muted;
+      },
+      isMuted() { return muted; },
+      crit()    { tone(540, 0.12, 'sawtooth', 0.10, 220); },
+      combo()   { tone(880, 0.09, 'square', 0.09, 1320); },
+      levelup() { tone(523, 0.12, 'triangle', 0.12, 784); setTimeout(() => tone(784, 0.18, 'triangle', 0.12, 1046), 90); },
+      boss()    { tone(110, 0.45, 'sawtooth', 0.16, 55); },
+      pickup()  { const n = performance.now(); if (n - lastPickup < 55) return; lastPickup = n; tone(660, 0.05, 'sine', 0.05, 920); },
+      hurt()    { const n = performance.now(); if (n - lastHurt < 200) return; lastHurt = n; tone(170, 0.13, 'sawtooth', 0.10, 70); },
+    };
+  })();
+
   // ── 게임 상태 ───────────────────────────────────────────────────
   let state = 'idle'; // idle | playing | paused | levelup | itembox | dead | win
   let player = null;
@@ -200,6 +246,8 @@
   let dashCd = 0;              // 대쉬 잔여 쿨다운
   let dashEffect = null;       // 대쉬 슬래시 시각 효과
   let screenShake = 0;         // 화면 흔들림 강도
+  let hitStop = 0;             // 히트스톱(타격 정지) 잔여 시간 — 큰 타격 순간 짧게 정지
+  let hurtScreenFlash = 0;     // 피격 시 화면 붉은 플래시 잔여 시간
   let lastMoveDir = { dx: 1, dy: 0 }; // 마지막 이동 방향 (대쉬 방향 결정)
   let itemBoxes     = [];        // 월드에 존재하는 아이템 박스
   let hybridTowers  = [];
@@ -369,6 +417,8 @@
     dashCd      = 0;
     dashEffect  = null;
     screenShake = 0;
+    hitStop = 0;
+    hurtScreenFlash = 0;
     lastMoveDir = { dx: 1, dy: 0 };
     itemBoxes     = [];
     hybridTowers  = [];
@@ -1954,6 +2004,12 @@
       placeHybridTower();
       return;
     }
+    if (e.key === 'm' || e.key === 'M') {
+      e.preventDefault();
+      const muted = SFX.toggleMute();
+      floatTexts.push({ text: muted ? '🔇 음소거' : '🔊 사운드 ON', life: 1.2, maxLife: 1.2, screenSpace: true, color: '#9fb4d8', size: 16 });
+      return;
+    }
     if (e.key === 'y' || e.key === 'Y') {
       e.preventDefault();
       cycleHybridTowerType();
@@ -2272,13 +2328,20 @@
     enemy.hurtFlash = 0.12;
     if (dmg >= 8) {
       const rounded = Math.round(dmg);
+      const isCrit = dmg >= 80;
       damageNumbers.push({
         x: enemy.x + (Math.random() - 0.5) * 10,
         y: enemy.y - enemy.size - 4,
         val: rounded,
         life: 0.65, maxLife: 0.65,
-        crit: dmg >= 80,
+        crit: isCrit,
       });
+      // 큰 치명타 → 짧은 히트스톱 + 효과음 (살아있지 않은 적엔 생략)
+      if (isCrit && enemy.hp > 0) {
+        hitStop = Math.max(hitStop, 0.045);
+        screenShake = Math.min(screenShake + 0.2, 0.5);
+        SFX.crit();
+      }
     }
     if (enemy.hp <= 0) killEnemy(enemy);
   }
@@ -2293,6 +2356,7 @@
     comboBonusCoins += bonusCoins;
     xpGems.push({ x: enemy.x, y: enemy.y, val: Math.round(reached * 0.6) });
     floatTexts.push({ x: enemy.x, y: enemy.y - 28, text: `🔥 ${reached} COMBO! +${bonusCoins}c`, life: 1.6, maxLife: 1.6, color: '#f1c40f', size: 15 });
+    SFX.combo();
   }
 
   function killEnemy(enemy) {
@@ -2314,6 +2378,8 @@
       }
       spawnExplosion(enemy.x, enemy.y, 200, 0, true);
       screenShake = Math.min(screenShake + 0.5, 0.7);
+      hitStop = Math.max(hitStop, 0.13);   // 보스 처치 임팩트
+      SFX.boss();
       floatTexts.push({ text: '🏆 BOSS SLAIN!', life: 3.5, maxLife: 3.5, screenSpace: true, color: '#f1c40f', size: 26 });
     }
     xpGems.push({ x: enemy.x, y: enemy.y, val: enemy.xpVal });
@@ -2363,6 +2429,7 @@
       faceAngle: 0,
     });
     floatTexts.push({ text: '⚠ BOSS APPROACHING ⚠', life: 2.5, maxLife: 2.5, screenSpace: true, color: '#e74c3c', size: 22 });
+    SFX.boss();
   }
 
   // ── XP / 레벨업 ─────────────────────────────────────────────────
@@ -2384,6 +2451,7 @@
 
   function showLevelUp() {
     state = 'levelup';
+    SFX.levelup();
     document.getElementById('lvDisp').textContent = player.level;
     setText('levelTitle', '⬆ 레벨 업!');
     const builder = () => buildChoices();
@@ -2755,6 +2823,13 @@
       return;
     }
 
+    // 히트스톱 — 큰 타격 순간 아주 잠깐 전체 정지 → 타격감 강화
+    if (hitStop > 0) {
+      hitStop -= dt;
+      render(dt);
+      return;
+    }
+
     elapsed += dt;
     document.getElementById('timeDisp').textContent = fmtTime(elapsed);
     if (elapsed >= getSurviveGoal()) {
@@ -3021,6 +3096,8 @@
         const contactDmg = e.isBoss ? 55 : [8, 18, 38][Math.min(e.tier, 2)];
         player.hp -= contactDmg * dt;
         screenShake = Math.min(screenShake + 0.15, 0.35);
+        hurtScreenFlash = 0.28;
+        SFX.hurt();
         player.invincible = 0.15;
         if (player.hp <= 0) { endGame('dead'); return; }
       }
@@ -3037,6 +3114,8 @@
       if (player.invincible <= 0 && dist(ep, projectileTarget) < ep.r + 12) {
         player.hp -= ep.dmg;
         screenShake = Math.min(screenShake + 0.22, 0.45);
+        hurtScreenFlash = 0.28;
+        SFX.hurt();
         player.invincible = 0.1;
         enemyProjectiles.splice(i, 1);
         if (player.hp <= 0) { endGame('dead'); return; }
@@ -3048,6 +3127,8 @@
 
     if (comboTimer > 0) comboTimer -= dt;
     else if (comboCount > 0) { comboCount = 0; comboMilestoneIdx = 0; }
+
+    if (hurtScreenFlash > 0) hurtScreenFlash = Math.max(0, hurtScreenFlash - dt);
 
     // 부유 텍스트 업데이트
     for (let i = floatTexts.length - 1; i >= 0; i--) {
@@ -3070,6 +3151,9 @@
       const g = xpGems[i];
       if (dist(g, player) < player.xpRange || (allyPlayer && dist(g, allyPlayer) < player.xpRange * 0.75)) {
         gainXP(g.val);
+        spawnParticle(g.x, g.y, '#f1c40f', 3, 0.22);
+        spawnParticle(g.x, g.y, '#ffe9a8', 2, 0.18);
+        SFX.pickup();
         xpGems.splice(i, 1);
       }
     }
@@ -3503,6 +3587,12 @@
 
     ctx.restore(); // camera
 
+    // 피격 화면 플래시 — 맞은 순간 붉게 번쩍 (즉각적 피드백)
+    if (hurtScreenFlash > 0) {
+      ctx.fillStyle = `rgba(231,76,60,${(hurtScreenFlash / 0.28) * 0.3})`;
+      ctx.fillRect(0, 0, W, H);
+    }
+
     // 보스 경고 화면 플래시
     if (bossWarning > 0) {
       const wAlpha = (Math.sin(bossWarning * 9) * 0.5 + 0.5) * 0.35;
@@ -3778,6 +3868,7 @@
 
   // ── 버튼 연결 ───────────────────────────────────────────────────
   document.getElementById('startBtn').addEventListener('click', () => {
+    SFX.init();   // 사용자 제스처 — 오디오 컨텍스트 활성화
     ensureStartPanels();
     clearEndActions();
     clearRunSnapshot();
