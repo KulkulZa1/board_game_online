@@ -27,7 +27,15 @@ super-weapon. Source: `EVOLUTION_DEFS` in `public/arcade/vampire/game.js`.
 Reachability: `availableEvolutions()` → `buildChoices()` **guarantees** an
 evolution card appears on level-up when its combo is satisfied.
 
-### Tower Defense — Adjacency Synergies
+### Level-up choice weighting
+Non-evolution level-up cards are weighted, not flat-random:
+
+- Owned weapon level-ups are favored over generic passives, especially at level 4 or when their required passive is already owned.
+- Passives that complete or support an owned weapon's evolution recipe are favored over unrelated passives.
+- New weapons are favored in the first few levels to create an early build fork, then become less common.
+- Cards expose short reason tags (`Build starter`, `Power up`, `Combo passive`, `Near evolution`) so the RNG friction is readable rather than opaque.
+
+### Tower Defense Synergies
 Towers within a synergy radius of a partner type gain bonuses, recomputed on
 every place/sell/upgrade. Source: `SYNERGIES` in `sandbox/tower-defense/config.js`,
 applied by `recomputeSynergies()`.

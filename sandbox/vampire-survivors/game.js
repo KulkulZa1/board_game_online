@@ -131,13 +131,16 @@ window.VSGame = (function () {
       level: 1, xp: 0,
       weapons: ['orb'],
       weaponCDs: { orb: 0 },
+      skillLevels: { orb: 1 },
+      ownedPassives: [],
       speed: baseSp,
       dmgMult: 1,
       cdMult:  1,
+      areaMult: 1,
       xpRange: charDef ? charDef.baseStats.magnet * 30 + 60 : 80,
       revivals: charDef ? charDef.baseStats.revivals : 0,
       appliedPassives: [],
-      appliedSkills: {}
+      appliedSkills: { orb: 1 }
     };
     levelUpChoices = [];
   }
@@ -175,12 +178,16 @@ window.VSGame = (function () {
     if (!stage) return;
 
     movePlayer(dt);
+    if (player.regen) {
+      player.hp = Math.min(player.maxHp, player.hp + player.regen * dt);
+    }
     spawnWaves(dt, stage);
     updateEnemies(dt);
     fireWeapons(dt);
     updateProjectiles(dt);
     updateParticles(dt);
     updateGroundItems();
+    if (state === 'playing') checkLevelUp();
     checkPlayerEnemyCollision();
 
     if (enemies.length > analyticsData.peakEnemies)
@@ -357,7 +364,7 @@ window.VSGame = (function () {
       var skill = getSkillDef(skillId);
       if (!skill) return;
 
-      var lv = (player.appliedSkills[skillId] || 1) - 1;
+      var lv = skillLevelIndex(skillId, skill);
       var cd = (skill.perLevel.cooldownMs[lv] || 1500) / 1000 * player.cdMult;
 
       if (!player.weaponCDs[skillId]) player.weaponCDs[skillId] = cd; // start pre-charged
@@ -378,24 +385,108 @@ window.VSGame = (function () {
     return null;
   }
 
+  function getPassiveDef(id) {
+    var passives = VS_CONFIG.PASSIVES || [];
+    for (var i = 0; i < passives.length; i++) {
+      if (passives[i].id === id) return passives[i];
+    }
+    return null;
+  }
+
+  function configuredMaxSkillLevel(skill) {
+    if (skill && skill.maxLevel) return Math.max(1, skill.maxLevel);
+    return Math.max(1, VS_CONFIG.maxSkillLevel || 5);
+  }
+
+  function skillLevel(skillId) {
+    return Math.max(1, (player.skillLevels && player.skillLevels[skillId]) || (player.appliedSkills && player.appliedSkills[skillId]) || 1);
+  }
+
+  function skillLevelIndex(skillId, skill) {
+    var perLevel = skill && skill.perLevel || {};
+    var levels = Math.max(
+      (perLevel.damage || []).length,
+      (perLevel.projectiles || []).length,
+      (perLevel.cooldownMs || []).length,
+      (perLevel.pierce || []).length,
+      1
+    );
+    return Math.max(0, Math.min(skillLevel(skillId) - 1, levels - 1));
+  }
+
   function fireSkill(id, skill, lv) {
     var dmg   = (skill.perLevel.damage[lv]      || 10) * player.dmgMult;
     var count = skill.perLevel.projectiles[lv]  || 1;
     var pierce = skill.perLevel.pierce[lv]       || 0;
+    var areaMult = player.areaMult || 1;
 
     // Find nearest enemy for targeting
     var target = nearestEnemy();
 
-    if (id === 'orb') {
+    if (id === 'blackhole') {
+      for (var bh = 0; bh < count; bh++) {
+        var bha = (Math.PI * 2 / count) * bh;
+        projectiles.push({
+          x: player.x + Math.cos(bha) * 60,
+          y: player.y + Math.sin(bha) * 60,
+          orbitAngle: bha, orbitRadius: 78 * areaMult, orbitSpeed: 3.2,
+          orbits: true, blackhole: true, pullRadius: 120 * areaMult,
+          dmg: dmg, color: '#8e44ad', size: 14 * areaMult, life: 999,
+          pierce: 999, hits: new Set()
+        });
+      }
+    } else if (id === 'stormbow') {
+      var sx = target ? target.x : player.x + 1;
+      var sy = target ? target.y : player.y;
+      for (var sb = 0; sb < Math.max(5, count); sb++) {
+        var sdx = sx - player.x, sdy = sy - player.y;
+        var sa = Math.atan2(sdy, sdx) + (sb - (Math.max(5, count) - 1) / 2) * 0.16;
+        projectiles.push({
+          x: player.x, y: player.y,
+          vx: Math.cos(sa) * 440, vy: Math.sin(sa) * 440,
+          dmg: dmg, color: '#f1c40f', size: 6, life: 1.1,
+          pierce: Math.max(8, pierce), hits: new Set()
+        });
+      }
+    } else if (id === 'supernova') {
+      projectiles.push({
+        x: player.x, y: player.y, vx: 0, vy: 0,
+        aura: true, auraRadius: 0, auraMaxRadius: 155 * areaMult,
+        dmg: dmg, color: '#f39c12', size: 155 * areaMult,
+        life: 0.55, pierce: 999, hits: new Set()
+      });
+    } else if (id === 'deathray') {
+      if (target) {
+        var rdx = target.x - player.x, rdy = target.y - player.y;
+        var rd = Math.hypot(rdx, rdy) || 1;
+        projectiles.push({
+          x: player.x, y: player.y,
+          vx: (rdx / rd) * 620, vy: (rdy / rd) * 620,
+          dmg: dmg, color: '#e74c3c', size: 9, life: 0.45,
+          pierce: 999, hits: new Set()
+        });
+      }
+    } else if (id === 'aegis') {
+      for (var ag = 0; ag < count; ag++) {
+        var aa = (Math.PI * 2 / count) * ag;
+        projectiles.push({
+          x: player.x + Math.cos(aa) * 55,
+          y: player.y + Math.sin(aa) * 55,
+          orbitAngle: aa, orbitRadius: 64 * areaMult, orbitSpeed: 4.0,
+          orbits: true, dmg: dmg, color: '#ecf0f1',
+          size: 10 * areaMult, life: 1.4, pierce: pierce, hits: new Set()
+        });
+      }
+    } else if (id === 'orb') {
       // Orbiting projectile — spawn at offset
       for (var i = 0; i < count; i++) {
         var angle = (Math.PI * 2 / count) * i;
         projectiles.push({
           x: player.x + Math.cos(angle) * 40,
           y: player.y + Math.sin(angle) * 40,
-          orbitAngle: angle, orbitRadius: 55, orbitSpeed: 2.5,
+          orbitAngle: angle, orbitRadius: 55 * areaMult, orbitSpeed: 2.5,
           orbits: true, dmg: dmg, color: tokenColor('proj_orb'),
-          size: 8, life: 999, pierce: pierce, hits: new Set()
+          size: 8 * areaMult, life: 999, pierce: pierce, hits: new Set()
         });
       }
     } else if (id === 'nova') {
@@ -425,9 +516,9 @@ window.VSGame = (function () {
       // Expand ring
       projectiles.push({
         x: player.x, y: player.y, vx: 0, vy: 0,
-        aura: true, auraRadius: 0, auraMaxRadius: 80,
+        aura: true, auraRadius: 0, auraMaxRadius: 80 * areaMult,
         dmg: dmg, color: tokenColor('proj_aura'),
-        size: 80, life: 0.5, pierce: 999, hits: new Set()
+        size: 80 * areaMult, life: 0.5, pierce: 999, hits: new Set()
       });
     } else {
       // Default: aimed at nearest enemy
@@ -461,6 +552,16 @@ window.VSGame = (function () {
         p.orbitAngle += p.orbitSpeed * dt;
         p.x = player.x + Math.cos(p.orbitAngle) * p.orbitRadius;
         p.y = player.y + Math.sin(p.orbitAngle) * p.orbitRadius;
+        if (p.blackhole) {
+          enemies.forEach(function (e) {
+            if (e.dead) return;
+            var pullD = dist(p, e);
+            if (pullD > 0 && pullD < (p.pullRadius || 120)) {
+              e.x += (p.x - e.x) / pullD * 55 * dt;
+              e.y += (p.y - e.y) / pullD * 55 * dt;
+            }
+          });
+        }
       } else if (p.aura) {
         p.auraRadius += (p.auraMaxRadius / 0.5) * dt;
         p.x = player.x; p.y = player.y;
@@ -609,7 +710,36 @@ window.VSGame = (function () {
     var pool = VS_CONFIG.PROBABILITY && VS_CONFIG.PROBABILITY.levelUpPool || { common:60, uncommon:28, rare:10, legendary:2 };
     var skills = VS_CONFIG.SKILLS || [];
     var passives = VS_CONFIG.PASSIVES || [];
-    var allOptions = skills.concat(passives);
+    var count = VS_CONFIG.PROBABILITY && VS_CONFIG.PROBABILITY.offerCount || 3;
+    var chosen = [];
+    var seen = new Set();
+
+    availableEvolutions().forEach(function (evo) {
+      if (chosen.length >= count) return;
+      if (!seen.has(evo.id)) {
+        seen.add(evo.id);
+        chosen.push(evo);
+      }
+    });
+
+    var allOptions = [];
+    skills.forEach(function (skill) {
+      if (skill.evolved) return;
+      if (player.weapons.includes(skill.id)) {
+        if (skillLevel(skill.id) < configuredMaxSkillLevel(skill)) {
+          allOptions.push(Object.assign({}, skill, {
+            kind: 'level',
+            description: 'Level ' + skillLevel(skill.id) + ' -> ' + (skillLevel(skill.id) + 1) + '. ' + (skill.description || '')
+          }));
+        }
+      } else {
+        allOptions.push(Object.assign({}, skill, { kind: 'skill' }));
+      }
+    });
+    passives.forEach(function (passive) {
+      if (player.ownedPassives && player.ownedPassives.includes(passive.id)) return;
+      allOptions.push(Object.assign({}, passive, { kind: 'passive' }));
+    });
 
     // Weight by rarity
     var weighted = [];
@@ -618,9 +748,6 @@ window.VSGame = (function () {
       for (var i = 0; i < w; i++) weighted.push(s);
     });
 
-    var count = VS_CONFIG.PROBABILITY && VS_CONFIG.PROBABILITY.offerCount || 3;
-    var chosen = [];
-    var seen = new Set();
     var tries = 0;
     while (chosen.length < count && weighted.length > 0 && tries < 200) {
       tries++;
@@ -633,21 +760,105 @@ window.VSGame = (function () {
     return chosen;
   }
 
-  function applyLevelUpChoice(skillId) {
-    var skill = getSkillDef(skillId);
-    if (skill) {
-      if (!player.appliedSkills[skillId]) player.appliedSkills[skillId] = 0;
-      player.appliedSkills[skillId]++;
-      if (!player.weapons.includes(skillId)) {
-        player.weapons.push(skillId);
-        player.weaponCDs[skillId] = 0;
-      }
-      player.dmgMult *= 1.05; // slight global buff per pick
+  function availableEvolutions() {
+    var recipes = VS_CONFIG.EVOLUTIONS || [];
+    var out = [];
+    recipes.forEach(function (recipe) {
+      var base = getSkillDef(recipe.base);
+      var evolved = getSkillDef(recipe.id);
+      var req = getPassiveDef(recipe.req);
+      if (!base || !evolved || !req) return;
+      if (!player.weapons.includes(recipe.base)) return;
+      if (player.weapons.includes(recipe.id)) return;
+      if (skillLevel(recipe.base) < configuredMaxSkillLevel(base)) return;
+      if (!player.ownedPassives || !player.ownedPassives.includes(recipe.req)) return;
+      out.push(Object.assign({}, evolved, {
+        kind: 'evolve',
+        base: recipe.base,
+        req: recipe.req,
+        rarity: 'legendary',
+        description: base.name + ' + ' + req.name + ' -> ' + evolved.name
+      }));
+    });
+    return out;
+  }
+
+  function applyLevelUpChoice(choiceId) {
+    var evo = (VS_CONFIG.EVOLUTIONS || []).find(function (recipe) { return recipe.id === choiceId; });
+    if (evo && canEvolve(evo)) {
+      evolveSkill(evo);
+    } else {
+      var skill = getSkillDef(choiceId);
+      var passive = getPassiveDef(choiceId);
+      if (skill) addOrLevelSkill(skill);
+      else if (passive) applyPassive(passive);
     }
 
     state = 'playing';
     lastTs = 0;
     animId = requestAnimationFrame(loop);
+  }
+
+  function canEvolve(recipe) {
+    var base = getSkillDef(recipe.base);
+    return !!(
+      base &&
+      player.weapons.includes(recipe.base) &&
+      skillLevel(recipe.base) >= configuredMaxSkillLevel(base) &&
+      player.ownedPassives &&
+      player.ownedPassives.includes(recipe.req) &&
+      !player.weapons.includes(recipe.id)
+    );
+  }
+
+  function addOrLevelSkill(skill) {
+    var id = skill.id;
+    player.skillLevels = player.skillLevels || {};
+    player.appliedSkills = player.appliedSkills || {};
+    if (!player.weapons.includes(id)) {
+      player.weapons.push(id);
+      player.weaponCDs[id] = 0;
+      player.skillLevels[id] = 1;
+    } else {
+      player.skillLevels[id] = Math.min(configuredMaxSkillLevel(skill), skillLevel(id) + 1);
+    }
+    player.appliedSkills[id] = player.skillLevels[id];
+    player.dmgMult *= 1.03;
+  }
+
+  function evolveSkill(recipe) {
+    var baseIdx = player.weapons.indexOf(recipe.base);
+    if (baseIdx >= 0) player.weapons.splice(baseIdx, 1, recipe.id);
+    else player.weapons.push(recipe.id);
+    delete player.weaponCDs[recipe.base];
+    player.weaponCDs[recipe.id] = 0;
+    player.skillLevels[recipe.id] = 1;
+    player.appliedSkills[recipe.id] = 1;
+    player.skillLevels[recipe.base] = configuredMaxSkillLevel(getSkillDef(recipe.base));
+    player.appliedSkills[recipe.base] = player.skillLevels[recipe.base];
+    spawnParticle(player.x, player.y - 18, '#f1c40f', 0, 0.9, '*');
+  }
+
+  function applyPassive(passive) {
+    player.ownedPassives = player.ownedPassives || [];
+    if (player.ownedPassives.includes(passive.id)) return;
+    player.ownedPassives.push(passive.id);
+    player.appliedPassives.push(passive.id);
+    var value = Number(passive.value);
+    if (!isFinite(value) || value <= 0) value = 1;
+    if (passive.id === 'spinach') {
+      player.dmgMult *= value;
+    } else if (passive.id === 'hollow_heart') {
+      var hpGain = Math.round(player.maxHp * (value - 1));
+      player.maxHp += hpGain;
+      player.hp += hpGain;
+    } else if (passive.id === 'spellbinder') {
+      player.cdMult *= value;
+    } else if (passive.id === 'garlic_ring') {
+      player.areaMult *= value;
+    } else if (passive.id === 'pummarola') {
+      player.regen = (player.regen || 0) + value;
+    }
   }
 
   // ── Player–enemy collision ────────────────────────────────────────────────

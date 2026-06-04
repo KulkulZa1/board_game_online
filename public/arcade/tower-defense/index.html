@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Tower Defense - Board Game Online</title>
   <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/sandbox/tower-defense/graphics/sprites.css">
+  <link rel="stylesheet" href="/arcade/tower-defense/runtime/graphics/sprites.css">
   <style>
     *, *::before, *::after { box-sizing: border-box; }
     html, body { height: 100%; margin: 0; overflow: hidden; background: #080810; color: #d0d8f0; font-family: "Segoe UI", system-ui, sans-serif; font-size: 13px; }
@@ -13,6 +13,7 @@
     #toolbar a { color: #8a90a8; text-decoration: none; }
     #toolbar .title { font-weight: 700; }
     #toolbar .sep { flex: 1; }
+    .runtime-note { color: #8a90a8; font-size: 0.78rem; white-space: nowrap; }
     #toolbar button, .btn-small { background: rgba(255,255,255,0.06); border: 1px solid #1e2030; border-radius: 6px; color: #d0d8f0; padding: 4px 10px; cursor: pointer; }
     #toolbar button:hover, .btn-small:hover { background: rgba(255,255,255,0.1); }
     #main { display: flex; height: calc(100vh - 42px); }
@@ -51,7 +52,11 @@
     <button data-action="place">Place Tower</button>
     <button data-action="start-wave">Start Wave</button>
     <span class="sep"></span>
-    <a href="/sandbox/tower-defense/">Open Sandbox</a>
+    <button data-action="import">Import</button>
+    <button data-action="export">Export</button>
+    <button data-action="publish">Publish</button>
+    <span id="publish-status" class="runtime-note"></span>
+    <span class="runtime-note">Sandbox: npm run sandbox</span>
   </div>
   <div id="main">
     <div id="game-canvas-wrap">
@@ -62,19 +67,22 @@
   </div>
   <div id="panel-toggle">Editor Panel</div>
 
-  <script src="/sandbox/tower-defense/graphics/theme.js?v=1.1"></script>
-  <script src="/sandbox/tower-defense/config.js?v=1.1"></script>
-  <script src="/js/sandbox-config.js?v=1.0"></script>
+  <script src="/arcade/tower-defense/runtime/graphics/theme.js?v=1.1"></script>
+  <script src="/arcade/tower-defense/runtime/config.js?v=1.1"></script>
+  <script src="/js/sandbox-config.js?v=1.1"></script>
   <script>
     if (window.SandboxConfigBridge && window.TD_CONFIG) {
-      window.SandboxConfigBridge.load('sandbox_td_config', window.TD_CONFIG);
+      var loadedPublished = window.SandboxConfigBridge.load('td_published_config', window.TD_CONFIG);
+      var loadedDraft = !loadedPublished && window.SandboxConfigBridge.load('sandbox_td_config', window.TD_CONFIG);
+      var statusEl = document.getElementById('publish-status');
+      if (statusEl) statusEl.textContent = loadedPublished ? 'Published config loaded' : (loadedDraft ? 'Draft config loaded' : 'Default config');
     }
     document.getElementById('panel-toggle').addEventListener('click', function () {
       document.getElementById('editor-panel').classList.toggle('panel-open');
     });
   </script>
-  <script src="/sandbox/tower-defense/game.js?v=1.2"></script>
-  <script src="/sandbox/tower-defense/ui.js?v=1.2"></script>
+  <script src="/arcade/tower-defense/runtime/game.js?v=1.2"></script>
+  <script src="/arcade/tower-defense/runtime/ui.js?v=1.2"></script>
   <script>
     TDGame.init(document.getElementById('game-canvas'));
     TDUI.init();

@@ -54,6 +54,8 @@
     ],
 
     // ── Skills ────────────────────────────────────────────────────
+    maxSkillLevel: 5,
+
     SKILLS: [
       {
         id: 'orb', name: 'Magic Orb', icon: 'icon_orb', rarity: 'common',
@@ -182,7 +184,100 @@
         evolutionRequires: [],
         evolvesInto: null,
         _editorX: 170, _editorY: 80
+      },
+      {
+        id: 'blackhole', name: 'Black Hole', icon: 'icon_orb', rarity: 'legendary',
+        tags: ['magic', 'orbit', 'evolved'],
+        description: 'Evolved Magic Orb. Large orbits pull nearby enemies inward.',
+        evolved: true,
+        maxLevel: 1,
+        perLevel: {
+          damage:     [30],
+          projectiles:[5],
+          cooldownMs: [700],
+          pierce:     [999]
+        },
+        synergyBonus: { requiredTag: 'magic', bonusStat: 'damage', bonusPct: 20 },
+        evolutionRequires: ['spinach'],
+        evolvesInto: null,
+        _editorX: 20, _editorY: 140
+      },
+      {
+        id: 'stormbow', name: 'Storm Bow', icon: 'icon_arrow', rarity: 'legendary',
+        tags: ['physical', 'ranged', 'evolved'],
+        description: 'Evolved Arrow Rain. Fires a spread of piercing arrows.',
+        evolved: true,
+        maxLevel: 1,
+        perLevel: {
+          damage:     [32],
+          projectiles:[5],
+          cooldownMs: [450],
+          pierce:     [8]
+        },
+        synergyBonus: { requiredTag: 'physical', bonusStat: 'projectiles', bonusPct: 1 },
+        evolutionRequires: ['spellbinder'],
+        evolvesInto: null,
+        _editorX: 70, _editorY: 140
+      },
+      {
+        id: 'supernova', name: 'Supernova', icon: 'icon_nova', rarity: 'legendary',
+        tags: ['magic', 'aoe', 'evolved'],
+        description: 'Evolved Arcane Nova. A large expanding blast clears space.',
+        evolved: true,
+        maxLevel: 1,
+        perLevel: {
+          damage:     [75],
+          projectiles:[1],
+          cooldownMs: [2000],
+          pierce:     [999]
+        },
+        synergyBonus: { requiredTag: 'aoe', bonusStat: 'damage', bonusPct: 25 },
+        evolutionRequires: ['garlic_ring'],
+        evolvesInto: null,
+        _editorX: 120, _editorY: 140
+      },
+      {
+        id: 'deathray', name: 'Death Ray', icon: 'icon_laser', rarity: 'legendary',
+        tags: ['magic', 'ranged', 'pierce', 'evolved'],
+        description: 'Evolved Lightning Lance. A thicker beam burns through crowds.',
+        evolved: true,
+        maxLevel: 1,
+        perLevel: {
+          damage:     [65],
+          projectiles:[1],
+          cooldownMs: [1000],
+          pierce:     [999]
+        },
+        synergyBonus: { requiredTag: 'pierce', bonusStat: 'damage', bonusPct: 25 },
+        evolutionRequires: ['hollow_heart'],
+        evolvesInto: null,
+        _editorX: 170, _editorY: 140
+      },
+      {
+        id: 'aegis', name: 'Aegis', icon: 'icon_shield', rarity: 'legendary',
+        tags: ['holy', 'orbit', 'defense', 'evolved'],
+        description: 'Evolved Holy Shield. Dense shields orbit faster and hit harder.',
+        evolved: true,
+        maxLevel: 1,
+        perLevel: {
+          damage:     [34],
+          projectiles:[6],
+          cooldownMs: [900],
+          pierce:     [4]
+        },
+        synergyBonus: { requiredTag: 'holy', bonusStat: 'damage', bonusPct: 25 },
+        evolutionRequires: ['pummarola'],
+        evolvesInto: null,
+        _editorX: 220, _editorY: 140
       }
+    ],
+
+    EVOLUTIONS: [
+      { id: 'blackhole', base: 'orb',    req: 'spinach' },
+      { id: 'stormbow',  base: 'arrow',  req: 'spellbinder' },
+      { id: 'supernova', base: 'nova',   req: 'garlic_ring' },
+      { id: 'deathray',  base: 'laser',  req: 'hollow_heart' },
+      { id: 'aegis',     base: 'shield', req: 'pummarola' }
     ],
 
     // ── Passives ──────────────────────────────────────────────────

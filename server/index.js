@@ -58,6 +58,11 @@ app.use('/.well-known', express.static(
 app.use(express.static(path.join(__dirname, '..', 'public')));
 // sandbox/ is a developer-only design tool — NOT served in production.
 // Local dev: npm run sandbox (serves on port 3001 via npx serve)
+// Tower Defense still reuses the sandbox engine as its production runtime.
+// Serve only those runtime files under the arcade URL; keep /sandbox/ itself 404.
+app.use('/arcade/tower-defense/runtime', express.static(
+  path.join(__dirname, '..', 'sandbox', 'tower-defense')
+));
 
 // Cloudflare Tunnel 경유 시 실제 클라이언트 IP를 X-Forwarded-For / CF-Connecting-IP 로 전달
 // trust proxy 활성화로 req.ip 가 실제 IP를 반환

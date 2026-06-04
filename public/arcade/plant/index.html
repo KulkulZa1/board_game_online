@@ -68,11 +68,10 @@
   </div>
 
   <script src="/js/admob.js?v=1.0"></script>
-  <script src="/sandbox/plant-growing/config.js?v=1.1"></script>
-  <script src="/js/sandbox-config.js?v=1.0"></script>
+  <script src="/js/sandbox-config.js?v=1.1"></script>
   <script>
-    if (window.SandboxConfigBridge && window.PG_CONFIG) {
-      window.SandboxConfigBridge.load('sandbox_pg_config', window.PG_CONFIG);
+    if (window.SandboxConfigBridge) {
+      window.PG_CONFIG = window.SandboxConfigBridge.read('sandbox_pg_config');
     }
   </script>
   <script src="game.js?v=1.2"></script>
