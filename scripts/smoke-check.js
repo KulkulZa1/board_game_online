@@ -446,6 +446,10 @@ function checkVampireDirectorLoopCoverage() {
     'premiumCharacters',
     'purchasePremiumCharacter',
     'monetizationPanel',
+    'evolutionPlanPanel',
+    'renderEvolutionPlan',
+    'evolutionProgress',
+    'appendChoiceButton',
     'placeHybridTower',
     'updateHybridTowers',
     'fireHybridTower',
@@ -460,10 +464,14 @@ function checkVampireDirectorLoopCoverage() {
     throw new Error(`Vampire Survivors loop coverage missing: ${missingGameMarkers.join(', ')}`);
   }
 
-  const requiredCssMarkers = ['.meta-panel', '.start-card', '.pause-overlay', '.end-actions', '.daily-panel', '.upgrade-grid', '.run-report', '.monetization-panel', '.resume-panel', '.coop-panel'];
+  const requiredCssMarkers = ['.meta-panel', '.start-card', '.pause-overlay', '.end-actions', '.daily-panel', '.upgrade-grid', '.run-report', '.monetization-panel', '.resume-panel', '.coop-panel', '.evolution-plan', '.level-evolution-plan', '.evolution-plan-row.ready'];
   const missingCssMarkers = requiredCssMarkers.filter((marker) => !css.includes(marker));
   if (missingCssMarkers.length) {
     throw new Error(`Vampire Survivors UI CSS missing: ${missingCssMarkers.join(', ')}`);
+  }
+
+  if (game.includes('btn.innerHTML = `<div class="upgrade-name"')) {
+    throw new Error('Vampire Survivors level-up choice text should be rendered with DOM text nodes, not innerHTML');
   }
 
   if (!page.includes('/socket.io/socket.io.js')) {

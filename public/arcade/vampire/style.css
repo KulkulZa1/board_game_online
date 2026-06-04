@@ -495,6 +495,62 @@ html, body {
 .combo-arrow { color: var(--muted); font-size: 0.85em; padding: 0 2px; }
 .combo-desc { color: var(--muted); font-size: 0.72rem; }
 
+.evolution-plan {
+  width: 100%;
+  padding: 9px;
+  border: 1px solid rgba(241,196,15,0.22);
+  border-radius: 8px;
+  background: rgba(241,196,15,0.045);
+  text-align: left;
+}
+
+.evolution-plan-title {
+  margin-bottom: 6px;
+  color: #f1c40f;
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.evolution-plan-row {
+  display: grid;
+  grid-template-columns: 1.25fr 0.9fr 0.9fr;
+  gap: 6px;
+  align-items: center;
+  padding: 5px 0;
+  border-top: 1px solid rgba(255,255,255,0.055);
+  font-size: 0.7rem;
+  line-height: 1.25;
+}
+
+.evolution-plan-row:first-of-type { border-top: none; }
+.evolution-plan-row.ready { color: #f1c40f; }
+.evolution-plan-row.evolved { color: #2ecc71; }
+.evolution-plan-row.progress { color: var(--text); }
+.evolution-plan-row.missing { color: var(--muted); }
+
+.evolution-result {
+  font-weight: 800;
+}
+
+.evolution-status {
+  color: inherit;
+  opacity: 0.92;
+}
+
+.level-evolution-plan {
+  margin-bottom: 10px;
+  max-height: 112px;
+  overflow: hidden;
+}
+
+.level-evolution-plan .evolution-plan-row,
+.pause-evolution-plan .evolution-plan-row {
+  grid-template-columns: 1fr;
+  gap: 2px;
+}
+
 .meta-panel {
   display: flex;
   justify-content: center;
@@ -714,6 +770,11 @@ html, body {
   .daily-panel {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .evolution-plan-row {
+    grid-template-columns: 1fr;
+    gap: 2px;
   }
 
   .start-card {

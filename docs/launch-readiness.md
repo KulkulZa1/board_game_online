@@ -35,6 +35,7 @@ This launch-readiness pass found and fixed:
 - Public arcade pages no longer request `/sandbox/...` assets. Tower Defense now loads its reused runtime through `/arcade/tower-defense/runtime/`, while `/sandbox/` remains a dev-only 404 route in production.
 - Vampire Survivors now persists an active run locally during play, pause, mobile visibility changes, page unload, and revive. A valid saved run appears as a Continue/Discard panel on the start overlay and restores into the pause menu.
 - Vampire Survivors has a first Socket.io co-op relay: the host creates a shareable `?vpsRoom=...` link, the guest sends movement/dash/tower input, the host simulates an ally, and the guest sees a compact mirror of the host state.
+- Vampire Survivors now keeps evolution recipes visible on start, pause, and level-up overlays so players can plan around missing passives or max-level weapons before the end-run report.
 - Tower Defense sandbox now has a validated `Publish` action. Published configs save under `td_published_config`, export as `td-published-config.json`, and `/arcade/tower-defense/` prefers that published key before falling back to draft/default config.
 - Service worker caching no longer serves old JS/CSS before checking the network; this prevents deployed game logic from appearing stale after Render deploys.
 - All HTML pages now load `/js/sw-update.js`, which registers the service worker consistently and reloads controlled pages once after an updated worker takes control.

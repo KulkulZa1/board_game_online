@@ -48,6 +48,9 @@ This note records the launch-readiness work for `/arcade/vampire/`.
 - Achievement and run report layer.
   - One-time achievements grant coin rewards for survival milestones, first clear, hard clear, triple evolution, near-miss clear, defense-line tower play, and no-revive clear.
   - The end screen reports evolved weapon count, tower placements, lowest HP, and missed evolution hints so failed evolution attempts become readable next-run plans.
+- Evolution planning UI.
+  - The start overlay shows all evolution recipes, while level-up and pause overlays show a compact progress plan for the current run.
+  - Level-up upgrade cards now render text through DOM text nodes instead of HTML strings, keeping the normal choice flow while reducing injection risk.
 - Sandbox evolution mirror.
   - `sandbox/vampire-survivors/` now stores evolved skills and `EVOLUTIONS` recipes in `VS_CONFIG`, exposes editable base/passive/result rows, shows golden evolution cards, and swaps max-level base skills into evolved skills at runtime.
   - Old local sandbox saves are migrated by appending missing default evolved skills and recipes.

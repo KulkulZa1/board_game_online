@@ -448,6 +448,84 @@
     return hints;
   }
 
+  // Evolution plan state for start, pause, and level-up surfaces.
+  function evolutionProgress(evo) {
+    const base = WEAPON_DEFS[evo.base];
+    const evolved = WEAPON_DEFS[evo.id];
+    const starterWeapons = player ? [] : (currentCharacter().startWeapons || []);
+    const hasBase = player ? player.weapons.includes(evo.base) : starterWeapons.includes(evo.base);
+    const hasEvolved = player ? player.weapons.includes(evo.id) : false;
+    const baseLevel = player ? (player.weaponLevels[evo.base] || (hasBase ? 1 : 0)) : (hasBase ? 1 : 0);
+    const baseMaxed = hasBase && baseLevel >= MAX_WEAPON_LEVEL;
+    const hasPassive = player ? !!player.passives[evo.req] : false;
+    let stateText = `Need ${base.name}`;
+    let stateClass = 'missing';
+    let priority = 5;
+
+    if (hasEvolved) {
+      stateText = 'Evolved';
+      stateClass = 'evolved';
+      priority = 3;
+    } else if (baseMaxed && hasPassive) {
+      stateText = 'Ready on next level-up';
+      stateClass = 'ready';
+      priority = 0;
+    } else if (hasBase && hasPassive) {
+      stateText = `Need ${MAX_WEAPON_LEVEL - baseLevel} more ${base.name} levels`;
+      stateClass = 'progress';
+      priority = 1;
+    } else if (baseMaxed) {
+      stateText = `Need ${evo.reqName}`;
+      stateClass = 'progress';
+      priority = 1;
+    } else if (hasBase) {
+      stateText = `Lv.${baseLevel}/${MAX_WEAPON_LEVEL} - find ${evo.reqName}`;
+      stateClass = 'progress';
+      priority = 2;
+    } else if (hasPassive) {
+      stateText = `Find ${base.name}`;
+      stateClass = 'progress';
+      priority = 2;
+    }
+
+    return { evo, base, evolved, hasBase, hasEvolved, baseLevel, baseMaxed, hasPassive, stateText, stateClass, priority };
+  }
+
+  function renderEvolutionPlan(container, options = {}) {
+    if (!container) return;
+    container.textContent = '';
+    const compact = !!options.compact;
+    const rows = EVOLUTION_DEFS
+      .map(evolutionProgress)
+      .sort((a, b) => a.priority - b.priority);
+    const visibleRows = compact ? rows.slice(0, 3) : rows;
+
+    const title = document.createElement('div');
+    title.className = 'evolution-plan-title';
+    title.textContent = compact ? 'Evolution Plan' : 'Evolution Recipes';
+    container.appendChild(title);
+
+    visibleRows.forEach(row => {
+      const item = document.createElement('div');
+      item.className = `evolution-plan-row ${row.stateClass}`;
+
+      const recipe = document.createElement('div');
+      recipe.className = 'evolution-recipe';
+      recipe.textContent = `${row.base.icon} ${row.base.name} Lv.5 + ${row.evo.reqName}`;
+
+      const result = document.createElement('div');
+      result.className = 'evolution-result';
+      result.textContent = `${row.evolved.icon} ${row.evolved.name}`;
+
+      const status = document.createElement('div');
+      status.className = 'evolution-status';
+      status.textContent = row.stateText;
+
+      item.append(recipe, result, status);
+      container.appendChild(item);
+    });
+  }
+
   // 이지스 진화 효과: 보호막 발동 시 주변 적에게 반사 피해
   function aegisReflect(dmg, range) {
     for (let i = enemies.length - 1; i >= 0; i--) {
@@ -1007,6 +1085,13 @@
       overlayBox.insertBefore(wrap, document.getElementById('overlaySub') || document.getElementById('startBtn'));
     }
 
+    if (!document.getElementById('evolutionPlanPanel')) {
+      const panel = document.createElement('div');
+      panel.id = 'evolutionPlanPanel';
+      panel.className = 'start-select-wrap evolution-plan';
+      overlayBox.insertBefore(panel, document.getElementById('overlaySub') || document.getElementById('startBtn'));
+    }
+
     if (!document.getElementById('dailyPanel')) {
       const panel = document.createElement('div');
       panel.id = 'dailyPanel';
@@ -1069,6 +1154,9 @@
       const detail = document.createElement('p');
       detail.id = 'pauseDetail';
       detail.textContent = 'Run is safely paused. Press P or resume to continue.';
+      const plan = document.createElement('div');
+      plan.id = 'pauseEvolutionPlan';
+      plan.className = 'evolution-plan pause-evolution-plan';
       const actions = document.createElement('div');
       actions.className = 'pause-actions';
       const resume = document.createElement('button');
@@ -1086,7 +1174,7 @@
         endGame('dead');
       });
       actions.append(resume, restart);
-      box.append(title, detail, actions);
+      box.append(title, detail, plan, actions);
       pauseOverlay.appendChild(box);
       wrapper.appendChild(pauseOverlay);
     }
@@ -1107,6 +1195,8 @@
       ads.textContent = meta.adsRemoved ? 'Ads Off' : 'Ads On';
       metaPanel.append(coins, best, badges, ads);
     }
+
+    renderEvolutionPlan(document.getElementById('evolutionPlanPanel'));
 
     const charGrid = document.querySelector('#characterSelect .start-select-grid');
     if (charGrid) {
@@ -1416,6 +1506,7 @@
       if (state !== 'playing') return;
       state = 'paused';
       saveRunSnapshot('pause');
+      renderEvolutionPlan(document.getElementById('pauseEvolutionPlan'), { compact: true });
       if (pauseOverlay) pauseOverlay.style.display = 'flex';
       return;
     }
@@ -2126,23 +2217,57 @@
     showChoiceOverlay(makeItemPicks(), makeItemPicks);
   }
 
+  function ensureLevelEvolutionPlan() {
+    const box = document.getElementById('levelBox');
+    const list = document.getElementById('upgradeList');
+    if (!box || !list) return null;
+    let panel = document.getElementById('levelEvolutionPlan');
+    if (!panel) {
+      panel = document.createElement('div');
+      panel.id = 'levelEvolutionPlan';
+      panel.className = 'evolution-plan level-evolution-plan';
+      box.insertBefore(panel, list);
+    }
+    return panel;
+  }
+
+  function appendChoiceButton(list, c, i) {
+    const btn = document.createElement('button');
+    btn.className = 'upgrade-btn' + (c.kind === 'evolve' ? ' evolution' : '');
+
+    const name = document.createElement('div');
+    name.className = 'upgrade-name';
+    const badge = document.createElement('span');
+    badge.className = 'key-badge';
+    badge.textContent = String(i + 1);
+    name.appendChild(badge);
+    name.appendChild(document.createTextNode(c.name));
+    btn.appendChild(name);
+
+    if (c.desc) {
+      const desc = document.createElement('div');
+      desc.className = 'upgrade-desc';
+      desc.textContent = c.desc;
+      btn.appendChild(desc);
+    }
+
+    btn.onclick = () => {
+      c.choose();
+      document.getElementById('levelOverlay').style.display = 'none';
+      state = 'playing';
+      updateHUD();
+    };
+    list.appendChild(btn);
+  }
+
   function showChoiceOverlay(picks, builder) {
     freeRerollUsed       = false;
     currentChoiceBuilder = builder || null;
     const list = document.getElementById('upgradeList');
     list.innerHTML = '';
+    renderEvolutionPlan(ensureLevelEvolutionPlan(), { compact: true });
     picks.forEach((c, i) => {
-      const btn = document.createElement('button');
-      btn.className = 'upgrade-btn' + (c.kind === 'evolve' ? ' evolution' : '');
-      btn.innerHTML = `<div class="upgrade-name"><span class="key-badge">${i + 1}</span>${c.name}</div>`
-        + (c.desc ? `<div class="upgrade-desc">${c.desc}</div>` : '');
-      btn.onclick = () => {
-        c.choose();
-        document.getElementById('levelOverlay').style.display = 'none';
-        state = 'playing';
-        updateHUD();
-      };
-      list.appendChild(btn);
+      appendChoiceButton(list, c, i);
     });
     // 리롤 버튼
     const rerollBtn = document.createElement('button');
@@ -2186,18 +2311,9 @@
     const newPicks = currentChoiceBuilder();
     const list     = document.getElementById('upgradeList');
     list.innerHTML = '';
+    renderEvolutionPlan(ensureLevelEvolutionPlan(), { compact: true });
     newPicks.forEach((c, i) => {
-      const btn = document.createElement('button');
-      btn.className = 'upgrade-btn' + (c.kind === 'evolve' ? ' evolution' : '');
-      btn.innerHTML = `<div class="upgrade-name"><span class="key-badge">${i + 1}</span>${c.name}</div>`
-        + (c.desc ? `<div class="upgrade-desc">${c.desc}</div>` : '');
-      btn.onclick = () => {
-        c.choose();
-        document.getElementById('levelOverlay').style.display = 'none';
-        state = 'playing';
-        updateHUD();
-      };
-      list.appendChild(btn);
+      appendChoiceButton(list, c, i);
     });
     const rerollBtn = document.createElement('button');
     rerollBtn.id        = 'rerollBtn';
