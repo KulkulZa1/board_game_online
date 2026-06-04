@@ -384,6 +384,9 @@ function checkTowerDefenseSandboxCoverage() {
 function checkVampireDirectorLoopCoverage() {
   const game = fs.readFileSync(path.join(root, 'public/arcade/vampire/game.js'), 'utf8');
   const css = fs.readFileSync(path.join(root, 'public/arcade/vampire/style.css'), 'utf8');
+  const page = fs.readFileSync(path.join(root, 'public/arcade/vampire/index.html'), 'utf8');
+  const serverEvents = fs.readFileSync(path.join(root, 'server/events.js'), 'utf8');
+  const serverState = fs.readFileSync(path.join(root, 'server/state.js'), 'utf8');
   const admob = fs.readFileSync(path.join(root, 'public/js/admob.js'), 'utf8');
 
   const requiredGameMarkers = [
@@ -410,6 +413,14 @@ function checkVampireDirectorLoopCoverage() {
     'clearRunSnapshot',
     'resumePanel',
     'beforeunload',
+    'coopPanel',
+    'hostCoopRoom',
+    'joinCoopRoom',
+    'allyPlayer',
+    'sendGuestInput',
+    'sendHostCoopState',
+    'renderCoopGuestMirror',
+    "state === 'coop-guest'",
     "state = 'paused'",
     'visibilitychange',
     'elapsed >= getSurviveGoal()',
@@ -438,10 +449,20 @@ function checkVampireDirectorLoopCoverage() {
     throw new Error(`Vampire Survivors loop coverage missing: ${missingGameMarkers.join(', ')}`);
   }
 
-  const requiredCssMarkers = ['.meta-panel', '.start-card', '.pause-overlay', '.end-actions', '.daily-panel', '.upgrade-grid', '.run-report', '.monetization-panel', '.resume-panel'];
+  const requiredCssMarkers = ['.meta-panel', '.start-card', '.pause-overlay', '.end-actions', '.daily-panel', '.upgrade-grid', '.run-report', '.monetization-panel', '.resume-panel', '.coop-panel'];
   const missingCssMarkers = requiredCssMarkers.filter((marker) => !css.includes(marker));
   if (missingCssMarkers.length) {
     throw new Error(`Vampire Survivors UI CSS missing: ${missingCssMarkers.join(', ')}`);
+  }
+
+  if (!page.includes('/socket.io/socket.io.js')) {
+    throw new Error('Vampire Survivors page should load Socket.io for co-op relay');
+  }
+
+  const requiredCoopServerMarkers = ['arcadeVampireRooms', 'vps:room:create', 'vps:room:join', 'vps:guest:input', 'vps:host:state', 'vps:state'];
+  const missingCoopServer = requiredCoopServerMarkers.filter(marker => !serverEvents.includes(marker) && !serverState.includes(marker));
+  if (missingCoopServer.length) {
+    throw new Error(`Vampire Survivors co-op relay missing: ${missingCoopServer.join(', ')}`);
   }
 
   if (
@@ -781,6 +802,52 @@ async function runSocketSmokeCheck() {
   }
 }
 
+async function runVampireCoopSocketSmokeCheck() {
+  const host = await openPollingSocket();
+  const guest = await openPollingSocket();
+
+  await emitSocketEvent(host, 'vps:room:create', {});
+  const created = await waitForSocketEvent(host, 'vps:room:created');
+  if (!created.roomId) {
+    throw new Error('Vampire co-op room did not return a roomId');
+  }
+
+  await emitSocketEvent(guest, 'vps:room:join', { roomId: created.roomId });
+  const joined = await waitForSocketEvent(guest, 'vps:room:joined');
+  const hostNotice = await waitForSocketEvent(host, 'vps:guest:joined');
+  if (joined.roomId !== created.roomId || hostNotice.roomId !== created.roomId) {
+    throw new Error('Vampire co-op join did not connect host and guest to the same room');
+  }
+
+  await emitSocketEvent(guest, 'vps:guest:input', {
+    roomId: created.roomId,
+    input: { dx: 0.7, dy: -0.2, dash: true, tower: false },
+  });
+  const input = await waitForSocketEvent(host, 'vps:guest:input');
+  if (!input.input || input.input.dx <= 0 || !input.input.dash) {
+    throw new Error('Vampire co-op guest input was not relayed to host');
+  }
+
+  await emitSocketEvent(host, 'vps:host:state', {
+    roomId: created.roomId,
+    snapshot: {
+      state: 'playing',
+      elapsed: 12,
+      kills: 3,
+      hp: 90,
+      maxHp: 100,
+      level: 2,
+      host: { x: 1, y: 2 },
+      guest: { x: 3, y: 4 },
+      enemies: [{ x: 5, y: 6, size: 10, hpPct: 0.5, color: '#e74c3c' }],
+    },
+  });
+  const stateEvent = await waitForSocketEvent(guest, 'vps:state');
+  if (!stateEvent.snapshot || stateEvent.snapshot.kills !== 3 || !stateEvent.snapshot.guest) {
+    throw new Error('Vampire co-op host state was not relayed to guest');
+  }
+}
+
 async function main() {
   process.env.PORT = String(port);
   require(path.join(root, 'server.js'));
@@ -838,6 +905,7 @@ async function main() {
     }
 
     await runSocketSmokeCheck();
+    await runVampireCoopSocketSmokeCheck();
     checkChatBubbleUi();
     await checkDeploymentCachePolicy();
     checkServiceWorkerUpdateCoverage();

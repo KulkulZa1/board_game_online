@@ -212,6 +212,17 @@
   let dailyChallengeEnabled = !!meta.dailyChallengeEnabled;
   let runRewardsGranted = false;
   let lastRunSnapshotAt = 0;
+  let allyPlayer = null;
+  const coop = {
+    socket: null,
+    role: 'solo',
+    roomId: null,
+    guestConnected: false,
+    guestInput: { dx: 0, dy: 0, dash: false, tower: false },
+    lastInputSentAt: 0,
+    lastStateSentAt: 0,
+    mirrorSnapshot: null,
+  };
 
   const SANDBOX_CONFIG = window.VS_CONFIG || null;
   const ENEMY_COLORS = {
@@ -334,6 +345,7 @@
     lastMoveDir = { dx: 1, dy: 0 };
     itemBoxes     = [];
     hybridTowers  = [];
+    allyPlayer = null;
     selectedTowerTypeIdx = 0;
     towerRecharge = 0;
     itemBoxTimer  = 0;
@@ -350,6 +362,7 @@
 
     // 시작 무기
     character.startWeapons.forEach(id => addWeapon(id));
+    if (coop.role === 'host' && coop.guestConnected) initAllyPlayer();
     if (daily && !player.weapons.includes(daily.forcedWeapon)) addWeapon(daily.forcedWeapon);
     if (meta.pendingStartBoost) {
       player.rerolls += 1;
@@ -509,6 +522,7 @@
       dailyChallengeEnabled,
       selectedStageIdx,
       player: cloneForSnapshot(player),
+      allyPlayer: allyPlayer ? cloneForSnapshot(allyPlayer) : null,
       enemies: cloneForSnapshot(enemies),
       projectiles: cloneForSnapshot(projectiles),
       xpGems: cloneForSnapshot(xpGems),
@@ -575,6 +589,7 @@
     dailyChallengeEnabled = !!snapshot.dailyChallengeEnabled;
     selectedStageIdx = Number(snapshot.selectedStageIdx) || 0;
     player = snapshot.player;
+    allyPlayer = snapshot.allyPlayer || null;
     enemies = Array.isArray(snapshot.enemies) ? snapshot.enemies : [];
     projectiles = Array.isArray(snapshot.projectiles) ? snapshot.projectiles : [];
     xpGems = Array.isArray(snapshot.xpGems) ? snapshot.xpGems : [];
@@ -631,6 +646,192 @@
   function syncAdSettings() {
     if (window.AdMobHelper && typeof AdMobHelper.setAdsRemoved === 'function') {
       AdMobHelper.setAdsRemoved(!!meta.adsRemoved);
+    }
+  }
+
+  function coopShareUrl(roomId) {
+    const url = new URL(window.location.href);
+    url.searchParams.set('vpsRoom', roomId);
+    return url.toString();
+  }
+
+  function setCoopStatus(text) {
+    const el = document.getElementById('coopStatus');
+    if (el) el.textContent = text;
+  }
+
+  function ensureCoopSocket() {
+    if (coop.socket || typeof io !== 'function') return coop.socket;
+    coop.socket = io({ reconnectionAttempts: 10 });
+    coop.socket.on('vps:room:created', ({ roomId }) => {
+      coop.role = 'host';
+      coop.roomId = roomId;
+      setCoopStatus(`Co-op room ready. Share: ${coopShareUrl(roomId)}`);
+      renderStartOptions();
+    });
+    coop.socket.on('vps:room:joined', ({ roomId }) => {
+      coop.role = 'guest';
+      coop.roomId = roomId;
+      setCoopStatus('Joined as co-op guest. Use keyboard or touch joystick to control the ally.');
+      document.getElementById('overlay').classList.remove('visible');
+      state = 'coop-guest';
+      renderStartOptions();
+    });
+    coop.socket.on('vps:guest:joined', () => {
+      coop.guestConnected = true;
+      setCoopStatus('Guest connected. Start a run and they will control the ally.');
+      if (player && !allyPlayer) initAllyPlayer();
+      renderStartOptions();
+    });
+    coop.socket.on('vps:guest:left', () => {
+      coop.guestConnected = false;
+      setCoopStatus('Guest disconnected. The ally will hold position.');
+      renderStartOptions();
+    });
+    coop.socket.on('vps:guest:input', ({ input }) => {
+      coop.guestInput = input || coop.guestInput;
+    });
+    coop.socket.on('vps:state', ({ snapshot }) => {
+      coop.mirrorSnapshot = snapshot;
+    });
+    coop.socket.on('vps:room:closed', ({ reason }) => {
+      setCoopStatus(`Co-op room closed: ${reason || 'ended'}`);
+      coop.role = 'solo';
+      coop.roomId = null;
+      coop.guestConnected = false;
+      coop.mirrorSnapshot = null;
+      renderStartOptions();
+    });
+    coop.socket.on('vps:error', ({ message }) => {
+      setCoopStatus(message || 'Co-op connection failed.');
+    });
+    return coop.socket;
+  }
+
+  function hostCoopRoom() {
+    const socket = ensureCoopSocket();
+    if (!socket) {
+      setCoopStatus('Co-op requires Socket.io on the server.');
+      return;
+    }
+    socket.emit('vps:room:create');
+    setCoopStatus('Creating co-op room...');
+  }
+
+  function joinCoopRoom(roomId) {
+    const socket = ensureCoopSocket();
+    if (!socket || !roomId) return;
+    socket.emit('vps:room:join', { roomId });
+    setCoopStatus('Joining co-op room...');
+  }
+
+  function initAllyPlayer() {
+    if (!player) return;
+    allyPlayer = {
+      x: player.x + 46,
+      y: player.y + 12,
+      speed: player.speed * 0.98,
+      radius: 11,
+      dashCd: 0,
+      towerCd: 0,
+      attackCd: 0,
+      lastMoveDir: { dx: 1, dy: 0 },
+    };
+  }
+
+  function sendGuestInput(force) {
+    if (coop.role !== 'guest' || !coop.socket || !coop.roomId) return;
+    const now = performance.now();
+    if (!force && now - coop.lastInputSentAt < 80) return;
+    coop.lastInputSentAt = now;
+    const input = getMoveDir();
+    coop.socket.emit('vps:guest:input', {
+      roomId: coop.roomId,
+      input: {
+        dx: input.dx,
+        dy: input.dy,
+        dash: !!(keys[' '] || keys.x || keys.X),
+        tower: !!(keys.t || keys.T),
+      },
+    });
+  }
+
+  function sendHostCoopState(force) {
+    if (coop.role !== 'host' || !coop.socket || !coop.roomId || !coop.guestConnected || !player) return;
+    const now = performance.now();
+    if (!force && now - coop.lastStateSentAt < 180) return;
+    coop.lastStateSentAt = now;
+    coop.socket.emit('vps:host:state', {
+      roomId: coop.roomId,
+      snapshot: {
+        state,
+        elapsed,
+        kills,
+        hp: player.hp,
+        maxHp: player.maxHp,
+        level: player.level,
+        host: { x: player.x, y: player.y },
+        guest: allyPlayer ? { x: allyPlayer.x, y: allyPlayer.y } : null,
+        enemies: enemies.slice(0, 30).map(e => ({
+          x: e.x,
+          y: e.y,
+          size: e.size,
+          hpPct: e.maxHp ? e.hp / e.maxHp : 0,
+          color: ENEMY_COLORS[e.type] || '#e74c3c',
+        })),
+      },
+    });
+  }
+
+  function renderCoopGuestMirror() {
+    const W = canvas.width, H = canvas.height;
+    const snap = coop.mirrorSnapshot;
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = '#101827';
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#dfe6ff';
+    ctx.font = 'bold 18px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('Co-op Guest Controller', W / 2, 48);
+    ctx.font = '13px system-ui, sans-serif';
+    ctx.fillStyle = '#9aa6c7';
+    ctx.fillText('Move with WASD / arrows or touch joystick. Space = dash.', W / 2, 74);
+    if (!snap) {
+      ctx.fillText('Waiting for host run state...', W / 2, H / 2);
+      return;
+    }
+    ctx.fillStyle = '#f1c40f';
+    ctx.fillText(`Time ${fmtTime(snap.elapsed || 0)}  Lv.${snap.level || 1}  ${snap.kills || 0} kills  HP ${Math.ceil(snap.hp || 0)}/${Math.ceil(snap.maxHp || 1)}`, W / 2, 104);
+    const cx = W / 2, cy = H / 2 + 30;
+    const host = snap.host || { x: 0, y: 0 };
+    const scale = 0.42;
+    function sx(x) { return cx + (x - host.x) * scale; }
+    function sy(y) { return cy + (y - host.y) * scale; }
+    (snap.enemies || []).forEach(e => {
+      ctx.beginPath();
+      ctx.arc(sx(e.x), sy(e.y), Math.max(4, e.size * scale), 0, Math.PI * 2);
+      ctx.fillStyle = e.color || '#e74c3c';
+      ctx.globalAlpha = 0.75;
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    });
+    if (snap.guest) {
+      ctx.beginPath();
+      ctx.arc(sx(snap.guest.x), sy(snap.guest.y), 11, 0, Math.PI * 2);
+      ctx.fillStyle = '#2ecc71';
+      ctx.fill();
+      ctx.fillStyle = '#06130d';
+      ctx.font = 'bold 11px sans-serif';
+      ctx.fillText('G', sx(snap.guest.x), sy(snap.guest.y) + 1);
+    }
+    if (snap.host) {
+      ctx.beginPath();
+      ctx.arc(sx(snap.host.x), sy(snap.host.y), 12, 0, Math.PI * 2);
+      ctx.fillStyle = '#f1c40f';
+      ctx.fill();
+      ctx.fillStyle = '#1b1300';
+      ctx.font = 'bold 11px sans-serif';
+      ctx.fillText('H', sx(snap.host.x), sy(snap.host.y) + 1);
     }
   }
 
@@ -844,6 +1045,13 @@
       const panel = document.createElement('div');
       panel.id = 'resumePanel';
       panel.className = 'daily-panel resume-panel';
+      overlayBox.insertBefore(panel, document.getElementById('startBtn'));
+    }
+
+    if (!document.getElementById('coopPanel')) {
+      const panel = document.createElement('div');
+      panel.id = 'coopPanel';
+      panel.className = 'daily-panel coop-panel';
       overlayBox.insertBefore(panel, document.getElementById('startBtn'));
     }
 
@@ -1167,6 +1375,39 @@
         resumePanel.append(label, continueBtn, discardBtn);
       }
     }
+
+    const coopPanel = document.getElementById('coopPanel');
+    if (coopPanel) {
+      coopPanel.textContent = '';
+      const queryRoom = new URLSearchParams(window.location.search).get('vpsRoom');
+      const label = document.createElement('div');
+      label.id = 'coopStatus';
+      label.className = 'daily-text';
+      if (coop.role === 'host' && coop.roomId) {
+        label.textContent = coop.guestConnected
+          ? 'Co-op guest connected. Start or continue the run.'
+          : `Co-op room ready. Share: ${coopShareUrl(coop.roomId)}`;
+      } else if (coop.role === 'guest') {
+        label.textContent = 'Joined as co-op guest. Control the ally while the host runs the game.';
+      } else if (queryRoom) {
+        label.textContent = `Co-op invite ${queryRoom}. Join as guest to control the ally.`;
+      } else {
+        label.textContent = 'Optional 2-player co-op relay: host a run and share the link with a friend.';
+      }
+      const hostBtn = document.createElement('button');
+      hostBtn.type = 'button';
+      hostBtn.className = `secondary-btn${coop.role === 'host' ? ' selected-lite' : ''}`;
+      hostBtn.textContent = coop.role === 'host' ? 'Hosting' : 'Host Co-op';
+      hostBtn.disabled = coop.role === 'guest';
+      hostBtn.addEventListener('click', () => hostCoopRoom());
+      const joinBtn = document.createElement('button');
+      joinBtn.type = 'button';
+      joinBtn.className = `secondary-btn${coop.role === 'guest' ? ' selected-lite' : ''}`;
+      joinBtn.textContent = coop.role === 'guest' ? 'Joined' : 'Join';
+      joinBtn.disabled = !queryRoom || coop.role === 'host';
+      joinBtn.addEventListener('click', () => joinCoopRoom(queryRoom));
+      coopPanel.append(label, hostBtn, joinBtn);
+    }
   }
 
   function setPaused(paused) {
@@ -1339,6 +1580,67 @@
     floatTexts.push({ x: player.x, y: player.y - 34, text: `${def.name} placed`, life: 1.4, maxLife: 1.4, color: def.color, size: 13 });
     updateTowerButton();
     return true;
+  }
+
+  function placeHybridTowerAt(source, typeIdx) {
+    if (!source || !player) return false;
+    if ((player.towerCharges || 0) <= 0) return false;
+    if (hybridTowers.length >= MAX_HYBRID_TOWERS) {
+      hybridTowers.shift();
+    }
+    const def = HYBRID_TOWER_TYPES[typeIdx % HYBRID_TOWER_TYPES.length] || HYBRID_TOWER_TYPES[0];
+    hybridTowers.push({
+      id: Date.now() + Math.random(),
+      type: def.id,
+      x: source.x,
+      y: source.y,
+      cd: 0,
+      life: 40,
+      pulse: 0,
+      placedBy: 'guest',
+    });
+    player.towerCharges -= 1;
+    player.towersPlaced = (player.towersPlaced || 0) + 1;
+    source.towerCd = 1.2;
+    for (let i = 0; i < 10; i++) spawnParticle(source.x, source.y, def.color, 4 + Math.random() * 4, 0.35);
+    floatTexts.push({ x: source.x, y: source.y - 34, text: `Guest ${def.name}`, life: 1.4, maxLife: 1.4, color: def.color, size: 13 });
+    updateTowerButton();
+    return true;
+  }
+
+  function updateAllyPlayer(dt) {
+    if (!allyPlayer || state !== 'playing') return;
+    const input = coop.role === 'host' ? coop.guestInput : { dx: 0, dy: 0, dash: false, tower: false };
+    const mag = Math.hypot(input.dx || 0, input.dy || 0);
+    const dx = mag > 1 ? input.dx / mag : (input.dx || 0);
+    const dy = mag > 1 ? input.dy / mag : (input.dy || 0);
+    if (dx || dy) allyPlayer.lastMoveDir = { dx, dy };
+    allyPlayer.x += dx * allyPlayer.speed * dt;
+    allyPlayer.y += dy * allyPlayer.speed * dt;
+    if (allyPlayer.dashCd > 0) allyPlayer.dashCd -= dt;
+    if (allyPlayer.towerCd > 0) allyPlayer.towerCd -= dt;
+    if (allyPlayer.attackCd > 0) allyPlayer.attackCd -= dt;
+    if (input.dash && allyPlayer.dashCd <= 0) {
+      allyPlayer.dashCd = DASH_COOLDOWN;
+      const dir = allyPlayer.lastMoveDir || { dx: 1, dy: 0 };
+      allyPlayer.x += dir.dx * 45;
+      allyPlayer.y += dir.dy * 45;
+      for (const e of enemies) {
+        if (dist(e, allyPlayer) < DASH_RANGE) dealDamage(e, DASH_DMG * 0.85 * player.dmgMult);
+      }
+      spawnParticle(allyPlayer.x, allyPlayer.y, '#2ecc71', 22, 0.35);
+    }
+    if (input.tower && allyPlayer.towerCd <= 0) {
+      placeHybridTowerAt(allyPlayer, selectedTowerTypeIdx);
+    }
+    if (allyPlayer.attackCd <= 0) {
+      const target = nearestEnemyFromPoint(allyPlayer, 260);
+      if (target) {
+        const ang = Math.atan2(target.y - allyPlayer.y, target.x - allyPlayer.x);
+        projectiles.push({ type: 'tower', x: allyPlayer.x, y: allyPlayer.y, vx: Math.cos(ang) * 380, vy: Math.sin(ang) * 380, r: 5, dmg: 16 * player.dmgMult, life: 0.85, color: '#2ecc71', source: 'guest' });
+        allyPlayer.attackCd = 0.85;
+      }
+    }
   }
 
   function nearestEnemyFromPoint(point, range) {
@@ -1692,9 +1994,10 @@
   }
 
   // 적 투사체 발사 — 플레이어 방향 + spread 각도
-  function fireEnemyProjectile(enemy, spread) {
+  function fireEnemyProjectile(enemy, spread, target) {
     spread = spread || 0;
-    const ang = Math.atan2(player.y - enemy.y, player.x - enemy.x) + spread;
+    target = target || player;
+    const ang = Math.atan2(target.y - enemy.y, target.x - enemy.x) + spread;
     const spd = [220, 260, 190][enemy.tier] || 220;
     const r   = 5 + enemy.tier * 2;
     enemyProjectiles.push({ x: enemy.x, y: enemy.y, vx: Math.cos(ang) * spd, vy: Math.sin(ang) * spd, r, dmg: enemy.attackDmg, life: 1.6 });
@@ -2002,6 +2305,12 @@
     const dt = Math.min((ts - lastTime) / 1000, 0.05);
     lastTime = ts;
 
+    if (state === 'coop-guest') {
+      sendGuestInput();
+      renderCoopGuestMirror();
+      return;
+    }
+
     if (state !== 'playing') {
       render(dt);
       return;
@@ -2024,6 +2333,7 @@
     update(dt);
     render(dt);
     updateHUD();
+    sendHostCoopState();
     if (elapsed - lastRunSnapshotAt >= RUN_SNAPSHOT_INTERVAL) {
       saveRunSnapshot('auto');
     }
@@ -2089,7 +2399,7 @@
       box.life -= dt;
       box.pulseT = (box.pulseT || 0) + dt;
       if (box.life <= 0) { itemBoxes.splice(i, 1); continue; }
-      if (dist(box, player) < 26) {
+      if (dist(box, player) < 26 || (allyPlayer && dist(box, allyPlayer) < 26)) {
         for (let k = 0; k < 10; k++) spawnParticle(box.x, box.y, '#f1c40f', 5 + Math.random() * 5, 0.5);
         itemBoxes.splice(i, 1);
         showItemBoxChoices();
@@ -2103,6 +2413,7 @@
 
     // 무기 발사
     for (const id of player.weapons) fireWeapon(id, dt);
+    updateAllyPlayer(dt);
     updateHybridTowers(dt);
 
     // 투사체 업데이트
@@ -2178,8 +2489,9 @@
     for (let i = enemies.length - 1; i >= 0; i--) {
       const e = enemies[i];
       if (e.hurtFlash > 0) e.hurtFlash -= dt;
-      const ang = Math.atan2(player.y - e.y, player.x - e.x);
-      const d   = dist(e, player);
+      const targetActor = allyPlayer && dist(e, allyPlayer) < dist(e, player) ? allyPlayer : player;
+      const ang = Math.atan2(targetActor.y - e.y, targetActor.x - e.x);
+      const d   = dist(e, targetActor);
       e.faceAngle = ang;
 
       // 보스 페이즈 전환 체크 (HP 50% 이하 → 격노)
@@ -2208,7 +2520,7 @@
         if (e.attackCd <= 0) {
           const shots = (e.bossPhase || 0) === 1 ? 12 : 8;
           for (let b = 0; b < shots; b++) {
-            fireEnemyProjectile(e, (b / shots) * Math.PI * 2 - ang);
+            fireEnemyProjectile(e, (b / shots) * Math.PI * 2 - ang, targetActor);
           }
           e.attackCd = (e.bossPhase || 0) === 1 ? 1.5 : 2.5;
         }
@@ -2225,7 +2537,7 @@
         if (e.attackCd <= 0 && d < e.attackRange) {
           const shots = e.tier === 2 ? 3 : (rageActive ? 2 : 1);
           for (let s = 0; s < shots; s++) {
-            fireEnemyProjectile(e, shots > 1 ? (s - (shots - 1) / 2) * 0.22 : 0);
+            fireEnemyProjectile(e, shots > 1 ? (s - (shots - 1) / 2) * 0.22 : 0, targetActor);
           }
           e.attackCd = e.attackBase * (rageActive ? 0.55 : 1.0);
         }
@@ -2250,7 +2562,8 @@
       if (ep.life <= 0) { enemyProjectiles.splice(i, 1); continue; }
       ep.x += ep.vx * dt;
       ep.y += ep.vy * dt;
-      if (player.invincible <= 0 && dist(ep, player) < ep.r + 12) {
+      const projectileTarget = allyPlayer && dist(ep, allyPlayer) < dist(ep, player) ? allyPlayer : player;
+      if (player.invincible <= 0 && dist(ep, projectileTarget) < ep.r + 12) {
         player.hp -= ep.dmg;
         screenShake = Math.min(screenShake + 0.22, 0.45);
         player.invincible = 0.1;
@@ -2282,7 +2595,7 @@
     // XP 수집
     for (let i = xpGems.length - 1; i >= 0; i--) {
       const g = xpGems[i];
-      if (dist(g, player) < player.xpRange) {
+      if (dist(g, player) < player.xpRange || (allyPlayer && dist(g, allyPlayer) < player.xpRange * 0.75)) {
         gainXP(g.val);
         xpGems.splice(i, 1);
       }
@@ -2631,6 +2944,29 @@
     ctx.globalAlpha = 1;
     ctx.restore();
 
+    if (allyPlayer) {
+      ctx.save();
+      ctx.translate(allyPlayer.x, allyPlayer.y);
+      ctx.shadowBlur = 14;
+      ctx.shadowColor = '#2ecc71';
+      ctx.fillStyle = '#2ecc71';
+      ctx.beginPath();
+      ctx.arc(0, 0, allyPlayer.radius || 11, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = '#06130d';
+      ctx.font = 'bold 11px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('G', 0, 1);
+      ctx.strokeStyle = 'rgba(46,204,113,0.35)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, 0, (allyPlayer.radius || 11) + 7, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+
     ctx.restore(); // camera
 
     // 보스 경고 화면 플래시
@@ -2924,5 +3260,8 @@
   ensureStartPanels();
   renderStartOptions();
   renderStageSelect();
+  if (new URLSearchParams(window.location.search).has('vpsRoom')) {
+    ensureCoopSocket();
+  }
   frameId = requestAnimationFrame(loop);
 })();

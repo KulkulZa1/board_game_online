@@ -672,6 +672,10 @@ html, body {
   background: rgba(46, 204, 113, 0.07);
 }
 
+.coop-panel {
+  background: rgba(52, 152, 219, 0.07);
+}
+
 .daily-text {
   color: var(--muted);
   font-size: 0.74rem;

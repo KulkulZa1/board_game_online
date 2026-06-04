@@ -10,6 +10,7 @@
 - Native monetization boundary for `/arcade/vampire/`: ad-removal ownership suppresses interstitial ads, restore purchase is exposed, and locked premium characters can be unlocked through the purchase helper when a Capacitor billing plugin is present.
 - Production-safe Tower Defense arcade runtime path: `/arcade/tower-defense/` now loads reused TD engine files from `/arcade/tower-defense/runtime/` instead of broken `/sandbox/...` URLs.
 - Vampire Survivors mid-run resume: active runs save locally on start, pause, periodic play, revive, visibility change, and page unload; valid saved runs can be continued from the start overlay.
+- Vampire Survivors co-op relay MVP: a host can create a shareable Socket.io co-op room, a guest can join from `?vpsRoom=...`, control an ally in the host simulation, and receive a compact live state mirror.
 - Smoke-check coverage for Vampire Survivors character/difficulty/meta/pause/revive markers.
 - `docs/vampire-survivors-director-loop.md` with verification targets and remaining design work.
 

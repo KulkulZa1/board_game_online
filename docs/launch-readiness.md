@@ -34,6 +34,7 @@ This launch-readiness pass found and fixed:
 - Vampire Survivors now has a native-only purchase boundary for ad removal, restore purchase, and premium character unlocks. Web remains no-op; real store product setup is still required.
 - Public arcade pages no longer request `/sandbox/...` assets. Tower Defense now loads its reused runtime through `/arcade/tower-defense/runtime/`, while `/sandbox/` remains a dev-only 404 route in production.
 - Vampire Survivors now persists an active run locally during play, pause, mobile visibility changes, page unload, and revive. A valid saved run appears as a Continue/Discard panel on the start overlay and restores into the pause menu.
+- Vampire Survivors has a first Socket.io co-op relay: the host creates a shareable `?vpsRoom=...` link, the guest sends movement/dash/tower input, the host simulates an ally, and the guest sees a compact mirror of the host state.
 - Service worker caching no longer serves old JS/CSS before checking the network; this prevents deployed game logic from appearing stale after Render deploys.
 - All HTML pages now load `/js/sw-update.js`, which registers the service worker consistently and reloads controlled pages once after an updated worker takes control.
 - Server responses for HTML, `sw.js`, JS, CSS, and `manifest.json` now send `Cache-Control: no-cache, no-store, must-revalidate`.
@@ -62,6 +63,15 @@ Current production observations before this branch is merged and Render redeploy
 - Death, win, and starting a new run clear the snapshot so end-run rewards are not replayed.
 - Restoring a run opens the pause menu at the saved elapsed time; the player must explicitly resume.
 - Snapshots older than 36 hours are discarded.
+
+## Vampire co-op relay behavior
+
+- `/arcade/vampire/` loads Socket.io and can host a lightweight co-op room from the start overlay.
+- The host gets a shareable URL with `?vpsRoom=<id>`; a second browser can join as guest.
+- The host remains authoritative for simulation and rewards.
+- The guest controls an ally body through relayed movement, dash, and tower intent.
+- The ally can attract enemies, collect XP, fire a simple bolt, dash-damage nearby enemies, and place shared-charge hybrid towers.
+- The guest receives a compact state mirror rather than a full deterministic local simulation. Full synchronized co-op progression remains future work.
 
 ## Sandbox to main-game flow
 
@@ -95,6 +105,7 @@ Manual checks:
 - Launch at least one protected v1.0 game without changing its code.
 - Launch Vampire, Plant, and Tower Defense.
 - In Vampire, start a run, pause or reload, then confirm the Continue panel restores the saved run into the pause menu.
+- In Vampire, host a co-op room, open the share URL in a second browser, join as guest, start the host run, and confirm guest input moves the green ally plus the guest mirror receives state.
 - Save sandbox config for each sandbox-backed game and reopen the matching main game on the same origin.
 - Check browser console and network panels for errors.
 - Compare local routes with `https://board-game-online.onrender.com/` after Render redeploys.
@@ -103,4 +114,4 @@ Manual checks:
 
 - Sandbox persistence is browser-local only. Cross-device publishing needs a server-backed content store, schema validation, and moderation.
 - Production verification cannot prove branch changes until the branch is merged to `main` and Render finishes redeploying.
-- Gameplay smoke tests are still mostly manual. Add headless browser checks for core loops before launch.
+- Gameplay smoke tests are still mostly manual. The co-op relay has a socket smoke test, but full two-browser play should be checked before launch.

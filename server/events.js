@@ -487,9 +487,128 @@ function registerEvents(io) {
       io.to(room.id).emit('chat:message', msg);
     });
 
+    // --- Arcade Vampire Survivors co-op relay ---
+    socket.on('vps:room:create', () => {
+      if (!rateCheck(socket.id, 'vps_create', 3, 60 * 1000)) {
+        socket.emit('vps:error', { code: 'RATE_LIMIT', message: 'Too many co-op room requests.' });
+        return;
+      }
+      if (state.arcadeVampireRooms.size >= 30) {
+        socket.emit('vps:error', { code: 'SERVER_FULL', message: 'Co-op relay is full. Try again later.' });
+        return;
+      }
+      const roomId = uuidv4().slice(0, 8);
+      const room = {
+        id: roomId,
+        hostSocketId: socket.id,
+        guestSocketId: null,
+        createdAt: Date.now(),
+        lastStateAt: 0,
+        cleanupTimer: null,
+      };
+      state.arcadeVampireRooms.set(roomId, room);
+      socket.join(`vps:${roomId}`);
+      room.cleanupTimer = setTimeout(() => {
+        const current = state.arcadeVampireRooms.get(roomId);
+        if (current && !current.guestSocketId) {
+          state.arcadeVampireRooms.delete(roomId);
+          io.to(socket.id).emit('vps:room:closed', { reason: 'timeout' });
+        }
+      }, 30 * 60 * 1000);
+      socket.emit('vps:room:created', { roomId });
+    });
+
+    socket.on('vps:room:join', ({ roomId }) => {
+      if (!rateCheck(socket.id, 'vps_join', 8, 60 * 1000)) return;
+      if (!roomId || typeof roomId !== 'string' || !/^[a-f0-9-]{4,36}$/i.test(roomId)) {
+        socket.emit('vps:error', { code: 'INVALID_ROOM', message: 'Invalid co-op room.' });
+        return;
+      }
+      const room = state.arcadeVampireRooms.get(roomId);
+      if (!room) {
+        socket.emit('vps:error', { code: 'NOT_FOUND', message: 'Co-op room not found.' });
+        return;
+      }
+      if (room.hostSocketId === socket.id) {
+        socket.emit('vps:error', { code: 'HOST_SELF_JOIN', message: 'Open the share link in another browser.' });
+        return;
+      }
+      if (room.guestSocketId && room.guestSocketId !== socket.id) {
+        socket.emit('vps:error', { code: 'ROOM_FULL', message: 'This co-op room already has a guest.' });
+        return;
+      }
+      room.guestSocketId = socket.id;
+      clearTimeout(room.cleanupTimer);
+      socket.join(`vps:${roomId}`);
+      socket.emit('vps:room:joined', { roomId });
+      io.to(room.hostSocketId).emit('vps:guest:joined', { roomId });
+    });
+
+    socket.on('vps:guest:input', ({ roomId, input }) => {
+      if (!rateCheck(socket.id, 'vps_input', 40, 5 * 1000)) return;
+      const room = state.arcadeVampireRooms.get(roomId);
+      if (!room || room.guestSocketId !== socket.id) return;
+      const safe = {
+        dx: Math.max(-1, Math.min(1, Number(input && input.dx) || 0)),
+        dy: Math.max(-1, Math.min(1, Number(input && input.dy) || 0)),
+        dash: !!(input && input.dash),
+        tower: !!(input && input.tower),
+      };
+      io.to(room.hostSocketId).emit('vps:guest:input', { roomId, input: safe });
+    });
+
+    socket.on('vps:host:state', ({ roomId, snapshot }) => {
+      const room = state.arcadeVampireRooms.get(roomId);
+      if (!room || room.hostSocketId !== socket.id || !room.guestSocketId) return;
+      const now = Date.now();
+      if (now - room.lastStateAt < 120) return;
+      room.lastStateAt = now;
+      const safe = {
+        state: String(snapshot && snapshot.state || '').slice(0, 16),
+        elapsed: Math.max(0, Number(snapshot && snapshot.elapsed) || 0),
+        kills: Math.max(0, Number(snapshot && snapshot.kills) || 0),
+        hp: Math.max(0, Number(snapshot && snapshot.hp) || 0),
+        maxHp: Math.max(1, Number(snapshot && snapshot.maxHp) || 1),
+        level: Math.max(1, Number(snapshot && snapshot.level) || 1),
+        host: snapshot && snapshot.host ? {
+          x: Number(snapshot.host.x) || 0,
+          y: Number(snapshot.host.y) || 0,
+        } : null,
+        guest: snapshot && snapshot.guest ? {
+          x: Number(snapshot.guest.x) || 0,
+          y: Number(snapshot.guest.y) || 0,
+        } : null,
+        enemies: Array.isArray(snapshot && snapshot.enemies)
+          ? snapshot.enemies.slice(0, 30).map(e => ({
+              x: Number(e.x) || 0,
+              y: Number(e.y) || 0,
+              size: Math.max(4, Math.min(60, Number(e.size) || 10)),
+              hpPct: Math.max(0, Math.min(1, Number(e.hpPct) || 0)),
+              color: typeof e.color === 'string' ? e.color.slice(0, 24) : '#e74c3c',
+            }))
+          : [],
+      };
+      io.to(room.guestSocketId).emit('vps:state', { roomId, snapshot: safe });
+    });
+
     // --- Disconnect ---
     socket.on('disconnect', () => {
       cleanRateLimit(socket.id);
+
+      for (const [roomId, vpsRoom] of state.arcadeVampireRooms.entries()) {
+        if (vpsRoom.hostSocketId === socket.id) {
+          if (vpsRoom.guestSocketId) io.to(vpsRoom.guestSocketId).emit('vps:room:closed', { reason: 'host-disconnected' });
+          clearTimeout(vpsRoom.cleanupTimer);
+          state.arcadeVampireRooms.delete(roomId);
+        } else if (vpsRoom.guestSocketId === socket.id) {
+          vpsRoom.guestSocketId = null;
+          io.to(vpsRoom.hostSocketId).emit('vps:guest:left', { roomId });
+          vpsRoom.cleanupTimer = setTimeout(() => {
+            const current = state.arcadeVampireRooms.get(roomId);
+            if (current && !current.guestSocketId) state.arcadeVampireRooms.delete(roomId);
+          }, 10 * 60 * 1000);
+        }
+      }
 
       // 관전자 정리
       const specFound = getSpectatorBySocketId(socket.id);
