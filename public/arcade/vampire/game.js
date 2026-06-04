@@ -2324,6 +2324,13 @@
     name.appendChild(document.createTextNode(c.name));
     btn.appendChild(name);
 
+    if (c.tag) {
+      const tag = document.createElement('div');
+      tag.className = `choice-tag ${c.kind}`;
+      tag.textContent = c.tag;
+      btn.appendChild(tag);
+    }
+
     if (c.desc) {
       const desc = document.createElement('div');
       desc.className = 'upgrade-desc';
@@ -2338,6 +2345,49 @@
       updateHUD();
     };
     list.appendChild(btn);
+  }
+
+  function choiceWeight(choice) {
+    const level = choice.weaponId ? (player.weaponLevels[choice.weaponId] || 1) : 1;
+    if (choice.kind === 'weapon-lv') {
+      const nearEvolution = EVOLUTION_DEFS.some(evo => evo.base === choice.weaponId && player.passives[evo.req]);
+      return nearEvolution ? 6 : (level >= MAX_WEAPON_LEVEL - 1 ? 4.8 : 3.2);
+    }
+    if (choice.kind === 'passive') {
+      const completesOwnedWeapon = EVOLUTION_DEFS.some(evo =>
+        evo.req === choice.passiveId &&
+        player.weapons.includes(evo.base) &&
+        (player.weaponLevels[evo.base] || 1) >= MAX_WEAPON_LEVEL
+      );
+      const supportsOwnedWeapon = EVOLUTION_DEFS.some(evo => evo.req === choice.passiveId && player.weapons.includes(evo.base));
+      return completesOwnedWeapon ? 7 : (supportsOwnedWeapon ? 4.4 : 2.2);
+    }
+    if (choice.kind === 'weapon-new') {
+      const earlyRun = player.level <= 4 || player.weapons.length <= 2;
+      return earlyRun ? 4 : 2.4;
+    }
+    return 1;
+  }
+
+  function weightedPick(pool) {
+    const total = pool.reduce((sum, choice) => sum + choiceWeight(choice), 0);
+    let roll = Math.random() * total;
+    for (let i = 0; i < pool.length; i++) {
+      roll -= choiceWeight(pool[i]);
+      if (roll <= 0) return i;
+    }
+    return pool.length - 1;
+  }
+
+  function takeWeightedChoices(pool, limit) {
+    const available = [...pool];
+    const picks = [];
+    while (available.length && picks.length < limit) {
+      const idx = weightedPick(available);
+      picks.push(available[idx]);
+      available.splice(idx, 1);
+    }
+    return picks;
   }
 
   function showChoiceOverlay(picks, builder) {
@@ -2424,6 +2474,8 @@
         const w = WEAPON_DEFS[id];
         levelable.push({
           kind: 'weapon-lv',
+          weaponId: id,
+          tag: lvl >= MAX_WEAPON_LEVEL - 1 ? 'Near evolution' : 'Power up',
           name: `${w.icon} ${w.name} Lv.${lvl}→${lvl + 1}`,
           desc: w.desc + ' 강화',
           choose: () => addWeapon(id),
@@ -2439,6 +2491,8 @@
           const w = WEAPON_DEFS[id];
           newWeapons.push({
             kind: 'weapon-new',
+            weaponId: id,
+            tag: player.weapons.length <= 2 ? 'Build starter' : 'New weapon',
             name: `${w.icon} ${w.name} (신규)`,
             desc: w.desc,
             choose: () => addWeapon(id),
@@ -2450,6 +2504,8 @@
     // 4) 패시브 (항상 후보)
     const passives = PASSIVE_POOL.map(pv => ({
       kind: 'passive',
+      passiveId: pv.id,
+      tag: EVOLUTION_DEFS.some(evo => evo.req === pv.id && player.weapons.includes(evo.base)) ? 'Combo passive' : 'Passive',
       name: pv.name,
       desc: pv.desc,
       choose: () => applyPassive(pv),
@@ -2457,15 +2513,11 @@
 
     const result = [];
     if (evoChoices.length) result.push(evoChoices[0]);   // 진화 1개 보장
-    const rest = shuffled([...levelable, ...newWeapons, ...passives]);
-    for (const c of rest) {
-      if (result.length >= 3) break;
-      result.push(c);
-    }
+    result.push(...takeWeightedChoices([...levelable, ...newWeapons, ...passives], 3 - result.length));
     // 항상 3개 보장 (부족 시 첫 패시브로 채움)
     while (result.length < 3) {
       const pv = PASSIVE_POOL[0];
-      result.push({ kind: 'passive', name: pv.name, desc: pv.desc, choose: () => applyPassive(pv) });
+      result.push({ kind: 'passive', passiveId: pv.id, name: pv.name, desc: pv.desc, tag: 'Fallback', choose: () => applyPassive(pv) });
     }
     return result.slice(0, 3);
   }

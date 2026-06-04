@@ -53,6 +53,9 @@ This note records the launch-readiness work for `/arcade/vampire/`.
   - Level-up upgrade cards now render text through DOM text nodes instead of HTML strings, keeping the normal choice flow while reducing injection risk.
 - Evolution payoff.
   - Picking a ready evolution now creates a short on-field celebration with a readable banner, screen-space text, heavier particles, screen shake, and a WebAudio chime that safely no-ops when audio is unavailable.
+- Level-up decision tension.
+  - Evolution choices remain guaranteed when ready, while the remaining cards are weighted toward early build starters, weapon level-ups, and combo passives that support owned weapons.
+  - Cards show short tags like `Build starter`, `Power up`, `Combo passive`, and `Near evolution` so the player can read why a choice matters.
 - Sandbox evolution mirror.
   - `sandbox/vampire-survivors/` now stores evolved skills and `EVOLUTIONS` recipes in `VS_CONFIG`, exposes editable base/passive/result rows, shows golden evolution cards, and swaps max-level base skills into evolved skills at runtime.
   - Old local sandbox saves are migrated by appending missing default evolved skills and recipes.

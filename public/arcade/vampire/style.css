@@ -203,6 +203,26 @@ html, body {
 }
 
 /* 진화 선택지 — 황금 강조 */
+.choice-tag {
+  display: inline-flex;
+  width: fit-content;
+  margin: 5px 0 3px;
+  padding: 2px 7px;
+  border: 1px solid rgba(255,255,255,0.16);
+  border-radius: 999px;
+  background: rgba(255,255,255,0.07);
+  color: rgba(255,255,255,0.74);
+  font-size: 0.62rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.choice-tag.weapon-lv { color: #f8c471; border-color: rgba(248,196,113,0.35); }
+.choice-tag.weapon-new { color: #85c1e9; border-color: rgba(133,193,233,0.35); }
+.choice-tag.passive { color: #c39bd3; border-color: rgba(195,155,211,0.35); }
+.upgrade-btn.evolution .choice-tag { color: #f1c40f; border-color: rgba(241,196,15,0.55); }
+
 .upgrade-btn.evolution {
   background: linear-gradient(135deg, rgba(241,196,15,0.22), rgba(230,126,34,0.18));
   border: 1px solid #f1c40f;
