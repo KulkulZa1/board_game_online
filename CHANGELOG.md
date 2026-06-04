@@ -9,6 +9,7 @@
 - Sandbox Vampire Survivors evolution mirror: `sandbox/vampire-survivors/` now has config-driven evolved skills, editable evolution recipes, golden evolution level-up cards, passive prerequisites, and a runtime smoke check that verifies `orb + spinach -> blackhole`.
 - Native monetization boundary for `/arcade/vampire/`: ad-removal ownership suppresses interstitial ads, restore purchase is exposed, and locked premium characters can be unlocked through the purchase helper when a Capacitor billing plugin is present.
 - Production-safe Tower Defense arcade runtime path: `/arcade/tower-defense/` now loads reused TD engine files from `/arcade/tower-defense/runtime/` instead of broken `/sandbox/...` URLs.
+- Vampire Survivors mid-run resume: active runs save locally on start, pause, periodic play, revive, visibility change, and page unload; valid saved runs can be continued from the start overlay.
 - Smoke-check coverage for Vampire Survivors character/difficulty/meta/pause/revive markers.
 - `docs/vampire-survivors-director-loop.md` with verification targets and remaining design work.
 

@@ -32,6 +32,10 @@ This note records the launch-readiness work for `/arcade/vampire/`.
   - `AdMobHelper.purchaseAdRemoval()` and `restorePurchases()` are native-only hooks for Capacitor billing plugins.
   - When `adsRemoved` is owned, forced interstitials are suppressed while opt-in rewarded revive/boost actions remain available.
   - Locked premium characters can call `AdMobHelper.purchasePremiumCharacter()` and persist ownership in local meta only after the native helper reports success.
+- Mobile interruption recovery.
+  - Active runs save to `vps_run_snapshot_v1` during play, pause, visibility changes, page unload, and revive.
+  - A saved run appears on the start overlay as Continue/Discard and restores into the pause menu instead of immediately unpausing.
+  - Death, win, and starting a new run clear the snapshot so coins and achievements are only awarded by the final outcome.
 - Tower Defense hybrid mechanic.
   - During a run, `T` places the selected tower at the player position and `Y` cycles Cannon/Frost/Tesla.
   - Tower charges recover over time and from kills, creating a small defend-or-save decision layer inside the survival loop.
@@ -65,6 +69,6 @@ This note records the launch-readiness work for `/arcade/vampire/`.
 ## Remaining design work
 
 - Real store configuration is not complete: product IDs, billing plugin choice, receipt validation, and production AdMob IDs must be configured before store submission.
-- The sandbox version now mirrors skill leveling and evolution recipes, but it does not yet mirror the full production meta loop: character unlocks, difficulty/map selection, daily modifiers, coins, achievements, and TD hybrid tuning remain arcade-side.
+- The sandbox version now mirrors skill leveling and evolution recipes, but it does not yet mirror the full production meta loop: character unlocks, difficulty/map selection, daily modifiers, coins, achievements, run snapshots, and TD hybrid tuning remain arcade-side.
 - Two-player cooperative Vampire Survivors mode remains a larger architecture task because it needs deterministic state sync or authoritative server simulation.
 - The TD hybrid currently ships as an in-run tower-placement layer, and the standalone TD arcade route can load the reused runtime, but there is still no full sandbox-authored premium TD stage publishing system.

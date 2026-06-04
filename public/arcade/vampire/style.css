@@ -668,6 +668,10 @@ html, body {
   background: rgba(241, 196, 15, 0.06);
 }
 
+.resume-panel {
+  background: rgba(46, 204, 113, 0.07);
+}
+
 .daily-text {
   color: var(--muted);
   font-size: 0.74rem;

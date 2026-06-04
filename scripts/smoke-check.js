@@ -396,6 +396,8 @@ function checkVampireDirectorLoopCoverage() {
     'MAX_HYBRID_TOWERS',
     'ACHIEVEMENT_REWARDS',
     'META_KEY',
+    'RUN_SNAPSHOT_KEY',
+    'RUN_SNAPSHOT_INTERVAL',
     'selectedCharacterId',
     'selectedDifficultyId',
     'selectedMapId',
@@ -403,6 +405,11 @@ function checkVampireDirectorLoopCoverage() {
     'dailyChallenge',
     'upgradeCost',
     'function setPaused',
+    'saveRunSnapshot',
+    'restoreRunSnapshot',
+    'clearRunSnapshot',
+    'resumePanel',
+    'beforeunload',
     "state = 'paused'",
     'visibilitychange',
     'elapsed >= getSurviveGoal()',
@@ -431,7 +438,7 @@ function checkVampireDirectorLoopCoverage() {
     throw new Error(`Vampire Survivors loop coverage missing: ${missingGameMarkers.join(', ')}`);
   }
 
-  const requiredCssMarkers = ['.meta-panel', '.start-card', '.pause-overlay', '.end-actions', '.daily-panel', '.upgrade-grid', '.run-report', '.monetization-panel'];
+  const requiredCssMarkers = ['.meta-panel', '.start-card', '.pause-overlay', '.end-actions', '.daily-panel', '.upgrade-grid', '.run-report', '.monetization-panel', '.resume-panel'];
   const missingCssMarkers = requiredCssMarkers.filter((marker) => !css.includes(marker));
   if (missingCssMarkers.length) {
     throw new Error(`Vampire Survivors UI CSS missing: ${missingCssMarkers.join(', ')}`);

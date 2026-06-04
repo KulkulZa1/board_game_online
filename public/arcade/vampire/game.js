@@ -70,6 +70,9 @@
   // 신규 획득 가능한 기본 무기 목록
   const WEAPON_POOL = ['orb', 'arrow', 'nova', 'shield', 'laser'];
   const META_KEY = 'vps_meta_v2';
+  const RUN_SNAPSHOT_KEY = 'vps_run_snapshot_v1';
+  const RUN_SNAPSHOT_MAX_AGE_MS = 36 * 60 * 60 * 1000;
+  const RUN_SNAPSHOT_INTERVAL = 8;
   const CHARACTER_DEFS = [
     {
       id: 'knight',
@@ -208,6 +211,7 @@
   let selectedMapId = meta.lastMap || 'meadow';
   let dailyChallengeEnabled = !!meta.dailyChallengeEnabled;
   let runRewardsGranted = false;
+  let lastRunSnapshotAt = 0;
 
   const SANDBOX_CONFIG = window.VS_CONFIG || null;
   const ENEMY_COLORS = {
@@ -489,6 +493,141 @@
     syncAdSettings();
   }
 
+  function cloneForSnapshot(value) {
+    return JSON.parse(JSON.stringify(value));
+  }
+
+  function saveRunSnapshot(reason) {
+    if (!player || (state !== 'playing' && state !== 'paused')) return false;
+    const snapshot = {
+      version: 1,
+      savedAt: Date.now(),
+      reason: reason || 'auto',
+      selectedCharacterId,
+      selectedDifficultyId,
+      selectedMapId,
+      dailyChallengeEnabled,
+      selectedStageIdx,
+      player: cloneForSnapshot(player),
+      enemies: cloneForSnapshot(enemies),
+      projectiles: cloneForSnapshot(projectiles),
+      xpGems: cloneForSnapshot(xpGems),
+      itemBoxes: cloneForSnapshot(itemBoxes),
+      hybridTowers: cloneForSnapshot(hybridTowers),
+      enemyProjectiles: cloneForSnapshot(enemyProjectiles),
+      damageNumbers: cloneForSnapshot(damageNumbers),
+      floatTexts: cloneForSnapshot(floatTexts.filter(text => !text.screenSpace)),
+      elapsed,
+      kills,
+      waveTimer,
+      camera: cloneForSnapshot(camera),
+      dashCd,
+      dashEffect: dashEffect ? cloneForSnapshot(dashEffect) : null,
+      screenShake,
+      lastMoveDir: cloneForSnapshot(lastMoveDir),
+      selectedTowerTypeIdx,
+      towerRecharge,
+      itemBoxTimer,
+      nextBossTime,
+      bossActive,
+      bossWarning,
+      comboCount,
+      comboTimer,
+      milestones: Array.from(milestones),
+      waveCount,
+    };
+    try {
+      localStorage.setItem(RUN_SNAPSHOT_KEY, JSON.stringify(snapshot));
+      lastRunSnapshotAt = elapsed || lastRunSnapshotAt;
+      return true;
+    } catch (_err) {
+      return false;
+    }
+  }
+
+  function loadRunSnapshot() {
+    try {
+      const raw = localStorage.getItem(RUN_SNAPSHOT_KEY);
+      if (!raw) return null;
+      const snapshot = JSON.parse(raw);
+      if (!snapshot || snapshot.version !== 1 || !snapshot.player || !Array.isArray(snapshot.player.weapons)) return null;
+      if (!snapshot.savedAt || Date.now() - snapshot.savedAt > RUN_SNAPSHOT_MAX_AGE_MS) {
+        clearRunSnapshot();
+        return null;
+      }
+      return snapshot;
+    } catch (_err) {
+      return null;
+    }
+  }
+
+  function clearRunSnapshot() {
+    try { localStorage.removeItem(RUN_SNAPSHOT_KEY); } catch (_err) {}
+  }
+
+  function restoreRunSnapshot(snapshot) {
+    if (!snapshot || !snapshot.player) return false;
+    if (frameId) cancelAnimationFrame(frameId);
+    clearEndActions();
+    selectedCharacterId = snapshot.selectedCharacterId || selectedCharacterId;
+    selectedDifficultyId = snapshot.selectedDifficultyId || selectedDifficultyId;
+    selectedMapId = snapshot.selectedMapId || selectedMapId;
+    dailyChallengeEnabled = !!snapshot.dailyChallengeEnabled;
+    selectedStageIdx = Number(snapshot.selectedStageIdx) || 0;
+    player = snapshot.player;
+    enemies = Array.isArray(snapshot.enemies) ? snapshot.enemies : [];
+    projectiles = Array.isArray(snapshot.projectiles) ? snapshot.projectiles : [];
+    xpGems = Array.isArray(snapshot.xpGems) ? snapshot.xpGems : [];
+    particles = [];
+    chainExplosions = [];
+    itemBoxes = Array.isArray(snapshot.itemBoxes) ? snapshot.itemBoxes : [];
+    hybridTowers = Array.isArray(snapshot.hybridTowers) ? snapshot.hybridTowers : [];
+    enemyProjectiles = Array.isArray(snapshot.enemyProjectiles) ? snapshot.enemyProjectiles : [];
+    damageNumbers = Array.isArray(snapshot.damageNumbers) ? snapshot.damageNumbers : [];
+    floatTexts = [{ text: 'Saved run restored', life: 2, maxLife: 2, screenSpace: true, color: '#f1c40f', size: 18 }]
+      .concat(Array.isArray(snapshot.floatTexts) ? snapshot.floatTexts : []);
+    elapsed = Number(snapshot.elapsed) || 0;
+    kills = Number(snapshot.kills) || 0;
+    waveTimer = Number(snapshot.waveTimer) || 0;
+    camera = snapshot.camera || { x: 0, y: 0 };
+    dashCd = Number(snapshot.dashCd) || 0;
+    dashEffect = snapshot.dashEffect || null;
+    screenShake = Number(snapshot.screenShake) || 0;
+    lastMoveDir = snapshot.lastMoveDir || { dx: 1, dy: 0 };
+    selectedTowerTypeIdx = Number(snapshot.selectedTowerTypeIdx) || 0;
+    towerRecharge = Number(snapshot.towerRecharge) || 0;
+    itemBoxTimer = Number(snapshot.itemBoxTimer) || 0;
+    nextBossTime = Number(snapshot.nextBossTime) || (currentDifficulty().bossInterval || BOSS_INTERVAL);
+    bossActive = !!snapshot.bossActive;
+    bossWarning = Number(snapshot.bossWarning) || 0;
+    comboCount = Number(snapshot.comboCount) || 0;
+    comboTimer = Number(snapshot.comboTimer) || 0;
+    milestones = new Set(Array.isArray(snapshot.milestones) ? snapshot.milestones : []);
+    waveCount = Number(snapshot.waveCount) || 0;
+    runRewardsGranted = false;
+    currentChoiceBuilder = null;
+    freeRerollUsed = false;
+    state = 'paused';
+    lastRunSnapshotAt = elapsed;
+    document.getElementById('overlay').classList.remove('visible');
+    document.getElementById('levelOverlay').style.display = 'none';
+    const pauseOverlay = document.getElementById('pauseOverlay');
+    if (pauseOverlay) pauseOverlay.style.display = 'flex';
+    const pauseDetail = document.getElementById('pauseDetail');
+    if (pauseDetail) pauseDetail.textContent = `Saved at ${fmtTime(elapsed)}. Resume when ready.`;
+    const pauseBtn = document.getElementById('pauseBtn');
+    if (pauseBtn) pauseBtn.style.display = '';
+    const towerBtn = document.getElementById('towerBtn');
+    if (towerBtn) towerBtn.style.display = '';
+    renderStageSelect();
+    renderWeaponSlots();
+    updateHUD();
+    updateTowerButton();
+    lastTime = performance.now();
+    frameId = requestAnimationFrame(loop);
+    return true;
+  }
+
   function syncAdSettings() {
     if (window.AdMobHelper && typeof AdMobHelper.setAdsRemoved === 'function') {
       AdMobHelper.setAdsRemoved(!!meta.adsRemoved);
@@ -698,6 +837,13 @@
       const panel = document.createElement('div');
       panel.id = 'monetizationPanel';
       panel.className = 'daily-panel monetization-panel';
+      overlayBox.insertBefore(panel, document.getElementById('startBtn'));
+    }
+
+    if (!document.getElementById('resumePanel')) {
+      const panel = document.createElement('div');
+      panel.id = 'resumePanel';
+      panel.className = 'daily-panel resume-panel';
       overlayBox.insertBefore(panel, document.getElementById('startBtn'));
     }
 
@@ -989,6 +1135,38 @@
       });
       monetizationPanel.append(label, buyBtn, restoreBtn);
     }
+
+    const resumePanel = document.getElementById('resumePanel');
+    if (resumePanel) {
+      resumePanel.textContent = '';
+      const snapshot = loadRunSnapshot();
+      if (!snapshot) {
+        resumePanel.style.display = 'none';
+      } else {
+        resumePanel.style.display = 'flex';
+        const character = CHARACTER_DEFS.find(def => def.id === snapshot.selectedCharacterId) || currentCharacter();
+        const difficulty = DIFFICULTY_DEFS.find(def => def.id === snapshot.selectedDifficultyId) || currentDifficulty();
+        const label = document.createElement('div');
+        label.className = 'daily-text';
+        label.textContent = `Saved run: ${fmtTime(snapshot.elapsed || 0)} / Lv.${snapshot.player.level || 1} / ${snapshot.kills || 0} kills / ${character.name} / ${difficulty.name}`;
+        const continueBtn = document.createElement('button');
+        continueBtn.type = 'button';
+        continueBtn.className = 'secondary-btn selected-lite';
+        continueBtn.textContent = 'Continue';
+        continueBtn.addEventListener('click', () => {
+          restoreRunSnapshot(snapshot);
+        });
+        const discardBtn = document.createElement('button');
+        discardBtn.type = 'button';
+        discardBtn.className = 'secondary-btn';
+        discardBtn.textContent = 'Discard';
+        discardBtn.addEventListener('click', () => {
+          clearRunSnapshot();
+          renderStartOptions();
+        });
+        resumePanel.append(label, continueBtn, discardBtn);
+      }
+    }
   }
 
   function setPaused(paused) {
@@ -996,6 +1174,7 @@
     if (paused) {
       if (state !== 'playing') return;
       state = 'paused';
+      saveRunSnapshot('pause');
       if (pauseOverlay) pauseOverlay.style.display = 'flex';
       return;
     }
@@ -1072,6 +1251,7 @@
     if (frameId) cancelAnimationFrame(frameId);
     frameId = requestAnimationFrame(loop);
     updateHUD();
+    saveRunSnapshot('revive');
   }
 
   function renderEndActions(result, reward) {
@@ -1286,6 +1466,9 @@
   document.addEventListener('keyup', e => { keys[e.key] = false; });
   document.addEventListener('visibilitychange', () => {
     if (document.hidden && state === 'playing') setPaused(true);
+  });
+  window.addEventListener('beforeunload', () => {
+    saveRunSnapshot('beforeunload');
   });
 
   // 조이스틱
@@ -1841,6 +2024,9 @@
     update(dt);
     render(dt);
     updateHUD();
+    if (elapsed - lastRunSnapshotAt >= RUN_SNAPSHOT_INTERVAL) {
+      saveRunSnapshot('auto');
+    }
   }
 
   function update(dt) {
@@ -2571,6 +2757,7 @@
   // ── 게임 종료 ───────────────────────────────────────────────────
   function endGame(result) {
     state = result;
+    clearRunSnapshot();
     cancelAnimationFrame(frameId);
     const reward = awardRunRewards(result);
     const icon  = document.getElementById('overlayIcon');
@@ -2707,6 +2894,7 @@
   document.getElementById('startBtn').addEventListener('click', () => {
     ensureStartPanels();
     clearEndActions();
+    clearRunSnapshot();
     if (!isCharacterUnlocked(currentCharacter())) selectedCharacterId = 'knight';
     if (!isMapUnlocked(currentMap())) selectedMapId = 'meadow';
     meta.lastCharacter = selectedCharacterId;
@@ -2727,6 +2915,7 @@
     document.getElementById('levelOverlay').style.display = 'none';
     initGame();
     state = 'playing';
+    saveRunSnapshot('start');
     lastTime = performance.now();
     frameId = requestAnimationFrame(loop);
   });

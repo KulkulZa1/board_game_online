@@ -33,6 +33,7 @@ This launch-readiness pass found and fixed:
 - Vampire Survivors sandbox now mirrors the production skill-level/evolution loop with editable evolution recipes and a runtime smoke check for `orb + spinach -> blackhole`.
 - Vampire Survivors now has a native-only purchase boundary for ad removal, restore purchase, and premium character unlocks. Web remains no-op; real store product setup is still required.
 - Public arcade pages no longer request `/sandbox/...` assets. Tower Defense now loads its reused runtime through `/arcade/tower-defense/runtime/`, while `/sandbox/` remains a dev-only 404 route in production.
+- Vampire Survivors now persists an active run locally during play, pause, mobile visibility changes, page unload, and revive. A valid saved run appears as a Continue/Discard panel on the start overlay and restores into the pause menu.
 - Service worker caching no longer serves old JS/CSS before checking the network; this prevents deployed game logic from appearing stale after Render deploys.
 - All HTML pages now load `/js/sw-update.js`, which registers the service worker consistently and reloads controlled pages once after an updated worker takes control.
 - Server responses for HTML, `sw.js`, JS, CSS, and `manifest.json` now send `Cache-Control: no-cache, no-store, must-revalidate`.
@@ -53,6 +54,14 @@ Current production observations before this branch is merged and Render redeploy
 - New messages from the same player replace the existing bubble instead of stacking.
 - Bubble text is assigned through `textContent`, capped for display, and auto-hidden after roughly four seconds.
 - Spectator-authored messages remain chat-log-only until the shell has a stable spectator avatar area.
+
+## Vampire run resume behavior
+
+- Active `/arcade/vampire/` runs save to `localStorage` under `vps_run_snapshot_v1`.
+- Snapshots are written on fresh start, periodic play, pause, mobile tab/app hide, page unload, and revive.
+- Death, win, and starting a new run clear the snapshot so end-run rewards are not replayed.
+- Restoring a run opens the pause menu at the saved elapsed time; the player must explicitly resume.
+- Snapshots older than 36 hours are discarded.
 
 ## Sandbox to main-game flow
 
@@ -85,6 +94,7 @@ Manual checks:
 - Open the home page and game list.
 - Launch at least one protected v1.0 game without changing its code.
 - Launch Vampire, Plant, and Tower Defense.
+- In Vampire, start a run, pause or reload, then confirm the Continue panel restores the saved run into the pause menu.
 - Save sandbox config for each sandbox-backed game and reopen the matching main game on the same origin.
 - Check browser console and network panels for errors.
 - Compare local routes with `https://board-game-online.onrender.com/` after Render redeploys.
