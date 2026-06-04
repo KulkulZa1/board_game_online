@@ -66,16 +66,18 @@
   ];
 
   // 패시브(능력치) 업그레이드 — 진화 재료로도 사용됨
-  // max: 최대 스택 수. 도달 시 레벨업/리롤 선택지에서 자동 제외 (무의미한 선택지 방지)
+  // max: 최대 스택 수. 도달 시 선택지에서 자동 제외. max:null = 무제한(성장 판타지 핵심 스탯)
+  //   무제한: 공격력·체력·관통 → 끝없이 강해지는 재미
+  //   상한:   쿨다운(0 방지)·치명타(100%↑ 무의미)·이속(조작 불가 방지)·자석(지수 폭주)·재생(무적 방지)
   const PASSIVE_POOL = [
-    { id: 'hp_up',    name: '❤ 체력 회복',   desc: '최대 체력 +20, 체력 회복',     max: 6, apply: (p) => { p.maxHp += 20; p.hp = Math.min(p.hp + 30, p.maxHp); } },
-    { id: 'spd_up',   name: '👟 이동 속도',   desc: '이동 속도 +12%',               max: 5, apply: (p) => { p.speed *= 1.12; } },
-    { id: 'dmg_up',   name: '⚔ 공격력',      desc: '모든 무기 데미지 +18%',         max: 8, apply: (p) => { p.dmgMult *= 1.18; } },
-    { id: 'cd_up',    name: '⏩ 쿨다운 감소', desc: '모든 무기 쿨다운 -12%',         max: 5, apply: (p) => { p.cdMult  *= 0.88; } },
-    { id: 'magnet',   name: '🧲 경험치 자석', desc: 'XP 획득 반경 +60%',             max: 4, apply: (p) => { p.xpRange *= 1.6; } },
-    { id: 'crit',     name: '⚡ 치명타',       desc: '15% 확률 2배 피해 (중첩 가능)',  max: 6, apply: (p) => { p.critChance = (p.critChance || 0) + 0.15; } },
-    { id: 'pierce_up',name: '🔱 관통 강화',   desc: '화살·부메랑 관통 +2',           max: 5, apply: (p) => { p.pierceBonus = (p.pierceBonus || 0) + 2; } },
-    { id: 'regen',    name: '💚 체력 재생',   desc: '초당 최대 체력 2% 자동 회복',    max: 5, apply: (p) => { p.regenRate = (p.regenRate || 0) + 0.02; } },
+    { id: 'hp_up',    name: '❤ 체력 회복',   desc: '최대 체력 +20, 체력 회복',     max: null, apply: (p) => { p.maxHp += 20; p.hp = Math.min(p.hp + 30, p.maxHp); } },
+    { id: 'spd_up',   name: '👟 이동 속도',   desc: '이동 속도 +12%',               max: 5,    apply: (p) => { p.speed *= 1.12; } },
+    { id: 'dmg_up',   name: '⚔ 공격력',      desc: '모든 무기 데미지 +18%',         max: null, apply: (p) => { p.dmgMult *= 1.18; } },
+    { id: 'cd_up',    name: '⏩ 쿨다운 감소', desc: '모든 무기 쿨다운 -12%',         max: 5,    apply: (p) => { p.cdMult  *= 0.88; } },
+    { id: 'magnet',   name: '🧲 경험치 자석', desc: 'XP 획득 반경 +60%',             max: 4,    apply: (p) => { p.xpRange *= 1.6; } },
+    { id: 'crit',     name: '⚡ 치명타',       desc: '15% 확률 2배 피해 (중첩 가능)',  max: 6,    apply: (p) => { p.critChance = (p.critChance || 0) + 0.15; } },
+    { id: 'pierce_up',name: '🔱 관통 강화',   desc: '화살·부메랑 관통 +2',           max: null, apply: (p) => { p.pierceBonus = (p.pierceBonus || 0) + 2; } },
+    { id: 'regen',    name: '💚 체력 재생',   desc: '초당 최대 체력 2% 자동 회복',    max: 5,    apply: (p) => { p.regenRate = (p.regenRate || 0) + 0.02; } },
   ];
 
   // 신규 획득 가능한 기본 무기 목록
@@ -186,6 +188,7 @@
   let projectiles = [];
   let xpGems = [];
   let particles = [];
+  let playerTrail = [];        // 플레이어 이동 잔상 (질주감 연출, 최대 10개)
   let chainExplosions = [];
   let enemyProjectiles = [];   // 적이 발사한 투사체
   let elapsed = 0;
@@ -356,6 +359,7 @@
     projectiles= [];
     xpGems     = [];
     particles  = [];
+    playerTrail = [];
     chainExplosions = [];
     enemyProjectiles = [];
     elapsed    = 0;
@@ -2619,12 +2623,13 @@
   function passiveChoices() {
     return PASSIVE_POOL.filter(pv => !isPassiveMaxed(pv)).map(pv => {
       const lvl = passiveLevel(pv.id);
+      const stack = lvl > 0 ? (pv.max != null ? ` (Lv.${lvl}/${pv.max})` : ` (Lv.${lvl} · 무제한)`) : '';
       return {
         kind: 'passive',
         passiveId: pv.id,
         tag: EVOLUTION_DEFS.some(evo => evo.req === pv.id && player.weapons.includes(evo.base)) ? 'Combo passive' : 'Passive',
         name: pv.name,
-        desc: lvl > 0 ? `${pv.desc} (Lv.${lvl}/${pv.max})` : pv.desc,
+        desc: pv.desc + stack,
         choose: () => applyPassive(pv),
       };
     });
@@ -2779,6 +2784,16 @@
     if (dx !== 0 || dy !== 0) lastMoveDir = { dx, dy };
     player.x += dx * player.speed * (player.tempSpeedMult || 1) * dt;
     player.y += dy * player.speed * (player.tempSpeedMult || 1) * dt;
+
+    // 이동 잔상 — 움직일 때만 위치를 찍어 질주감 연출 (최대 10개로 제한)
+    if (dx !== 0 || dy !== 0) {
+      playerTrail.push({ x: player.x, y: player.y, life: 0.3 });
+      if (playerTrail.length > 10) playerTrail.shift();
+    }
+    for (let i = playerTrail.length - 1; i >= 0; i--) {
+      playerTrail[i].life -= dt;
+      if (playerTrail[i].life <= 0) playerTrail.splice(i, 1);
+    }
 
     // 대쉬 공격 (Space / X)
     if (dashCd > 0) dashCd -= dt;
@@ -3404,10 +3419,34 @@
     ctx.globalAlpha = 1;
     ctx.textAlign = 'left';
 
+    // 플레이어 이동 잔상 (질주감)
+    for (const t of playerTrail) {
+      ctx.globalAlpha = Math.max(0, t.life / 0.3) * 0.22;
+      ctx.fillStyle = '#d7a3f5';
+      ctx.beginPath();
+      ctx.arc(t.x, t.y, 7, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+
     // 플레이어
     ctx.save();
     ctx.translate(player.x, player.y);
     const inv = player.invincible > 0;
+    // 콤보 오라 — 콤보가 쌓일수록 강하게 빛나는 링 (게임이 살아있는 느낌)
+    if (comboCount >= 10 && comboTimer > 0) {
+      const auraCol = comboCount >= 30 ? '#e74c3c' : comboCount >= 20 ? '#f39c12' : '#f1c40f';
+      const auraR = 20 + Math.sin(elapsed * 16) * 3 + Math.min(comboCount, 80) * 0.22;
+      ctx.globalAlpha = 0.55;
+      ctx.strokeStyle = auraCol;
+      ctx.lineWidth = 3;
+      ctx.shadowBlur = 16; ctx.shadowColor = auraCol;
+      ctx.beginPath();
+      ctx.arc(0, 0, auraR, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+      ctx.globalAlpha = 1;
+    }
     const hpRatio = getPlayerHpRatio();
     if (hpRatio <= LOW_HP_THRESHOLD) {
       const critical = hpRatio <= CRITICAL_HP_THRESHOLD;
@@ -3499,6 +3538,17 @@
       ctx.fillText(`⚠ BOSS  ${Math.ceil(bossEnemy.hp)} / ${bossEnemy.maxHp}`, W / 2, by + bh + 14);
       ctx.shadowBlur = 0;
       ctx.textAlign = 'left';
+    }
+
+    // 콤보 화면 비네트 — 높은 콤보에서 화면 가장자리가 발광하며 몰입감 상승
+    if (comboCount >= 15 && comboTimer > 0) {
+      const vCol = comboCount >= 30 ? '231,76,60' : comboCount >= 20 ? '243,156,18' : '241,196,15';
+      const vA = Math.min(0.26, 0.10 + comboCount * 0.0035) * (0.7 + Math.sin(elapsed * 10) * 0.3);
+      const grad = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.34, W / 2, H / 2, Math.max(W, H) * 0.62);
+      grad.addColorStop(0, 'rgba(0,0,0,0)');
+      grad.addColorStop(1, `rgba(${vCol},${vA})`);
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, W, H);
     }
 
     // 콤보 표시
@@ -3665,7 +3715,9 @@
     let passRows = PASSIVE_POOL.map(pv => {
       const forEvo = EVOLUTION_DEFS.find(e => e.req === pv.id);
       const evoTag = forEvo ? ` <span style="color:#f1c40f;font-size:0.7em">→ ${WEAPON_DEFS[forEvo.id].icon}${WEAPON_DEFS[forEvo.id].name}</span>` : '';
-      const maxTag = pv.max != null ? ` <span style="color:#7f8c9b;font-size:0.7em">(최대 ${pv.max}중첩)</span>` : '';
+      const maxTag = pv.max != null
+        ? ` <span style="color:#7f8c9b;font-size:0.7em">(최대 ${pv.max}중첩)</span>`
+        : ` <span style="color:#2ecc71;font-size:0.7em">(무제한 ∞)</span>`;
       return `<tr>
         <td>${pv.name}</td>
         <td class="combo-desc">${pv.desc}${maxTag}${evoTag}</td>
