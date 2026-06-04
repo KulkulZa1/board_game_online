@@ -8,6 +8,7 @@ window.TDUI = (function () {
   var unsavedDot;
   var saveTimer = null;
   var STORAGE_KEY = 'sandbox_td_config';
+  var PUBLISHED_KEY = 'td_published_config';
 
   // ── Helpers ──────────────────────────────────────────────────────
   function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
@@ -830,6 +831,78 @@ window.TDUI = (function () {
     if (unsavedDot) unsavedDot.style.display = 'none';
   }
 
+  function validateConfig(config) {
+    var errors = [];
+    if (!config || typeof config !== 'object') return ['Config must be an object.'];
+    if (!Array.isArray(config.STAGES) || !config.STAGES.length) errors.push('At least one stage is required.');
+    if (!config.ENEMY_TYPES || typeof config.ENEMY_TYPES !== 'object') errors.push('ENEMY_TYPES is required.');
+    if (!config.TOWER || typeof config.TOWER !== 'object') errors.push('Base TOWER config is required.');
+    var enemyTypes = Object.keys(config.ENEMY_TYPES || {});
+    (config.STAGES || []).forEach(function (stage, si) {
+      if (!stage || typeof stage !== 'object') {
+        errors.push('Stage ' + (si + 1) + ' must be an object.');
+        return;
+      }
+      if (!stage.id) errors.push('Stage ' + (si + 1) + ' is missing id.');
+      if (!stage.name) errors.push('Stage ' + (si + 1) + ' is missing name.');
+      if (!Array.isArray(stage.waves) || !stage.waves.length) {
+        errors.push('Stage ' + (si + 1) + ' needs at least one wave.');
+        return;
+      }
+      stage.waves.forEach(function (wave, wi) {
+        var label = 'Stage ' + (si + 1) + ' wave ' + (wi + 1);
+        if (!wave || typeof wave !== 'object') {
+          errors.push(label + ' must be an object.');
+          return;
+        }
+        if (!enemyTypes.includes(wave.enemyType)) errors.push(label + ' uses unknown enemy type: ' + wave.enemyType);
+        if (!Number.isFinite(Number(wave.count)) || Number(wave.count) < 1 || Number(wave.count) > 300) errors.push(label + ' count must be 1-300.');
+        if (!Number.isFinite(Number(wave.intervalMs)) || Number(wave.intervalMs) < 0 || Number(wave.intervalMs) > 20000) errors.push(label + ' intervalMs must be 0-20000.');
+        if (!Number.isFinite(Number(wave.hpMult)) || Number(wave.hpMult) <= 0 || Number(wave.hpMult) > 20) errors.push(label + ' hpMult must be >0 and <=20.');
+        if (!Number.isFinite(Number(wave.speedMult)) || Number(wave.speedMult) <= 0 || Number(wave.speedMult) > 10) errors.push(label + ' speedMult must be >0 and <=10.');
+      });
+    });
+    enemyTypes.forEach(function (key) {
+      var enemy = config.ENEMY_TYPES[key] || {};
+      if (!Number.isFinite(Number(enemy.hp)) || Number(enemy.hp) <= 0) errors.push('Enemy ' + key + ' needs hp > 0.');
+      if (!Number.isFinite(Number(enemy.speed)) || Number(enemy.speed) <= 0) errors.push('Enemy ' + key + ' needs speed > 0.');
+    });
+    return errors;
+  }
+
+  function normalizeImportConfig(parsed) {
+    if (parsed && parsed.schema === 'td-config-v1' && parsed.config) return parsed.config;
+    return parsed;
+  }
+
+  function downloadJSON(filename, config) {
+    var data = JSON.stringify(config, null, 2);
+    var blob = new Blob([data], { type: 'application/json' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url; a.download = filename;
+    a.click(); URL.revokeObjectURL(url);
+  }
+
+  function publishJSON() {
+    var errors = validateConfig(TD_CONFIG);
+    if (errors.length) {
+      alert('Cannot publish:\n' + errors.slice(0, 8).join('\n'));
+      return false;
+    }
+    var published = JSON.parse(JSON.stringify(TD_CONFIG));
+    published.__publishedAt = new Date().toISOString();
+    published.__source = 'tower-defense-sandbox';
+    try {
+      localStorage.setItem(PUBLISHED_KEY, JSON.stringify(published));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(published));
+    } catch (e) {}
+    downloadJSON('td-published-config.json', published);
+    if (unsavedDot) unsavedDot.style.display = 'none';
+    alert('Published TD config saved locally and exported as td-published-config.json. Import that file on /arcade/tower-defense/ if sandbox and arcade run on different origins.');
+    return true;
+  }
+
   function makeStageCopy(src, idx) {
     var stage = src ? JSON.parse(JSON.stringify(src)) : {
       backgroundToken: 'bg_dawn',
@@ -875,12 +948,7 @@ window.TDUI = (function () {
   }
 
   function exportJSON() {
-    var data = JSON.stringify(TD_CONFIG, null, 2);
-    var blob = new Blob([data], { type: 'application/json' });
-    var url = URL.createObjectURL(blob);
-    var a = document.createElement('a');
-    a.href = url; a.download = 'td-config.json';
-    a.click(); URL.revokeObjectURL(url);
+    downloadJSON('td-config.json', TD_CONFIG);
   }
 
   function importJSON() {
@@ -891,7 +959,12 @@ window.TDUI = (function () {
       var reader = new FileReader();
       reader.onload = function (ev) {
         try {
-          var parsed = JSON.parse(ev.target.result);
+          var parsed = normalizeImportConfig(JSON.parse(ev.target.result));
+          var errors = validateConfig(parsed);
+          if (errors.length) {
+            alert('Invalid TD config:\n' + errors.slice(0, 8).join('\n'));
+            return;
+          }
           deepMerge(window.TD_CONFIG, parsed);
           if (TDGame) TDGame.onConfigChange();
           markUnsaved();
@@ -966,6 +1039,7 @@ window.TDUI = (function () {
       if (!btn) return;
       switch (btn.dataset.action) {
         case 'export':    exportJSON(); break;
+        case 'publish':   publishJSON(); break;
         case 'import':    importJSON(); break;
         case 'snapshot':  saveSnapshot(); break;
         case 'snapshots': showSnapshotManager(); break;
@@ -1020,6 +1094,8 @@ window.TDUI = (function () {
     init: init,
     refresh: refresh,
     markUnsaved: markUnsaved,
+    validateConfig: validateConfig,
+    publishJSON: publishJSON,
     showPassiveModal: showPassiveModal,
     showStageClearModal: showStageClearModal,
     showInfinityModal: showInfinityModal,

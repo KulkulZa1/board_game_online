@@ -379,6 +379,17 @@ function checkTowerDefenseSandboxCoverage() {
   if (!ui.includes("label: 'Synergies'") || !ui.includes("type: 'amplifier'")) {
     throw new Error('Tower Defense editor should expose synergies and amplifier placement');
   }
+  if (!ui.includes('td_published_config') || !ui.includes('validateConfig') || !ui.includes('publishJSON')) {
+    throw new Error('Tower Defense editor should validate and publish configs for arcade import');
+  }
+  const sandboxPage = fs.readFileSync(path.join(root, 'sandbox/tower-defense/index.html'), 'utf8');
+  const arcadePage = fs.readFileSync(path.join(root, 'public/arcade/tower-defense/index.html'), 'utf8');
+  if (!sandboxPage.includes('data-action="publish"') || !arcadePage.includes('data-action="publish"')) {
+    throw new Error('Tower Defense sandbox and arcade route should expose publish controls');
+  }
+  if (!arcadePage.includes('td_published_config') || !arcadePage.includes('Published config loaded')) {
+    throw new Error('Tower Defense arcade route should prefer published config and show load status');
+  }
 }
 
 function checkVampireDirectorLoopCoverage() {

@@ -35,6 +35,7 @@ This launch-readiness pass found and fixed:
 - Public arcade pages no longer request `/sandbox/...` assets. Tower Defense now loads its reused runtime through `/arcade/tower-defense/runtime/`, while `/sandbox/` remains a dev-only 404 route in production.
 - Vampire Survivors now persists an active run locally during play, pause, mobile visibility changes, page unload, and revive. A valid saved run appears as a Continue/Discard panel on the start overlay and restores into the pause menu.
 - Vampire Survivors has a first Socket.io co-op relay: the host creates a shareable `?vpsRoom=...` link, the guest sends movement/dash/tower input, the host simulates an ally, and the guest sees a compact mirror of the host state.
+- Tower Defense sandbox now has a validated `Publish` action. Published configs save under `td_published_config`, export as `td-published-config.json`, and `/arcade/tower-defense/` prefers that published key before falling back to draft/default config.
 - Service worker caching no longer serves old JS/CSS before checking the network; this prevents deployed game logic from appearing stale after Render deploys.
 - All HTML pages now load `/js/sw-update.js`, which registers the service worker consistently and reloads controlled pages once after an updated worker takes control.
 - Server responses for HTML, `sw.js`, JS, CSS, and `manifest.json` now send `Cache-Control: no-cache, no-store, must-revalidate`.
@@ -81,9 +82,16 @@ Sandbox editors save same-origin `localStorage` configuration. Main arcade games
 |---|---|---|
 | `/sandbox/vampire-survivors/` | `sandbox_vs_config` | `/arcade/vampire/` |
 | `/sandbox/plant-growing/` | `sandbox_pg_config` | `/arcade/plant/` |
-| `/sandbox/tower-defense/` | `sandbox_td_config` | `/arcade/tower-defense/` via `/arcade/tower-defense/runtime/` |
+| `/sandbox/tower-defense/` | `sandbox_td_config` / `td_published_config` | `/arcade/tower-defense/` via `/arcade/tower-defense/runtime/` |
 
-Local and production browser storage are separate. A stage created on localhost will not appear on Render unless it is also created on the production origin or exported into source code. The sandbox editors remain developer tools; public arcade pages must not request `/sandbox/` assets.
+Local and production browser storage are separate. A stage created on localhost will not appear on Render unless it is also created on the production origin, imported from a published JSON file, or exported into source code. The sandbox editors remain developer tools; public arcade pages must not request `/sandbox/` assets.
+
+Tower Defense publish flow:
+
+1. Edit `sandbox/tower-defense/`.
+2. Click `Publish`; validation rejects missing stages, unknown enemy types, and invalid wave values.
+3. Import the exported `td-published-config.json` on `/arcade/tower-defense/` if the sandbox and arcade are on different origins.
+4. The arcade route displays whether a published, draft, or default config was loaded.
 
 The Vampire Survivors sandbox now edits skill evolutions as config data, but arcade-only meta systems such as coins, achievements, character unlocks, daily challenge, map unlocks, and the in-run TD hybrid still need a shared schema before the sandbox can tune every production rule.
 
@@ -107,11 +115,12 @@ Manual checks:
 - In Vampire, start a run, pause or reload, then confirm the Continue panel restores the saved run into the pause menu.
 - In Vampire, host a co-op room, open the share URL in a second browser, join as guest, start the host run, and confirm guest input moves the green ally plus the guest mirror receives state.
 - Save sandbox config for each sandbox-backed game and reopen the matching main game on the same origin.
+- For Tower Defense, publish from the sandbox, import the exported JSON into `/arcade/tower-defense/`, and confirm the arcade route reports `Published config loaded`.
 - Check browser console and network panels for errors.
 - Compare local routes with `https://board-game-online.onrender.com/` after Render redeploys.
 
 ## Remaining launch risks
 
-- Sandbox persistence is browser-local only. Cross-device publishing needs a server-backed content store, schema validation, and moderation.
+- Sandbox persistence is browser-local only. Tower Defense now has file-based publish/import validation, but cross-device publishing still needs a server-backed content store, schema validation on the server, and moderation.
 - Production verification cannot prove branch changes until the branch is merged to `main` and Render finishes redeploying.
 - Gameplay smoke tests are still mostly manual. The co-op relay has a socket smoke test, but full two-browser play should be checked before launch.

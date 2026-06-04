@@ -52,6 +52,10 @@
     <button data-action="place">Place Tower</button>
     <button data-action="start-wave">Start Wave</button>
     <span class="sep"></span>
+    <button data-action="import">Import</button>
+    <button data-action="export">Export</button>
+    <button data-action="publish">Publish</button>
+    <span id="publish-status" class="runtime-note"></span>
     <span class="runtime-note">Sandbox: npm run sandbox</span>
   </div>
   <div id="main">
@@ -68,7 +72,10 @@
   <script src="/js/sandbox-config.js?v=1.1"></script>
   <script>
     if (window.SandboxConfigBridge && window.TD_CONFIG) {
-      window.SandboxConfigBridge.load('sandbox_td_config', window.TD_CONFIG);
+      var loadedPublished = window.SandboxConfigBridge.load('td_published_config', window.TD_CONFIG);
+      var loadedDraft = !loadedPublished && window.SandboxConfigBridge.load('sandbox_td_config', window.TD_CONFIG);
+      var statusEl = document.getElementById('publish-status');
+      if (statusEl) statusEl.textContent = loadedPublished ? 'Published config loaded' : (loadedDraft ? 'Draft config loaded' : 'Default config');
     }
     document.getElementById('panel-toggle').addEventListener('click', function () {
       document.getElementById('editor-panel').classList.toggle('panel-open');

@@ -9,6 +9,7 @@
 - Sandbox Vampire Survivors evolution mirror: `sandbox/vampire-survivors/` now has config-driven evolved skills, editable evolution recipes, golden evolution level-up cards, passive prerequisites, and a runtime smoke check that verifies `orb + spinach -> blackhole`.
 - Native monetization boundary for `/arcade/vampire/`: ad-removal ownership suppresses interstitial ads, restore purchase is exposed, and locked premium characters can be unlocked through the purchase helper when a Capacitor billing plugin is present.
 - Production-safe Tower Defense arcade runtime path: `/arcade/tower-defense/` now loads reused TD engine files from `/arcade/tower-defense/runtime/` instead of broken `/sandbox/...` URLs.
+- Tower Defense sandbox-to-arcade publish/import flow: the editor validates configs, saves `td_published_config`, exports `td-published-config.json`, and the arcade route prefers published config before draft/default config.
 - Vampire Survivors mid-run resume: active runs save locally on start, pause, periodic play, revive, visibility change, and page unload; valid saved runs can be continued from the start overlay.
 - Vampire Survivors co-op relay MVP: a host can create a shareable Socket.io co-op room, a guest can join from `?vpsRoom=...`, control an ally in the host simulation, and receive a compact live state mirror.
 - Smoke-check coverage for Vampire Survivors character/difficulty/meta/pause/revive markers.
