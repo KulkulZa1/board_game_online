@@ -565,8 +565,9 @@
   function spawnExplosion(x, y, range, dmg, evolved) {
     const col = evolved ? '#f1c40f' : '#e74c3c';
     for (let i = 0; i < 12; i++) spawnParticle(x, y, col, 6 + Math.random() * 8, 0.5 + Math.random() * 0.4);
-    for (const e of enemies) {
-      if (dist({ x, y }, e) < range) dealDamage(e, dmg);
+    for (let _i = enemies.length - 1; _i >= 0; _i--) {
+      const e = enemies[_i];
+      if (e && dist({ x, y }, e) < range) dealDamage(e, dmg);
     }
     projectiles.push({ type: 'explosion', x, y, r: 0, maxR: range, life: 0.4, dmg: 0, evolved });
     // 슈퍼노바: 주변에 연쇄 2차 폭발 큐 등록 (게임 루프에서 처리)
@@ -619,6 +620,8 @@
   }
 
   function killEnemy(enemy) {
+    if (enemy.dying) return;  // 재진입 방지 — 동일 적 중복 처치 방지
+    enemy.dying = true;
     kills++;
     comboCount++;
     comboTimer = 1.5;
