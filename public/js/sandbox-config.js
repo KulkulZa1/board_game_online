@@ -23,9 +23,9 @@
 
   function load(key, target) {
     try {
-      var raw = window.localStorage && window.localStorage.getItem(key);
-      if (!raw) return false;
-      deepMerge(target, JSON.parse(raw));
+      var saved = read(key);
+      if (!saved || !target) return false;
+      deepMerge(target, saved);
       target.__loadedFromSandbox = true;
       return true;
     } catch (error) {
@@ -34,8 +34,23 @@
     }
   }
 
+  function read(key) {
+    try {
+      var raw = window.localStorage && window.localStorage.getItem(key);
+      if (!raw) return null;
+      var parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object') return null;
+      parsed.__loadedFromSandbox = true;
+      return parsed;
+    } catch (error) {
+      console.warn('Sandbox config read failed:', key, error);
+      return null;
+    }
+  }
+
   window.SandboxConfigBridge = {
     deepMerge: deepMerge,
-    load: load
+    load: load,
+    read: read
   };
 })();

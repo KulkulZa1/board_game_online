@@ -32,14 +32,15 @@ This launch-readiness pass found and fixed:
 - The smoke test now covers chat payload trimming plus client-side bubble behavior for live messages versus history replay.
 - Vampire Survivors sandbox now mirrors the production skill-level/evolution loop with editable evolution recipes and a runtime smoke check for `orb + spinach -> blackhole`.
 - Vampire Survivors now has a native-only purchase boundary for ad removal, restore purchase, and premium character unlocks. Web remains no-op; real store product setup is still required.
+- Public arcade pages no longer request `/sandbox/...` assets. Tower Defense now loads its reused runtime through `/arcade/tower-defense/runtime/`, while `/sandbox/` remains a dev-only 404 route in production.
 - Service worker caching no longer serves old JS/CSS before checking the network; this prevents deployed game logic from appearing stale after Render deploys.
 - All HTML pages now load `/js/sw-update.js`, which registers the service worker consistently and reloads controlled pages once after an updated worker takes control.
 - Server responses for HTML, `sw.js`, JS, CSS, and `manifest.json` now send `Cache-Control: no-cache, no-store, must-revalidate`.
 
 Current production observations before this branch is merged and Render redeploys:
 
-- Production home, `/arcade/tower-defense/`, and `/sandbox/` loaded successfully and matched the local route list for the checked pages.
-- Browser console warnings/errors were empty on the checked production lobby, Tower Defense route, and sandbox index route.
+- Production home and arcade routes loaded on current `main`; `/sandbox/` is expected to return 404.
+- Branch changes that move Tower Defense runtime files off `/sandbox/...` require merge and Render redeploy before they are visible on production.
 - The new chat speech-bubble behavior is not visible on production until this branch is merged and Render redeploys.
 - Production currently still serves `sw.js` with the old JS/CSS stale-while-revalidate policy until this branch is merged and Render redeploys.
 - Production asset headers checked on 2026-05-20 showed `/sw.js` and `/api/version` were no-store, but `/js/chat.js` and `/manifest.json` still used `Cache-Control: public, max-age=0`; this branch changes JS/CSS/manifest to no-store too.
@@ -61,9 +62,9 @@ Sandbox editors save same-origin `localStorage` configuration. Main arcade games
 |---|---|---|
 | `/sandbox/vampire-survivors/` | `sandbox_vs_config` | `/arcade/vampire/` |
 | `/sandbox/plant-growing/` | `sandbox_pg_config` | `/arcade/plant/` |
-| `/sandbox/tower-defense/` | `sandbox_td_config` | `/arcade/tower-defense/` |
+| `/sandbox/tower-defense/` | `sandbox_td_config` | `/arcade/tower-defense/` via `/arcade/tower-defense/runtime/` |
 
-Local and production browser storage are separate. A stage created on localhost will not appear on Render unless it is also created on the production origin or exported into source code.
+Local and production browser storage are separate. A stage created on localhost will not appear on Render unless it is also created on the production origin or exported into source code. The sandbox editors remain developer tools; public arcade pages must not request `/sandbox/` assets.
 
 The Vampire Survivors sandbox now edits skill evolutions as config data, but arcade-only meta systems such as coins, achievements, character unlocks, daily challenge, map unlocks, and the in-run TD hybrid still need a shared schema before the sandbox can tune every production rule.
 

@@ -84,11 +84,10 @@
   </div>
 
   <script src="/js/admob.js?v=1.0"></script>
-  <script src="/sandbox/vampire-survivors/config.js?v=1.1"></script>
-  <script src="/js/sandbox-config.js?v=1.0"></script>
+  <script src="/js/sandbox-config.js?v=1.1"></script>
   <script>
-    if (window.SandboxConfigBridge && window.VS_CONFIG) {
-      window.SandboxConfigBridge.load('sandbox_vs_config', window.VS_CONFIG);
+    if (window.SandboxConfigBridge) {
+      window.VS_CONFIG = window.SandboxConfigBridge.read('sandbox_vs_config');
     }
   </script>
   <script src="game.js?v=1.4"></script>

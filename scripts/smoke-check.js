@@ -312,6 +312,56 @@ function checkVersionBadgeCoverage() {
   }
 }
 
+function checkProductionArcadeAssetPolicy() {
+  const arcadePages = [
+    'public/arcade/vampire/index.html',
+    'public/arcade/plant/index.html',
+    'public/arcade/tower-defense/index.html',
+  ];
+  const offenders = arcadePages.filter((file) =>
+    fs.readFileSync(path.join(root, file), 'utf8').includes('/sandbox/')
+  );
+  if (offenders.length) {
+    throw new Error(`Public arcade pages must not request /sandbox/ assets: ${offenders.join(', ')}`);
+  }
+
+  const towerPage = fs.readFileSync(path.join(root, 'public/arcade/tower-defense/index.html'), 'utf8');
+  if (!towerPage.includes('/arcade/tower-defense/runtime/config.js') || !towerPage.includes('/arcade/tower-defense/runtime/game.js')) {
+    throw new Error('Tower Defense arcade page should load runtime assets from /arcade/tower-defense/runtime/');
+  }
+
+  const server = fs.readFileSync(path.join(root, 'server/index.js'), 'utf8');
+  if (!server.includes("'/arcade/tower-defense/runtime'") || server.includes("app.use('/sandbox'")) {
+    throw new Error('Server should expose Tower Defense runtime under arcade path while keeping /sandbox/ unserved');
+  }
+}
+
+function checkSandboxConfigBridgeRead() {
+  const bridge = fs.readFileSync(path.join(root, 'public/js/sandbox-config.js'), 'utf8');
+  const store = {
+    sandbox_vs_config: JSON.stringify({ STAGES: [{ name: 'Local Draft' }] }),
+  };
+  const context = {
+    console,
+    window: {
+      localStorage: {
+        getItem: (key) => store[key] || null,
+      },
+    },
+  };
+  vm.createContext(context);
+  vm.runInContext(bridge, context, { filename: 'public/js/sandbox-config.js' });
+  const saved = context.window.SandboxConfigBridge.read('sandbox_vs_config');
+  if (!saved || !saved.__loadedFromSandbox || !Array.isArray(saved.STAGES) || saved.STAGES[0].name !== 'Local Draft') {
+    throw new Error('SandboxConfigBridge.read should return saved localStorage config without a sandbox script tag');
+  }
+  const target = { STAGES: [] };
+  const loaded = context.window.SandboxConfigBridge.load('sandbox_vs_config', target);
+  if (!loaded || !target.__loadedFromSandbox || target.STAGES[0].name !== 'Local Draft') {
+    throw new Error('SandboxConfigBridge.load should still merge saved config into an existing target');
+  }
+}
+
 function checkTowerDefenseSandboxCoverage() {
   const config = fs.readFileSync(path.join(root, 'sandbox/tower-defense/config.js'), 'utf8');
   const game = fs.readFileSync(path.join(root, 'sandbox/tower-defense/game.js'), 'utf8');
@@ -764,6 +814,10 @@ async function main() {
       '/arcade/plant/',
       '/arcade/plant/game.js',
       '/arcade/tower-defense/',
+      '/arcade/tower-defense/runtime/config.js',
+      '/arcade/tower-defense/runtime/game.js',
+      '/arcade/tower-defense/runtime/ui.js',
+      '/arcade/tower-defense/runtime/graphics/sprites.css',
       '/games3d/chess3d/',
       '/games3d/chess3d/scene.js',
     ];
@@ -781,6 +835,8 @@ async function main() {
     await checkDeploymentCachePolicy();
     checkServiceWorkerUpdateCoverage();
     checkVersionBadgeCoverage();
+    checkProductionArcadeAssetPolicy();
+    checkSandboxConfigBridgeRead();
     checkTowerDefenseSandboxCoverage();
     checkVampireDirectorLoopCoverage();
     checkVampireSandboxEvolutionCoverage();

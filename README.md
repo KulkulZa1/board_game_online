@@ -92,9 +92,9 @@ They save their live config to browser `localStorage`:
 |---|---|---|
 | `sandbox/vampire-survivors/` | `sandbox_vs_config` | `/arcade/vampire/` via `public/js/sandbox-config.js` |
 | `sandbox/plant-growing/` | `sandbox_pg_config` | `/arcade/plant/` via `public/js/sandbox-config.js` |
-| `sandbox/tower-defense/` | `sandbox_td_config` | no production arcade implementation yet |
+| `sandbox/tower-defense/` | `sandbox_td_config` | `/arcade/tower-defense/` via `/arcade/tower-defense/runtime/` |
 
-Because production does not serve `/sandbox/`, production checks should verify that arcade pages still load and that `/sandbox/` returns 404. Sandbox-to-arcade promotion is currently local/design-time only unless a future publishing flow copies validated config into production assets.
+Because production does not serve `/sandbox/`, production checks should verify that arcade pages still load, no public arcade HTML requests `/sandbox/` assets, and `/sandbox/` returns 404. Tower Defense reuses the sandbox engine through a production-safe runtime alias under `/arcade/tower-defense/runtime/`; the editor itself remains a local developer tool. Sandbox-to-arcade promotion is currently browser-local/design-time only unless a future publishing flow copies validated config into production assets.
 
 See `docs/launch-readiness.md` for the current security, deployment, and manual verification checklist.
 
@@ -114,7 +114,7 @@ See `docs/launch-readiness.md` for the current security, deployment, and manual 
 - 개인 전적 기록 (게임별 승/패/무 통계)
 - PC + Android 모바일 지원
 - PWA (홈 화면 추가 지원)
-- `/sandbox/` 신규 게임 실험실 (Render에서도 정적 라우트로 제공)
+- `npm run sandbox` 신규 게임 실험실 (Render에서는 `/sandbox/` 비노출)
 
 ---
 
@@ -148,6 +148,6 @@ main    ← 안정 배포 버전 (Render.com 자동 배포)
 | 서버 | Express 4, Socket.io 4 |
 | 체스 검증 | chess.js 0.12.0 |
 | 프론트엔드 | Vanilla HTML/CSS/JS |
-| 정적 파일 | `public/` + `/sandbox/` |
+| 정적 파일 | `public/` (`/sandbox/`는 개발 서버 전용) |
 | 배포 | Render.com |
 | 형상 관리 | GitHub |
