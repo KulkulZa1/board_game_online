@@ -13,6 +13,7 @@
 - Vampire Survivors mid-run resume: active runs save locally on start, pause, periodic play, revive, visibility change, and page unload; valid saved runs can be continued from the start overlay.
 - Vampire Survivors co-op relay MVP: a host can create a shareable Socket.io co-op room, a guest can join from `?vpsRoom=...`, control an ally in the host simulation, and receive a compact live state mirror.
 - Vampire Survivors evolution planning UI: start, pause, and level-up surfaces now show recipe progress so failed or near-ready evolutions are visible during the run.
+- Vampire Survivors evolution payoff: successful evolutions now trigger a transient banner, stronger particle burst, screen shake, and a defensive WebAudio chime.
 - Smoke-check coverage for Vampire Survivors character/difficulty/meta/pause/revive markers.
 - `docs/vampire-survivors-director-loop.md` with verification targets and remaining design work.
 

@@ -51,6 +51,8 @@ This note records the launch-readiness work for `/arcade/vampire/`.
 - Evolution planning UI.
   - The start overlay shows all evolution recipes, while level-up and pause overlays show a compact progress plan for the current run.
   - Level-up upgrade cards now render text through DOM text nodes instead of HTML strings, keeping the normal choice flow while reducing injection risk.
+- Evolution payoff.
+  - Picking a ready evolution now creates a short on-field celebration with a readable banner, screen-space text, heavier particles, screen shake, and a WebAudio chime that safely no-ops when audio is unavailable.
 - Sandbox evolution mirror.
   - `sandbox/vampire-survivors/` now stores evolved skills and `EVOLUTIONS` recipes in `VS_CONFIG`, exposes editable base/passive/result rows, shows golden evolution cards, and swaps max-level base skills into evolved skills at runtime.
   - Old local sandbox saves are migrated by appending missing default evolved skills and recipes.

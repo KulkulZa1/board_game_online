@@ -203,6 +203,8 @@
   let waveCount          = 0;     // 총 웨이브 카운터 (horde 판정)
   let freeRerollUsed     = false; // 현재 선택창 무료 리롤 사용 여부 (창마다 초기화)
   let currentChoiceBuilder = null; // 현재 선택지 생성 함수 (리롤 시 재호출)
+  let audioCtx = null;
+  let evolutionBannerTimer = null;
 
   let meta = loadMeta();
   syncAdSettings();
@@ -398,13 +400,74 @@
     delete player.weaponLevels[evo.base];
     delete player.weaponCDs[evo.base];
     player.weaponCDs[evo.id] = 0;
-    for (let i = 0; i < 30; i++) spawnParticle(player.x, player.y, '#f1c40f', 6 + Math.random() * 6, 0.9);
+    showEvolutionCelebration(evo);
     renderWeaponSlots();
     if (!meta.achievements.evolve1) {
       meta.achievements.evolve1 = true;
       ensureMetaAchievements();
       saveMeta();
     }
+  }
+
+  function ensureAudioContext() {
+    const Ctor = window.AudioContext || window.webkitAudioContext;
+    if (!Ctor) return null;
+    if (!audioCtx) audioCtx = new Ctor();
+    if (audioCtx.state === 'suspended' && typeof audioCtx.resume === 'function') {
+      audioCtx.resume().catch(() => {});
+    }
+    return audioCtx;
+  }
+
+  function playEvolutionChime() {
+    const ctxAudio = ensureAudioContext();
+    if (!ctxAudio) return;
+    const now = ctxAudio.currentTime;
+    [523.25, 659.25, 783.99, 1046.5].forEach((freq, idx) => {
+      const osc = ctxAudio.createOscillator();
+      const gain = ctxAudio.createGain();
+      osc.type = idx === 3 ? 'triangle' : 'sine';
+      osc.frequency.setValueAtTime(freq, now + idx * 0.055);
+      gain.gain.setValueAtTime(0.0001, now + idx * 0.055);
+      gain.gain.exponentialRampToValueAtTime(0.11, now + idx * 0.055 + 0.018);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + idx * 0.055 + 0.42);
+      osc.connect(gain).connect(ctxAudio.destination);
+      osc.start(now + idx * 0.055);
+      osc.stop(now + idx * 0.055 + 0.45);
+    });
+  }
+
+  function showEvolutionCelebration(evo) {
+    const evolved = WEAPON_DEFS[evo.id];
+    const base = WEAPON_DEFS[evo.base];
+    const banner = document.getElementById('evolutionBanner');
+    const title = document.getElementById('evolutionBannerTitle');
+    const detail = document.getElementById('evolutionBannerDetail');
+
+    for (let i = 0; i < 84; i++) {
+      const ring = i % 3;
+      spawnParticle(player.x, player.y, ring === 0 ? '#f1c40f' : (ring === 1 ? '#ffffff' : '#8e44ad'), 5 + Math.random() * 10, 0.7 + Math.random() * 0.5);
+    }
+    screenShake = Math.min(screenShake + 0.65, 0.9);
+    floatTexts.push({
+      text: `EVOLVED: ${evolved.icon} ${evolved.name}`,
+      life: 3.0,
+      maxLife: 3.0,
+      screenSpace: true,
+      color: '#f1c40f',
+      size: 25,
+    });
+    playEvolutionChime();
+
+    if (!banner || !title || !detail) return;
+    title.textContent = `${evolved.icon} ${evolved.name}`;
+    detail.textContent = `${base.name} Lv.5 + ${evo.reqName}`;
+    banner.classList.add('visible');
+    if (evolutionBannerTimer) clearTimeout(evolutionBannerTimer);
+    evolutionBannerTimer = setTimeout(() => {
+      banner.classList.remove('visible');
+      evolutionBannerTimer = null;
+    }, 2600);
   }
 
   // 패시브 적용 + 보유 기록 (진화 조건 판정용)
@@ -1141,6 +1204,23 @@
     }
 
     const wrapper = document.getElementById('gameWrapper');
+    if (wrapper && !document.getElementById('evolutionBanner')) {
+      const banner = document.createElement('div');
+      banner.id = 'evolutionBanner';
+      banner.className = 'evolution-banner';
+      const kicker = document.createElement('div');
+      kicker.className = 'evolution-banner-kicker';
+      kicker.textContent = 'Weapon Evolved';
+      const title = document.createElement('div');
+      title.id = 'evolutionBannerTitle';
+      title.className = 'evolution-banner-title';
+      const detail = document.createElement('div');
+      detail.id = 'evolutionBannerDetail';
+      detail.className = 'evolution-banner-detail';
+      banner.append(kicker, title, detail);
+      wrapper.appendChild(banner);
+    }
+
     if (wrapper && !document.getElementById('pauseOverlay')) {
       const pauseOverlay = document.createElement('div');
       pauseOverlay.id = 'pauseOverlay';
