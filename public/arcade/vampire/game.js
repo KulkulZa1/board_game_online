@@ -78,6 +78,85 @@
 
   // 신규 획득 가능한 기본 무기 목록
   const WEAPON_POOL = ['orb', 'arrow', 'nova', 'shield', 'laser', 'boomerang', 'chain'];
+  const META_KEY = 'vps_meta_v2';
+  const RUN_SNAPSHOT_KEY = 'vps_run_snapshot_v1';
+  const RUN_SNAPSHOT_MAX_AGE_MS = 36 * 60 * 60 * 1000;
+  const RUN_SNAPSHOT_INTERVAL = 8;
+  const CHARACTER_DEFS = [
+    {
+      id: 'knight',
+      name: 'Chess Knight',
+      icon: 'N',
+      desc: 'Fast starter with bow pressure.',
+      startWeapons: ['arrow'],
+      speedMult: 1.08,
+      hpBonus: 0,
+      dmgMult: 1,
+      cdMult: 1,
+      xpRangeMult: 1,
+      unlock: { type: 'free' },
+    },
+    {
+      id: 'omok',
+      name: 'Omok Stone',
+      icon: 'O',
+      desc: 'Tougher bruiser with stone orbit.',
+      startWeapons: ['orb', 'nova'],
+      speedMult: 0.94,
+      hpBonus: 25,
+      dmgMult: 1.1,
+      cdMult: 1.04,
+      xpRangeMult: 0.95,
+      unlock: { achievement: 'survive180', cost: 350, label: 'Survive 3:00 or pay 350 coins' },
+    },
+    {
+      id: 'reversi',
+      name: 'Reversi Mage',
+      icon: 'R',
+      desc: 'Cooldown specialist with late-game scaling.',
+      startWeapons: ['shield', 'laser'],
+      speedMult: 1,
+      hpBonus: 10,
+      dmgMult: 0.95,
+      cdMult: 0.9,
+      xpRangeMult: 1.12,
+      unlock: { achievement: 'evolve1', cost: 600, premiumProduct: 'reversi', label: 'Evolve a weapon, pay 600 coins, or unlock premium on mobile' },
+    },
+  ];
+  const DIFFICULTY_DEFS = [
+    { id: 'easy', name: 'Easy', desc: 'Practice run.', enemyHpMult: 0.78, enemySpeedMult: 0.92, enemyDmgMult: 0.75, spawnMult: 0.82, bossInterval: 150, coinMult: 0.75 },
+    { id: 'normal', name: 'Normal', desc: 'Balanced 10 minute run.', enemyHpMult: 1, enemySpeedMult: 1, enemyDmgMult: 1, spawnMult: 1, bossInterval: 120, coinMult: 1 },
+    { id: 'hard', name: 'Hard', desc: 'Higher pressure and rewards.', enemyHpMult: 1.28, enemySpeedMult: 1.1, enemyDmgMult: 1.22, spawnMult: 1.22, bossInterval: 105, coinMult: 1.45 },
+  ];
+  const META_UPGRADE_DEFS = [
+    { id: 'might', name: 'Might', desc: '+4% weapon damage per rank.', max: 5, baseCost: 120, apply: (stats, level) => { stats.dmgMult *= 1 + level * 0.04; } },
+    { id: 'vitality', name: 'Vitality', desc: '+8 max HP per rank.', max: 5, baseCost: 110, apply: (stats, level) => { stats.hpBonus += level * 8; } },
+    { id: 'magnet', name: 'Magnet', desc: '+8% XP pickup range per rank.', max: 5, baseCost: 100, apply: (stats, level) => { stats.xpRangeMult *= 1 + level * 0.08; } },
+    { id: 'haste', name: 'Haste', desc: '-3% cooldown per rank.', max: 5, baseCost: 140, apply: (stats, level) => { stats.cdMult *= Math.max(0.75, 1 - level * 0.03); } },
+  ];
+  const MAP_DEFS = [
+    { id: 'meadow', name: 'Meadow', desc: 'Balanced 10 minute field.', durationSeconds: 600, enemyHpMult: 1, spawnMult: 1, coinMult: 1, bg: '#101827', unlock: { type: 'free' } },
+    { id: 'night', name: 'Night Board', desc: 'More enemies after your first clear.', durationSeconds: 600, enemyHpMult: 1.08, spawnMult: 1.12, coinMult: 1.15, bg: '#101222', unlock: { achievement: 'win1', label: 'Clear one run' } },
+    { id: 'snow', name: 'Snow Endgame', desc: 'Longer, harder, better payout.', durationSeconds: 720, enemyHpMult: 1.18, spawnMult: 1.18, coinMult: 1.35, bg: '#13212b', unlock: { achievement: 'clearHard', cost: 900, label: 'Clear Hard or pay 900 coins' } },
+  ];
+  const START_BOOST_COST = 90;
+  const HYBRID_TOWER_TYPES = [
+    { id: 'cannon', name: 'Cannon', icon: 'C', color: '#3498db', range: 190, dmg: 26, cd: 0.72, projectileSpeed: 430 },
+    { id: 'frost', name: 'Frost', icon: 'F', color: '#5dade2', range: 165, dmg: 13, cd: 1.1, projectileSpeed: 330, slow: 1.6 },
+    { id: 'tesla', name: 'Tesla', icon: 'T', color: '#f1c40f', range: 150, dmg: 18, cd: 0.9, chain: 2 },
+  ];
+  const MAX_HYBRID_TOWERS = 8;
+  const TOWER_RECHARGE_SECONDS = 45;
+  const ACHIEVEMENT_REWARDS = {
+    survive180: 120,
+    win1: 250,
+    clearHard: 350,
+    dailyClear: 160,
+    evolve3: 260,
+    nearMissClear: 220,
+    towerBuilder: 180,
+    noReviveClear: 180,
+  };
 
   // 랜덤 아이템 박스 — 40초마다 맵에 등장, 플레이어가 수집
   const ITEM_BOX_POOL = [
@@ -99,7 +178,7 @@
   ];
 
   // ── 게임 상태 ───────────────────────────────────────────────────
-  let state = 'idle'; // idle | playing | levelup | itembox | dead | win
+  let state = 'idle'; // idle | playing | paused | levelup | itembox | dead | win
   let player = null;
   let enemies = [];
   let projectiles = [];
@@ -118,6 +197,9 @@
   let screenShake = 0;         // 화면 흔들림 강도
   let lastMoveDir = { dx: 1, dy: 0 }; // 마지막 이동 방향 (대쉬 방향 결정)
   let itemBoxes     = [];        // 월드에 존재하는 아이템 박스
+  let hybridTowers  = [];
+  let selectedTowerTypeIdx = 0;
+  let towerRecharge = 0;
   let itemBoxTimer  = 0;
   let nextBossTime  = BOSS_INTERVAL;
   let bossActive    = false;
@@ -130,6 +212,33 @@
   let waveCount          = 0;     // 총 웨이브 카운터 (horde 판정)
   let freeRerollUsed     = false; // 현재 선택창 무료 리롤 사용 여부 (창마다 초기화)
   let currentChoiceBuilder = null; // 현재 선택지 생성 함수 (리롤 시 재호출)
+  let audioCtx = null;
+  let evolutionBannerTimer = null;
+  const LOW_HP_THRESHOLD = 0.25;
+  const CRITICAL_HP_THRESHOLD = 0.15;
+  const LOW_HP_ALERT_COOLDOWN = 7.5;
+  let lowHpAlertCooldown = 0;
+  let lowHpPulse = 0;
+
+  let meta = loadMeta();
+  syncAdSettings();
+  let selectedCharacterId = meta.lastCharacter || 'knight';
+  let selectedDifficultyId = meta.lastDifficulty || 'normal';
+  let selectedMapId = meta.lastMap || 'meadow';
+  let dailyChallengeEnabled = !!meta.dailyChallengeEnabled;
+  let runRewardsGranted = false;
+  let lastRunSnapshotAt = 0;
+  let allyPlayer = null;
+  const coop = {
+    socket: null,
+    role: 'solo',
+    roomId: null,
+    guestConnected: false,
+    guestInput: { dx: 0, dy: 0, dash: false, tower: false },
+    lastInputSentAt: 0,
+    lastStateSentAt: 0,
+    mirrorSnapshot: null,
+  };
 
   const SANDBOX_CONFIG = window.VS_CONFIG || null;
   const ENEMY_COLORS = {
@@ -172,7 +281,9 @@
 
   function getSurviveGoal() {
     const stage = sandboxStage();
-    return stage && stage.durationSeconds ? stage.durationSeconds : SURVIVE_GOAL;
+    if (stage && stage.durationSeconds) return stage.durationSeconds;
+    const map = currentMap();
+    return map.durationSeconds || SURVIVE_GOAL;
   }
 
   function renderStageSelect() {
@@ -197,24 +308,41 @@
 
   function initGame() {
     syncSandboxWeaponStats();
+    ensureMetaAchievements();
+    const character = currentCharacter();
+    const difficulty = currentDifficulty();
+    const map = currentMap();
+    const daily = dailyChallengeEnabled ? dailyChallenge() : null;
+    const metaStats = { hpBonus: 0, dmgMult: 1, cdMult: 1, xpRangeMult: 1 };
+    META_UPGRADE_DEFS.forEach(def => def.apply(metaStats, upgradeLevel(def.id)));
+    const maxHp = BASE_HP + (character.hpBonus || 0) + metaStats.hpBonus + (meta.pendingStartBoost ? 20 : 0);
     player = {
       x: 0, y: 0,
-      hp: BASE_HP, maxHp: BASE_HP,
-      speed: PLAYER_SPEED,
+      hp: maxHp, maxHp,
+      speed: PLAYER_SPEED * character.speedMult,
       level: 1, xp: 0,
       weapons: [],       // 보유 무기 id 목록
       weaponLevels: {},  // 무기별 레벨 (1~MAX_WEAPON_LEVEL)
       weaponCDs: {},     // 무기별 쿨다운 잔여 시간
       passives: {},      // 보유 패시브 id → 스택 수 (진화 조건 판정)
-      dmgMult: 1,
-      cdMult:  1,
-      xpRange: 80,
+      dmgMult: character.dmgMult * metaStats.dmgMult,
+      cdMult:  character.cdMult * metaStats.cdMult,
+      xpRange: 80 * character.xpRangeMult * metaStats.xpRangeMult,
       invincible: 0,     // 무적 시간(초)
       shieldTimer: 0,
       tempDmgMult:  1,     // 임시 공격력 배율 (아이템 박스)
       tempDmgTimer: 0,
       tempSpeedMult: 1,    // 임시 속도 배율 (아이템 박스)
       tempSpeedTimer: 0,
+      characterId: character.id,
+      difficultyId: difficulty.id,
+      revived: false,
+      mapId: map.id,
+      dailyKey: daily ? daily.key : null,
+      towerCharges: 2,
+      maxTowerCharges: 4,
+      towersPlaced: 0,
+      lowestHpPct: 1,
       rerolls: 0,          // 추가 리롤권 (몬스터 드롭)
       critChance: 0,        // 치명타 확률 (crit 패시브)
       pierceBonus: 0,       // 화살·부메랑 추가 관통 (pierce_up 패시브)
@@ -235,22 +363,38 @@
     screenShake = 0;
     lastMoveDir = { dx: 1, dy: 0 };
     itemBoxes     = [];
+    hybridTowers  = [];
+    allyPlayer = null;
+    selectedTowerTypeIdx = 0;
+    towerRecharge = 0;
     itemBoxTimer  = 0;
-    nextBossTime  = BOSS_INTERVAL;
+    nextBossTime  = difficulty.bossInterval || BOSS_INTERVAL;
     bossActive    = false;
     bossWarning   = 0;
     damageNumbers = [];
     floatTexts    = [];
+    lowHpAlertCooldown = 0;
+    lowHpPulse = 0;
     comboCount    = 0;
     comboTimer    = 0;
     milestones    = new Set();
     waveCount     = 0;
+    runRewardsGranted = false;
 
     // 시작 무기
-    addWeapon('orb');
-    addWeapon('arrow');
+    character.startWeapons.forEach(id => addWeapon(id));
+    if (coop.role === 'host' && coop.guestConnected) initAllyPlayer();
+    if (daily && !player.weapons.includes(daily.forcedWeapon)) addWeapon(daily.forcedWeapon);
+    if (meta.pendingStartBoost) {
+      player.rerolls += 1;
+      const bonusWeapon = WEAPON_POOL.find(id => !player.weapons.includes(id));
+      if (bonusWeapon && player.weapons.length < MAX_WEAPONS) addWeapon(bonusWeapon);
+      meta.pendingStartBoost = false;
+      saveMeta();
+    }
     spawnWave();
     updateHUD();
+    updateTowerButton();
   }
 
   function addWeapon(id) {
@@ -275,8 +419,74 @@
     delete player.weaponLevels[evo.base];
     delete player.weaponCDs[evo.base];
     player.weaponCDs[evo.id] = 0;
-    for (let i = 0; i < 30; i++) spawnParticle(player.x, player.y, '#f1c40f', 6 + Math.random() * 6, 0.9);
+    showEvolutionCelebration(evo);
     renderWeaponSlots();
+    if (!meta.achievements.evolve1) {
+      meta.achievements.evolve1 = true;
+      ensureMetaAchievements();
+      saveMeta();
+    }
+  }
+
+  function ensureAudioContext() {
+    const Ctor = window.AudioContext || window.webkitAudioContext;
+    if (!Ctor) return null;
+    if (!audioCtx) audioCtx = new Ctor();
+    if (audioCtx.state === 'suspended' && typeof audioCtx.resume === 'function') {
+      audioCtx.resume().catch(() => {});
+    }
+    return audioCtx;
+  }
+
+  function playEvolutionChime() {
+    const ctxAudio = ensureAudioContext();
+    if (!ctxAudio) return;
+    const now = ctxAudio.currentTime;
+    [523.25, 659.25, 783.99, 1046.5].forEach((freq, idx) => {
+      const osc = ctxAudio.createOscillator();
+      const gain = ctxAudio.createGain();
+      osc.type = idx === 3 ? 'triangle' : 'sine';
+      osc.frequency.setValueAtTime(freq, now + idx * 0.055);
+      gain.gain.setValueAtTime(0.0001, now + idx * 0.055);
+      gain.gain.exponentialRampToValueAtTime(0.11, now + idx * 0.055 + 0.018);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + idx * 0.055 + 0.42);
+      osc.connect(gain).connect(ctxAudio.destination);
+      osc.start(now + idx * 0.055);
+      osc.stop(now + idx * 0.055 + 0.45);
+    });
+  }
+
+  function showEvolutionCelebration(evo) {
+    const evolved = WEAPON_DEFS[evo.id];
+    const base = WEAPON_DEFS[evo.base];
+    const banner = document.getElementById('evolutionBanner');
+    const title = document.getElementById('evolutionBannerTitle');
+    const detail = document.getElementById('evolutionBannerDetail');
+
+    for (let i = 0; i < 84; i++) {
+      const ring = i % 3;
+      spawnParticle(player.x, player.y, ring === 0 ? '#f1c40f' : (ring === 1 ? '#ffffff' : '#8e44ad'), 5 + Math.random() * 10, 0.7 + Math.random() * 0.5);
+    }
+    screenShake = Math.min(screenShake + 0.65, 0.9);
+    floatTexts.push({
+      text: `EVOLVED: ${evolved.icon} ${evolved.name}`,
+      life: 3.0,
+      maxLife: 3.0,
+      screenSpace: true,
+      color: '#f1c40f',
+      size: 25,
+    });
+    playEvolutionChime();
+
+    if (!banner || !title || !detail) return;
+    title.textContent = `${evolved.icon} ${evolved.name}`;
+    detail.textContent = `${base.name} Lv.5 + ${evo.reqName}`;
+    banner.classList.add('visible');
+    if (evolutionBannerTimer) clearTimeout(evolutionBannerTimer);
+    evolutionBannerTimer = setTimeout(() => {
+      banner.classList.remove('visible');
+      evolutionBannerTimer = null;
+    }, 2600);
   }
 
   // 패시브 적용 + 보유 기록 (진화 조건 판정용)
@@ -295,6 +505,109 @@
     );
   }
 
+  function evolvedWeaponCount() {
+    if (!player) return 0;
+    return player.weapons.filter(id => WEAPON_DEFS[id] && WEAPON_DEFS[id].evolved).length;
+  }
+
+  function missedEvolutionHints() {
+    if (!player) return [];
+    const hints = [];
+    for (const evo of EVOLUTION_DEFS) {
+      if (player.weapons.includes(evo.id)) continue;
+      const base = WEAPON_DEFS[evo.base];
+      const evolved = WEAPON_DEFS[evo.id];
+      const hasBase = player.weapons.includes(evo.base);
+      const baseMaxed = hasBase && (player.weaponLevels[evo.base] || 1) >= MAX_WEAPON_LEVEL;
+      const hasPassive = !!player.passives[evo.req];
+      if (baseMaxed && !hasPassive) {
+        hints.push(`${base.name} Lv.5 needed ${evo.reqName} for ${evolved.name}`);
+      } else if (hasPassive && hasBase && !baseMaxed) {
+        hints.push(`${base.name} needed Lv.5 to evolve with ${evo.reqName}`);
+      }
+      if (hints.length >= 3) break;
+    }
+    return hints;
+  }
+
+  // Evolution plan state for start, pause, and level-up surfaces.
+  function evolutionProgress(evo) {
+    const base = WEAPON_DEFS[evo.base];
+    const evolved = WEAPON_DEFS[evo.id];
+    const starterWeapons = player ? [] : (currentCharacter().startWeapons || []);
+    const hasBase = player ? player.weapons.includes(evo.base) : starterWeapons.includes(evo.base);
+    const hasEvolved = player ? player.weapons.includes(evo.id) : false;
+    const baseLevel = player ? (player.weaponLevels[evo.base] || (hasBase ? 1 : 0)) : (hasBase ? 1 : 0);
+    const baseMaxed = hasBase && baseLevel >= MAX_WEAPON_LEVEL;
+    const hasPassive = player ? !!player.passives[evo.req] : false;
+    let stateText = `Need ${base.name}`;
+    let stateClass = 'missing';
+    let priority = 5;
+
+    if (hasEvolved) {
+      stateText = 'Evolved';
+      stateClass = 'evolved';
+      priority = 3;
+    } else if (baseMaxed && hasPassive) {
+      stateText = 'Ready on next level-up';
+      stateClass = 'ready';
+      priority = 0;
+    } else if (hasBase && hasPassive) {
+      stateText = `Need ${MAX_WEAPON_LEVEL - baseLevel} more ${base.name} levels`;
+      stateClass = 'progress';
+      priority = 1;
+    } else if (baseMaxed) {
+      stateText = `Need ${evo.reqName}`;
+      stateClass = 'progress';
+      priority = 1;
+    } else if (hasBase) {
+      stateText = `Lv.${baseLevel}/${MAX_WEAPON_LEVEL} - find ${evo.reqName}`;
+      stateClass = 'progress';
+      priority = 2;
+    } else if (hasPassive) {
+      stateText = `Find ${base.name}`;
+      stateClass = 'progress';
+      priority = 2;
+    }
+
+    return { evo, base, evolved, hasBase, hasEvolved, baseLevel, baseMaxed, hasPassive, stateText, stateClass, priority };
+  }
+
+  function renderEvolutionPlan(container, options = {}) {
+    if (!container) return;
+    container.textContent = '';
+    const compact = !!options.compact;
+    const rows = EVOLUTION_DEFS
+      .map(evolutionProgress)
+      .sort((a, b) => a.priority - b.priority);
+    const visibleRows = compact ? rows.slice(0, 3) : rows;
+
+    const title = document.createElement('div');
+    title.className = 'evolution-plan-title';
+    title.textContent = compact ? 'Evolution Plan' : 'Evolution Recipes';
+    container.appendChild(title);
+
+    visibleRows.forEach(row => {
+      const item = document.createElement('div');
+      item.className = `evolution-plan-row ${row.stateClass}`;
+
+      const recipe = document.createElement('div');
+      recipe.className = 'evolution-recipe';
+      recipe.textContent = `${row.base.icon} ${row.base.name} Lv.5 + ${row.evo.reqName}`;
+
+      const result = document.createElement('div');
+      result.className = 'evolution-result';
+      result.textContent = `${row.evolved.icon} ${row.evolved.name}`;
+
+      const status = document.createElement('div');
+      status.className = 'evolution-status';
+      status.textContent = row.stateText;
+
+      item.append(recipe, result, status);
+      container.appendChild(item);
+    });
+  }
+
   // 이지스 진화 효과: 보호막 발동 시 주변 적에게 반사 피해
   function aegisReflect(dmg, range) {
     for (let i = enemies.length - 1; i >= 0; i--) {
@@ -310,10 +623,1318 @@
     if (el) el.textContent = text;
   }
 
+  function loadMeta() {
+    const fallback = {
+      coins: 0,
+      bestTime: 0,
+      bestKills: 0,
+      unlockedCharacters: ['knight'],
+      achievements: {},
+      upgrades: {},
+      unlockedMaps: ['meadow'],
+      lastCharacter: 'knight',
+      lastDifficulty: 'normal',
+      lastMap: 'meadow',
+      dailyChallengeEnabled: false,
+      dailyCompletions: {},
+      pendingStartBoost: false,
+      adsRemoved: false,
+      premiumCharacters: [],
+    };
+    try {
+      const raw = localStorage.getItem(META_KEY);
+      if (!raw) return fallback;
+      const saved = JSON.parse(raw);
+      return {
+        ...fallback,
+        ...saved,
+        unlockedCharacters: Array.isArray(saved.unlockedCharacters) && saved.unlockedCharacters.length ? saved.unlockedCharacters : fallback.unlockedCharacters,
+        achievements: saved.achievements && typeof saved.achievements === 'object' ? saved.achievements : fallback.achievements,
+        upgrades: saved.upgrades && typeof saved.upgrades === 'object' ? saved.upgrades : fallback.upgrades,
+        unlockedMaps: Array.isArray(saved.unlockedMaps) && saved.unlockedMaps.length ? saved.unlockedMaps : fallback.unlockedMaps,
+        dailyCompletions: saved.dailyCompletions && typeof saved.dailyCompletions === 'object' ? saved.dailyCompletions : fallback.dailyCompletions,
+        premiumCharacters: Array.isArray(saved.premiumCharacters) ? saved.premiumCharacters : fallback.premiumCharacters,
+        adsRemoved: !!saved.adsRemoved,
+      };
+    } catch (_err) {
+      return fallback;
+    }
+  }
+
+  function saveMeta() {
+    try { localStorage.setItem(META_KEY, JSON.stringify(meta)); } catch (_err) {}
+    syncAdSettings();
+  }
+
+  function cloneForSnapshot(value) {
+    return JSON.parse(JSON.stringify(value));
+  }
+
+  function saveRunSnapshot(reason) {
+    if (!player || (state !== 'playing' && state !== 'paused')) return false;
+    const snapshot = {
+      version: 1,
+      savedAt: Date.now(),
+      reason: reason || 'auto',
+      selectedCharacterId,
+      selectedDifficultyId,
+      selectedMapId,
+      dailyChallengeEnabled,
+      selectedStageIdx,
+      player: cloneForSnapshot(player),
+      allyPlayer: allyPlayer ? cloneForSnapshot(allyPlayer) : null,
+      enemies: cloneForSnapshot(enemies),
+      projectiles: cloneForSnapshot(projectiles),
+      xpGems: cloneForSnapshot(xpGems),
+      itemBoxes: cloneForSnapshot(itemBoxes),
+      hybridTowers: cloneForSnapshot(hybridTowers),
+      enemyProjectiles: cloneForSnapshot(enemyProjectiles),
+      damageNumbers: cloneForSnapshot(damageNumbers),
+      floatTexts: cloneForSnapshot(floatTexts.filter(text => !text.screenSpace)),
+      elapsed,
+      kills,
+      waveTimer,
+      camera: cloneForSnapshot(camera),
+      dashCd,
+      dashEffect: dashEffect ? cloneForSnapshot(dashEffect) : null,
+      screenShake,
+      lastMoveDir: cloneForSnapshot(lastMoveDir),
+      selectedTowerTypeIdx,
+      towerRecharge,
+      itemBoxTimer,
+      nextBossTime,
+      bossActive,
+      bossWarning,
+      comboCount,
+      comboTimer,
+      milestones: Array.from(milestones),
+      waveCount,
+    };
+    try {
+      localStorage.setItem(RUN_SNAPSHOT_KEY, JSON.stringify(snapshot));
+      lastRunSnapshotAt = elapsed || lastRunSnapshotAt;
+      return true;
+    } catch (_err) {
+      return false;
+    }
+  }
+
+  function loadRunSnapshot() {
+    try {
+      const raw = localStorage.getItem(RUN_SNAPSHOT_KEY);
+      if (!raw) return null;
+      const snapshot = JSON.parse(raw);
+      if (!snapshot || snapshot.version !== 1 || !snapshot.player || !Array.isArray(snapshot.player.weapons)) return null;
+      if (!snapshot.savedAt || Date.now() - snapshot.savedAt > RUN_SNAPSHOT_MAX_AGE_MS) {
+        clearRunSnapshot();
+        return null;
+      }
+      return snapshot;
+    } catch (_err) {
+      return null;
+    }
+  }
+
+  function clearRunSnapshot() {
+    try { localStorage.removeItem(RUN_SNAPSHOT_KEY); } catch (_err) {}
+  }
+
+  function restoreRunSnapshot(snapshot) {
+    if (!snapshot || !snapshot.player) return false;
+    if (frameId) cancelAnimationFrame(frameId);
+    clearEndActions();
+    selectedCharacterId = snapshot.selectedCharacterId || selectedCharacterId;
+    selectedDifficultyId = snapshot.selectedDifficultyId || selectedDifficultyId;
+    selectedMapId = snapshot.selectedMapId || selectedMapId;
+    dailyChallengeEnabled = !!snapshot.dailyChallengeEnabled;
+    selectedStageIdx = Number(snapshot.selectedStageIdx) || 0;
+    player = snapshot.player;
+    allyPlayer = snapshot.allyPlayer || null;
+    enemies = Array.isArray(snapshot.enemies) ? snapshot.enemies : [];
+    projectiles = Array.isArray(snapshot.projectiles) ? snapshot.projectiles : [];
+    xpGems = Array.isArray(snapshot.xpGems) ? snapshot.xpGems : [];
+    particles = [];
+    chainExplosions = [];
+    itemBoxes = Array.isArray(snapshot.itemBoxes) ? snapshot.itemBoxes : [];
+    hybridTowers = Array.isArray(snapshot.hybridTowers) ? snapshot.hybridTowers : [];
+    enemyProjectiles = Array.isArray(snapshot.enemyProjectiles) ? snapshot.enemyProjectiles : [];
+    damageNumbers = Array.isArray(snapshot.damageNumbers) ? snapshot.damageNumbers : [];
+    floatTexts = [{ text: 'Saved run restored', life: 2, maxLife: 2, screenSpace: true, color: '#f1c40f', size: 18 }]
+      .concat(Array.isArray(snapshot.floatTexts) ? snapshot.floatTexts : []);
+    elapsed = Number(snapshot.elapsed) || 0;
+    kills = Number(snapshot.kills) || 0;
+    waveTimer = Number(snapshot.waveTimer) || 0;
+    camera = snapshot.camera || { x: 0, y: 0 };
+    dashCd = Number(snapshot.dashCd) || 0;
+    dashEffect = snapshot.dashEffect || null;
+    screenShake = Number(snapshot.screenShake) || 0;
+    lastMoveDir = snapshot.lastMoveDir || { dx: 1, dy: 0 };
+    selectedTowerTypeIdx = Number(snapshot.selectedTowerTypeIdx) || 0;
+    towerRecharge = Number(snapshot.towerRecharge) || 0;
+    itemBoxTimer = Number(snapshot.itemBoxTimer) || 0;
+    nextBossTime = Number(snapshot.nextBossTime) || (currentDifficulty().bossInterval || BOSS_INTERVAL);
+    bossActive = !!snapshot.bossActive;
+    bossWarning = Number(snapshot.bossWarning) || 0;
+    comboCount = Number(snapshot.comboCount) || 0;
+    comboTimer = Number(snapshot.comboTimer) || 0;
+    milestones = new Set(Array.isArray(snapshot.milestones) ? snapshot.milestones : []);
+    waveCount = Number(snapshot.waveCount) || 0;
+    runRewardsGranted = false;
+    currentChoiceBuilder = null;
+    freeRerollUsed = false;
+    state = 'paused';
+    lastRunSnapshotAt = elapsed;
+    document.getElementById('overlay').classList.remove('visible');
+    document.getElementById('levelOverlay').style.display = 'none';
+    const pauseOverlay = document.getElementById('pauseOverlay');
+    if (pauseOverlay) pauseOverlay.style.display = 'flex';
+    const pauseDetail = document.getElementById('pauseDetail');
+    if (pauseDetail) pauseDetail.textContent = `Saved at ${fmtTime(elapsed)}. Resume when ready.`;
+    const pauseBtn = document.getElementById('pauseBtn');
+    if (pauseBtn) pauseBtn.style.display = '';
+    const towerBtn = document.getElementById('towerBtn');
+    if (towerBtn) towerBtn.style.display = '';
+    renderStageSelect();
+    renderWeaponSlots();
+    updateHUD();
+    updateTowerButton();
+    lastTime = performance.now();
+    frameId = requestAnimationFrame(loop);
+    return true;
+  }
+
+  function syncAdSettings() {
+    if (window.AdMobHelper && typeof AdMobHelper.setAdsRemoved === 'function') {
+      AdMobHelper.setAdsRemoved(!!meta.adsRemoved);
+    }
+  }
+
+  function coopShareUrl(roomId) {
+    const url = new URL(window.location.href);
+    url.searchParams.set('vpsRoom', roomId);
+    return url.toString();
+  }
+
+  function setCoopStatus(text) {
+    const el = document.getElementById('coopStatus');
+    if (el) el.textContent = text;
+  }
+
+  function ensureCoopSocket() {
+    if (coop.socket || typeof io !== 'function') return coop.socket;
+    coop.socket = io({ reconnectionAttempts: 10 });
+    coop.socket.on('vps:room:created', ({ roomId }) => {
+      coop.role = 'host';
+      coop.roomId = roomId;
+      setCoopStatus(`Co-op room ready. Share: ${coopShareUrl(roomId)}`);
+      renderStartOptions();
+    });
+    coop.socket.on('vps:room:joined', ({ roomId }) => {
+      coop.role = 'guest';
+      coop.roomId = roomId;
+      setCoopStatus('Joined as co-op guest. Use keyboard or touch joystick to control the ally.');
+      document.getElementById('overlay').classList.remove('visible');
+      state = 'coop-guest';
+      renderStartOptions();
+    });
+    coop.socket.on('vps:guest:joined', () => {
+      coop.guestConnected = true;
+      setCoopStatus('Guest connected. Start a run and they will control the ally.');
+      if (player && !allyPlayer) initAllyPlayer();
+      renderStartOptions();
+    });
+    coop.socket.on('vps:guest:left', () => {
+      coop.guestConnected = false;
+      setCoopStatus('Guest disconnected. The ally will hold position.');
+      renderStartOptions();
+    });
+    coop.socket.on('vps:guest:input', ({ input }) => {
+      coop.guestInput = input || coop.guestInput;
+    });
+    coop.socket.on('vps:state', ({ snapshot }) => {
+      coop.mirrorSnapshot = snapshot;
+    });
+    coop.socket.on('vps:room:closed', ({ reason }) => {
+      setCoopStatus(`Co-op room closed: ${reason || 'ended'}`);
+      coop.role = 'solo';
+      coop.roomId = null;
+      coop.guestConnected = false;
+      coop.mirrorSnapshot = null;
+      renderStartOptions();
+    });
+    coop.socket.on('vps:error', ({ message }) => {
+      setCoopStatus(message || 'Co-op connection failed.');
+    });
+    return coop.socket;
+  }
+
+  function hostCoopRoom() {
+    const socket = ensureCoopSocket();
+    if (!socket) {
+      setCoopStatus('Co-op requires Socket.io on the server.');
+      return;
+    }
+    socket.emit('vps:room:create');
+    setCoopStatus('Creating co-op room...');
+  }
+
+  function joinCoopRoom(roomId) {
+    const socket = ensureCoopSocket();
+    if (!socket || !roomId) return;
+    socket.emit('vps:room:join', { roomId });
+    setCoopStatus('Joining co-op room...');
+  }
+
+  function initAllyPlayer() {
+    if (!player) return;
+    allyPlayer = {
+      x: player.x + 46,
+      y: player.y + 12,
+      speed: player.speed * 0.98,
+      radius: 11,
+      dashCd: 0,
+      towerCd: 0,
+      attackCd: 0,
+      lastMoveDir: { dx: 1, dy: 0 },
+    };
+  }
+
+  function sendGuestInput(force) {
+    if (coop.role !== 'guest' || !coop.socket || !coop.roomId) return;
+    const now = performance.now();
+    if (!force && now - coop.lastInputSentAt < 80) return;
+    coop.lastInputSentAt = now;
+    const input = getMoveDir();
+    coop.socket.emit('vps:guest:input', {
+      roomId: coop.roomId,
+      input: {
+        dx: input.dx,
+        dy: input.dy,
+        dash: !!(keys[' '] || keys.x || keys.X),
+        tower: !!(keys.t || keys.T),
+      },
+    });
+  }
+
+  function sendHostCoopState(force) {
+    if (coop.role !== 'host' || !coop.socket || !coop.roomId || !coop.guestConnected || !player) return;
+    const now = performance.now();
+    if (!force && now - coop.lastStateSentAt < 180) return;
+    coop.lastStateSentAt = now;
+    coop.socket.emit('vps:host:state', {
+      roomId: coop.roomId,
+      snapshot: {
+        state,
+        elapsed,
+        kills,
+        hp: player.hp,
+        maxHp: player.maxHp,
+        level: player.level,
+        host: { x: player.x, y: player.y },
+        guest: allyPlayer ? { x: allyPlayer.x, y: allyPlayer.y } : null,
+        enemies: enemies.slice(0, 30).map(e => ({
+          x: e.x,
+          y: e.y,
+          size: e.size,
+          hpPct: e.maxHp ? e.hp / e.maxHp : 0,
+          color: ENEMY_COLORS[e.type] || '#e74c3c',
+        })),
+      },
+    });
+  }
+
+  function renderCoopGuestMirror() {
+    const W = canvas.width, H = canvas.height;
+    const snap = coop.mirrorSnapshot;
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = '#101827';
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#dfe6ff';
+    ctx.font = 'bold 18px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('Co-op Guest Controller', W / 2, 48);
+    ctx.font = '13px system-ui, sans-serif';
+    ctx.fillStyle = '#9aa6c7';
+    ctx.fillText('Move with WASD / arrows or touch joystick. Space = dash.', W / 2, 74);
+    if (!snap) {
+      ctx.fillText('Waiting for host run state...', W / 2, H / 2);
+      return;
+    }
+    ctx.fillStyle = '#f1c40f';
+    ctx.fillText(`Time ${fmtTime(snap.elapsed || 0)}  Lv.${snap.level || 1}  ${snap.kills || 0} kills  HP ${Math.ceil(snap.hp || 0)}/${Math.ceil(snap.maxHp || 1)}`, W / 2, 104);
+    const cx = W / 2, cy = H / 2 + 30;
+    const host = snap.host || { x: 0, y: 0 };
+    const scale = 0.42;
+    function sx(x) { return cx + (x - host.x) * scale; }
+    function sy(y) { return cy + (y - host.y) * scale; }
+    (snap.enemies || []).forEach(e => {
+      ctx.beginPath();
+      ctx.arc(sx(e.x), sy(e.y), Math.max(4, e.size * scale), 0, Math.PI * 2);
+      ctx.fillStyle = e.color || '#e74c3c';
+      ctx.globalAlpha = 0.75;
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    });
+    if (snap.guest) {
+      ctx.beginPath();
+      ctx.arc(sx(snap.guest.x), sy(snap.guest.y), 11, 0, Math.PI * 2);
+      ctx.fillStyle = '#2ecc71';
+      ctx.fill();
+      ctx.fillStyle = '#06130d';
+      ctx.font = 'bold 11px sans-serif';
+      ctx.fillText('G', sx(snap.guest.x), sy(snap.guest.y) + 1);
+    }
+    if (snap.host) {
+      ctx.beginPath();
+      ctx.arc(sx(snap.host.x), sy(snap.host.y), 12, 0, Math.PI * 2);
+      ctx.fillStyle = '#f1c40f';
+      ctx.fill();
+      ctx.fillStyle = '#1b1300';
+      ctx.font = 'bold 11px sans-serif';
+      ctx.fillText('H', sx(snap.host.x), sy(snap.host.y) + 1);
+    }
+  }
+
+  function currentCharacter() {
+    return CHARACTER_DEFS.find(ch => ch.id === selectedCharacterId) || CHARACTER_DEFS[0];
+  }
+
+  function currentDifficulty() {
+    return DIFFICULTY_DEFS.find(diff => diff.id === selectedDifficultyId) || DIFFICULTY_DEFS[1];
+  }
+
+  function currentMap() {
+    return MAP_DEFS.find(map => map.id === selectedMapId) || MAP_DEFS[0];
+  }
+
+  function todayKey() {
+    return new Date().toISOString().slice(0, 10);
+  }
+
+  function seededIndex(seed, length) {
+    let hash = 0;
+    for (let i = 0; i < seed.length; i++) hash = ((hash << 5) - hash + seed.charCodeAt(i)) | 0;
+    return Math.abs(hash) % length;
+  }
+
+  function dailyChallenge() {
+    const key = todayKey();
+    const forcedWeapon = WEAPON_POOL[seededIndex(`${key}:weapon`, WEAPON_POOL.length)];
+    const difficulty = DIFFICULTY_DEFS[1 + seededIndex(`${key}:difficulty`, DIFFICULTY_DEFS.length - 1)];
+    return {
+      key,
+      name: `Daily ${key}`,
+      desc: `Forced ${WEAPON_DEFS[forcedWeapon].name}, ${difficulty.name} pressure, +75 coins on clear.`,
+      forcedWeapon,
+      enemyHpMult: 1.08,
+      spawnMult: 1.12,
+      coinBonus: 75,
+    };
+  }
+
+  function isMapUnlocked(def) {
+    if (!def || !def.unlock || def.unlock.type === 'free') return true;
+    if (meta.unlockedMaps.includes(def.id)) return true;
+    return !!(def.unlock.achievement && meta.achievements[def.unlock.achievement]);
+  }
+
+  function unlockMap(id) {
+    if (!meta.unlockedMaps.includes(id)) meta.unlockedMaps.push(id);
+  }
+
+  function upgradeLevel(id) {
+    return Math.max(0, Math.min(Number(meta.upgrades[id]) || 0, (META_UPGRADE_DEFS.find(def => def.id === id) || {}).max || 0));
+  }
+
+  function upgradeCost(def) {
+    const level = upgradeLevel(def.id);
+    if (level >= def.max) return null;
+    return def.baseCost + level * 80;
+  }
+
+  function isCharacterUnlocked(def) {
+    if (!def || !def.unlock || def.unlock.type === 'free') return true;
+    if (meta.unlockedCharacters.includes(def.id)) return true;
+    if (isPremiumCharacterOwned(def.id)) return true;
+    return !!(def.unlock.achievement && meta.achievements[def.unlock.achievement]);
+  }
+
+  function isPremiumCharacterOwned(id) {
+    return Array.isArray(meta.premiumCharacters) && meta.premiumCharacters.includes(id);
+  }
+
+  function unlockCharacter(id) {
+    if (!meta.unlockedCharacters.includes(id)) meta.unlockedCharacters.push(id);
+  }
+
+  async function purchasePremiumCharacter(def) {
+    if (!def || !def.unlock || !def.unlock.premiumProduct) return false;
+    if (!window.AdMobHelper || typeof AdMobHelper.purchasePremiumCharacter !== 'function') return false;
+    const result = await AdMobHelper.purchasePremiumCharacter(def.unlock.premiumProduct);
+    if (!result || !result.ok) return false;
+    if (!Array.isArray(meta.premiumCharacters)) meta.premiumCharacters = [];
+    if (!meta.premiumCharacters.includes(def.id)) meta.premiumCharacters.push(def.id);
+    unlockCharacter(def.id);
+    selectedCharacterId = def.id;
+    meta.lastCharacter = def.id;
+    saveMeta();
+    return true;
+  }
+
+  function ensureMetaAchievements() {
+    CHARACTER_DEFS.forEach(def => {
+      if (isCharacterUnlocked(def)) unlockCharacter(def.id);
+    });
+    MAP_DEFS.forEach(def => {
+      if (isMapUnlocked(def)) unlockMap(def.id);
+    });
+  }
+
+  function ensureStartPanels() {
+    const overlayBox = document.getElementById('overlayBox');
+    if (!overlayBox) return;
+
+    const headerStats = document.getElementById('hdr-stats');
+    if (headerStats && !document.getElementById('pauseBtn')) {
+      const pauseBtn = document.createElement('button');
+      pauseBtn.id = 'pauseBtn';
+      pauseBtn.className = 'guide-btn pause-btn';
+      pauseBtn.type = 'button';
+      pauseBtn.title = 'Pause (P)';
+      pauseBtn.textContent = 'II';
+      pauseBtn.style.display = 'none';
+      pauseBtn.addEventListener('click', () => togglePause());
+      const guideBtn = document.getElementById('guideBtn');
+      headerStats.insertBefore(pauseBtn, guideBtn || null);
+    }
+
+    if (headerStats && !document.getElementById('towerBtn')) {
+      const towerBtn = document.createElement('button');
+      towerBtn.id = 'towerBtn';
+      towerBtn.className = 'guide-btn tower-btn';
+      towerBtn.type = 'button';
+      towerBtn.title = 'Place tower (T)';
+      towerBtn.textContent = 'TW';
+      towerBtn.style.display = 'none';
+      towerBtn.addEventListener('click', () => placeHybridTower());
+      const pauseBtn = document.getElementById('pauseBtn');
+      headerStats.insertBefore(towerBtn, pauseBtn || document.getElementById('guideBtn') || null);
+    }
+
+    if (!document.getElementById('metaPanel')) {
+      const metaPanel = document.createElement('div');
+      metaPanel.id = 'metaPanel';
+      metaPanel.className = 'meta-panel';
+      overlayBox.insertBefore(metaPanel, document.getElementById('overlaySub') || document.getElementById('startBtn'));
+    }
+
+    if (!document.getElementById('characterSelect')) {
+      const wrap = document.createElement('div');
+      wrap.id = 'characterSelect';
+      wrap.className = 'start-select-wrap';
+      const title = document.createElement('div');
+      title.className = 'start-select-title';
+      title.textContent = 'Character';
+      const grid = document.createElement('div');
+      grid.className = 'start-select-grid';
+      wrap.append(title, grid);
+      overlayBox.insertBefore(wrap, document.getElementById('overlaySub') || document.getElementById('startBtn'));
+    }
+
+    if (!document.getElementById('difficultySelect')) {
+      const wrap = document.createElement('div');
+      wrap.id = 'difficultySelect';
+      wrap.className = 'start-select-wrap';
+      const title = document.createElement('div');
+      title.className = 'start-select-title';
+      title.textContent = 'Difficulty';
+      const grid = document.createElement('div');
+      grid.className = 'start-select-grid difficulty-grid';
+      wrap.append(title, grid);
+      overlayBox.insertBefore(wrap, document.getElementById('overlaySub') || document.getElementById('startBtn'));
+    }
+
+    if (!document.getElementById('mapSelect')) {
+      const wrap = document.createElement('div');
+      wrap.id = 'mapSelect';
+      wrap.className = 'start-select-wrap';
+      const title = document.createElement('div');
+      title.className = 'start-select-title';
+      title.textContent = 'Map';
+      const grid = document.createElement('div');
+      grid.className = 'start-select-grid map-grid';
+      wrap.append(title, grid);
+      overlayBox.insertBefore(wrap, document.getElementById('overlaySub') || document.getElementById('startBtn'));
+    }
+
+    if (!document.getElementById('evolutionPlanPanel')) {
+      const panel = document.createElement('div');
+      panel.id = 'evolutionPlanPanel';
+      panel.className = 'start-select-wrap evolution-plan';
+      overlayBox.insertBefore(panel, document.getElementById('overlaySub') || document.getElementById('startBtn'));
+    }
+
+    if (!document.getElementById('dailyPanel')) {
+      const panel = document.createElement('div');
+      panel.id = 'dailyPanel';
+      panel.className = 'daily-panel';
+      overlayBox.insertBefore(panel, document.getElementById('overlaySub') || document.getElementById('startBtn'));
+    }
+
+    if (!document.getElementById('upgradePanel')) {
+      const wrap = document.createElement('div');
+      wrap.id = 'upgradePanel';
+      wrap.className = 'start-select-wrap upgrade-panel';
+      const title = document.createElement('div');
+      title.className = 'start-select-title';
+      title.textContent = 'Permanent Upgrades';
+      const grid = document.createElement('div');
+      grid.className = 'start-select-grid upgrade-grid';
+      wrap.append(title, grid);
+      overlayBox.insertBefore(wrap, document.getElementById('overlaySub') || document.getElementById('startBtn'));
+    }
+
+    if (!document.getElementById('startBoostPanel')) {
+      const panel = document.createElement('div');
+      panel.id = 'startBoostPanel';
+      panel.className = 'daily-panel start-boost-panel';
+      overlayBox.insertBefore(panel, document.getElementById('startBtn'));
+    }
+
+    if (!document.getElementById('monetizationPanel')) {
+      const panel = document.createElement('div');
+      panel.id = 'monetizationPanel';
+      panel.className = 'daily-panel monetization-panel';
+      overlayBox.insertBefore(panel, document.getElementById('startBtn'));
+    }
+
+    if (!document.getElementById('resumePanel')) {
+      const panel = document.createElement('div');
+      panel.id = 'resumePanel';
+      panel.className = 'daily-panel resume-panel';
+      overlayBox.insertBefore(panel, document.getElementById('startBtn'));
+    }
+
+    if (!document.getElementById('coopPanel')) {
+      const panel = document.createElement('div');
+      panel.id = 'coopPanel';
+      panel.className = 'daily-panel coop-panel';
+      overlayBox.insertBefore(panel, document.getElementById('startBtn'));
+    }
+
+    const wrapper = document.getElementById('gameWrapper');
+    if (wrapper && !document.getElementById('evolutionBanner')) {
+      const banner = document.createElement('div');
+      banner.id = 'evolutionBanner';
+      banner.className = 'evolution-banner';
+      const kicker = document.createElement('div');
+      kicker.className = 'evolution-banner-kicker';
+      kicker.textContent = 'Weapon Evolved';
+      const title = document.createElement('div');
+      title.id = 'evolutionBannerTitle';
+      title.className = 'evolution-banner-title';
+      const detail = document.createElement('div');
+      detail.id = 'evolutionBannerDetail';
+      detail.className = 'evolution-banner-detail';
+      banner.append(kicker, title, detail);
+      wrapper.appendChild(banner);
+    }
+
+    if (wrapper && !document.getElementById('pauseOverlay')) {
+      const pauseOverlay = document.createElement('div');
+      pauseOverlay.id = 'pauseOverlay';
+      pauseOverlay.className = 'pause-overlay';
+      pauseOverlay.style.display = 'none';
+      const box = document.createElement('div');
+      box.id = 'pauseBox';
+      const title = document.createElement('div');
+      title.className = 'pause-title';
+      title.textContent = 'Paused';
+      const detail = document.createElement('p');
+      detail.id = 'pauseDetail';
+      detail.textContent = 'Run is safely paused. Press P or resume to continue.';
+      const plan = document.createElement('div');
+      plan.id = 'pauseEvolutionPlan';
+      plan.className = 'evolution-plan pause-evolution-plan';
+      const actions = document.createElement('div');
+      actions.className = 'pause-actions';
+      const resume = document.createElement('button');
+      resume.id = 'resumeBtn';
+      resume.type = 'button';
+      resume.textContent = 'Resume';
+      resume.addEventListener('click', () => setPaused(false));
+      const restart = document.createElement('button');
+      restart.id = 'restartBtn';
+      restart.type = 'button';
+      restart.className = 'secondary-btn';
+      restart.textContent = 'Restart';
+      restart.addEventListener('click', () => {
+        setPaused(false);
+        endGame('dead');
+      });
+      actions.append(resume, restart);
+      box.append(title, detail, plan, actions);
+      pauseOverlay.appendChild(box);
+      wrapper.appendChild(pauseOverlay);
+    }
+  }
+
+  function renderStartOptions() {
+    ensureMetaAchievements();
+    const metaPanel = document.getElementById('metaPanel');
+    if (metaPanel) {
+      metaPanel.textContent = '';
+      const coins = document.createElement('span');
+      coins.textContent = `Coins ${Math.floor(meta.coins || 0)}`;
+      const best = document.createElement('span');
+      best.textContent = `Best ${fmtTime(meta.bestTime || 0)} / ${meta.bestKills || 0} K`;
+      const badges = document.createElement('span');
+      badges.textContent = `Achievements ${Object.keys(meta.achievements || {}).filter(id => meta.achievements[id]).length}`;
+      const ads = document.createElement('span');
+      ads.textContent = meta.adsRemoved ? 'Ads Off' : 'Ads On';
+      metaPanel.append(coins, best, badges, ads);
+    }
+
+    renderEvolutionPlan(document.getElementById('evolutionPlanPanel'));
+
+    const charGrid = document.querySelector('#characterSelect .start-select-grid');
+    if (charGrid) {
+      charGrid.textContent = '';
+      CHARACTER_DEFS.forEach(def => {
+        const unlocked = isCharacterUnlocked(def);
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = `start-card character-card${def.id === selectedCharacterId ? ' selected' : ''}${unlocked ? '' : ' locked'}`;
+        const title = document.createElement('div');
+        title.className = 'start-card-title';
+        title.textContent = `${def.icon} ${def.name}`;
+        const desc = document.createElement('div');
+        desc.className = 'start-card-desc';
+        desc.textContent = def.desc;
+        const metaText = document.createElement('div');
+        metaText.className = 'start-card-meta';
+        metaText.textContent = unlocked
+          ? `Starts with ${def.startWeapons.join(', ')}${isPremiumCharacterOwned(def.id) ? ' / Premium owned' : ''}`
+          : (def.unlock && def.unlock.label ? def.unlock.label : 'Locked');
+        btn.append(title, desc, metaText);
+        btn.addEventListener('click', async () => {
+          if (!isCharacterUnlocked(def)) {
+            const cost = def.unlock && def.unlock.cost ? def.unlock.cost : 0;
+            if (cost && meta.coins >= cost) {
+              meta.coins -= cost;
+              unlockCharacter(def.id);
+              saveMeta();
+            } else if (await purchasePremiumCharacter(def)) {
+              renderStartOptions();
+              return;
+            } else {
+              return;
+            }
+          }
+          selectedCharacterId = def.id;
+          meta.lastCharacter = def.id;
+          saveMeta();
+          renderStartOptions();
+        });
+        charGrid.appendChild(btn);
+      });
+    }
+
+    const diffGrid = document.querySelector('#difficultySelect .start-select-grid');
+    if (diffGrid) {
+      diffGrid.textContent = '';
+      DIFFICULTY_DEFS.forEach(def => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = `start-card difficulty-card${def.id === selectedDifficultyId ? ' selected' : ''}`;
+        const title = document.createElement('div');
+        title.className = 'start-card-title';
+        title.textContent = def.name;
+        const desc = document.createElement('div');
+        desc.className = 'start-card-desc';
+        desc.textContent = def.desc;
+        const metaText = document.createElement('div');
+        metaText.className = 'start-card-meta';
+        metaText.textContent = `${Math.round(def.coinMult * 100)}% coin reward`;
+        btn.append(title, desc, metaText);
+        btn.addEventListener('click', () => {
+          selectedDifficultyId = def.id;
+          meta.lastDifficulty = def.id;
+          saveMeta();
+          renderStartOptions();
+        });
+        diffGrid.appendChild(btn);
+      });
+    }
+
+    const mapGrid = document.querySelector('#mapSelect .start-select-grid');
+    if (mapGrid) {
+      mapGrid.textContent = '';
+      MAP_DEFS.forEach(def => {
+        const unlocked = isMapUnlocked(def);
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = `start-card map-card${def.id === selectedMapId ? ' selected' : ''}${unlocked ? '' : ' locked'}`;
+        const title = document.createElement('div');
+        title.className = 'start-card-title';
+        title.textContent = def.name;
+        const desc = document.createElement('div');
+        desc.className = 'start-card-desc';
+        desc.textContent = def.desc;
+        const metaText = document.createElement('div');
+        metaText.className = 'start-card-meta';
+        metaText.textContent = unlocked ? `${fmtTime(def.durationSeconds)} / ${Math.round(def.coinMult * 100)}% coins` : (def.unlock && def.unlock.label ? def.unlock.label : 'Locked');
+        btn.append(title, desc, metaText);
+        btn.addEventListener('click', () => {
+          if (!isMapUnlocked(def)) {
+            const cost = def.unlock && def.unlock.cost ? def.unlock.cost : 0;
+            if (cost && meta.coins >= cost) {
+              meta.coins -= cost;
+              unlockMap(def.id);
+              saveMeta();
+            } else {
+              return;
+            }
+          }
+          selectedMapId = def.id;
+          meta.lastMap = def.id;
+          saveMeta();
+          renderStartOptions();
+        });
+        mapGrid.appendChild(btn);
+      });
+    }
+
+    const dailyPanel = document.getElementById('dailyPanel');
+    if (dailyPanel) {
+      const daily = dailyChallenge();
+      dailyPanel.textContent = '';
+      const text = document.createElement('div');
+      text.className = 'daily-text';
+      const completed = !!meta.dailyCompletions[daily.key];
+      text.textContent = `${daily.name}: ${daily.desc}${completed ? ' Completed today.' : ''}`;
+      const toggle = document.createElement('button');
+      toggle.type = 'button';
+      toggle.className = `secondary-btn${dailyChallengeEnabled ? ' selected-lite' : ''}`;
+      toggle.textContent = dailyChallengeEnabled ? 'Daily On' : 'Daily Off';
+      toggle.addEventListener('click', () => {
+        dailyChallengeEnabled = !dailyChallengeEnabled;
+        meta.dailyChallengeEnabled = dailyChallengeEnabled;
+        saveMeta();
+        renderStartOptions();
+      });
+      dailyPanel.append(text, toggle);
+    }
+
+    const upgradeGrid = document.querySelector('#upgradePanel .start-select-grid');
+    if (upgradeGrid) {
+      upgradeGrid.textContent = '';
+      META_UPGRADE_DEFS.forEach(def => {
+        const level = upgradeLevel(def.id);
+        const cost = upgradeCost(def);
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'start-card upgrade-card';
+        const title = document.createElement('div');
+        title.className = 'start-card-title';
+        title.textContent = `${def.name} ${level}/${def.max}`;
+        const desc = document.createElement('div');
+        desc.className = 'start-card-desc';
+        desc.textContent = def.desc;
+        const metaText = document.createElement('div');
+        metaText.className = 'start-card-meta';
+        metaText.textContent = cost === null ? 'Max rank' : `Buy: ${cost} coins`;
+        btn.append(title, desc, metaText);
+        btn.addEventListener('click', () => {
+          const nextCost = upgradeCost(def);
+          if (nextCost === null || (meta.coins || 0) < nextCost) return;
+          meta.coins -= nextCost;
+          meta.upgrades[def.id] = upgradeLevel(def.id) + 1;
+          saveMeta();
+          renderStartOptions();
+        });
+        upgradeGrid.appendChild(btn);
+      });
+    }
+
+    const startBoostPanel = document.getElementById('startBoostPanel');
+    if (startBoostPanel) {
+      startBoostPanel.textContent = '';
+      const label = document.createElement('div');
+      label.className = 'daily-text';
+      label.textContent = meta.pendingStartBoost
+        ? 'Start boost armed: +20 HP, +1 reroll, and one bonus starter weapon.'
+        : `Start boost: +20 HP, +1 reroll, bonus starter weapon. Cost ${START_BOOST_COST} coins or rewarded ad.`;
+      const coinBtn = document.createElement('button');
+      coinBtn.type = 'button';
+      coinBtn.className = 'secondary-btn';
+      coinBtn.textContent = meta.pendingStartBoost ? 'Boost Ready' : `Buy Boost (${START_BOOST_COST})`;
+      coinBtn.disabled = !!meta.pendingStartBoost;
+      coinBtn.addEventListener('click', () => {
+        if (meta.pendingStartBoost || (meta.coins || 0) < START_BOOST_COST) return;
+        meta.coins -= START_BOOST_COST;
+        meta.pendingStartBoost = true;
+        saveMeta();
+        renderStartOptions();
+      });
+      const adBtn = document.createElement('button');
+      adBtn.type = 'button';
+      adBtn.className = 'secondary-btn';
+      adBtn.textContent = 'Ad Boost';
+      adBtn.disabled = !!meta.pendingStartBoost;
+      adBtn.addEventListener('click', async () => {
+        if (meta.pendingStartBoost) return;
+        const watched = window.AdMobHelper && typeof AdMobHelper.showRewardedStartBoost === 'function'
+          ? await AdMobHelper.showRewardedStartBoost()
+          : false;
+        if (!watched) return;
+        meta.pendingStartBoost = true;
+        saveMeta();
+        renderStartOptions();
+      });
+      startBoostPanel.append(label, coinBtn, adBtn);
+    }
+
+    const monetizationPanel = document.getElementById('monetizationPanel');
+    if (monetizationPanel) {
+      monetizationPanel.textContent = '';
+      const nativePurchases = !!(window.AdMobHelper && typeof AdMobHelper.canUseNativePurchases === 'function' && AdMobHelper.canUseNativePurchases());
+      const label = document.createElement('div');
+      label.className = 'daily-text';
+      label.textContent = meta.adsRemoved
+        ? 'Ad removal owned. Interstitial ads stay disabled on this device; rewarded boosts remain opt-in.'
+        : 'Remove ads is a native mobile purchase. Web keeps ads as no-op.';
+      const buyBtn = document.createElement('button');
+      buyBtn.type = 'button';
+      buyBtn.className = `secondary-btn${meta.adsRemoved ? ' selected-lite' : ''}`;
+      buyBtn.textContent = meta.adsRemoved ? 'Ads Removed' : (nativePurchases ? 'Remove Ads' : 'Mobile Only');
+      buyBtn.disabled = !!meta.adsRemoved || !nativePurchases;
+      buyBtn.addEventListener('click', async () => {
+        if (meta.adsRemoved || !window.AdMobHelper || typeof AdMobHelper.purchaseAdRemoval !== 'function') return;
+        const result = await AdMobHelper.purchaseAdRemoval();
+        if (!result || !result.ok) return;
+        meta.adsRemoved = true;
+        saveMeta();
+        renderStartOptions();
+      });
+      const restoreBtn = document.createElement('button');
+      restoreBtn.type = 'button';
+      restoreBtn.className = 'secondary-btn';
+      restoreBtn.textContent = 'Restore';
+      restoreBtn.disabled = !!meta.adsRemoved || !nativePurchases;
+      restoreBtn.addEventListener('click', async () => {
+        if (!window.AdMobHelper || typeof AdMobHelper.restorePurchases !== 'function') return;
+        const result = await AdMobHelper.restorePurchases();
+        if (!result || !result.ok) return;
+        meta.adsRemoved = true;
+        saveMeta();
+        renderStartOptions();
+      });
+      monetizationPanel.append(label, buyBtn, restoreBtn);
+    }
+
+    const resumePanel = document.getElementById('resumePanel');
+    if (resumePanel) {
+      resumePanel.textContent = '';
+      const snapshot = loadRunSnapshot();
+      if (!snapshot) {
+        resumePanel.style.display = 'none';
+      } else {
+        resumePanel.style.display = 'flex';
+        const character = CHARACTER_DEFS.find(def => def.id === snapshot.selectedCharacterId) || currentCharacter();
+        const difficulty = DIFFICULTY_DEFS.find(def => def.id === snapshot.selectedDifficultyId) || currentDifficulty();
+        const label = document.createElement('div');
+        label.className = 'daily-text';
+        label.textContent = `Saved run: ${fmtTime(snapshot.elapsed || 0)} / Lv.${snapshot.player.level || 1} / ${snapshot.kills || 0} kills / ${character.name} / ${difficulty.name}`;
+        const continueBtn = document.createElement('button');
+        continueBtn.type = 'button';
+        continueBtn.className = 'secondary-btn selected-lite';
+        continueBtn.textContent = 'Continue';
+        continueBtn.addEventListener('click', () => {
+          restoreRunSnapshot(snapshot);
+        });
+        const discardBtn = document.createElement('button');
+        discardBtn.type = 'button';
+        discardBtn.className = 'secondary-btn';
+        discardBtn.textContent = 'Discard';
+        discardBtn.addEventListener('click', () => {
+          clearRunSnapshot();
+          renderStartOptions();
+        });
+        resumePanel.append(label, continueBtn, discardBtn);
+      }
+    }
+
+    const coopPanel = document.getElementById('coopPanel');
+    if (coopPanel) {
+      coopPanel.textContent = '';
+      const queryRoom = new URLSearchParams(window.location.search).get('vpsRoom');
+      const label = document.createElement('div');
+      label.id = 'coopStatus';
+      label.className = 'daily-text';
+      if (coop.role === 'host' && coop.roomId) {
+        label.textContent = coop.guestConnected
+          ? 'Co-op guest connected. Start or continue the run.'
+          : `Co-op room ready. Share: ${coopShareUrl(coop.roomId)}`;
+      } else if (coop.role === 'guest') {
+        label.textContent = 'Joined as co-op guest. Control the ally while the host runs the game.';
+      } else if (queryRoom) {
+        label.textContent = `Co-op invite ${queryRoom}. Join as guest to control the ally.`;
+      } else {
+        label.textContent = 'Optional 2-player co-op relay: host a run and share the link with a friend.';
+      }
+      const hostBtn = document.createElement('button');
+      hostBtn.type = 'button';
+      hostBtn.className = `secondary-btn${coop.role === 'host' ? ' selected-lite' : ''}`;
+      hostBtn.textContent = coop.role === 'host' ? 'Hosting' : 'Host Co-op';
+      hostBtn.disabled = coop.role === 'guest';
+      hostBtn.addEventListener('click', () => hostCoopRoom());
+      const joinBtn = document.createElement('button');
+      joinBtn.type = 'button';
+      joinBtn.className = `secondary-btn${coop.role === 'guest' ? ' selected-lite' : ''}`;
+      joinBtn.textContent = coop.role === 'guest' ? 'Joined' : 'Join';
+      joinBtn.disabled = !queryRoom || coop.role === 'host';
+      joinBtn.addEventListener('click', () => joinCoopRoom(queryRoom));
+      coopPanel.append(label, hostBtn, joinBtn);
+    }
+  }
+
+  function setPaused(paused) {
+    const pauseOverlay = document.getElementById('pauseOverlay');
+    if (paused) {
+      if (state !== 'playing') return;
+      state = 'paused';
+      saveRunSnapshot('pause');
+      renderEvolutionPlan(document.getElementById('pauseEvolutionPlan'), { compact: true });
+      if (pauseOverlay) pauseOverlay.style.display = 'flex';
+      return;
+    }
+    if (state !== 'paused') return;
+    state = 'playing';
+    if (pauseOverlay) pauseOverlay.style.display = 'none';
+    lastTime = performance.now();
+  }
+
+  function togglePause() {
+    if (state === 'playing') setPaused(true);
+    else if (state === 'paused') setPaused(false);
+  }
+
+  function awardRunRewards(result) {
+    if (runRewardsGranted || !player) return { coins: 0, achievements: [] };
+    runRewardsGranted = true;
+    const diff = currentDifficulty();
+    const map = currentMap();
+    const daily = dailyChallengeEnabled ? dailyChallenge() : null;
+    const baseCoins = Math.max(1, Math.floor(kills / 12 + elapsed / 18 + player.level * 2));
+    const winBonus = result === 'win' ? 120 : 0;
+    const dailyBonus = result === 'win' && daily && !meta.dailyCompletions[daily.key] ? daily.coinBonus : 0;
+    let coins = Math.floor((baseCoins + winBonus + dailyBonus) * diff.coinMult * map.coinMult);
+    const achievements = [];
+    const grantAchievement = (id, label) => {
+      if (meta.achievements[id]) return;
+      meta.achievements[id] = true;
+      const reward = ACHIEVEMENT_REWARDS[id] || 0;
+      coins += reward;
+      achievements.push(`${label}${reward ? ` +${reward}c` : ''}`);
+    };
+    if (elapsed > (meta.bestTime || 0)) meta.bestTime = Math.floor(elapsed);
+    if (kills > (meta.bestKills || 0)) meta.bestKills = kills;
+
+    if (elapsed >= 180) grantAchievement('survive180', 'Survived 3:00');
+    if (result === 'win') grantAchievement('win1', 'First clear');
+    if (result === 'win' && selectedDifficultyId === 'hard') grantAchievement('clearHard', 'Hard clear');
+    if (result === 'win' && evolvedWeaponCount() >= 3) grantAchievement('evolve3', 'Triple evolution');
+    if (result === 'win' && (player.lowestHpPct || 1) <= 0.1) grantAchievement('nearMissClear', 'Near miss clear');
+    if ((player.towersPlaced || 0) >= 5) grantAchievement('towerBuilder', 'Defense line');
+    if (result === 'win' && !player.revived) grantAchievement('noReviveClear', 'No-revive clear');
+    if (result === 'win' && daily && !meta.dailyCompletions[daily.key]) {
+      meta.dailyCompletions[daily.key] = true;
+      grantAchievement('dailyClear', 'Daily clear');
+    }
+    meta.coins = Math.max(0, Math.floor(meta.coins || 0) + coins);
+    ensureMetaAchievements();
+    saveMeta();
+    return { coins, achievements };
+  }
+
+  async function reviveRun() {
+    if (!player || state !== 'dead' || player.revived) return;
+    const reviveCost = 120;
+    if ((meta.coins || 0) >= reviveCost) {
+      meta.coins -= reviveCost;
+      saveMeta();
+    } else {
+      const watched = window.AdMobHelper && typeof AdMobHelper.showRewardedRevive === 'function'
+        ? await AdMobHelper.showRewardedRevive()
+        : false;
+      if (!watched) return;
+    }
+    player.revived = true;
+    player.hp = Math.max(Math.floor(player.maxHp * 0.35), 1);
+    player.invincible = 3;
+    enemies = enemies.filter(e => dist(e, player) > 180);
+    enemyProjectiles = [];
+    document.getElementById('overlay').classList.remove('visible');
+    document.getElementById('levelOverlay').style.display = 'none';
+    state = 'playing';
+    lastTime = performance.now();
+    if (frameId) cancelAnimationFrame(frameId);
+    frameId = requestAnimationFrame(loop);
+    updateHUD();
+    saveRunSnapshot('revive');
+  }
+
+  function renderEndActions(result, reward) {
+    const overlayBox = document.getElementById('overlayBox');
+    if (!overlayBox) return;
+    const old = document.getElementById('runActions');
+    if (old) old.remove();
+    const actions = document.createElement('div');
+    actions.id = 'runActions';
+    actions.className = 'end-actions';
+    const rewardText = document.createElement('div');
+    rewardText.className = 'reward-line';
+    rewardText.textContent = `Earned ${reward.coins || 0} coins${reward.achievements && reward.achievements.length ? ` / ${reward.achievements.join(', ')}` : ''}`;
+    actions.appendChild(rewardText);
+    const runReport = document.createElement('div');
+    runReport.className = 'run-report';
+    const summary = document.createElement('div');
+    summary.textContent = `Evolutions ${evolvedWeaponCount()} / ${EVOLUTION_DEFS.length} - Towers placed ${player.towersPlaced || 0} - Lowest HP ${Math.round((player.lowestHpPct || 0) * 100)}%`;
+    runReport.appendChild(summary);
+    const misses = missedEvolutionHints();
+    if (misses.length) {
+      const hintTitle = document.createElement('div');
+      hintTitle.className = 'run-report-title';
+      hintTitle.textContent = 'Next-run evolution plan';
+      runReport.appendChild(hintTitle);
+      misses.forEach(text => {
+        const row = document.createElement('div');
+        row.textContent = text;
+        runReport.appendChild(row);
+      });
+    }
+    actions.appendChild(runReport);
+    if (result === 'dead' && player && !player.revived) {
+      const revive = document.createElement('button');
+      revive.type = 'button';
+      revive.className = 'secondary-btn';
+      revive.textContent = (meta.coins || 0) >= 120 ? 'Revive -120 coins' : 'Revive with rewarded ad';
+      revive.addEventListener('click', () => reviveRun());
+      actions.appendChild(revive);
+    }
+    overlayBox.insertBefore(actions, document.getElementById('startBtn'));
+  }
+
+  function clearEndActions() {
+    const old = document.getElementById('runActions');
+    if (old) old.remove();
+  }
+
+  function currentHybridTowerType() {
+    return HYBRID_TOWER_TYPES[selectedTowerTypeIdx % HYBRID_TOWER_TYPES.length];
+  }
+
+  function cycleHybridTowerType() {
+    selectedTowerTypeIdx = (selectedTowerTypeIdx + 1) % HYBRID_TOWER_TYPES.length;
+    updateTowerButton();
+    if (player) {
+      const def = currentHybridTowerType();
+      floatTexts.push({ x: player.x, y: player.y - 28, text: `Tower: ${def.name}`, life: 1.2, maxLife: 1.2, color: def.color, size: 13 });
+    }
+  }
+
+  function placeHybridTower() {
+    if (state !== 'playing' || !player) return false;
+    if ((player.towerCharges || 0) <= 0) {
+      floatTexts.push({ x: player.x, y: player.y - 28, text: 'Tower charge empty', life: 1.1, maxLife: 1.1, color: '#f39c12', size: 12 });
+      return false;
+    }
+    if (hybridTowers.length >= MAX_HYBRID_TOWERS) {
+      hybridTowers.shift();
+    }
+    const def = currentHybridTowerType();
+    hybridTowers.push({
+      id: Date.now() + Math.random(),
+      type: def.id,
+      x: player.x,
+      y: player.y,
+      cd: 0.2,
+      life: 90,
+      pulse: 0,
+      kills: 0,
+    });
+    player.towerCharges--;
+    player.towersPlaced = (player.towersPlaced || 0) + 1;
+    for (let i = 0; i < 10; i++) spawnParticle(player.x, player.y, def.color, 4 + Math.random() * 4, 0.35);
+    floatTexts.push({ x: player.x, y: player.y - 34, text: `${def.name} placed`, life: 1.4, maxLife: 1.4, color: def.color, size: 13 });
+    updateTowerButton();
+    return true;
+  }
+
+  function placeHybridTowerAt(source, typeIdx) {
+    if (!source || !player) return false;
+    if ((player.towerCharges || 0) <= 0) return false;
+    if (hybridTowers.length >= MAX_HYBRID_TOWERS) {
+      hybridTowers.shift();
+    }
+    const def = HYBRID_TOWER_TYPES[typeIdx % HYBRID_TOWER_TYPES.length] || HYBRID_TOWER_TYPES[0];
+    hybridTowers.push({
+      id: Date.now() + Math.random(),
+      type: def.id,
+      x: source.x,
+      y: source.y,
+      cd: 0,
+      life: 40,
+      pulse: 0,
+      placedBy: 'guest',
+    });
+    player.towerCharges -= 1;
+    player.towersPlaced = (player.towersPlaced || 0) + 1;
+    source.towerCd = 1.2;
+    for (let i = 0; i < 10; i++) spawnParticle(source.x, source.y, def.color, 4 + Math.random() * 4, 0.35);
+    floatTexts.push({ x: source.x, y: source.y - 34, text: `Guest ${def.name}`, life: 1.4, maxLife: 1.4, color: def.color, size: 13 });
+    updateTowerButton();
+    return true;
+  }
+
+  function updateAllyPlayer(dt) {
+    if (!allyPlayer || state !== 'playing') return;
+    const input = coop.role === 'host' ? coop.guestInput : { dx: 0, dy: 0, dash: false, tower: false };
+    const mag = Math.hypot(input.dx || 0, input.dy || 0);
+    const dx = mag > 1 ? input.dx / mag : (input.dx || 0);
+    const dy = mag > 1 ? input.dy / mag : (input.dy || 0);
+    if (dx || dy) allyPlayer.lastMoveDir = { dx, dy };
+    allyPlayer.x += dx * allyPlayer.speed * dt;
+    allyPlayer.y += dy * allyPlayer.speed * dt;
+    if (allyPlayer.dashCd > 0) allyPlayer.dashCd -= dt;
+    if (allyPlayer.towerCd > 0) allyPlayer.towerCd -= dt;
+    if (allyPlayer.attackCd > 0) allyPlayer.attackCd -= dt;
+    if (input.dash && allyPlayer.dashCd <= 0) {
+      allyPlayer.dashCd = DASH_COOLDOWN;
+      const dir = allyPlayer.lastMoveDir || { dx: 1, dy: 0 };
+      allyPlayer.x += dir.dx * 45;
+      allyPlayer.y += dir.dy * 45;
+      for (const e of enemies) {
+        if (dist(e, allyPlayer) < DASH_RANGE) dealDamage(e, DASH_DMG * 0.85 * player.dmgMult);
+      }
+      spawnParticle(allyPlayer.x, allyPlayer.y, '#2ecc71', 22, 0.35);
+    }
+    if (input.tower && allyPlayer.towerCd <= 0) {
+      placeHybridTowerAt(allyPlayer, selectedTowerTypeIdx);
+    }
+    if (allyPlayer.attackCd <= 0) {
+      const target = nearestEnemyFromPoint(allyPlayer, 260);
+      if (target) {
+        const ang = Math.atan2(target.y - allyPlayer.y, target.x - allyPlayer.x);
+        projectiles.push({ type: 'tower', x: allyPlayer.x, y: allyPlayer.y, vx: Math.cos(ang) * 380, vy: Math.sin(ang) * 380, r: 5, dmg: 16 * player.dmgMult, life: 0.85, color: '#2ecc71', source: 'guest' });
+        allyPlayer.attackCd = 0.85;
+      }
+    }
+  }
+
+  function nearestEnemyFromPoint(point, range) {
+    let best = null;
+    let bestD = Infinity;
+    for (const enemy of enemies) {
+      const d = dist(point, enemy);
+      if (d < range && d < bestD) {
+        best = enemy;
+        bestD = d;
+      }
+    }
+    return best;
+  }
+
+  function fireHybridTower(tower, def, target) {
+    if (def.id === 'tesla') {
+      let current = target;
+      const chained = new Set();
+      for (let i = 0; i <= (def.chain || 0) && current; i++) {
+        chained.add(current);
+        dealDamage(current, def.dmg * player.dmgMult);
+        spawnParticle(current.x, current.y, def.color, 8, 0.25);
+        current = enemies.find(enemy => !chained.has(enemy) && dist(enemy, current) < 120) || null;
+      }
+      return;
+    }
+    const ang = Math.atan2(target.y - tower.y, target.x - tower.x);
+    projectiles.push({
+      type: 'tower',
+      towerType: def.id,
+      x: tower.x,
+      y: tower.y,
+      vx: Math.cos(ang) * def.projectileSpeed,
+      vy: Math.sin(ang) * def.projectileSpeed,
+      r: def.id === 'frost' ? 6 : 5,
+      dmg: def.dmg * player.dmgMult,
+      life: def.range / def.projectileSpeed + 0.25,
+      color: def.color,
+      slow: def.slow || 0,
+    });
+  }
+
+  function updateHybridTowers(dt) {
+    if (!player) return;
+    if ((player.towerCharges || 0) < (player.maxTowerCharges || 4)) {
+      towerRecharge += dt;
+      if (towerRecharge >= TOWER_RECHARGE_SECONDS) {
+        towerRecharge = 0;
+        player.towerCharges++;
+        floatTexts.push({ text: 'Tower charge ready', life: 1.8, maxLife: 1.8, screenSpace: true, color: '#5dade2', size: 15 });
+      }
+    } else {
+      towerRecharge = 0;
+    }
+
+    for (let i = hybridTowers.length - 1; i >= 0; i--) {
+      const tower = hybridTowers[i];
+      tower.life -= dt;
+      tower.pulse += dt;
+      if (tower.life <= 0) {
+        hybridTowers.splice(i, 1);
+        continue;
+      }
+      const def = HYBRID_TOWER_TYPES.find(t => t.id === tower.type) || HYBRID_TOWER_TYPES[0];
+      tower.cd -= dt;
+      if (tower.cd > 0) continue;
+      const target = nearestEnemyFromPoint(tower, def.range);
+      if (!target) continue;
+      fireHybridTower(tower, def, target);
+      tower.cd = def.cd;
+    }
+    updateTowerButton();
+  }
+
+  function updateTowerButton() {
+    const btn = document.getElementById('towerBtn');
+    if (!btn) return;
+    const def = currentHybridTowerType();
+    const charges = player ? (player.towerCharges || 0) : 0;
+    btn.textContent = `${def.icon}${charges}`;
+    btn.title = `Place ${def.name} tower (T). Switch type with Y.`;
+    btn.style.borderColor = def.color;
+  }
+
   // ── 입력 ────────────────────────────────────────────────────────
   const keys = {};
   document.addEventListener('keydown', e => {
     keys[e.key] = true;
+    if (e.key === 'p' || e.key === 'P') {
+      e.preventDefault();
+      togglePause();
+      return;
+    }
+    if (e.key === 't' || e.key === 'T') {
+      e.preventDefault();
+      placeHybridTower();
+      return;
+    }
+    if (e.key === 'y' || e.key === 'Y') {
+      e.preventDefault();
+      cycleHybridTowerType();
+      return;
+    }
     // 레벨업 / 아이템 선택 화면에서 숫자키로 선택 / 리롤
     if (state === 'levelup' || state === 'itembox') {
       if (['1','2','3'].includes(e.key)) {
@@ -328,9 +1949,19 @@
     // ? 키로 조합 가이드 토글
     if (e.key === '?' || e.key === 'h') toggleComboGuide();
     // ESC로 조합 가이드 닫기
-    if (e.key === 'Escape') closeComboGuide();
+    if (e.key === 'Escape') {
+      const guide = document.getElementById('comboGuide');
+      if (guide && guide.style.display === 'flex') closeComboGuide();
+      else togglePause();
+    }
   });
   document.addEventListener('keyup', e => { keys[e.key] = false; });
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden && state === 'playing') setPaused(true);
+  });
+  window.addEventListener('beforeunload', () => {
+    saveRunSnapshot('beforeunload');
+  });
 
   // 조이스틱
   let joyActive = false, joyDx = 0, joyDy = 0;
@@ -386,11 +2017,16 @@
 
   // ── 적 생성 ─────────────────────────────────────────────────────
   function spawnWave() {
+    const runDifficulty = currentDifficulty();
+    const map = currentMap();
+    const daily = dailyChallengeEnabled ? dailyChallenge() : null;
+    const hpMult = runDifficulty.enemyHpMult * map.enemyHpMult * (daily ? daily.enemyHpMult : 1);
+    const spawnMult = runDifficulty.spawnMult * map.spawnMult * (daily ? daily.spawnMult : 1);
     const stage = sandboxStage();
     if (stage && Array.isArray(stage.waveSchedule) && stage.waveSchedule.length) {
       const active = stage.waveSchedule.filter(wave => elapsed >= (Number(wave.atSecond) || 0));
       const wave = active.length ? active[active.length - 1] : stage.waveSchedule[0];
-      const count = Math.min(Number(wave.count) || 1, 20);
+      const count = Math.min(Math.ceil((Number(wave.count) || 1) * spawnMult), 24);
       for (let i = 0; i < count; i++) {
         if (enemies.length >= MAX_ENEMIES) break;
         spawnSandboxEnemy(wave.enemyType || 'zombie');
@@ -405,7 +2041,7 @@
     //   1분=1.87, 3분=3.97, 5분=6.25, 10분=13.0, 15분=21.75
     const m = elapsed / 60;
     const difficulty = 1 + 0.9 * m + 0.03 * m * m;
-    const baseCount = isHorde ? Math.min(20 + Math.floor(elapsed / 10), 60) : Math.min(8 + Math.floor(elapsed / 12), 38);
+    const baseCount = Math.ceil((isHorde ? Math.min(20 + Math.floor(elapsed / 10), 60) : Math.min(8 + Math.floor(elapsed / 12), 38)) * spawnMult);
     for (let i = 0; i < baseCount; i++) {
       if (enemies.length >= MAX_ENEMIES) break;
       const angle = Math.random() * Math.PI * 2;
@@ -424,9 +2060,9 @@
       enemies.push({
         x: player.x + Math.cos(angle) * spawnDist,
         y: player.y + Math.sin(angle) * spawnDist,
-        hp:    [30, 80, 200][tier] * difficulty,
-        maxHp: [30, 80, 200][tier] * difficulty,
-        speed: [75, 55, 35][tier] + Math.random() * 20,
+        hp:    [30, 80, 200][tier] * difficulty * hpMult,
+        maxHp: [30, 80, 200][tier] * difficulty * hpMult,
+        speed: ([75, 55, 35][tier] + Math.random() * 20) * runDifficulty.enemySpeedMult,
         size:  [10, 15, 22][tier],
         color: ['#e74c3c', behavior === 'archer' ? '#1abc9c' : '#9b59b6', '#c0392b'][tier],
         xpVal: Math.round([5, 13, 30][tier] * (1 + elapsed / 300)),  // XP 보상 증가 → 무기 레벨 빠른 성장으로 난이도 완화
@@ -437,7 +2073,7 @@
         attackCd: Math.random() * attackBase,   // 초기 공격 시간 분산
         attackBase,
         attackRange: behavior === 'archer' ? (tier === 2 ? 280 : 220) : 0,
-        attackDmg: Math.round([10, 20, 38][tier] * (1 + elapsed / 500)),  // 적 공격력 완만 상승 (후반 위협 유지)
+        attackDmg: Math.round([10, 20, 38][tier] * (1 + elapsed / 500) * runDifficulty.enemyDmgMult),  // 적 공격력 완만 상승 (후반 위협 유지)
       });
     }
   }
@@ -445,18 +2081,21 @@
   function spawnSandboxEnemy(typeKey) {
     const def = sandboxEnemy(typeKey) || sandboxEnemy('zombie');
     if (!def) return;
+    const runDifficulty = currentDifficulty();
+    const map = currentMap();
+    const daily = dailyChallengeEnabled ? dailyChallenge() : null;
     const angle = Math.random() * Math.PI * 2;
     const distFromPlayer = 350 + Math.random() * 150;
     const difficulty = 1 + elapsed / 120;
     const isBoss = def.isBoss || typeKey === 'boss' || def.behavior === 'boss_chase';
     const tier = isBoss ? 2 : (def.hp > 100 ? 1 : 0);
-    const hp = (Number(def.hp) || [30, 80, 250][tier]) * difficulty;
+    const hp = (Number(def.hp) || [30, 80, 250][tier]) * difficulty * runDifficulty.enemyHpMult * map.enemyHpMult * (daily ? daily.enemyHpMult : 1);
     enemies.push({
       x: player.x + Math.cos(angle) * distFromPlayer,
       y: player.y + Math.sin(angle) * distFromPlayer,
       hp,
       maxHp: hp,
-      speed: Number(def.speed) || [75, 55, 35][tier],
+      speed: (Number(def.speed) || [75, 55, 35][tier]) * runDifficulty.enemySpeedMult,
       size: Math.max(8, (Number(def.size) || [20, 30, 44][tier]) / 2),
       color: ENEMY_COLORS[typeKey] || ENEMY_COLORS.zombie,
       xpVal: Number(def.xpValue) || [3, 8, 20][tier],
@@ -587,9 +2226,10 @@
   }
 
   // 적 투사체 발사 — 플레이어 방향 + spread 각도
-  function fireEnemyProjectile(enemy, spread) {
+  function fireEnemyProjectile(enemy, spread, target) {
     spread = spread || 0;
-    const ang = Math.atan2(player.y - enemy.y, player.x - enemy.x) + spread;
+    target = target || player;
+    const ang = Math.atan2(target.y - enemy.y, target.x - enemy.x) + spread;
     const spd = [220, 260, 190][enemy.tier] || 220;
     const r   = 5 + enemy.tier * 2;
     enemyProjectiles.push({ x: enemy.x, y: enemy.y, vx: Math.cos(ang) * spd, vy: Math.sin(ang) * spd, r, dmg: enemy.attackDmg, life: 1.6 });
@@ -645,23 +2285,31 @@
       player.rerolls++;
       floatTexts.push({ x: enemy.x, y: enemy.y - 20, text: '🎲 리롤권 획득!', life: 1.8, maxLife: 1.8, color: '#a29bfe', size: 13 });
     }
+    if (!enemy.isBoss && kills % 35 === 0 && player.towerCharges < player.maxTowerCharges) {
+      player.towerCharges++;
+      towerRecharge = 0;
+      floatTexts.push({ x: enemy.x, y: enemy.y - 32, text: 'Tower charge +1', life: 1.6, maxLife: 1.6, color: '#5dade2', size: 13 });
+    }
     enemies.splice(enemies.indexOf(enemy), 1);
     document.getElementById('killDisp').textContent = kills;
   }
 
   function spawnBoss() {
+    const runDifficulty = currentDifficulty();
+    const map = currentMap();
+    const daily = dailyChallengeEnabled ? dailyChallenge() : null;
     bossActive  = true;
     bossWarning = 2.5;
-    const bossNum = Math.floor(elapsed / BOSS_INTERVAL);
+    const bossNum = Math.floor(elapsed / (runDifficulty.bossInterval || BOSS_INTERVAL));
     // 보스 HP는 경과 시간에 비례해 스케일 — 해당 시점 플레이어 DPS로 약 15~25초 교전이 되도록 설계
     //   1번째(5분)≈22.5k, 2번째(10분)≈52k, 3번째(15분)≈93.5k
-    const hp = Math.round((5000 + bossNum * 4000) * (1 + elapsed / 200));
+    const hp = Math.round((5000 + bossNum * 4000) * (1 + elapsed / 200) * runDifficulty.enemyHpMult * map.enemyHpMult * (daily ? daily.enemyHpMult : 1));
     const ang = Math.random() * Math.PI * 2;
     enemies.push({
       x: player.x + Math.cos(ang) * 430,
       y: player.y + Math.sin(ang) * 430,
       hp, maxHp: hp,
-      speed: 44 + bossNum * 3,
+      speed: (44 + bossNum * 3) * runDifficulty.enemySpeedMult,
       size: 36,
       color: '#f1c40f',
       xpVal: 80 + bossNum * 25,
@@ -672,7 +2320,7 @@
       attackCd: 0.6,
       attackBase: 2.5,
       attackRange: 390,
-      attackDmg: 40 + bossNum * 15,
+      attackDmg: Math.round((40 + bossNum * 15) * runDifficulty.enemyDmgMult),
       bossPhase: 0,
       frozen: 0,
       faceAngle: 0,
@@ -718,23 +2366,107 @@
     showChoiceOverlay(makeItemPicks(), makeItemPicks);
   }
 
+  function ensureLevelEvolutionPlan() {
+    const box = document.getElementById('levelBox');
+    const list = document.getElementById('upgradeList');
+    if (!box || !list) return null;
+    let panel = document.getElementById('levelEvolutionPlan');
+    if (!panel) {
+      panel = document.createElement('div');
+      panel.id = 'levelEvolutionPlan';
+      panel.className = 'evolution-plan level-evolution-plan';
+      box.insertBefore(panel, list);
+    }
+    return panel;
+  }
+
+  function appendChoiceButton(list, c, i) {
+    const btn = document.createElement('button');
+    btn.className = 'upgrade-btn' + (c.kind === 'evolve' ? ' evolution' : '');
+
+    const name = document.createElement('div');
+    name.className = 'upgrade-name';
+    const badge = document.createElement('span');
+    badge.className = 'key-badge';
+    badge.textContent = String(i + 1);
+    name.appendChild(badge);
+    name.appendChild(document.createTextNode(c.name));
+    btn.appendChild(name);
+
+    if (c.tag) {
+      const tag = document.createElement('div');
+      tag.className = `choice-tag ${c.kind}`;
+      tag.textContent = c.tag;
+      btn.appendChild(tag);
+    }
+
+    if (c.desc) {
+      const desc = document.createElement('div');
+      desc.className = 'upgrade-desc';
+      desc.textContent = c.desc;
+      btn.appendChild(desc);
+    }
+
+    btn.onclick = () => {
+      c.choose();
+      document.getElementById('levelOverlay').style.display = 'none';
+      state = 'playing';
+      updateHUD();
+    };
+    list.appendChild(btn);
+  }
+
+  function choiceWeight(choice) {
+    const level = choice.weaponId ? (player.weaponLevels[choice.weaponId] || 1) : 1;
+    if (choice.kind === 'weapon-lv') {
+      const nearEvolution = EVOLUTION_DEFS.some(evo => evo.base === choice.weaponId && player.passives[evo.req]);
+      return nearEvolution ? 6 : (level >= MAX_WEAPON_LEVEL - 1 ? 4.8 : 3.2);
+    }
+    if (choice.kind === 'passive') {
+      const completesOwnedWeapon = EVOLUTION_DEFS.some(evo =>
+        evo.req === choice.passiveId &&
+        player.weapons.includes(evo.base) &&
+        (player.weaponLevels[evo.base] || 1) >= MAX_WEAPON_LEVEL
+      );
+      const supportsOwnedWeapon = EVOLUTION_DEFS.some(evo => evo.req === choice.passiveId && player.weapons.includes(evo.base));
+      return completesOwnedWeapon ? 7 : (supportsOwnedWeapon ? 4.4 : 2.2);
+    }
+    if (choice.kind === 'weapon-new') {
+      const earlyRun = player.level <= 4 || player.weapons.length <= 2;
+      return earlyRun ? 4 : 2.4;
+    }
+    return 1;
+  }
+
+  function weightedPick(pool) {
+    const total = pool.reduce((sum, choice) => sum + choiceWeight(choice), 0);
+    let roll = Math.random() * total;
+    for (let i = 0; i < pool.length; i++) {
+      roll -= choiceWeight(pool[i]);
+      if (roll <= 0) return i;
+    }
+    return pool.length - 1;
+  }
+
+  function takeWeightedChoices(pool, limit) {
+    const available = [...pool];
+    const picks = [];
+    while (available.length && picks.length < limit) {
+      const idx = weightedPick(available);
+      picks.push(available[idx]);
+      available.splice(idx, 1);
+    }
+    return picks;
+  }
+
   function showChoiceOverlay(picks, builder) {
     freeRerollUsed       = false;
     currentChoiceBuilder = builder || null;
     const list = document.getElementById('upgradeList');
     list.innerHTML = '';
+    renderEvolutionPlan(ensureLevelEvolutionPlan(), { compact: true });
     picks.forEach((c, i) => {
-      const btn = document.createElement('button');
-      btn.className = 'upgrade-btn' + (c.kind === 'evolve' ? ' evolution' : '');
-      btn.innerHTML = `<div class="upgrade-name"><span class="key-badge">${i + 1}</span>${c.name}</div>`
-        + (c.desc ? `<div class="upgrade-desc">${c.desc}</div>` : '');
-      btn.onclick = () => {
-        c.choose();
-        document.getElementById('levelOverlay').style.display = 'none';
-        state = 'playing';
-        updateHUD();
-      };
-      list.appendChild(btn);
+      appendChoiceButton(list, c, i);
     });
     // 리롤 버튼
     const rerollBtn = document.createElement('button');
@@ -778,18 +2510,9 @@
     const newPicks = currentChoiceBuilder();
     const list     = document.getElementById('upgradeList');
     list.innerHTML = '';
+    renderEvolutionPlan(ensureLevelEvolutionPlan(), { compact: true });
     newPicks.forEach((c, i) => {
-      const btn = document.createElement('button');
-      btn.className = 'upgrade-btn' + (c.kind === 'evolve' ? ' evolution' : '');
-      btn.innerHTML = `<div class="upgrade-name"><span class="key-badge">${i + 1}</span>${c.name}</div>`
-        + (c.desc ? `<div class="upgrade-desc">${c.desc}</div>` : '');
-      btn.onclick = () => {
-        c.choose();
-        document.getElementById('levelOverlay').style.display = 'none';
-        state = 'playing';
-        updateHUD();
-      };
-      list.appendChild(btn);
+      appendChoiceButton(list, c, i);
     });
     const rerollBtn = document.createElement('button');
     rerollBtn.id        = 'rerollBtn';
@@ -820,6 +2543,8 @@
         const w = WEAPON_DEFS[id];
         levelable.push({
           kind: 'weapon-lv',
+          weaponId: id,
+          tag: lvl >= MAX_WEAPON_LEVEL - 1 ? 'Near evolution' : 'Power up',
           name: `${w.icon} ${w.name} Lv.${lvl}→${lvl + 1}`,
           desc: w.desc + ' 강화',
           choose: () => addWeapon(id),
@@ -835,6 +2560,8 @@
           const w = WEAPON_DEFS[id];
           newWeapons.push({
             kind: 'weapon-new',
+            weaponId: id,
+            tag: player.weapons.length <= 2 ? 'Build starter' : 'New weapon',
             name: `${w.icon} ${w.name} (신규)`,
             desc: w.desc,
             choose: () => addWeapon(id),
@@ -846,6 +2573,8 @@
     // 4) 패시브 (항상 후보)
     const passives = PASSIVE_POOL.map(pv => ({
       kind: 'passive',
+      passiveId: pv.id,
+      tag: EVOLUTION_DEFS.some(evo => evo.req === pv.id && player.weapons.includes(evo.base)) ? 'Combo passive' : 'Passive',
       name: pv.name,
       desc: pv.desc,
       choose: () => applyPassive(pv),
@@ -853,28 +2582,78 @@
 
     const result = [];
     if (evoChoices.length) result.push(evoChoices[0]);   // 진화 1개 보장
-    const rest = shuffled([...levelable, ...newWeapons, ...passives]);
-    for (const c of rest) {
-      if (result.length >= 3) break;
-      result.push(c);
-    }
+    result.push(...takeWeightedChoices([...levelable, ...newWeapons, ...passives], 3 - result.length));
     // 항상 3개 보장 (부족 시 첫 패시브로 채움)
     while (result.length < 3) {
       const pv = PASSIVE_POOL[0];
-      result.push({ kind: 'passive', name: pv.name, desc: pv.desc, choose: () => applyPassive(pv) });
+      result.push({ kind: 'passive', passiveId: pv.id, name: pv.name, desc: pv.desc, tag: 'Fallback', choose: () => applyPassive(pv) });
     }
     return result.slice(0, 3);
   }
 
   // ── HUD 업데이트 ────────────────────────────────────────────────
   function updateHUD() {
-    const hpPct = player.hp / player.maxHp * 100;
-    document.getElementById('hpFill').style.width  = hpPct + '%';
+    const hpRatio = getPlayerHpRatio();
+    const hpPct = hpRatio * 100;
+    player.lowestHpPct = Math.min(player.lowestHpPct ?? 1, hpRatio);
+    const hpFill = document.getElementById('hpFill');
+    const hpBar = document.getElementById('hpBar');
+    hpFill.style.width  = hpPct + '%';
+    hpBar.classList.toggle('critical', hpRatio <= LOW_HP_THRESHOLD);
     document.getElementById('hpText').textContent   = `${Math.ceil(player.hp)}/${player.maxHp}`;
     const xpPct = player.xp / xpNeeded(player.level) * 100;
     document.getElementById('xpFill').style.width  = xpPct + '%';
     document.getElementById('xpLabel').textContent  = `Lv.${player.level}`;
     document.getElementById('xpText').textContent   = `${Math.floor(player.xp)}/${xpNeeded(player.level)}`;
+  }
+
+  function getPlayerHpRatio() {
+    if (!player || !player.maxHp) return 1;
+    return Math.max(0, Math.min(1, player.hp / player.maxHp));
+  }
+
+  function updateLowHpFeedback(dt) {
+    lowHpAlertCooldown = Math.max(0, lowHpAlertCooldown - dt);
+    lowHpPulse = Math.max(0, lowHpPulse - dt);
+
+    const hpRatio = getPlayerHpRatio();
+    if (hpRatio > LOW_HP_THRESHOLD || lowHpAlertCooldown > 0) return;
+
+    const critical = hpRatio <= CRITICAL_HP_THRESHOLD;
+    floatTexts.push({
+      text: critical ? 'CRITICAL HP' : 'LOW HP',
+      life: critical ? 1.55 : 1.25,
+      maxLife: critical ? 1.55 : 1.25,
+      screenSpace: true,
+      color: critical ? '#ff3b30' : '#f39c12',
+      size: critical ? 22 : 18,
+    });
+    lowHpPulse = critical ? 2.2 : 1.5;
+    screenShake = Math.min(screenShake + (critical ? 0.26 : 0.16), critical ? 0.55 : 0.38);
+    lowHpAlertCooldown = LOW_HP_ALERT_COOLDOWN;
+  }
+
+  function renderLowHpWarning(W, H) {
+    if (!player || state !== 'playing') return;
+    const hpRatio = getPlayerHpRatio();
+    if (hpRatio > LOW_HP_THRESHOLD) return;
+
+    const critical = hpRatio <= CRITICAL_HP_THRESHOLD;
+    const pressure = (LOW_HP_THRESHOLD - hpRatio) / LOW_HP_THRESHOLD;
+    const pulse = 0.55 + Math.sin(elapsed * (critical ? 13 : 9)) * 0.25 + Math.min(lowHpPulse, 1) * 0.2;
+    const alpha = Math.max(0.1, Math.min(0.5, pressure * pulse));
+    const color = critical ? '255,59,48' : '243,156,18';
+
+    ctx.save();
+    ctx.strokeStyle = `rgba(${color},${alpha})`;
+    ctx.lineWidth = critical ? 10 : 7;
+    ctx.strokeRect(3, 3, W - 6, H - 6);
+    const grad = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.28, W / 2, H / 2, Math.max(W, H) * 0.72);
+    grad.addColorStop(0, 'rgba(0,0,0,0)');
+    grad.addColorStop(1, `rgba(${color},${alpha * 0.34})`);
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+    ctx.restore();
   }
 
   function renderWeaponSlots() {
@@ -896,6 +2675,12 @@
     const dt = Math.min((ts - lastTime) / 1000, 0.05);
     lastTime = ts;
 
+    if (state === 'coop-guest') {
+      sendGuestInput();
+      renderCoopGuestMirror();
+      return;
+    }
+
     if (state !== 'playing') {
       render(dt);
       return;
@@ -903,6 +2688,10 @@
 
     elapsed += dt;
     document.getElementById('timeDisp').textContent = fmtTime(elapsed);
+    if (elapsed >= getSurviveGoal()) {
+      endGame('win');
+      return;
+    }
 
     // 1분마다 마일스톤 알림 (무한 모드)
     const mins = Math.floor(elapsed / 60);
@@ -914,6 +2703,10 @@
     update(dt);
     render(dt);
     updateHUD();
+    sendHostCoopState();
+    if (elapsed - lastRunSnapshotAt >= RUN_SNAPSHOT_INTERVAL) {
+      saveRunSnapshot('auto');
+    }
   }
 
   function update(dt) {
@@ -956,7 +2749,7 @@
 
     // 보스 등장 체크
     if (!bossActive && elapsed >= nextBossTime) {
-      nextBossTime += BOSS_INTERVAL;
+      nextBossTime += currentDifficulty().bossInterval || BOSS_INTERVAL;
       spawnBoss();
     }
     if (bossWarning > 0) bossWarning -= dt;
@@ -976,7 +2769,7 @@
       box.life -= dt;
       box.pulseT = (box.pulseT || 0) + dt;
       if (box.life <= 0) { itemBoxes.splice(i, 1); continue; }
-      if (dist(box, player) < 26) {
+      if (dist(box, player) < 26 || (allyPlayer && dist(box, allyPlayer) < 26)) {
         for (let k = 0; k < 10; k++) spawnParticle(box.x, box.y, '#f1c40f', 5 + Math.random() * 5, 0.5);
         itemBoxes.splice(i, 1);
         showItemBoxChoices();
@@ -994,6 +2787,8 @@
 
     // 무기 발사
     for (const id of player.weapons) fireWeapon(id, dt);
+    updateAllyPlayer(dt);
+    updateHybridTowers(dt);
 
     // 투사체 업데이트
     for (let i = projectiles.length - 1; i >= 0; i--) {
@@ -1056,6 +2851,18 @@
             spawnParticle(p.x, p.y, '#27ae60', 5, 0.2);
           }
         }
+      } else if (p.type === 'tower') {
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        for (let j = enemies.length - 1; j >= 0; j--) {
+          const e = enemies[j];
+          if (dist(p, e) < p.r + e.size) {
+            dealDamage(e, p.dmg);
+            if (p.slow && e.hp > 0) e.frozen = Math.max(e.frozen || 0, p.slow);
+            projectiles.splice(i, 1);
+            break;
+          }
+        }
       }
       // 'arc' 타입은 시각 효과 전용 — life만 감소, 처리 없음
     }
@@ -1074,8 +2881,9 @@
     for (let i = enemies.length - 1; i >= 0; i--) {
       const e = enemies[i];
       if (e.hurtFlash > 0) e.hurtFlash -= dt;
-      const ang = Math.atan2(player.y - e.y, player.x - e.x);
-      const d   = dist(e, player);
+      const targetActor = allyPlayer && dist(e, allyPlayer) < dist(e, player) ? allyPlayer : player;
+      const ang = Math.atan2(targetActor.y - e.y, targetActor.x - e.x);
+      const d   = dist(e, targetActor);
       e.faceAngle = ang;
 
       // 보스 페이즈 전환 체크 (HP 50% 이하 → 격노)
@@ -1104,7 +2912,7 @@
         if (e.attackCd <= 0) {
           const shots = (e.bossPhase || 0) === 1 ? 12 : 8;
           for (let b = 0; b < shots; b++) {
-            fireEnemyProjectile(e, (b / shots) * Math.PI * 2 - ang);
+            fireEnemyProjectile(e, (b / shots) * Math.PI * 2 - ang, targetActor);
           }
           e.attackCd = (e.bossPhase || 0) === 1 ? 1.5 : 2.5;
         }
@@ -1121,7 +2929,7 @@
         if (e.attackCd <= 0 && d < e.attackRange) {
           const shots = e.tier === 2 ? 3 : (rageActive ? 2 : 1);
           for (let s = 0; s < shots; s++) {
-            fireEnemyProjectile(e, shots > 1 ? (s - (shots - 1) / 2) * 0.22 : 0);
+            fireEnemyProjectile(e, shots > 1 ? (s - (shots - 1) / 2) * 0.22 : 0, targetActor);
           }
           e.attackCd = e.attackBase * (rageActive ? 0.55 : 1.0);
         }
@@ -1146,7 +2954,8 @@
       if (ep.life <= 0) { enemyProjectiles.splice(i, 1); continue; }
       ep.x += ep.vx * dt;
       ep.y += ep.vy * dt;
-      if (player.invincible <= 0 && dist(ep, player) < ep.r + 12) {
+      const projectileTarget = allyPlayer && dist(ep, allyPlayer) < dist(ep, player) ? allyPlayer : player;
+      if (player.invincible <= 0 && dist(ep, projectileTarget) < ep.r + 12) {
         player.hp -= ep.dmg;
         screenShake = Math.min(screenShake + 0.22, 0.45);
         player.invincible = 0.1;
@@ -1156,6 +2965,8 @@
     }
 
     // 콤보 타이머 감쇠
+    updateLowHpFeedback(dt);
+
     if (comboTimer > 0) comboTimer -= dt;
     else if (comboCount > 0) comboCount = 0;
 
@@ -1178,7 +2989,7 @@
     // XP 수집
     for (let i = xpGems.length - 1; i >= 0; i--) {
       const g = xpGems[i];
-      if (dist(g, player) < player.xpRange) {
+      if (dist(g, player) < player.xpRange || (allyPlayer && dist(g, allyPlayer) < player.xpRange * 0.75)) {
         gainXP(g.val);
         xpGems.splice(i, 1);
       }
@@ -1198,6 +3009,8 @@
   function render() {
     const W = canvas.width, H = canvas.height;
     ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = currentMap().bg || '#101827';
+    ctx.fillRect(0, 0, W, H);
 
     // 화면 흔들기 (최외곽 save)
     ctx.save();
@@ -1258,6 +3071,31 @@
     }
 
     // 파티클
+    for (const tower of hybridTowers) {
+      const def = HYBRID_TOWER_TYPES.find(t => t.id === tower.type) || HYBRID_TOWER_TYPES[0];
+      const pulse = 1 + Math.sin((tower.pulse || 0) * 5) * 0.06;
+      ctx.save();
+      ctx.translate(tower.x, tower.y);
+      ctx.globalAlpha = Math.min(1, tower.life / 8);
+      ctx.strokeStyle = `rgba(255,255,255,${tower.cd <= 0 ? 0.16 : 0.08})`;
+      ctx.beginPath();
+      ctx.arc(0, 0, def.range, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = def.color;
+      ctx.shadowBlur = 14;
+      ctx.shadowColor = def.color;
+      ctx.beginPath();
+      ctx.rect(-12 * pulse, -12 * pulse, 24 * pulse, 24 * pulse);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = '#09101c';
+      ctx.font = 'bold 12px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(def.icon, 0, 1);
+      ctx.restore();
+    }
+
     for (const p of particles) {
       const alpha = p.life / p.maxLife;
       ctx.globalAlpha = alpha;
@@ -1293,6 +3131,14 @@
         ctx.fillStyle = '#f39c12';
         ctx.fillRect(-12, -2, 24, 4);
         ctx.restore();
+      } else if (p.type === 'tower') {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        ctx.fillStyle = p.color || '#5dade2';
+        ctx.shadowBlur = 12;
+        ctx.shadowColor = p.color || '#5dade2';
+        ctx.fill();
+        ctx.shadowBlur = 0;
       } else if (p.type === 'laser' || p.type === 'deathray') {
         const evolved = p.type === 'deathray';
         const ex = p.x + Math.cos(p.angle) * p.length;
@@ -1498,6 +3344,18 @@
     ctx.save();
     ctx.translate(player.x, player.y);
     const inv = player.invincible > 0;
+    const hpRatio = getPlayerHpRatio();
+    if (hpRatio <= LOW_HP_THRESHOLD) {
+      const critical = hpRatio <= CRITICAL_HP_THRESHOLD;
+      const pulse = 1 + Math.sin(elapsed * (critical ? 12 : 8)) * 0.08 + lowHpPulse * 0.04;
+      ctx.globalAlpha = critical ? 0.42 : 0.28;
+      ctx.strokeStyle = critical ? '#ff3b30' : '#f39c12';
+      ctx.lineWidth = critical ? 4 : 3;
+      ctx.beginPath();
+      ctx.arc(0, 0, 25 * pulse, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
     ctx.globalAlpha = inv ? 0.5 + Math.sin(elapsed * 30) * 0.3 : 1;
     ctx.shadowBlur  = 18;
     ctx.shadowColor = '#8e44ad';
@@ -1517,6 +3375,29 @@
     ctx.globalAlpha = 1;
     ctx.restore();
 
+    if (allyPlayer) {
+      ctx.save();
+      ctx.translate(allyPlayer.x, allyPlayer.y);
+      ctx.shadowBlur = 14;
+      ctx.shadowColor = '#2ecc71';
+      ctx.fillStyle = '#2ecc71';
+      ctx.beginPath();
+      ctx.arc(0, 0, allyPlayer.radius || 11, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = '#06130d';
+      ctx.font = 'bold 11px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('G', 0, 1);
+      ctx.strokeStyle = 'rgba(46,204,113,0.35)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, 0, (allyPlayer.radius || 11) + 7, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+
     ctx.restore(); // camera
 
     // 보스 경고 화면 플래시
@@ -1530,6 +3411,8 @@
     }
 
     // 보스 체력 바 (상단)
+    renderLowHpWarning(W, H);
+
     const bossEnemy = enemies.find(e => e.isBoss);
     if (bossEnemy) {
       const bw = W * 0.55, bh = 14;
@@ -1615,6 +3498,26 @@
       ctx.fillText('DASH', cx, cy);
       ctx.textAlign = 'left';
       ctx.textBaseline = 'alphabetic';
+
+      const towerDef = currentHybridTowerType();
+      const tx = 38, ty = H - 36;
+      ctx.beginPath();
+      ctx.arc(tx, ty, rad, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      ctx.fill();
+      ctx.strokeStyle = towerDef.color;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.fillStyle = towerDef.color;
+      ctx.font = 'bold 11px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(`${towerDef.icon}${player.towerCharges || 0}`, tx, ty);
+      ctx.fillStyle = 'rgba(255,255,255,0.75)';
+      ctx.font = '9px sans-serif';
+      ctx.fillText('T/Y', tx, ty + 25);
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'alphabetic';
     }
 
     ctx.restore(); // 화면 흔들기 종료
@@ -1623,7 +3526,9 @@
   // ── 게임 종료 ───────────────────────────────────────────────────
   function endGame(result) {
     state = result;
+    clearRunSnapshot();
     cancelAnimationFrame(frameId);
+    const reward = awardRunRewards(result);
     const icon  = document.getElementById('overlayIcon');
     const msg   = document.getElementById('overlayMsg');
     const sub   = document.getElementById('overlaySub');
@@ -1639,6 +3544,13 @@
     }
     sub.textContent = `Lv.${player.level}  ·  ${fmtTime(elapsed)}  ·  ${kills}마리 처치`;
     btn.textContent = '다시하기';
+    sub.textContent = `Lv.${player.level}  -  ${fmtTime(elapsed)}  -  ${kills} kills  -  ${currentCharacter().name} / ${currentDifficulty().name}`;
+    renderEndActions(result, reward);
+    renderStartOptions();
+    const pauseBtn = document.getElementById('pauseBtn');
+    if (pauseBtn) pauseBtn.style.display = 'none';
+    const towerBtn = document.getElementById('towerBtn');
+    if (towerBtn) towerBtn.style.display = 'none';
     ov.classList.add('visible');
 
     if (window.AdMobHelper) AdMobHelper.showAfterGame();
@@ -1749,18 +3661,40 @@
 
   // ── 버튼 연결 ───────────────────────────────────────────────────
   document.getElementById('startBtn').addEventListener('click', () => {
+    ensureStartPanels();
+    clearEndActions();
+    clearRunSnapshot();
+    if (!isCharacterUnlocked(currentCharacter())) selectedCharacterId = 'knight';
+    if (!isMapUnlocked(currentMap())) selectedMapId = 'meadow';
+    meta.lastCharacter = selectedCharacterId;
+    meta.lastDifficulty = selectedDifficultyId;
+    meta.lastMap = selectedMapId;
+    meta.dailyChallengeEnabled = dailyChallengeEnabled;
+    saveMeta();
     const select = document.getElementById('stageSelect');
     if (select) selectedStageIdx = parseInt(select.value, 10) || 0;
     if (frameId) cancelAnimationFrame(frameId);
     document.getElementById('overlay').classList.remove('visible');
+    const pauseOverlay = document.getElementById('pauseOverlay');
+    if (pauseOverlay) pauseOverlay.style.display = 'none';
+    const pauseBtn = document.getElementById('pauseBtn');
+    if (pauseBtn) pauseBtn.style.display = '';
+    const towerBtn = document.getElementById('towerBtn');
+    if (towerBtn) towerBtn.style.display = '';
     document.getElementById('levelOverlay').style.display = 'none';
     initGame();
     state = 'playing';
+    saveRunSnapshot('start');
     lastTime = performance.now();
     frameId = requestAnimationFrame(loop);
   });
 
   // 첫 프레임 시작
+  ensureStartPanels();
+  renderStartOptions();
   renderStageSelect();
+  if (new URLSearchParams(window.location.search).has('vpsRoom')) {
+    ensureCoopSocket();
+  }
   frameId = requestAnimationFrame(loop);
 })();

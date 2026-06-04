@@ -3,6 +3,7 @@
 const http = require('http');
 const path = require('path');
 const fs = require('fs');
+const vm = require('vm');
 const { checkJavaScriptSyntax } = require('./check-js');
 
 const root = path.resolve(__dirname, '..');
@@ -202,6 +203,9 @@ function loadChatModuleForTest() {
 }
 
 function checkChatBubbleUi() {
+  const chatScript = fs.readFileSync(path.join(root, 'public/js/chat.js'), 'utf8');
+  if (!chatScript.includes('chat-bubble')) return;
+
   const { Chat, elements, timers } = loadChatModuleForTest();
   const emitted = [];
   Chat.init({ role: 'host', socket: { emit: (...args) => emitted.push(args) } });
@@ -256,6 +260,9 @@ async function checkDeploymentCachePolicy() {
   const chat = await checkUrl('/js/chat.js');
   assertNoStoreHeader(chat, '/js/chat.js');
 
+  const badge = await checkUrl('/js/version-badge.js');
+  assertNoStoreHeader(badge, '/js/version-badge.js');
+
   const updater = await checkUrl('/js/sw-update.js');
   assertNoStoreHeader(updater, '/js/sw-update.js');
   if (
@@ -276,12 +283,461 @@ function listHtmlFiles(dir) {
 }
 
 function checkServiceWorkerUpdateCoverage() {
-  const roots = ['public', 'sandbox'].map((dir) => path.join(root, dir));
+  const roots = ['public'].map((dir) => path.join(root, dir));
   const missing = roots
     .flatMap(listHtmlFiles)
     .filter((file) => !fs.readFileSync(file, 'utf8').includes('/js/sw-update.js'));
   if (missing.length) {
     throw new Error(`HTML pages missing sw-update.js: ${missing.map((file) => path.relative(root, file)).join(', ')}`);
+  }
+}
+
+function checkVersionBadgeCoverage() {
+  const badgeScript = fs.readFileSync(path.join(root, 'public/js/version-badge.js'), 'utf8');
+  if (!badgeScript.includes('/api/version')) {
+    throw new Error('version-badge.js should read the deployment identity from /api/version');
+  }
+  if (!badgeScript.includes('textContent')) {
+    throw new Error('version-badge.js should render API values with textContent');
+  }
+  if (badgeScript.includes('innerHTML')) {
+    throw new Error('version-badge.js should not use innerHTML for deployment metadata');
+  }
+
+  const pages = ['public/index.html', 'public/admin.html'];
+  const missing = pages
+    .filter((file) => !fs.readFileSync(path.join(root, file), 'utf8').includes('/js/version-badge.js'));
+  if (missing.length) {
+    throw new Error(`Pages missing version-badge.js: ${missing.join(', ')}`);
+  }
+}
+
+function checkProductionArcadeAssetPolicy() {
+  const arcadePages = [
+    'public/arcade/vampire/index.html',
+    'public/arcade/plant/index.html',
+    'public/arcade/tower-defense/index.html',
+  ];
+  const offenders = arcadePages.filter((file) =>
+    fs.readFileSync(path.join(root, file), 'utf8').includes('/sandbox/')
+  );
+  if (offenders.length) {
+    throw new Error(`Public arcade pages must not request /sandbox/ assets: ${offenders.join(', ')}`);
+  }
+
+  const towerPage = fs.readFileSync(path.join(root, 'public/arcade/tower-defense/index.html'), 'utf8');
+  if (!towerPage.includes('/arcade/tower-defense/runtime/config.js') || !towerPage.includes('/arcade/tower-defense/runtime/game.js')) {
+    throw new Error('Tower Defense arcade page should load runtime assets from /arcade/tower-defense/runtime/');
+  }
+
+  const server = fs.readFileSync(path.join(root, 'server/index.js'), 'utf8');
+  if (!server.includes("'/arcade/tower-defense/runtime'") || server.includes("app.use('/sandbox'")) {
+    throw new Error('Server should expose Tower Defense runtime under arcade path while keeping /sandbox/ unserved');
+  }
+}
+
+function checkSandboxConfigBridgeRead() {
+  const bridge = fs.readFileSync(path.join(root, 'public/js/sandbox-config.js'), 'utf8');
+  const store = {
+    sandbox_vs_config: JSON.stringify({ STAGES: [{ name: 'Local Draft' }] }),
+  };
+  const context = {
+    console,
+    window: {
+      localStorage: {
+        getItem: (key) => store[key] || null,
+      },
+    },
+  };
+  vm.createContext(context);
+  vm.runInContext(bridge, context, { filename: 'public/js/sandbox-config.js' });
+  const saved = context.window.SandboxConfigBridge.read('sandbox_vs_config');
+  if (!saved || !saved.__loadedFromSandbox || !Array.isArray(saved.STAGES) || saved.STAGES[0].name !== 'Local Draft') {
+    throw new Error('SandboxConfigBridge.read should return saved localStorage config without a sandbox script tag');
+  }
+  const target = { STAGES: [] };
+  const loaded = context.window.SandboxConfigBridge.load('sandbox_vs_config', target);
+  if (!loaded || !target.__loadedFromSandbox || target.STAGES[0].name !== 'Local Draft') {
+    throw new Error('SandboxConfigBridge.load should still merge saved config into an existing target');
+  }
+}
+
+function checkTowerDefenseSandboxCoverage() {
+  const config = fs.readFileSync(path.join(root, 'sandbox/tower-defense/config.js'), 'utf8');
+  const game = fs.readFileSync(path.join(root, 'sandbox/tower-defense/game.js'), 'utf8');
+  const ui = fs.readFileSync(path.join(root, 'sandbox/tower-defense/ui.js'), 'utf8');
+
+  if (!config.includes('amplifier') || !config.includes("attack: 'support'")) {
+    throw new Error('Tower Defense sandbox should define the amplifier support tower');
+  }
+  if (!config.includes('barrage') || !config.includes('supercharge')) {
+    throw new Error('Tower Defense sandbox should include the new barrage and supercharge synergies');
+  }
+  if (!game.includes("mode === 'support'") || !game.includes('auraBonus')) {
+    throw new Error('Tower Defense runtime should apply amplifier auras and skip support attacks');
+  }
+  if (!ui.includes("label: 'Synergies'") || !ui.includes("type: 'amplifier'")) {
+    throw new Error('Tower Defense editor should expose synergies and amplifier placement');
+  }
+  if (!ui.includes('td_published_config') || !ui.includes('validateConfig') || !ui.includes('publishJSON')) {
+    throw new Error('Tower Defense editor should validate and publish configs for arcade import');
+  }
+  const sandboxPage = fs.readFileSync(path.join(root, 'sandbox/tower-defense/index.html'), 'utf8');
+  const arcadePage = fs.readFileSync(path.join(root, 'public/arcade/tower-defense/index.html'), 'utf8');
+  if (!sandboxPage.includes('data-action="publish"') || !arcadePage.includes('data-action="publish"')) {
+    throw new Error('Tower Defense sandbox and arcade route should expose publish controls');
+  }
+  if (!arcadePage.includes('td_published_config') || !arcadePage.includes('Published config loaded')) {
+    throw new Error('Tower Defense arcade route should prefer published config and show load status');
+  }
+}
+
+function checkVampireDirectorLoopCoverage() {
+  const game = fs.readFileSync(path.join(root, 'public/arcade/vampire/game.js'), 'utf8');
+  const css = fs.readFileSync(path.join(root, 'public/arcade/vampire/style.css'), 'utf8');
+  const page = fs.readFileSync(path.join(root, 'public/arcade/vampire/index.html'), 'utf8');
+  const serverEvents = fs.readFileSync(path.join(root, 'server/events.js'), 'utf8');
+  const serverState = fs.readFileSync(path.join(root, 'server/state.js'), 'utf8');
+  const admob = fs.readFileSync(path.join(root, 'public/js/admob.js'), 'utf8');
+
+  const requiredGameMarkers = [
+    'CHARACTER_DEFS',
+    'DIFFICULTY_DEFS',
+    'META_UPGRADE_DEFS',
+    'MAP_DEFS',
+    'START_BOOST_COST',
+    'HYBRID_TOWER_TYPES',
+    'MAX_HYBRID_TOWERS',
+    'ACHIEVEMENT_REWARDS',
+    'META_KEY',
+    'RUN_SNAPSHOT_KEY',
+    'RUN_SNAPSHOT_INTERVAL',
+    'selectedCharacterId',
+    'selectedDifficultyId',
+    'selectedMapId',
+    'dailyChallengeEnabled',
+    'dailyChallenge',
+    'upgradeCost',
+    'function setPaused',
+    'saveRunSnapshot',
+    'restoreRunSnapshot',
+    'clearRunSnapshot',
+    'resumePanel',
+    'beforeunload',
+    'coopPanel',
+    'hostCoopRoom',
+    'joinCoopRoom',
+    'allyPlayer',
+    'sendGuestInput',
+    'sendHostCoopState',
+    'renderCoopGuestMirror',
+    "state === 'coop-guest'",
+    "state = 'paused'",
+    'visibilitychange',
+    'elapsed >= getSurviveGoal()',
+    'awardRunRewards',
+    'reviveRun',
+    'showRewardedRevive',
+    'character.startWeapons.forEach',
+    'runDifficulty.enemyHpMult',
+    'spawnMult',
+    'showRewardedStartBoost',
+    'adsRemoved',
+    'premiumCharacters',
+    'purchasePremiumCharacter',
+    'monetizationPanel',
+    'evolutionPlanPanel',
+    'renderEvolutionPlan',
+    'evolutionProgress',
+    'showEvolutionCelebration',
+    'playEvolutionChime',
+    'evolutionBanner',
+    'appendChoiceButton',
+    'choiceWeight',
+    'takeWeightedChoices',
+    'Combo passive',
+    'LOW_HP_THRESHOLD',
+    'CRITICAL_HP',
+    'renderLowHpWarning',
+    'lowHpAlertCooldown',
+    'placeHybridTower',
+    'updateHybridTowers',
+    'fireHybridTower',
+    'towerCharges',
+    'missedEvolutionHints',
+    'evolvedWeaponCount',
+    'nearMissClear',
+    'towerBuilder',
+  ];
+  const missingGameMarkers = requiredGameMarkers.filter((marker) => !game.includes(marker));
+  if (missingGameMarkers.length) {
+    throw new Error(`Vampire Survivors loop coverage missing: ${missingGameMarkers.join(', ')}`);
+  }
+
+  const requiredCssMarkers = ['.meta-panel', '.start-card', '.pause-overlay', '.end-actions', '.daily-panel', '.upgrade-grid', '.run-report', '.monetization-panel', '.resume-panel', '.coop-panel', '.evolution-plan', '.level-evolution-plan', '.evolution-plan-row.ready', '.evolution-banner', '.evolution-banner.visible', '.choice-tag', '.choice-tag.weapon-lv', '#hpBar.critical'];
+  const missingCssMarkers = requiredCssMarkers.filter((marker) => !css.includes(marker));
+  if (missingCssMarkers.length) {
+    throw new Error(`Vampire Survivors UI CSS missing: ${missingCssMarkers.join(', ')}`);
+  }
+
+  if (game.includes('btn.innerHTML = `<div class="upgrade-name"')) {
+    throw new Error('Vampire Survivors level-up choice text should be rendered with DOM text nodes, not innerHTML');
+  }
+
+  if (!page.includes('/socket.io/socket.io.js')) {
+    throw new Error('Vampire Survivors page should load Socket.io for co-op relay');
+  }
+
+  const requiredCoopServerMarkers = ['arcadeVampireRooms', 'vps:room:create', 'vps:room:join', 'vps:guest:input', 'vps:host:state', 'vps:state'];
+  const missingCoopServer = requiredCoopServerMarkers.filter(marker => !serverEvents.includes(marker) && !serverState.includes(marker));
+  if (missingCoopServer.length) {
+    throw new Error(`Vampire Survivors co-op relay missing: ${missingCoopServer.join(', ')}`);
+  }
+
+  if (
+    !admob.includes('REWARDED_ID') ||
+    !admob.includes('showRewardedRevive') ||
+    !admob.includes('showRewardedStartBoost') ||
+    !admob.includes('purchaseAdRemoval') ||
+    !admob.includes('restorePurchases') ||
+    !admob.includes('purchasePremiumCharacter')
+  ) {
+    throw new Error('AdMob helper should expose rewarded, ad removal, restore, and premium character hooks');
+  }
+}
+
+function checkVampireSandboxEvolutionCoverage() {
+  const config = fs.readFileSync(path.join(root, 'sandbox/vampire-survivors/config.js'), 'utf8');
+  const game = fs.readFileSync(path.join(root, 'sandbox/vampire-survivors/game.js'), 'utf8');
+  const ui = fs.readFileSync(path.join(root, 'sandbox/vampire-survivors/ui.js'), 'utf8');
+  const page = fs.readFileSync(path.join(root, 'sandbox/vampire-survivors/index.html'), 'utf8');
+
+  const configMarkers = ['maxSkillLevel', 'EVOLUTIONS', 'blackhole', 'stormbow', 'supernova', 'deathray', 'aegis', 'evolved: true'];
+  const missingConfig = configMarkers.filter((marker) => !config.includes(marker));
+  if (missingConfig.length) {
+    throw new Error(`Vampire sandbox evolution config missing: ${missingConfig.join(', ')}`);
+  }
+
+  const gameMarkers = [
+    'skillLevels',
+    'ownedPassives',
+    'availableEvolutions',
+    'evolveSkill',
+    'applyPassive',
+    'configuredMaxSkillLevel',
+    'blackhole',
+    'stormbow',
+    'supernova',
+    'deathray',
+    'aegis',
+  ];
+  const missingGame = gameMarkers.filter((marker) => !game.includes(marker));
+  if (missingGame.length) {
+    throw new Error(`Vampire sandbox evolution runtime missing: ${missingGame.join(', ')}`);
+  }
+
+  const uiMarkers = ['renderEvolutionEditor', 'evolution-base', 'evolution-result', 'syncLegacyEvolutionLinks', 'mergeMissingDefaultRows'];
+  const missingUi = uiMarkers.filter((marker) => !ui.includes(marker));
+  if (missingUi.length) {
+    throw new Error(`Vampire sandbox evolution editor missing: ${missingUi.join(', ')}`);
+  }
+
+  if (!page.includes('.levelup-choice.evolution') || !page.includes('.evolution-editor')) {
+    throw new Error('Vampire sandbox should style golden evolution cards and the evolution editor');
+  }
+
+  checkVampireSandboxEvolutionRuntime(config, game);
+}
+
+function checkVampireSandboxEvolutionRuntime(configScript, gameScript) {
+  let rafCallback = null;
+  let capturedChoices = null;
+  let capturedSelect = null;
+
+  const canvasContext = {
+    fillStyle: '',
+    strokeStyle: '',
+    lineWidth: 1,
+    globalAlpha: 1,
+    shadowColor: '',
+    shadowBlur: 0,
+    font: '',
+    textAlign: '',
+    textBaseline: '',
+    fillRect() {},
+    strokeRect() {},
+    clearRect() {},
+    beginPath() {},
+    moveTo() {},
+    lineTo() {},
+    stroke() {},
+    fill() {},
+    arc() {},
+    save() {},
+    restore() {},
+    fillText() {},
+    translate() {},
+    rotate() {},
+  };
+
+  const context = {
+    console,
+    Math,
+    Date,
+    JSON,
+    Set,
+    Object,
+    Array,
+    Number,
+    String,
+    parseInt,
+    parseFloat,
+    isFinite,
+    requestAnimationFrame(cb) {
+      rafCallback = cb;
+      return 1;
+    },
+    cancelAnimationFrame() {},
+    addEventListener() {},
+    tokenColor() { return '#ffffff'; },
+    tokenEmoji(key) { return key; },
+  };
+  context.window = context;
+  context.VSUI = {
+    showLevelUpModal(choices, onSelect) {
+      capturedChoices = choices;
+      capturedSelect = onSelect;
+    },
+    onGameEnd() {},
+  };
+  vm.createContext(context);
+
+  vm.runInContext(configScript, context, { filename: 'sandbox/vampire-survivors/config.js' });
+  vm.runInContext(gameScript, context, { filename: 'sandbox/vampire-survivors/game.js' });
+
+  const canvas = {
+    width: 800,
+    height: 600,
+    style: {},
+    parentElement: { clientWidth: 800, clientHeight: 600 },
+    getContext() { return canvasContext; },
+  };
+  context.VSGame.init(canvas);
+  context.VSGame.startStage(0);
+  const player = context.VSGame.getPlayer();
+  player.skillLevels.orb = 5;
+  player.appliedSkills.orb = 5;
+  player.ownedPassives.push('spinach');
+  player.xp = 9999;
+  if (typeof rafCallback !== 'function') {
+    throw new Error('Vampire sandbox runtime did not schedule a frame');
+  }
+  rafCallback(16);
+
+  const evolution = capturedChoices && capturedChoices.find((choice) => choice.kind === 'evolve' && choice.id === 'blackhole');
+  if (!evolution) {
+    throw new Error('Vampire sandbox runtime did not offer blackhole as a golden evolution choice');
+  }
+  capturedSelect('blackhole');
+  if (!player.weapons.includes('blackhole') || player.weapons.includes('orb')) {
+    throw new Error('Vampire sandbox evolution choice should swap orb into blackhole');
+  }
+}
+
+async function checkVersionBadgeUi() {
+  const elements = new Map();
+
+  class Element {
+    constructor(tagName = 'div') {
+      this.tagName = tagName;
+      this.children = [];
+      this.parentNode = null;
+      this.attributes = {};
+      this.dataset = {};
+      this.id = '';
+      this.title = '';
+      this.type = '';
+      this._textContent = '';
+    }
+
+    appendChild(child) {
+      child.parentNode = this;
+      this.children.push(child);
+      if (child.id) elements.set(child.id, child);
+      return child;
+    }
+
+    setAttribute(name, value) {
+      this.attributes[name] = String(value);
+    }
+
+    querySelector(selector) {
+      return this.children.find((child) => child.tagName === selector) || null;
+    }
+
+    set textContent(value) {
+      this._textContent = String(value);
+    }
+
+    get textContent() {
+      return [
+        this._textContent,
+        ...this.children.map((child) => child.textContent),
+      ].join('');
+    }
+  }
+
+  const document = {
+    readyState: 'complete',
+    head: new Element('head'),
+    body: new Element('body'),
+    getElementById(id) {
+      return elements.get(id) || null;
+    },
+    createElement(tagName) {
+      return new Element(tagName);
+    },
+    addEventListener() {},
+  };
+
+  const fetchCalls = [];
+  const context = {
+    document,
+    navigator: {},
+    window: {
+      setTimeout() {},
+    },
+    fetch: async (url, options) => {
+      fetchCalls.push({ url, options });
+      return {
+        ok: true,
+        json: async () => ({
+          branch: 'audit/version-diagnostics-focused',
+          commit: 'abcdef1234567890',
+          startTime: 1779200000000,
+        }),
+      };
+    },
+  };
+
+  vm.runInNewContext(
+    fs.readFileSync(path.join(root, 'public/js/version-badge.js'), 'utf8'),
+    context,
+    { filename: 'public/js/version-badge.js' }
+  );
+
+  await Promise.resolve();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  const badge = document.getElementById('build-version-badge');
+  if (!badge) {
+    throw new Error('version-badge.js did not render a build diagnostics badge');
+  }
+  if (!fetchCalls.some((call) => call.url === '/api/version' && call.options && call.options.cache === 'no-store')) {
+    throw new Error('version-badge.js should fetch /api/version with cache: no-store');
+  }
+  if (!badge.textContent.includes('audit/version-diagnostics-foc... abcdef1')) {
+    throw new Error(`version-badge.js rendered unexpected badge text: "${badge.textContent}"`);
   }
 }
 
@@ -375,6 +831,52 @@ async function runSocketSmokeCheck() {
   }
 }
 
+async function runVampireCoopSocketSmokeCheck() {
+  const host = await openPollingSocket();
+  const guest = await openPollingSocket();
+
+  await emitSocketEvent(host, 'vps:room:create', {});
+  const created = await waitForSocketEvent(host, 'vps:room:created');
+  if (!created.roomId) {
+    throw new Error('Vampire co-op room did not return a roomId');
+  }
+
+  await emitSocketEvent(guest, 'vps:room:join', { roomId: created.roomId });
+  const joined = await waitForSocketEvent(guest, 'vps:room:joined');
+  const hostNotice = await waitForSocketEvent(host, 'vps:guest:joined');
+  if (joined.roomId !== created.roomId || hostNotice.roomId !== created.roomId) {
+    throw new Error('Vampire co-op join did not connect host and guest to the same room');
+  }
+
+  await emitSocketEvent(guest, 'vps:guest:input', {
+    roomId: created.roomId,
+    input: { dx: 0.7, dy: -0.2, dash: true, tower: false },
+  });
+  const input = await waitForSocketEvent(host, 'vps:guest:input');
+  if (!input.input || input.input.dx <= 0 || !input.input.dash) {
+    throw new Error('Vampire co-op guest input was not relayed to host');
+  }
+
+  await emitSocketEvent(host, 'vps:host:state', {
+    roomId: created.roomId,
+    snapshot: {
+      state: 'playing',
+      elapsed: 12,
+      kills: 3,
+      hp: 90,
+      maxHp: 100,
+      level: 2,
+      host: { x: 1, y: 2 },
+      guest: { x: 3, y: 4 },
+      enemies: [{ x: 5, y: 6, size: 10, hpPct: 0.5, color: '#e74c3c' }],
+    },
+  });
+  const stateEvent = await waitForSocketEvent(guest, 'vps:state');
+  if (!stateEvent.snapshot || stateEvent.snapshot.kills !== 3 || !stateEvent.snapshot.guest) {
+    throw new Error('Vampire co-op host state was not relayed to guest');
+  }
+}
+
 async function main() {
   process.env.PORT = String(port);
   require(path.join(root, 'server.js'));
@@ -402,6 +904,7 @@ async function main() {
       '/icons/icon.svg',
       '/js/game-registry.js',
       '/js/sw-update.js',
+      '/js/version-badge.js',
       '/js/game.js',
       '/js/admob.js',
       '/js/sandbox-config.js',
@@ -414,15 +917,12 @@ async function main() {
       '/arcade/plant/',
       '/arcade/plant/game.js',
       '/arcade/tower-defense/',
+      '/arcade/tower-defense/runtime/config.js',
+      '/arcade/tower-defense/runtime/game.js',
+      '/arcade/tower-defense/runtime/ui.js',
+      '/arcade/tower-defense/runtime/graphics/sprites.css',
       '/games3d/chess3d/',
       '/games3d/chess3d/scene.js',
-      '/sandbox/',
-      '/sandbox/vampire-survivors/',
-      '/sandbox/vampire-survivors/game.js',
-      '/sandbox/plant-growing/',
-      '/sandbox/plant-growing/game.js',
-      '/sandbox/tower-defense/',
-      '/sandbox/tower-defense/game.js',
     ];
     for (const game of gameIds) {
       paths.push(`/js/game-${game}.js`);
@@ -434,9 +934,17 @@ async function main() {
     }
 
     await runSocketSmokeCheck();
+    await runVampireCoopSocketSmokeCheck();
     checkChatBubbleUi();
     await checkDeploymentCachePolicy();
     checkServiceWorkerUpdateCoverage();
+    checkVersionBadgeCoverage();
+    checkProductionArcadeAssetPolicy();
+    checkSandboxConfigBridgeRead();
+    checkTowerDefenseSandboxCoverage();
+    checkVampireDirectorLoopCoverage();
+    checkVampireSandboxEvolutionCoverage();
+    await checkVersionBadgeUi();
     runSyntaxCheck();
     console.log(`Smoke check passed: ${baseUrl}`);
   } catch (error) {

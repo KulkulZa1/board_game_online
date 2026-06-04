@@ -850,13 +850,14 @@ h2 {
   cursor: pointer;
   transition: border-color 0.2s, transform 0.15s, box-shadow 0.2s;
 }
-.arcade-card:hover:not(.arcade-card-soon) {
+.arcade-card:hover:not(.arcade-card-soon):not(.arcade-card-disabled) {
   border-color: #2ecc71;
   transform: translateY(-2px);
   box-shadow: 0 4px 16px rgba(46,204,113,0.15);
 }
 
-.arcade-card-soon {
+.arcade-card-soon,
+.arcade-card-disabled {
   opacity: 0.5;
   cursor: default;
 }

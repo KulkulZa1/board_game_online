@@ -4,9 +4,11 @@
 window.TDUI = (function () {
   var panel, tabContent;
   var activeTab = 'stages';
+  var selectedTowerType = 'cannon';
   var unsavedDot;
   var saveTimer = null;
   var STORAGE_KEY = 'sandbox_td_config';
+  var PUBLISHED_KEY = 'td_published_config';
 
   // ── Helpers ──────────────────────────────────────────────────────
   function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
@@ -106,6 +108,7 @@ window.TDUI = (function () {
     { id: 'tower',    label: 'Tower' },
     { id: 'enemies',  label: 'Enemies' },
     { id: 'passives', label: 'Passives' },
+    { id: 'synergies',label: 'Synergies' },
     { id: 'economy',  label: 'Economy' },
     { id: 'analytics',label: 'Analytics' },
     { id: 'map',      label: 'Map' }
@@ -155,25 +158,53 @@ window.TDUI = (function () {
   }
 
   function renderTower() {
-    var cfg = TD_CONFIG.TOWER;
+    var type = selectedTowerType || 'cannon';
+    var cfg = type === 'cannon' ? TD_CONFIG.TOWER : (TD_CONFIG.TOWER_TYPES && TD_CONFIG.TOWER_TYPES[type]);
+    if (!cfg) { type = 'cannon'; selectedTowerType = 'cannon'; cfg = TD_CONFIG.TOWER; }
+    var prefix = type === 'cannon' ? 'TD_CONFIG.TOWER' : ('TD_CONFIG.TOWER_TYPES.' + type);
     var html = '<div class="tab-section">';
+    html += '<h3>Tower Type</h3>';
+    html += '<div class="field-row"><label>Type</label><select id="td-tower-type-select">';
+    var towerTypes = ['cannon'].concat(Object.keys(TD_CONFIG.TOWER_TYPES || {}));
+    towerTypes.forEach(function (key) {
+      var tc = key === 'cannon' ? TD_CONFIG.TOWER : TD_CONFIG.TOWER_TYPES[key];
+      html += '<option value="' + esc(key) + '"' + (key === type ? ' selected' : '') + '>' + esc((tc && tc.name) || key) + '</option>';
+    });
+    html += '</select></div>';
+
     html += '<h3>Base Stats</h3>';
-    html += sliderField('Cost', cfg.cost, 20, 300, 5, 'TD_CONFIG.TOWER.cost');
-    html += sliderField('Range', cfg.range, 50, 250, 5, 'TD_CONFIG.TOWER.range');
-    html += sliderField('Damage', cfg.damage, 5, 100, 1, 'TD_CONFIG.TOWER.damage');
-    html += sliderField('Fire Rate ms', cfg.fireRateMs, 200, 3000, 50, 'TD_CONFIG.TOWER.fireRateMs');
-    html += sliderField('Sell Ratio', cfg.sellRatio, 0.3, 1.0, 0.05, 'TD_CONFIG.TOWER.sellRatio', 100);
-    html += sliderField('Proj Speed', cfg.projectileSpeed, 100, 600, 10, 'TD_CONFIG.TOWER.projectileSpeed');
+    html += sliderField('Cost', cfg.cost, 20, 400, 5, prefix + '.cost');
+    html += sliderField('Range', cfg.range, 50, 300, 5, prefix + '.range');
+    html += sliderField('Damage', cfg.damage, 0, 120, 1, prefix + '.damage');
+    html += sliderField('Fire Rate ms', cfg.fireRateMs, 200, 3000, 50, prefix + '.fireRateMs');
+    html += sliderField('Sell Ratio', cfg.sellRatio, 0.3, 1.0, 0.05, prefix + '.sellRatio', 100);
+    html += sliderField('Proj Speed', cfg.projectileSpeed || 0, 0, 700, 10, prefix + '.projectileSpeed');
 
-    html += '<h3>Arc Cannon (Lv4)</h3>';
-    html += sliderField('Chain Count', cfg.arcChainCount, 1, 6, 1, 'TD_CONFIG.TOWER.arcChainCount');
-    html += sliderField('Chain Radius', cfg.arcChainRadius, 40, 160, 5, 'TD_CONFIG.TOWER.arcChainRadius');
+    if (type === 'cannon') {
+      html += '<h3>Arc Cannon (Lv4)</h3>';
+      html += sliderField('Chain Count', cfg.arcChainCount, 1, 6, 1, prefix + '.arcChainCount');
+      html += sliderField('Chain Radius', cfg.arcChainRadius, 40, 160, 5, prefix + '.arcChainRadius');
 
-    html += '<h3>Void Cannon (Lv5)</h3>';
-    html += sliderField('Void Every N', cfg.voidInterval, 1, 8, 1, 'TD_CONFIG.TOWER.voidInterval');
-    html += sliderField('Void Splash R', cfg.voidSplashRadius, 30, 150, 5, 'TD_CONFIG.TOWER.voidSplashRadius');
-    html += sliderField('Void Dmg Mult', cfg.voidDamageMult, 1, 6, 0.1, 'TD_CONFIG.TOWER.voidDamageMult', 10);
-    html += sliderField('Void Slow Dur', cfg.voidSlowDur, 0.5, 5, 0.5, 'TD_CONFIG.TOWER.voidSlowDur', 10);
+      html += '<h3>Void Cannon (Lv5)</h3>';
+      html += sliderField('Void Every N', cfg.voidInterval, 1, 8, 1, prefix + '.voidInterval');
+      html += sliderField('Void Splash R', cfg.voidSplashRadius, 30, 150, 5, prefix + '.voidSplashRadius');
+      html += sliderField('Void Dmg Mult', cfg.voidDamageMult, 1, 6, 0.1, prefix + '.voidDamageMult', 10);
+      html += sliderField('Void Slow Dur', cfg.voidSlowDur, 0.5, 5, 0.5, prefix + '.voidSlowDur', 10);
+    } else if (type === 'frost') {
+      html += '<h3>Frost Effects</h3>';
+      html += sliderField('Slow Factor', cfg.frostSlowFactor, 0.2, 0.9, 0.05, prefix + '.frostSlowFactor', 100);
+      html += sliderField('Slow Duration', cfg.frostSlowDur, 0.5, 5, 0.1, prefix + '.frostSlowDur', 10);
+      html += sliderField('Splash Radius', cfg.frostSplashRadius, 0, 120, 5, prefix + '.frostSplashRadius');
+    } else if (type === 'tesla') {
+      html += '<h3>Tesla Effects</h3>';
+      html += sliderField('Chain Count', cfg.teslaChainCount, 1, 8, 1, prefix + '.teslaChainCount');
+      html += sliderField('Chain Radius', cfg.teslaChainRadius, 40, 180, 5, prefix + '.teslaChainRadius');
+      html += sliderField('Chain Falloff', cfg.teslaChainFalloff, 0.3, 1, 0.05, prefix + '.teslaChainFalloff', 100);
+    } else if (type === 'amplifier') {
+      html += '<h3>Support Aura</h3>';
+      html += sliderField('Damage Bonus %', cfg.auraDamageMult, 0, 1, 0.01, prefix + '.auraDamageMult', 100);
+      html += sliderField('Range Bonus %', cfg.auraRangeMult, 0, 0.6, 0.01, prefix + '.auraRangeMult', 100);
+    }
 
     html += '<h3>Upgrade Levels</h3>';
     cfg.upgradeLevels.forEach(function (lv, i) {
@@ -253,6 +284,31 @@ window.TDUI = (function () {
       });
       html += '</select></div>';
       html += sliderField('Value', p.effectVal, -1, 2, 0.01, 'TD_CONFIG.PASSIVES[' + pi + '].effectVal', 100);
+      html += '</div>';
+    });
+    html += '</div>';
+    return html;
+  }
+
+  function renderSynergies() {
+    var html = '<div class="tab-section">';
+    html += '<h3>Adjacency Synergies</h3>';
+    (TD_CONFIG.SYNERGIES || []).forEach(function (s, si) {
+      var prefix = 'TD_CONFIG.SYNERGIES[' + si + ']';
+      html += '<div class="item-block">';
+      html += '<div class="item-header"><span style="font-size:1.1rem">' + esc(s.icon || '*') + '</span>';
+      html += '<span class="item-name">' + esc(s.name || s.id) + '</span>';
+      html += '<span style="font-size:0.7rem;color:var(--muted)">' + esc(s.a) + ' + ' + esc(s.b) + '</span></div>';
+      html += '<div style="font-size:0.72rem;color:var(--muted);margin-bottom:6px">' + esc(s.desc || '') + '</div>';
+      html += sliderField('Radius', s.radius || 100, 40, 260, 5, prefix + '.radius');
+      Object.keys(s.bonus || {}).forEach(function (key) {
+        var value = s.bonus[key];
+        if (typeof value === 'boolean') {
+          html += '<div class="field-row"><label>' + esc(key) + '</label><input type="checkbox" data-synergy-bool="' + si + '" data-bonus-key="' + esc(key) + '"' + (value ? ' checked' : '') + '></div>';
+        } else {
+          html += sliderField(key, value, key.indexOf('Mult') >= 0 || key.indexOf('Dmg') >= 0 ? -1 : 0, key.indexOf('Add') >= 0 ? 5 : 2, key.indexOf('Add') >= 0 ? 1 : 0.01, prefix + '.bonus.' + key, key.indexOf('Add') >= 0 ? 1 : 100);
+        }
+      });
       html += '</div>';
     });
     html += '</div>';
@@ -394,6 +450,7 @@ window.TDUI = (function () {
       { type: 'frost',  emoji: '❄️', name: 'Frost',  note: 'Slows enemies in area' },
       { type: 'tesla',  emoji: '⚡', name: 'Tesla',  note: 'Instant chain lightning' }
     ];
+    TYPES.push({ type: 'amplifier', emoji: 'AMP', name: 'Amplifier', note: 'Buffs nearby towers' });
     TYPES.forEach(function (t) {
       var cost = TDGame ? TDGame.getTowerCost(t.type) : '?';
       html += '<button class="btn-small td-place-type" data-place-type="' + t.type + '" ' +
@@ -426,6 +483,7 @@ window.TDUI = (function () {
       case 'tower':    return renderTower();
       case 'enemies':  return renderEnemies();
       case 'passives': return renderPassives();
+      case 'synergies':return renderSynergies();
       case 'economy':  return renderEconomy();
       case 'analytics':return renderAnalytics();
       case 'map':      return renderMap();
@@ -527,6 +585,24 @@ window.TDUI = (function () {
         var idx = parseInt(btn.dataset.playStage);
         TDGame.startStage(idx);
         refresh();
+      });
+    });
+    var towerTypeSelect = document.getElementById('td-tower-type-select');
+    if (towerTypeSelect) {
+      towerTypeSelect.addEventListener('change', function () {
+        selectedTowerType = towerTypeSelect.value || 'cannon';
+        refresh();
+      });
+    }
+    tabContent.querySelectorAll('[data-synergy-bool]').forEach(function (el) {
+      el.addEventListener('change', function () {
+        var idx = parseInt(el.dataset.synergyBool);
+        var key = el.dataset.bonusKey;
+        if (TD_CONFIG.SYNERGIES[idx] && TD_CONFIG.SYNERGIES[idx].bonus) {
+          TD_CONFIG.SYNERGIES[idx].bonus[key] = el.checked;
+          if (window.TDGame) TDGame.onConfigChange();
+          markUnsaved();
+        }
       });
     });
     // Place tower buttons (per type)
@@ -755,6 +831,78 @@ window.TDUI = (function () {
     if (unsavedDot) unsavedDot.style.display = 'none';
   }
 
+  function validateConfig(config) {
+    var errors = [];
+    if (!config || typeof config !== 'object') return ['Config must be an object.'];
+    if (!Array.isArray(config.STAGES) || !config.STAGES.length) errors.push('At least one stage is required.');
+    if (!config.ENEMY_TYPES || typeof config.ENEMY_TYPES !== 'object') errors.push('ENEMY_TYPES is required.');
+    if (!config.TOWER || typeof config.TOWER !== 'object') errors.push('Base TOWER config is required.');
+    var enemyTypes = Object.keys(config.ENEMY_TYPES || {});
+    (config.STAGES || []).forEach(function (stage, si) {
+      if (!stage || typeof stage !== 'object') {
+        errors.push('Stage ' + (si + 1) + ' must be an object.');
+        return;
+      }
+      if (!stage.id) errors.push('Stage ' + (si + 1) + ' is missing id.');
+      if (!stage.name) errors.push('Stage ' + (si + 1) + ' is missing name.');
+      if (!Array.isArray(stage.waves) || !stage.waves.length) {
+        errors.push('Stage ' + (si + 1) + ' needs at least one wave.');
+        return;
+      }
+      stage.waves.forEach(function (wave, wi) {
+        var label = 'Stage ' + (si + 1) + ' wave ' + (wi + 1);
+        if (!wave || typeof wave !== 'object') {
+          errors.push(label + ' must be an object.');
+          return;
+        }
+        if (!enemyTypes.includes(wave.enemyType)) errors.push(label + ' uses unknown enemy type: ' + wave.enemyType);
+        if (!Number.isFinite(Number(wave.count)) || Number(wave.count) < 1 || Number(wave.count) > 300) errors.push(label + ' count must be 1-300.');
+        if (!Number.isFinite(Number(wave.intervalMs)) || Number(wave.intervalMs) < 0 || Number(wave.intervalMs) > 20000) errors.push(label + ' intervalMs must be 0-20000.');
+        if (!Number.isFinite(Number(wave.hpMult)) || Number(wave.hpMult) <= 0 || Number(wave.hpMult) > 20) errors.push(label + ' hpMult must be >0 and <=20.');
+        if (!Number.isFinite(Number(wave.speedMult)) || Number(wave.speedMult) <= 0 || Number(wave.speedMult) > 10) errors.push(label + ' speedMult must be >0 and <=10.');
+      });
+    });
+    enemyTypes.forEach(function (key) {
+      var enemy = config.ENEMY_TYPES[key] || {};
+      if (!Number.isFinite(Number(enemy.hp)) || Number(enemy.hp) <= 0) errors.push('Enemy ' + key + ' needs hp > 0.');
+      if (!Number.isFinite(Number(enemy.speed)) || Number(enemy.speed) <= 0) errors.push('Enemy ' + key + ' needs speed > 0.');
+    });
+    return errors;
+  }
+
+  function normalizeImportConfig(parsed) {
+    if (parsed && parsed.schema === 'td-config-v1' && parsed.config) return parsed.config;
+    return parsed;
+  }
+
+  function downloadJSON(filename, config) {
+    var data = JSON.stringify(config, null, 2);
+    var blob = new Blob([data], { type: 'application/json' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url; a.download = filename;
+    a.click(); URL.revokeObjectURL(url);
+  }
+
+  function publishJSON() {
+    var errors = validateConfig(TD_CONFIG);
+    if (errors.length) {
+      alert('Cannot publish:\n' + errors.slice(0, 8).join('\n'));
+      return false;
+    }
+    var published = JSON.parse(JSON.stringify(TD_CONFIG));
+    published.__publishedAt = new Date().toISOString();
+    published.__source = 'tower-defense-sandbox';
+    try {
+      localStorage.setItem(PUBLISHED_KEY, JSON.stringify(published));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(published));
+    } catch (e) {}
+    downloadJSON('td-published-config.json', published);
+    if (unsavedDot) unsavedDot.style.display = 'none';
+    alert('Published TD config saved locally and exported as td-published-config.json. Import that file on /arcade/tower-defense/ if sandbox and arcade run on different origins.');
+    return true;
+  }
+
   function makeStageCopy(src, idx) {
     var stage = src ? JSON.parse(JSON.stringify(src)) : {
       backgroundToken: 'bg_dawn',
@@ -800,12 +948,7 @@ window.TDUI = (function () {
   }
 
   function exportJSON() {
-    var data = JSON.stringify(TD_CONFIG, null, 2);
-    var blob = new Blob([data], { type: 'application/json' });
-    var url = URL.createObjectURL(blob);
-    var a = document.createElement('a');
-    a.href = url; a.download = 'td-config.json';
-    a.click(); URL.revokeObjectURL(url);
+    downloadJSON('td-config.json', TD_CONFIG);
   }
 
   function importJSON() {
@@ -816,7 +959,12 @@ window.TDUI = (function () {
       var reader = new FileReader();
       reader.onload = function (ev) {
         try {
-          var parsed = JSON.parse(ev.target.result);
+          var parsed = normalizeImportConfig(JSON.parse(ev.target.result));
+          var errors = validateConfig(parsed);
+          if (errors.length) {
+            alert('Invalid TD config:\n' + errors.slice(0, 8).join('\n'));
+            return;
+          }
           deepMerge(window.TD_CONFIG, parsed);
           if (TDGame) TDGame.onConfigChange();
           markUnsaved();
@@ -891,6 +1039,7 @@ window.TDUI = (function () {
       if (!btn) return;
       switch (btn.dataset.action) {
         case 'export':    exportJSON(); break;
+        case 'publish':   publishJSON(); break;
         case 'import':    importJSON(); break;
         case 'snapshot':  saveSnapshot(); break;
         case 'snapshots': showSnapshotManager(); break;
@@ -945,6 +1094,8 @@ window.TDUI = (function () {
     init: init,
     refresh: refresh,
     markUnsaved: markUnsaved,
+    validateConfig: validateConfig,
+    publishJSON: publishJSON,
     showPassiveModal: showPassiveModal,
     showStageClearModal: showStageClearModal,
     showInfinityModal: showInfinityModal,

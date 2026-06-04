@@ -243,18 +243,51 @@ window.VSUI = (function () {
         html += '</div>';
 
         // Evolution
-        if (skill.evolvesInto) {
-          html += '<div class="evolve-tag">Evolves → ' + esc(skill.evolvesInto) + '</div>';
+        if (skill.evolved) {
+          html += '<div class="evolve-tag">Evolved skill</div>';
+        } else if (skill.evolvesInto) {
+          html += '<div class="evolve-tag">Evolves -> ' + esc(skill.evolvesInto) + '</div>';
         }
         html += '</div>';
       });
       html += '</div>';
     });
 
+    html += renderEvolutionEditor(skills);
+
     // Skill node graph (evolution chains)
     html += '<h3 style="margin-top:12px">Evolution Graph</h3>';
     html += buildSkillNodeGraph(skills);
 
+    html += '</div>';
+    return html;
+  }
+
+  function renderEvolutionEditor(skills) {
+    var evolutions = VS_CONFIG.EVOLUTIONS || [];
+    var passives = VS_CONFIG.PASSIVES || [];
+    var baseSkills = skills.filter(function (s) { return !s.evolved; });
+    var evolvedSkills = skills.filter(function (s) { return s.evolved; });
+    var html = '<h3 style="margin-top:12px">Evolutions</h3>';
+    html += '<div class="evolution-editor">';
+    html += '<div class="evolution-help">Base skill at max level + passive unlocks the evolved result as a golden in-run card.</div>';
+    evolutions.forEach(function (evo, ei) {
+      html += '<div class="evolution-row" data-ei="' + ei + '">';
+      html += '<select class="evolution-base" data-ei="' + ei + '">' + baseSkills.map(function (skill) {
+        return '<option value="' + esc(skill.id) + '"' + (evo.base === skill.id ? ' selected' : '') + '>' + esc(skill.name || skill.id) + '</option>';
+      }).join('') + '</select>';
+      html += '<span class="evolution-plus">+</span>';
+      html += '<select class="evolution-req" data-ei="' + ei + '">' + passives.map(function (passive) {
+        return '<option value="' + esc(passive.id) + '"' + (evo.req === passive.id ? ' selected' : '') + '>' + esc(passive.name || passive.id) + '</option>';
+      }).join('') + '</select>';
+      html += '<span class="evolution-arrow">-></span>';
+      html += '<select class="evolution-result" data-ei="' + ei + '">' + evolvedSkills.map(function (skill) {
+        return '<option value="' + esc(skill.id) + '"' + (evo.id === skill.id ? ' selected' : '') + '>' + esc(skill.name || skill.id) + '</option>';
+      }).join('') + '</select>';
+      html += '<button class="btn-small evolution-delete" data-ei="' + ei + '">Del</button>';
+      html += '</div>';
+    });
+    html += '<button class="btn-small evolution-add">+ Evolution</button>';
     html += '</div>';
     return html;
   }
@@ -265,9 +298,10 @@ window.VSUI = (function () {
 
     // SVG lines
     var lines = '';
-    skills.forEach(function (s) {
-      if (!s.evolvesInto || !s._editorX) return;
-      var target = skills.find(function (t) { return t.id === s.evolvesInto; });
+    (VS_CONFIG.EVOLUTIONS || []).forEach(function (evo) {
+      var s = skills.find(function (skill) { return skill.id === evo.base; });
+      if (!s || !s._editorX) return;
+      var target = skills.find(function (t) { return t.id === evo.id; });
       if (!target || !target._editorX) return;
       lines += '<line x1="' + s._editorX + '" y1="' + s._editorY + '" x2="' + target._editorX +
                '" y2="' + target._editorY + '" stroke="#f39c12" stroke-width="1.5" stroke-dasharray="4"/>';
@@ -544,6 +578,44 @@ window.VSUI = (function () {
       });
     });
 
+    content.querySelectorAll('.evolution-base, .evolution-req, .evolution-result').forEach(function (el) {
+      el.addEventListener('change', function () {
+        var idx = parseInt(el.dataset.ei);
+        VS_CONFIG.EVOLUTIONS = VS_CONFIG.EVOLUTIONS || [];
+        if (!VS_CONFIG.EVOLUTIONS[idx]) return;
+        if (el.classList.contains('evolution-base')) VS_CONFIG.EVOLUTIONS[idx].base = el.value;
+        else if (el.classList.contains('evolution-req')) VS_CONFIG.EVOLUTIONS[idx].req = el.value;
+        else VS_CONFIG.EVOLUTIONS[idx].id = el.value;
+        syncLegacyEvolutionLinks();
+        scheduleSave();
+        renderActiveTab();
+      });
+    });
+
+    content.querySelectorAll('.evolution-add').forEach(function (el) {
+      el.addEventListener('click', function () {
+        VS_CONFIG.EVOLUTIONS = VS_CONFIG.EVOLUTIONS || [];
+        var base = (VS_CONFIG.SKILLS || []).find(function (s) { return !s.evolved; });
+        var result = (VS_CONFIG.SKILLS || []).find(function (s) { return s.evolved; });
+        var req = (VS_CONFIG.PASSIVES || [])[0];
+        if (!base || !result || !req) return;
+        VS_CONFIG.EVOLUTIONS.push({ id: result.id, base: base.id, req: req.id });
+        syncLegacyEvolutionLinks();
+        scheduleSave();
+        renderActiveTab();
+      });
+    });
+
+    content.querySelectorAll('.evolution-delete').forEach(function (el) {
+      el.addEventListener('click', function () {
+        VS_CONFIG.EVOLUTIONS = VS_CONFIG.EVOLUTIONS || [];
+        VS_CONFIG.EVOLUTIONS.splice(parseInt(el.dataset.ei), 1);
+        syncLegacyEvolutionLinks();
+        scheduleSave();
+        renderActiveTab();
+      });
+    });
+
     content.querySelectorAll('.stage-name-input').forEach(function (el) {
       el.addEventListener('change', function () {
         VS_CONFIG.STAGES[el.dataset.si].name = el.value || ('Stage ' + (parseInt(el.dataset.si) + 1));
@@ -709,7 +781,8 @@ window.VSUI = (function () {
     html += '<h2>Level Up!</h2>';
     html += '<div class="levelup-choices">';
     choices.forEach(function (choice) {
-      html += '<button class="levelup-choice rarity-' + (choice.rarity || 'common') + '"' +
+      html += '<button class="levelup-choice rarity-' + (choice.rarity || 'common') +
+              (choice.kind === 'evolve' ? ' evolution' : '') + '"' +
               ' data-id="' + choice.id + '">';
       html += '<span class="choice-icon">' + tokenEmoji(choice.icon || 'icon_orb') + '</span>';
       html += '<span class="choice-name">' + esc(choice.name) + '</span>';
@@ -912,6 +985,17 @@ window.VSUI = (function () {
     stage.waveSchedule.sort(function (a, b) { return (a.atSecond || 0) - (b.atSecond || 0); });
   }
 
+  function syncLegacyEvolutionLinks() {
+    var recipes = VS_CONFIG.EVOLUTIONS || [];
+    (VS_CONFIG.SKILLS || []).forEach(function (skill) {
+      if (!skill.evolved) skill.evolvesInto = null;
+    });
+    recipes.forEach(function (recipe) {
+      var base = (VS_CONFIG.SKILLS || []).find(function (skill) { return skill.id === recipe.base; });
+      if (base) base.evolvesInto = recipe.id;
+    });
+  }
+
   function startAutosave() {
     setInterval(save, 10000);
   }
@@ -919,10 +1003,31 @@ window.VSUI = (function () {
   function loadFromStorage() {
     try {
       var raw = localStorage.getItem(KEY_CONFIG);
-      if (!raw) return;
-      var parsed = JSON.parse(raw);
-      deepMerge(VS_CONFIG, parsed);
+      if (raw) {
+        var parsed = JSON.parse(raw);
+        deepMerge(VS_CONFIG, parsed);
+      }
+      if (!Array.isArray(VS_CONFIG.EVOLUTIONS) && window.VS_DEFAULTS && Array.isArray(VS_DEFAULTS.EVOLUTIONS)) {
+        VS_CONFIG.EVOLUTIONS = JSON.parse(JSON.stringify(VS_DEFAULTS.EVOLUTIONS));
+      }
+      mergeMissingDefaultRows('SKILLS');
+      mergeMissingDefaultRows('PASSIVES');
+      mergeMissingDefaultRows('EVOLUTIONS');
+      if (!VS_CONFIG.maxSkillLevel) VS_CONFIG.maxSkillLevel = 5;
+      syncLegacyEvolutionLinks();
     } catch (e) { /* bad JSON */ }
+  }
+
+  function mergeMissingDefaultRows(key) {
+    if (!window.VS_DEFAULTS || !Array.isArray(VS_DEFAULTS[key])) return;
+    if (!Array.isArray(VS_CONFIG[key])) VS_CONFIG[key] = [];
+    var existing = new Set(VS_CONFIG[key].map(function (row) {
+      return key === 'EVOLUTIONS' ? row.id + ':' + row.base + ':' + row.req : row.id;
+    }));
+    VS_DEFAULTS[key].forEach(function (row) {
+      var id = key === 'EVOLUTIONS' ? row.id + ':' + row.base + ':' + row.req : row.id;
+      if (!existing.has(id)) VS_CONFIG[key].push(JSON.parse(JSON.stringify(row)));
+    });
   }
 
   function exportJSON() {

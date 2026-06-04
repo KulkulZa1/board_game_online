@@ -125,6 +125,12 @@
     .levelup-choice.rarity-rare    { border-color: #2980b9; }
     .levelup-choice.rarity-legendary { border-color: #f39c12; }
     .levelup-choice.rarity-uncommon  { border-color: #27ae60; }
+    .levelup-choice.evolution {
+      border-color: #f1c40f;
+      background: linear-gradient(135deg, rgba(241,196,15,0.18), rgba(142,68,173,0.12));
+      box-shadow: 0 0 22px rgba(241,196,15,0.16);
+    }
+    .levelup-choice.evolution .choice-name { color: #f1c40f; }
 
     /* ── Editor panel ────────────────────────────────────────────── */
     #editor-panel {
@@ -326,6 +332,42 @@
       font-size: 0.72rem;
       color: #f39c12;
       margin-top: 3px;
+    }
+    .evolution-editor {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      background: rgba(241,196,15,0.05);
+      border: 1px solid rgba(241,196,15,0.18);
+      border-radius: 8px;
+      padding: 8px;
+      margin-bottom: 8px;
+    }
+    .evolution-help {
+      color: var(--muted);
+      font-size: 0.72rem;
+      line-height: 1.35;
+    }
+    .evolution-row {
+      display: grid;
+      grid-template-columns: minmax(0,1fr) auto minmax(0,1fr) auto minmax(0,1fr) auto;
+      gap: 4px;
+      align-items: center;
+    }
+    .evolution-row select {
+      min-width: 0;
+      background: #1a1a2a;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text);
+      padding: 3px 4px;
+      font-size: 0.72rem;
+    }
+    .evolution-plus,
+    .evolution-arrow {
+      color: #f39c12;
+      font-size: 0.72rem;
+      white-space: nowrap;
     }
 
     /* Node graph */

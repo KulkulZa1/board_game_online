@@ -116,17 +116,21 @@ window.TDGame = (function () {
   function getTowerRange(tower) {
     var cfg = getTowerCfg(tower);
     var lvl = cfg.upgradeLevels[tower.level];
-    return cfg.range * lvl.rangeMult * (1 + getPassiveAdd('range'));
+    var aura = tower.auraBonus || {};
+    return cfg.range * lvl.rangeMult * (1 + getPassiveAdd('range')) * (1 + (aura.rangeMult || 0));
   }
   function getTowerDamage(tower) {
     var cfg = getTowerCfg(tower);
     var lvl = cfg.upgradeLevels[tower.level];
-    var dmg = cfg.damage * lvl.damageMult * (1 + getPassiveAdd('damage'));
+    var aura = tower.auraBonus || {};
+    var syn = tower.synergy || {};
+    var dmg = cfg.damage * lvl.damageMult * (1 + getPassiveAdd('damage')) * (1 + (aura.damageMult || 0) + (syn.teslaDamageMult || 0));
     return dmg;
   }
   function getTowerFireRate(tower) {
     var cfg = getTowerCfg(tower);
-    return cfg.fireRateMs * (1 + getPassiveAdd('firerate'));
+    var syn = tower.synergy || {};
+    return cfg.fireRateMs * (1 + getPassiveAdd('firerate') + (syn.fireRateMult || 0));
   }
   function getTowerCost(type) {
     var cfg = getTowerTypeCfg(type || 'cannon');
@@ -140,8 +144,27 @@ window.TDGame = (function () {
     var defs = TD_CONFIG.SYNERGIES || [];
     // 초기화
     towers.forEach(function (t) {
-      t.synergy = { shatterDmg: 0, teslaChainAdd: 0, teslaSlow: false };
+      t.synergy = { shatterDmg: 0, teslaChainAdd: 0, teslaSlow: false, fireRateMult: 0, teslaDamageMult: 0 };
+      t.auraBonus = { damageMult: 0, rangeMult: 0 };
       t.synergyIds = [];
+    });
+    towers.forEach(function (amp) {
+      var ampType = amp.type || 'cannon';
+      var ampCfg = getTowerCfg(amp);
+      if (ampType !== 'amplifier' || ampCfg.attack !== 'support') return;
+      var ampLvl = ampCfg.upgradeLevels[amp.level] || ampCfg.upgradeLevels[0];
+      var auraRange = ampCfg.range * (ampLvl.rangeMult || 1);
+      var damageBonus = ampCfg.auraDamageMult || 0;
+      var rangeBonus = ampCfg.auraRangeMult || 0;
+      if (ampLvl.special === 'strong-aura') damageBonus += 0.10;
+      if (ampLvl.special === 'wide-aura') rangeBonus += 0.08;
+      towers.forEach(function (t) {
+        if (t.id === amp.id) return;
+        if (getTowerCfg(t).attack === 'support') return;
+        if (dist(amp, t) > auraRange) return;
+        t.auraBonus.damageMult += damageBonus;
+        t.auraBonus.rangeMult += rangeBonus;
+      });
     });
     if (!defs.length) return;
     towers.forEach(function (t) {
@@ -165,6 +188,8 @@ window.TDGame = (function () {
         if (b.shatterDmg && tType === 'cannon') t.synergy.shatterDmg += b.shatterDmg;
         if (b.teslaChainAdd && tType === 'tesla') t.synergy.teslaChainAdd += b.teslaChainAdd;
         if (b.teslaSlow && tType === 'tesla') t.synergy.teslaSlow = true;
+        if (b.fireRateMult) t.synergy.fireRateMult += b.fireRateMult;
+        if (b.teslaDamageMult && tType === 'tesla') t.synergy.teslaDamageMult += b.teslaDamageMult;
         if (t.synergyIds.indexOf(def.id) < 0) t.synergyIds.push(def.id);
       });
     });
@@ -194,7 +219,7 @@ window.TDGame = (function () {
     for (var i = 0; i < towers.length; i++) {
       if (dist({x: x, y: y}, towers[i]) < 30) return false;
     }
-    towers.push({ id: nextTowerId++, x: x, y: y, type: type, level: 0, cd: 0, voidCount: 0, synergy: { shatterDmg: 0, teslaChainAdd: 0, teslaSlow: false }, synergyIds: [] });
+    towers.push({ id: nextTowerId++, x: x, y: y, type: type, level: 0, cd: 0, voidCount: 0, synergy: { shatterDmg: 0, teslaChainAdd: 0, teslaSlow: false, fireRateMult: 0, teslaDamageMult: 0 }, auraBonus: { damageMult: 0, rangeMult: 0 }, synergyIds: [] });
     state.gold -= cost;
     recomputeSynergies();
     if (window.TDUI && TDUI.markUnsaved) TDUI.markUnsaved();
@@ -421,6 +446,7 @@ window.TDGame = (function () {
   function fireTower(tower, target, dt) {
     var cfg = getTowerCfg(tower);
     var mode = cfg.attack || 'projectile';
+    if (mode === 'support') return;
     if (mode === 'frost') { fireFrost(tower, target, cfg); return; }
     if (mode === 'tesla') { fireTesla(tower, target, cfg); return; }
 
@@ -729,6 +755,7 @@ window.TDGame = (function () {
 
     // Towers fire
     towers.forEach(function (tower) {
+      if (getTowerCfg(tower).attack === 'support') return;
       tower.cd = (tower.cd || 0) - dt * 1000;
       if (tower.cd > 0) return;
       var range = getTowerRange(tower);
@@ -1023,7 +1050,7 @@ window.TDGame = (function () {
     });
 
     // Towers
-    var TYPE_FILL = { cannon: 'rgba(52,152,219,', frost: 'rgba(93,173,226,', tesla: 'rgba(241,196,15,' };
+    var TYPE_FILL = { cannon: 'rgba(52,152,219,', frost: 'rgba(93,173,226,', tesla: 'rgba(241,196,15,', amplifier: 'rgba(155,89,182,' };
     towers.forEach(function (t) {
       var isHovered = (t === hoveredTower);
       var tType = t.type || 'cannon';
