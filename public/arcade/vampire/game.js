@@ -205,6 +205,11 @@
   let currentChoiceBuilder = null; // 현재 선택지 생성 함수 (리롤 시 재호출)
   let audioCtx = null;
   let evolutionBannerTimer = null;
+  const LOW_HP_THRESHOLD = 0.25;
+  const CRITICAL_HP_THRESHOLD = 0.15;
+  const LOW_HP_ALERT_COOLDOWN = 7.5;
+  let lowHpAlertCooldown = 0;
+  let lowHpPulse = 0;
 
   let meta = loadMeta();
   syncAdSettings();
@@ -356,6 +361,8 @@
     bossWarning   = 0;
     damageNumbers = [];
     floatTexts    = [];
+    lowHpAlertCooldown = 0;
+    lowHpPulse = 0;
     comboCount    = 0;
     comboTimer    = 0;
     milestones    = new Set();
@@ -2524,14 +2531,67 @@
 
   // ── HUD 업데이트 ────────────────────────────────────────────────
   function updateHUD() {
-    const hpPct = player.hp / player.maxHp * 100;
-    player.lowestHpPct = Math.min(player.lowestHpPct ?? 1, Math.max(0, player.hp / player.maxHp));
-    document.getElementById('hpFill').style.width  = hpPct + '%';
+    const hpRatio = getPlayerHpRatio();
+    const hpPct = hpRatio * 100;
+    player.lowestHpPct = Math.min(player.lowestHpPct ?? 1, hpRatio);
+    const hpFill = document.getElementById('hpFill');
+    const hpBar = document.getElementById('hpBar');
+    hpFill.style.width  = hpPct + '%';
+    hpBar.classList.toggle('critical', hpRatio <= LOW_HP_THRESHOLD);
     document.getElementById('hpText').textContent   = `${Math.ceil(player.hp)}/${player.maxHp}`;
     const xpPct = player.xp / xpNeeded(player.level) * 100;
     document.getElementById('xpFill').style.width  = xpPct + '%';
     document.getElementById('xpLabel').textContent  = `Lv.${player.level}`;
     document.getElementById('xpText').textContent   = `${Math.floor(player.xp)}/${xpNeeded(player.level)}`;
+  }
+
+  function getPlayerHpRatio() {
+    if (!player || !player.maxHp) return 1;
+    return Math.max(0, Math.min(1, player.hp / player.maxHp));
+  }
+
+  function updateLowHpFeedback(dt) {
+    lowHpAlertCooldown = Math.max(0, lowHpAlertCooldown - dt);
+    lowHpPulse = Math.max(0, lowHpPulse - dt);
+
+    const hpRatio = getPlayerHpRatio();
+    if (hpRatio > LOW_HP_THRESHOLD || lowHpAlertCooldown > 0) return;
+
+    const critical = hpRatio <= CRITICAL_HP_THRESHOLD;
+    floatTexts.push({
+      text: critical ? 'CRITICAL HP' : 'LOW HP',
+      life: critical ? 1.55 : 1.25,
+      maxLife: critical ? 1.55 : 1.25,
+      screenSpace: true,
+      color: critical ? '#ff3b30' : '#f39c12',
+      size: critical ? 22 : 18,
+    });
+    lowHpPulse = critical ? 2.2 : 1.5;
+    screenShake = Math.min(screenShake + (critical ? 0.26 : 0.16), critical ? 0.55 : 0.38);
+    lowHpAlertCooldown = LOW_HP_ALERT_COOLDOWN;
+  }
+
+  function renderLowHpWarning(W, H) {
+    if (!player || state !== 'playing') return;
+    const hpRatio = getPlayerHpRatio();
+    if (hpRatio > LOW_HP_THRESHOLD) return;
+
+    const critical = hpRatio <= CRITICAL_HP_THRESHOLD;
+    const pressure = (LOW_HP_THRESHOLD - hpRatio) / LOW_HP_THRESHOLD;
+    const pulse = 0.55 + Math.sin(elapsed * (critical ? 13 : 9)) * 0.25 + Math.min(lowHpPulse, 1) * 0.2;
+    const alpha = Math.max(0.1, Math.min(0.5, pressure * pulse));
+    const color = critical ? '255,59,48' : '243,156,18';
+
+    ctx.save();
+    ctx.strokeStyle = `rgba(${color},${alpha})`;
+    ctx.lineWidth = critical ? 10 : 7;
+    ctx.strokeRect(3, 3, W - 6, H - 6);
+    const grad = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.28, W / 2, H / 2, Math.max(W, H) * 0.72);
+    grad.addColorStop(0, 'rgba(0,0,0,0)');
+    grad.addColorStop(1, `rgba(${color},${alpha * 0.34})`);
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+    ctx.restore();
   }
 
   function renderWeaponSlots() {
@@ -2821,6 +2881,8 @@
     }
 
     // 콤보 타이머 감쇠
+    updateLowHpFeedback(dt);
+
     if (comboTimer > 0) comboTimer -= dt;
     else if (comboCount > 0) comboCount = 0;
 
@@ -3173,6 +3235,18 @@
     ctx.save();
     ctx.translate(player.x, player.y);
     const inv = player.invincible > 0;
+    const hpRatio = getPlayerHpRatio();
+    if (hpRatio <= LOW_HP_THRESHOLD) {
+      const critical = hpRatio <= CRITICAL_HP_THRESHOLD;
+      const pulse = 1 + Math.sin(elapsed * (critical ? 12 : 8)) * 0.08 + lowHpPulse * 0.04;
+      ctx.globalAlpha = critical ? 0.42 : 0.28;
+      ctx.strokeStyle = critical ? '#ff3b30' : '#f39c12';
+      ctx.lineWidth = critical ? 4 : 3;
+      ctx.beginPath();
+      ctx.arc(0, 0, 25 * pulse, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
     ctx.globalAlpha = inv ? 0.5 + Math.sin(elapsed * 30) * 0.3 : 1;
     ctx.shadowBlur  = 18;
     ctx.shadowColor = '#8e44ad';
@@ -3228,6 +3302,8 @@
     }
 
     // 보스 체력 바 (상단)
+    renderLowHpWarning(W, H);
+
     const bossEnemy = enemies.find(e => e.isBoss);
     if (bossEnemy) {
       const bw = W * 0.55, bh = 14;

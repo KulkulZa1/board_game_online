@@ -38,6 +38,7 @@ This launch-readiness pass found and fixed:
 - Vampire Survivors now keeps evolution recipes visible on start, pause, and level-up overlays so players can plan around missing passives or max-level weapons before the end-run report.
 - Vampire Survivors evolutions now have a stronger success payoff: banner, particle burst, screen shake, and defensive WebAudio chime.
 - Vampire Survivors level-up cards now use weighted RNG friction and visible reason tags instead of a flat shuffle for every non-evolution choice.
+- Vampire Survivors low-health runs now have near-miss feedback during play: throttled screen-space alerts, player-ring pulse, canvas edge warning, and a critical HP bar state. This makes the existing near-miss achievement legible before the end screen.
 - Tower Defense sandbox now has a validated `Publish` action. Published configs save under `td_published_config`, export as `td-published-config.json`, and `/arcade/tower-defense/` prefers that published key before falling back to draft/default config.
 - Service worker caching no longer serves old JS/CSS before checking the network; this prevents deployed game logic from appearing stale after Render deploys.
 - All HTML pages now load `/js/sw-update.js`, which registers the service worker consistently and reloads controlled pages once after an updated worker takes control.

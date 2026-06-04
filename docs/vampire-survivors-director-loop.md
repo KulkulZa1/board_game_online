@@ -56,6 +56,9 @@ This note records the launch-readiness work for `/arcade/vampire/`.
 - Level-up decision tension.
   - Evolution choices remain guaranteed when ready, while the remaining cards are weighted toward early build starters, weapon level-ups, and combo passives that support owned weapons.
   - Cards show short tags like `Build starter`, `Power up`, `Combo passive`, and `Near evolution` so the player can read why a choice matters.
+- Near-miss feedback.
+  - Runs below 25% HP now show throttled `LOW HP` / `CRITICAL HP` alerts, a pulsing ring around the player, a canvas edge warning, and a critical HP bar state.
+  - The feedback is transient runtime state only; it does not enter run snapshots or alter the existing near-miss clear achievement calculation.
 - Sandbox evolution mirror.
   - `sandbox/vampire-survivors/` now stores evolved skills and `EVOLUTIONS` recipes in `VS_CONFIG`, exposes editable base/passive/result rows, shows golden evolution cards, and swaps max-level base skills into evolved skills at runtime.
   - Old local sandbox saves are migrated by appending missing default evolved skills and recipes.
@@ -75,6 +78,7 @@ This note records the launch-readiness work for `/arcade/vampire/`.
   - pause overlay appears with `P` and resumes without time jump.
   - death screen shows coin rewards and a revive action.
   - `T` places a tower, tower projectiles damage enemies, Frost freezes enemies, and Tesla chains to nearby enemies.
+  - lowering HP during a run produces visible low-health pressure without stacking repeated alerts.
   - end screen displays evolution count and missed evolution hints when a run ends without all possible evolutions.
   - mobile viewport stacks selection cards without covering controls.
 

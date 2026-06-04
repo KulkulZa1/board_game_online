@@ -456,6 +456,10 @@ function checkVampireDirectorLoopCoverage() {
     'choiceWeight',
     'takeWeightedChoices',
     'Combo passive',
+    'LOW_HP_THRESHOLD',
+    'CRITICAL_HP',
+    'renderLowHpWarning',
+    'lowHpAlertCooldown',
     'placeHybridTower',
     'updateHybridTowers',
     'fireHybridTower',
@@ -470,7 +474,7 @@ function checkVampireDirectorLoopCoverage() {
     throw new Error(`Vampire Survivors loop coverage missing: ${missingGameMarkers.join(', ')}`);
   }
 
-  const requiredCssMarkers = ['.meta-panel', '.start-card', '.pause-overlay', '.end-actions', '.daily-panel', '.upgrade-grid', '.run-report', '.monetization-panel', '.resume-panel', '.coop-panel', '.evolution-plan', '.level-evolution-plan', '.evolution-plan-row.ready', '.evolution-banner', '.evolution-banner.visible', '.choice-tag', '.choice-tag.weapon-lv'];
+  const requiredCssMarkers = ['.meta-panel', '.start-card', '.pause-overlay', '.end-actions', '.daily-panel', '.upgrade-grid', '.run-report', '.monetization-panel', '.resume-panel', '.coop-panel', '.evolution-plan', '.level-evolution-plan', '.evolution-plan-row.ready', '.evolution-banner', '.evolution-banner.visible', '.choice-tag', '.choice-tag.weapon-lv', '#hpBar.critical'];
   const missingCssMarkers = requiredCssMarkers.filter((marker) => !css.includes(marker));
   if (missingCssMarkers.length) {
     throw new Error(`Vampire Survivors UI CSS missing: ${missingCssMarkers.join(', ')}`);

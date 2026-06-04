@@ -264,6 +264,15 @@ html, body {
   border-radius: 4px;
   transition: width 0.15s;
 }
+#hpBar.critical #hpTrack {
+  border-color: #ff3b30;
+  box-shadow: 0 0 10px rgba(255, 59, 48, 0.35);
+}
+#hpBar.critical #hpFill {
+  background: linear-gradient(90deg, #ff3b30, #f39c12);
+  box-shadow: 0 0 12px rgba(255, 59, 48, 0.5);
+}
+#hpBar.critical #hpText { color: #ffb3ad; }
 #hpText { font-size: 0.72rem; color: var(--muted); min-width: 54px; }
 
 /* ── XP Bar ─────────────────────────────────────── */
