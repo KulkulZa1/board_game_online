@@ -76,8 +76,48 @@
     { id: 'cd_up',    name: '⏩ 쿨다운 감소', desc: '모든 무기 쿨다운 -12%',         max: 5,    apply: (p) => { p.cdMult  *= 0.88; } },
     { id: 'magnet',   name: '🧲 경험치 자석', desc: 'XP 획득 반경 +60%',             max: 4,    apply: (p) => { p.xpRange *= 1.6; } },
     { id: 'crit',     name: '⚡ 치명타',       desc: '15% 확률 2배 피해 (중첩 가능)',  max: 6,    apply: (p) => { p.critChance = (p.critChance || 0) + 0.15; } },
-    { id: 'pierce_up',name: '🔱 관통 강화',   desc: '화살·부메랑 관통 +2',           max: null, apply: (p) => { p.pierceBonus = (p.pierceBonus || 0) + 2; } },
+    { id: 'pierce_up',name: '🔱 관통 강화',   desc: '화살·부메랑 관통 +2, 번개 연쇄 +1',           max: null, apply: (p) => { p.pierceBonus = (p.pierceBonus || 0) + 2; } },
     { id: 'regen',    name: '💚 체력 재생',   desc: '초당 최대 체력 2% 자동 회복',    max: 5,    apply: (p) => { p.regenRate = (p.regenRate || 0) + 0.02; } },
+  ];
+
+  // 패시브 시너지 — 두 패시브를 조합하면 특수 효과 해금
+  const SYNERGY_DEFS = [
+    {
+      id: 'executioner',
+      name: '집행자', icon: '🗡',
+      desc: '치명타 피해 3배 (기본 2배)',
+      requires: [{ id: 'dmg_up', count: 3 }, { id: 'crit', count: 2 }],
+    },
+    {
+      id: 'blitz',
+      name: '전격전', icon: '⚡',
+      desc: '공격마다 15% 확률로 즉시 재발동',
+      requires: [{ id: 'spd_up', count: 2 }, { id: 'cd_up', count: 2 }],
+    },
+    {
+      id: 'iron_fortress',
+      name: '철갑 요새', icon: '🛡',
+      desc: '모든 피해 30% 감소',
+      requires: [{ id: 'regen', count: 2 }, { id: 'hp_up', count: 3 }],
+    },
+    {
+      id: 'vital_surge',
+      name: '생명 파동', icon: '💚',
+      desc: '적 처치마다 HP +3 회복',
+      requires: [{ id: 'regen', count: 3 }, { id: 'cd_up', count: 2 }],
+    },
+    {
+      id: 'armor_breaker',
+      name: '갑옷 파쇄', icon: '🔱',
+      desc: '관통 투사체 적중 시 40% 범위 피해 추가',
+      requires: [{ id: 'pierce_up', count: 3 }, { id: 'dmg_up', count: 2 }],
+    },
+    {
+      id: 'chain_crit',
+      name: '연쇄 크리티컬', icon: '🌩',
+      desc: '치명타 발동 시 2연쇄 번개 추가 (45% 피해)',
+      requires: [{ id: 'crit', count: 3 }, { id: 'pierce_up', count: 2 }],
+    },
   ];
 
   // 신규 획득 가능한 기본 무기 목록
@@ -556,10 +596,17 @@
     }, 2600);
   }
 
-  // 패시브 적용 + 보유 기록 (진화 조건 판정용)
+  // 패시브 적용 + 보유 기록 + 시너지 신규 해금 알림
   function applyPassive(pv) {
+    const prevActive = SYNERGY_DEFS.filter(s => hasSynergy(s.id));
     pv.apply(player);
     player.passives[pv.id] = (player.passives[pv.id] || 0) + 1;
+    for (const s of SYNERGY_DEFS) {
+      if (hasSynergy(s.id) && !prevActive.find(p => p.id === s.id)) {
+        floatTexts.push({ text: `✨ 시너지 해금: ${s.icon} ${s.name}!`, life: 3.0, maxLife: 3.0, screenSpace: true, color: '#c39bd3', size: 17 });
+        SFX.levelup();
+      }
+    }
   }
 
   // 패시브 현재 스택 수
@@ -569,6 +616,14 @@
   // 패시브가 최대 스택에 도달했는지 — 도달하면 선택지에서 제외
   function isPassiveMaxed(pv) {
     return pv.max != null && passiveLevel(pv.id) >= pv.max;
+  }
+
+  // 시너지 조건 충족 여부 확인
+  function hasSynergy(id) {
+    if (!player) return false;
+    const def = SYNERGY_DEFS.find(s => s.id === id);
+    if (!def) return false;
+    return def.requires.every(r => (player.passives[r.id] || 0) >= r.count);
   }
 
   // 현재 진화 가능한 조합 목록
@@ -2260,7 +2315,8 @@
     } else if (id === 'chain' || id === 'tempest') {
       // 사슬 번개: 가장 가까운 적부터 연쇄 즉시 타격 + 시각적 아크 생성
       const evolved  = id === 'tempest';
-      const bounces  = evolved ? 5 : 3;
+      // 관통 강화 패시브: 연쇄 횟수도 증가 (2 관통 = +1 연쇄)
+      const bounces = (evolved ? 5 : 3) + Math.floor((player.pierceBonus || 0) / 2);
       let cx = player.x, cy = player.y;
       const hit = new Set();
       for (let b = 0; b < bounces; b++) {
@@ -2326,12 +2382,15 @@
   }
 
   // ── 데미지 처리 ─────────────────────────────────────────────────
-  function dealDamage(enemy, dmg) {
+  // skipChain: chain_crit 연쇄 피해에서 재귀 방지용 플래그
+  function dealDamage(enemy, dmg, skipChain) {
     // 0 이하 피해 무시 — 보스 사망 폭발(dmg=0)이 재귀 호출하는 버그 방지
     if (dmg <= 0) return;
-    // 치명타: critChance 퍼센트로 2배 피해
+    // 치명타: critChance 퍼센트로 2배(집행자 시너지 시 3배) 피해
+    let isCritRoll = false;
     if (player && (player.critChance || 0) > 0 && Math.random() < player.critChance) {
-      dmg *= 2;
+      dmg *= hasSynergy('executioner') ? 3 : 2;
+      isCritRoll = true;
     }
     enemy.hp -= dmg;
     enemy.hurtFlash = 0.12;
@@ -2365,6 +2424,25 @@
         rings.push({ x: enemy.x, y: enemy.y, r: 6, maxR: 36, life: 0.18, maxLife: 0.18, color: '#ff8c00' });
         screenShake = Math.min(screenShake + 0.18, 0.5);
         SFX.crit();
+        // chain_crit 시너지: 치명타 발동 시 2연쇄 번개 추가
+        if (isCritRoll && !skipChain && hasSynergy('chain_crit')) {
+          let cx = enemy.x, cy = enemy.y;
+          const chainHit = new Set([enemy]);
+          for (let b = 0; b < 2; b++) {
+            let best = null, bd = Infinity;
+            for (const e of enemies) {
+              if (chainHit.has(e) || e.dying) continue;
+              const d = dist({ x: cx, y: cy }, e);
+              if (d < 200 && d < bd) { bd = d; best = e; }
+            }
+            if (!best) break;
+            chainHit.add(best);
+            dealDamage(best, dmg * 0.45, true);   // skipChain=true: 재귀 방지
+            projectiles.push({ type: 'arc', x: cx, y: cy, tx: best.x, ty: best.y, life: 0.22, dmg: 0 });
+            for (let k = 0; k < 2; k++) spawnParticle(best.x, best.y, '#9b59b6', 4, 0.2);
+            cx = best.x; cy = best.y;
+          }
+        }
       }
     }
     if (enemy.hp <= 0) killEnemy(enemy);
