@@ -91,7 +91,11 @@
       window.VS_CONFIG = window.SandboxConfigBridge.read('sandbox_vs_config');
     }
   </script>
-  <script src="game.js?v=2.9"></script>
+  <!-- 정적 데이터·사운드·유틸 모듈 (game.js 보다 먼저 로드) -->
+  <script src="vps-utils.js?v=1.0"></script>
+  <script src="vps-sfx.js?v=1.0"></script>
+  <script src="vps-config.js?v=1.0"></script>
+  <script src="game.js?v=3.0"></script>
   <script src="/js/sw-update.js?v=20260520b"></script>
 </body>
 </html>
