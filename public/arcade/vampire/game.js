@@ -2335,6 +2335,10 @@
         cx = best.x; cy = best.y;
       }
     }
+    // 블리츠 시너지: 15% 확률로 쿨다운 없이 즉시 재발동
+    if (hasSynergy('blitz') && Math.random() < 0.15) {
+      player.weaponCDs[id] = 0;
+    }
   }
 
   function nearestEnemy() {
@@ -2467,6 +2471,10 @@
     kills++;
     comboCount++;
     comboTimer = 1.5;
+    // vital_surge 시너지: 처치마다 HP 3 회복
+    if (hasSynergy('vital_surge') && player) {
+      player.hp = Math.min(player.hp + 3, player.maxHp);
+    }
     awardComboMilestone(enemy);
 
     // 연속 처치 스트릭 텍스트 (빠른 연속 처치 보상 피드백)
@@ -3088,6 +3096,20 @@
             e.y += Math.sin(a) * 45 * dt;
           }
         }
+        // 레벨2+ 오브: 적 투사체 요격 — 회전 방패 역할
+        const orbLevel = p.type === 'blackhole'
+          ? 5
+          : (player.weaponLevels['orb'] || 1);
+        if (orbLevel >= 2) {
+          for (let j = enemyProjectiles.length - 1; j >= 0; j--) {
+            const ep = enemyProjectiles[j];
+            if (dist(p, ep) < p.r + ep.r + 8) {
+              rings.push({ x: ep.x, y: ep.y, r: 3, maxR: 22, life: 0.14, maxLife: 0.14, color: '#3498db' });
+              for (let s = 0; s < 4; s++) spawnParticle(ep.x, ep.y, '#74b9ff', 3, 0.18);
+              enemyProjectiles.splice(j, 1);
+            }
+          }
+        }
       } else if (p.type === 'arrow') {
         p.x += p.vx * dt;
         p.y += p.vy * dt;
@@ -3095,6 +3117,10 @@
           const e = enemies[j];
           if (dist(p, e) < p.r + e.size) {
             dealDamage(e, p.dmg);
+            // armor_breaker 시너지: 관통 적중 시 40% 범위 피해
+            if (hasSynergy('armor_breaker')) {
+              chainExplosions.push({ x: e.x, y: e.y, range: 42, dmg: p.dmg * 0.4, delay: 0 });
+            }
             p.pierce--;
             if (p.pierce <= 0) { projectiles.splice(i, 1); break; }
           }
@@ -3126,6 +3152,10 @@
           if (!hitSet.has(e) && dist(p, e) < p.r + e.size) {
             hitSet.add(e);
             dealDamage(e, p.dmg);
+            // armor_breaker 시너지: 관통 적중 시 40% 범위 피해
+            if (hasSynergy('armor_breaker')) {
+              chainExplosions.push({ x: e.x, y: e.y, range: 42, dmg: p.dmg * 0.4, delay: 0 });
+            }
             spawnParticle(p.x, p.y, '#27ae60', 5, 0.2);
           }
         }
@@ -3246,7 +3276,7 @@
 
       if (player.invincible <= 0 && d < e.size + 12) {
         const contactDmg = e.isBoss ? 55 : [8, 18, 38][Math.min(e.tier, 2)];
-        player.hp -= contactDmg * dt;
+        player.hp -= contactDmg * dt * (hasSynergy('iron_fortress') ? 0.70 : 1.0);
         screenShake = Math.min(screenShake + 0.15, 0.35);
         hurtScreenFlash = 0.28;
         SFX.hurt();
@@ -3264,7 +3294,7 @@
       ep.y += ep.vy * dt;
       const projectileTarget = allyPlayer && dist(ep, allyPlayer) < dist(ep, player) ? allyPlayer : player;
       if (player.invincible <= 0 && dist(ep, projectileTarget) < ep.r + 12) {
-        player.hp -= ep.dmg;
+        player.hp -= ep.dmg * (hasSynergy('iron_fortress') ? 0.70 : 1.0);
         screenShake = Math.min(screenShake + 0.22, 0.45);
         hurtScreenFlash = 0.28;
         SFX.hurt();
@@ -4055,6 +4085,22 @@
       `<tr><td class="item-icon">${it.icon}</td><td>${it.name}</td></tr>`
     ).join('');
 
+    // 시너지 섹션
+    let synRows = SYNERGY_DEFS.map(s => {
+      const active = hasSynergy(s.id);
+      const reqStr = s.requires.map(r => {
+        const pv = PASSIVE_POOL.find(p => p.id === r.id);
+        const have = player ? (player.passives[r.id] || 0) : 0;
+        const met  = have >= r.count;
+        return `<span style="color:${met ? '#2ecc71' : '#7f8c9b'}">${pv ? pv.name : r.id} ×${r.count}</span>`;
+      }).join(' + ');
+      return `<tr style="opacity:${active ? 1 : 0.55}">
+        <td style="color:${active ? '#f1c40f' : '#aaa'}">${s.icon} ${s.name}</td>
+        <td class="combo-desc">${s.desc}</td>
+        <td class="combo-desc" style="font-size:0.75em">${reqStr}</td>
+      </tr>`;
+    }).join('');
+
     return `
       <div class="combo-section">
         <div class="combo-section-title">⚗️ 무기 진화 조합</div>
@@ -4075,6 +4121,13 @@
         <table class="combo-table">
           <thead><tr><th></th><th>아이템</th></tr></thead>
           <tbody>${itemRows}</tbody>
+        </table>
+      </div>
+      <div class="combo-section">
+        <div class="combo-section-title">✨ 패시브 시너지 (조합 특수효과)</div>
+        <table class="combo-table">
+          <thead><tr><th>시너지</th><th>효과</th><th>필요 조건</th></tr></thead>
+          <tbody>${synRows}</tbody>
         </table>
       </div>
     `;
