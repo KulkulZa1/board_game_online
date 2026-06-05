@@ -2001,7 +2001,9 @@
       const dir = allyPlayer.lastMoveDir || { dx: 1, dy: 0 };
       allyPlayer.x += dir.dx * 45;
       allyPlayer.y += dir.dy * 45;
-      for (const e of enemies) {
+      // 역방향 인덱스 루프 — dealDamage의 splice로 적을 건너뛰지 않도록
+      for (let ei = enemies.length - 1; ei >= 0; ei--) {
+        const e = enemies[ei];
         if (dist(e, allyPlayer) < DASH_RANGE) dealDamage(e, DASH_DMG * 0.85 * player.dmgMult);
       }
       spawnParticle(allyPlayer.x, allyPlayer.y, '#2ecc71', 22, 0.35);
@@ -3156,14 +3158,14 @@
     }
 
     if (state !== 'playing') {
-      render(dt);
+      render();
       return;
     }
 
     // 히트스톱 — 큰 타격 순간 아주 잠깐 전체 정지 → 타격감 강화
     if (hitStop > 0) {
       hitStop -= dt;
-      render(dt);
+      render();
       return;
     }
 
@@ -3182,7 +3184,7 @@
     }
 
     update(dt);
-    render(dt);
+    render();
     updateHUD();
     sendHostCoopState();
     if (elapsed - lastRunSnapshotAt >= RUN_SNAPSHOT_INTERVAL) {
@@ -3221,7 +3223,9 @@
       while (playerTrail.length > 16) playerTrail.shift();
       player.x += Math.cos(da) * 55;
       player.y += Math.sin(da) * 55;
-      for (const e of enemies) {
+      // 역방향 인덱스 루프 — dealDamage의 splice로 적을 건너뛰지 않도록
+      for (let ei = enemies.length - 1; ei >= 0; ei--) {
+        const e = enemies[ei];
         if (dist(e, player) < DASH_RANGE) {
           dealDamage(e, DASH_DMG * player.dmgMult);
           for (let k = 0; k < 3; k++) spawnParticle(e.x, e.y, '#f8c8ff', 5, 0.25);
@@ -3348,9 +3352,12 @@
         const evolved = p.type === 'blackhole';
         // 블랙홀: 사건의 지평선(흡입 반경) — 적을 블랙홀 중심으로 빨아들여 유저와 격리
         const captureR = evolved ? p.r + 78 : p.r;
-        for (const e of enemies) {
+        // 역방향 인덱스 루프 — dealDamage가 killEnemy로 enemies를 splice해도 적을 건너뛰지 않음
+        for (let ei = enemies.length - 1; ei >= 0; ei--) {
+          const e = enemies[ei];
           const de = dist(p, e);
           if (de < p.r + e.size) dealDamage(e, p.dmg * dt * 3);
+          if (e.dying) continue;
           if (evolved && !e.isBoss && de < captureR + e.size) {
             // 가까울수록 강한 흡입력 — 적을 플레이어가 아닌 블랙홀 쪽으로 끌어당김
             const pullStr = 60 + 150 * (1 - de / (captureR + e.size));
@@ -3400,7 +3407,9 @@
         const ey = p.y + Math.sin(p.angle) * p.length;
         const mult = evolved ? 9 : 5;          // 데스레이는 훨씬 강한 지속 피해
         const hitW = evolved ? 8 : 6;
-        for (const e of enemies) {
+        // 역방향 인덱스 루프 — dealDamage의 splice로 적을 건너뛰지 않도록
+        for (let ei = enemies.length - 1; ei >= 0; ei--) {
+          const e = enemies[ei];
           if (distToSegment(e, p, { x: ex, y: ey }) < e.size + hitW) {
             dealDamage(e, p.dmg * dt * mult);
           }
@@ -3473,6 +3482,8 @@
         if (Math.random() < 0.5) spawnParticle(e.x + (Math.random()-0.5)*8, e.y, '#2ecc71', 2 + Math.random() * 2, 0.18);
         if (e.poisonTimer <= 0) { e.poisonTimer = 0; e.poisonDmg = 0; }
       }
+      // DoT가 적을 처치했으면 이번 프레임의 나머지 처리(이동·접촉 피해·발사) 건너뜀 — 시체가 행동하지 않도록
+      if (e.dying || e.hp <= 0) continue;
       const targetActor = allyPlayer && dist(e, allyPlayer) < dist(e, player) ? allyPlayer : player;
       const ang = Math.atan2(targetActor.y - e.y, targetActor.x - e.x);
       const d   = dist(e, targetActor);
@@ -3631,17 +3642,26 @@
       if (rings[i].life <= 0) rings.splice(i, 1);
     }
 
-    // XP 수집
+    // XP 수집 — 화면 밖 멀리 버려진 젬은 수명(약 90초)으로 정리해 무한 증식 방지
     for (let i = xpGems.length - 1; i >= 0; i--) {
       const g = xpGems[i];
-      if (dist(g, player) < player.xpRange || (allyPlayer && dist(g, allyPlayer) < player.xpRange * 0.75)) {
+      const dp = dist(g, player);
+      if (dp < player.xpRange || (allyPlayer && dist(g, allyPlayer) < player.xpRange * 0.75)) {
         gainXP(g.val);
         spawnParticle(g.x, g.y, '#f1c40f', 3, 0.22);
         spawnParticle(g.x, g.y, '#ffe9a8', 2, 0.18);
         SFX.pickup();
         xpGems.splice(i, 1);
+        continue;
+      }
+      // 플레이어에게서 멀리(700px 이상) 떨어진 젬만 수명 차감 — 근처 젬은 사라지지 않음
+      if (dp > 700) {
+        g.life = (g.life === undefined ? 90 : g.life) - dt;
+        if (g.life <= 0) xpGems.splice(i, 1);
       }
     }
+    // 안전망: 극단적 상황에서도 배열 폭주 방지 (가장 오래된 젬부터 제거)
+    if (xpGems.length > 800) xpGems.splice(0, xpGems.length - 800);
 
     // 파티클
     for (let i = particles.length - 1; i >= 0; i--) {
