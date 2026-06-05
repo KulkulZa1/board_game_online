@@ -78,6 +78,8 @@
     { id: 'crit',     name: '⚡ 치명타',       desc: '15% 확률 2배 피해 (중첩 가능)',  max: 6,    apply: (p) => { p.critChance = (p.critChance || 0) + 0.15; } },
     { id: 'pierce_up',name: '🔱 관통 강화',   desc: '화살·부메랑 관통 +2, 번개 연쇄 +3',           max: null, apply: (p) => { p.pierceBonus = (p.pierceBonus || 0) + 2; } },
     { id: 'regen',    name: '💚 체력 재생',   desc: '초당 최대 체력 2% 자동 회복',    max: 5,    apply: (p) => { p.regenRate = (p.regenRate || 0) + 0.02; } },
+    { id: 'ignite',   name: '🔥 점화',        desc: '적중 시 10% 확률로 화상 (초당 피해, 중첩)',     max: 5,    apply: (p) => { p.igniteChance = (p.igniteChance || 0) + 0.10; } },
+    { id: 'venom',    name: '☠ 맹독',         desc: '적중 시 10% 확률로 독 (빠른 약한 틱, 중첩)', max: 5,    apply: (p) => { p.venomChance  = (p.venomChance  || 0) + 0.10; } },
   ];
 
   // 패시브 시너지 — 두 패시브를 조합하면 특수 효과 해금
@@ -237,6 +239,21 @@
         powerups.length = 0;
         floatTexts.push({ text: '🌀 전체 흡수!', life: 2.0, maxLife: 2.0, screenSpace: true, color: '#9b59b6', size: 22 });
         for (let _k = 0; _k < 20; _k++) spawnParticle(player.x, player.y, '#9b59b6', 6 + Math.random()*6, 0.5);
+      }
+    },
+    // 화염병 — 화면의 모든 적에게 화상 상태 부여
+    { id: 'firebomb', icon: '🔥', name: '화염병',    apply: ()  => {
+        for (const e of enemies) { e.burnTimer = Math.max(e.burnTimer || 0, 6); e.burnDmg = (e.burnDmg || 0) + player.dmgMult * 8; }
+        spawnExplosion(player.x, player.y, 260, 30 * player.dmgMult, false);
+        floatTexts.push({ text: '🔥 전체 화상!', life: 1.8, maxLife: 1.8, screenSpace: true, color: '#e74c3c', size: 20 });
+        for (let _k = 0; _k < 22; _k++) spawnParticle(player.x, player.y, '#e74c3c', 7 + Math.random()*7, 0.5);
+      }
+    },
+    // 독 구름 — 화면의 모든 적에게 독 상태 부여
+    { id: 'poisoncloud', icon: '☠', name: '독 구름', apply: ()  => {
+        for (const e of enemies) { e.poisonTimer = Math.max(e.poisonTimer || 0, 8); e.poisonDmg = (e.poisonDmg || 0) + player.dmgMult * 4; }
+        floatTexts.push({ text: '☠ 전체 중독!', life: 1.8, maxLife: 1.8, screenSpace: true, color: '#2ecc71', size: 20 });
+        for (let _k = 0; _k < 22; _k++) spawnParticle(player.x, player.y, '#27ae60', 7 + Math.random()*7, 0.5);
       }
     },
   ];
@@ -2233,24 +2250,49 @@
     }
 
     waveCount++;
-    const isHorde = (waveCount % HORDE_WAVE_EVERY === 0);
-    if (isHorde) floatTexts.push({ text: '🔥 HORDE WAVE!', life: 2.0, maxLife: 2.0, screenSpace: true, color: '#e74c3c', size: 20 });
+    // 웨이브 이벤트 — 매 웨이브마다 특수 유형 선택 (정규 이벤트 vs 스페셜)
+    // 스페셜 이벤트는 waveCount가 HORDE_WAVE_EVERY 배수일 때만 등장
+    const isSpecialSlot = (waveCount % HORDE_WAVE_EVERY === 0);
+    const eventRoll = Math.random();
+    const waveEvent = !isSpecialSlot ? 'normal'
+      : eventRoll < 0.33 ? 'horde'
+      : eventRoll < 0.60 ? 'swarm'
+      : eventRoll < 0.82 ? 'elite_pack'
+      : 'normal';
+    const WAVE_EVENT_BANNERS = {
+      horde:      { text: '🔥 HORDE WAVE!',        color: '#e74c3c' },
+      swarm:      { text: '🐝 SWARM RUSH!',          color: '#f39c12' },
+      elite_pack: { text: '👑 ELITE PACK!',          color: '#f1c40f' },
+    };
+    if (waveEvent !== 'normal') {
+      const b = WAVE_EVENT_BANNERS[waveEvent];
+      floatTexts.push({ text: b.text, life: 2.2, maxLife: 2.2, screenSpace: true, color: b.color, size: 22 });
+      screenShake = Math.min(screenShake + 0.2, 0.4);
+    }
     // 난이도 곡선: 분(m) 기준 가속 성장 (이차항 완화 — 초반 플레이어 성장 여유 확보)
     //   1분=1.87, 3분=3.97, 5분=6.25, 10분=13.0, 15분=21.75
     const m = elapsed / 60;
     const difficulty = 1 + 0.9 * m + 0.03 * m * m;
-    const baseCount = Math.ceil((isHorde ? Math.min(35 + Math.floor(elapsed / 8), 120) : Math.min(14 + Math.floor(elapsed / 9), 70)) * spawnMult);
+    const baseCount = Math.ceil((
+      waveEvent === 'horde'      ? Math.min(35 + Math.floor(elapsed / 8),  120) :
+      waveEvent === 'swarm'      ? Math.min(50 + Math.floor(elapsed / 6),  160) :
+      waveEvent === 'elite_pack' ? Math.min(8  + Math.floor(elapsed / 60),  16) :
+                                   Math.min(14 + Math.floor(elapsed / 9),   70)
+    ) * spawnMult);
     for (let i = 0; i < baseCount; i++) {
       if (enemies.length >= MAX_ENEMIES) break;
       const angle = Math.random() * Math.PI * 2;
       const spawnDist = 350 + Math.random() * 150;
       const tierRoll = Math.random();
-      const tier = elapsed < 45  ? 0
-                 : elapsed < 120 ? (tierRoll < 0.25 ? 1 : 0)
-                 : elapsed < 180 ? (tierRoll < 0.35 ? 1 : 0)
-                 : elapsed < 300 ? (tierRoll < 0.12 ? 2 : tierRoll < 0.45 ? 1 : 0)
-                 : elapsed < 450 ? (tierRoll < 0.22 ? 2 : tierRoll < 0.5  ? 1 : 0)
-                 :                 (tierRoll < 0.32 ? 2 : tierRoll < 0.55 ? 1 : 0);
+      // 웨이브 이벤트 오버라이드: swarm=tier0만, elite_pack=tier1+
+      let tier = elapsed < 45  ? 0
+               : elapsed < 120 ? (tierRoll < 0.25 ? 1 : 0)
+               : elapsed < 180 ? (tierRoll < 0.35 ? 1 : 0)
+               : elapsed < 300 ? (tierRoll < 0.12 ? 2 : tierRoll < 0.45 ? 1 : 0)
+               : elapsed < 450 ? (tierRoll < 0.22 ? 2 : tierRoll < 0.5  ? 1 : 0)
+               :                 (tierRoll < 0.32 ? 2 : tierRoll < 0.55 ? 1 : 0);
+      if (waveEvent === 'swarm') tier = 0;
+      if (waveEvent === 'elite_pack') tier = Math.max(1, tier);
       // 원거리 공격형(archer): tier1 40%, tier2 100%
       const bRoll = Math.random();
       const behavior = (tier === 2 || (tier === 1 && bRoll < 0.4)) ? 'archer' : 'chase';
@@ -2260,9 +2302,9 @@
         y: player.y + Math.sin(angle) * spawnDist,
         hp:    [30, 80, 200][tier] * difficulty * hpMult,
         maxHp: [30, 80, 200][tier] * difficulty * hpMult,
-        speed: ([75, 55, 35][tier] + Math.random() * 20) * runDifficulty.enemySpeedMult,
+        speed: ([75, 55, 35][tier] + Math.random() * 20) * runDifficulty.enemySpeedMult * (waveEvent === 'swarm' ? 1.45 : 1),
         size:  [10, 15, 22][tier],
-        color: ['#e74c3c', behavior === 'archer' ? '#1abc9c' : '#9b59b6', '#c0392b'][tier],
+        color: waveEvent === 'swarm' ? '#e67e22' : ['#e74c3c', behavior === 'archer' ? '#1abc9c' : '#9b59b6', '#c0392b'][tier],
         xpVal: Math.round([5, 13, 30][tier] * (1 + elapsed / 300)),  // XP 보상 증가 → 무기 레벨 빠른 성장으로 난이도 완화
         tier,
         hurtFlash: 0,
@@ -2274,8 +2316,8 @@
         attackRange: behavior === 'archer' ? (tier === 2 ? 280 : 220) : 0,
         attackDmg: Math.round([10, 20, 38][tier] * (1 + elapsed / 500) * runDifficulty.enemyDmgMult),  // 적 공격력 완만 상승 (후반 위협 유지)
       };
-      // 정예 승격 — tier1/2 중 6%가 정예로 등장. HP·보상·위협 강화, 처치 시 파워업 드롭
-      if (tier >= 1 && Math.random() < 0.06) {
+      // 정예 승격 — tier1/2 중 6%가 정예로 등장. elite_pack은 100%
+      if (tier >= 1 && (waveEvent === 'elite_pack' || Math.random() < 0.06)) {
         newEnemy.elite = true;
         newEnemy.eliteHue = Math.random() < 0.5 ? '#f1c40f' : '#ff7675';
         newEnemy.hp *= 2.6; newEnemy.maxHp *= 2.6;
@@ -2535,6 +2577,17 @@
     }
     enemy.hp -= dmg;
     enemy.hurtFlash = 0.12;
+    // 상태이상: ignite 패시브 → 화상, venom 패시브 → 독
+    if (player && !enemy.dying) {
+      if ((player.igniteChance || 0) > 0 && Math.random() < player.igniteChance) {
+        enemy.burnTimer = Math.max(enemy.burnTimer || 0, 4);
+        enemy.burnDmg   = Math.max(enemy.burnDmg   || 0, player.dmgMult * 7);
+      }
+      if ((player.venomChance || 0) > 0 && Math.random() < player.venomChance) {
+        enemy.poisonTimer = Math.max(enemy.poisonTimer || 0, 5);
+        enemy.poisonDmg   = Math.max(enemy.poisonDmg  || 0, player.dmgMult * 3);
+      }
+    }
     // 넉백: 피격 충격으로 플레이어 방향 반대로 밀림 (보스는 10% 강도)
     if (player) {
       const kbAng = Math.atan2(enemy.y - player.y, enemy.x - player.x);
@@ -3174,6 +3227,22 @@
           for (let k = 0; k < 3; k++) spawnParticle(e.x, e.y, '#f8c8ff', 5, 0.25);
         }
       }
+      // 대쉬 클리브 — 슬래시 경로 상의 적 투사체 전부 소멸
+      const slashFront = { x: player.x + Math.cos(da) * DASH_RANGE, y: player.y + Math.sin(da) * DASH_RANGE };
+      const slashBack  = { x: player.x - Math.cos(da) * 22,         y: player.y - Math.sin(da) * 22 };
+      let cleaved = 0;
+      for (let j = enemyProjectiles.length - 1; j >= 0; j--) {
+        const ep = enemyProjectiles[j];
+        if (distToSegment(ep, slashBack, slashFront) < ep.r + 22) {
+          rings.push({ x: ep.x, y: ep.y, r: 3, maxR: 20, life: 0.14, maxLife: 0.14, color: '#f0d0ff' });
+          spawnParticle(ep.x, ep.y, '#d7a3f5', 4, 0.22);
+          enemyProjectiles.splice(j, 1);
+          cleaved++;
+        }
+      }
+      if (cleaved >= 3) {
+        floatTexts.push({ text: `✂ ${cleaved} 투사체 차단!`, life: 1.2, maxLife: 1.2, screenSpace: true, color: '#d7a3f5', size: 15 });
+      }
     }
     if (dashEffect) { dashEffect.life -= dt; if (dashEffect.life <= 0) dashEffect = null; }
 
@@ -3390,6 +3459,20 @@
       const e = enemies[i];
       if (e.hurtFlash > 0) e.hurtFlash -= dt;
       if (e.spawnT > 0) e.spawnT = Math.max(0, e.spawnT - dt);
+      // DoT 틱: 화상(burnTimer) — 초당 burnDmg, 오렌지 파티클
+      if ((e.burnTimer || 0) > 0) {
+        e.burnTimer -= dt;
+        dealDamage(e, (e.burnDmg || 10) * dt);
+        if (Math.random() < 0.4) spawnParticle(e.x, e.y - e.size * 0.5, '#ff6b2b', 3 + Math.random() * 3, 0.22);
+        if (e.burnTimer <= 0) { e.burnTimer = 0; e.burnDmg = 0; }
+      }
+      // DoT 틱: 독(poisonTimer) — 초당 poisonDmg, 녹색 파티클
+      if ((e.poisonTimer || 0) > 0) {
+        e.poisonTimer -= dt;
+        dealDamage(e, (e.poisonDmg || 4) * dt);
+        if (Math.random() < 0.5) spawnParticle(e.x + (Math.random()-0.5)*8, e.y, '#2ecc71', 2 + Math.random() * 2, 0.18);
+        if (e.poisonTimer <= 0) { e.poisonTimer = 0; e.poisonDmg = 0; }
+      }
       const targetActor = allyPlayer && dist(e, allyPlayer) < dist(e, player) ? allyPlayer : player;
       const ang = Math.atan2(targetActor.y - e.y, targetActor.x - e.x);
       const d   = dist(e, targetActor);
@@ -3923,6 +4006,23 @@
         ctx.beginPath();
         ctx.arc(0, 0, e.size, 0, Math.PI * 2);
         ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+      // 화상 오버레이 (주황 글로우)
+      if ((e.burnTimer || 0) > 0 && !flash) {
+        ctx.globalAlpha = 0.45 + Math.sin(elapsed * 18) * 0.15;
+        ctx.shadowBlur = 10; ctx.shadowColor = '#ff6b2b';
+        ctx.strokeStyle = '#ff6b2b';
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(0, 0, e.size + 2, 0, Math.PI * 2); ctx.stroke();
+        ctx.shadowBlur = 0; ctx.globalAlpha = 1;
+      }
+      // 독 오버레이 (녹색 테두리)
+      if ((e.poisonTimer || 0) > 0 && !flash) {
+        ctx.globalAlpha = 0.6;
+        ctx.strokeStyle = '#2ecc71';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.arc(0, 0, e.size + 4, 0, Math.PI * 2); ctx.stroke();
         ctx.globalAlpha = 1;
       }
       ctx.shadowBlur = 0;
