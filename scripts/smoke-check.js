@@ -14,11 +14,11 @@ function request(pathname) {
   return httpRequest('GET', pathname);
 }
 
-function httpRequest(method, pathname, body = null) {
+function httpRequest(method, pathname, body = null, headers = {}) {
   return new Promise((resolve, reject) => {
     const options = {
       method,
-      headers: {},
+      headers: { ...headers },
     };
     if (body !== null) {
       options.headers['Content-Type'] = 'text/plain;charset=UTF-8';
@@ -74,7 +74,7 @@ function checkHandlers() {
 }
 
 function checkSecurityHelpers() {
-  const { isLoopbackAddress } = require('../server/security');
+  const { isLocalRequest, isLoopbackAddress } = require('../server/security');
   const localAddresses = ['127.0.0.1', '127.12.34.56', '::1', '::ffff:127.0.0.1', 'localhost'];
   const remoteAddresses = ['192.168.0.10', '10.0.0.5', '172.16.0.4', '203.0.113.9', 'example.com', ''];
 
@@ -86,6 +86,14 @@ function checkSecurityHelpers() {
   const falsePositive = remoteAddresses.filter((address) => isLoopbackAddress(address));
   if (falsePositive.length) {
     throw new Error(`Loopback detection false positive: ${falsePositive.join(', ')}`);
+  }
+
+  const proxiedLoopback = {
+    socket: { remoteAddress: '127.0.0.1' },
+    headers: { 'x-forwarded-for': '203.0.113.25' },
+  };
+  if (isLocalRequest(proxiedLoopback)) {
+    throw new Error('Proxied loopback request should not be treated as local admin traffic');
   }
 }
 
@@ -456,6 +464,16 @@ function checkVampireDirectorLoopCoverage() {
     'choiceWeight',
     'takeWeightedChoices',
     'Combo passive',
+    'SLASH_SUPPORT_DEFS',
+    'applySlashSupport',
+    'slashStats',
+    'performDashSlash',
+    'queueSlashEchoes',
+    'updateRuptures',
+    'slash-support',
+    'hasSlashSupport',
+    'Rupture Mark',
+    'Echo Step',
     'LOW_HP_THRESHOLD',
     'CRITICAL_HP',
     'renderLowHpWarning',
@@ -474,7 +492,7 @@ function checkVampireDirectorLoopCoverage() {
     throw new Error(`Vampire Survivors loop coverage missing: ${missingGameMarkers.join(', ')}`);
   }
 
-  const requiredCssMarkers = ['.meta-panel', '.start-card', '.pause-overlay', '.end-actions', '.daily-panel', '.upgrade-grid', '.run-report', '.monetization-panel', '.resume-panel', '.coop-panel', '.evolution-plan', '.level-evolution-plan', '.evolution-plan-row.ready', '.evolution-banner', '.evolution-banner.visible', '.choice-tag', '.choice-tag.weapon-lv', '#hpBar.critical'];
+  const requiredCssMarkers = ['.meta-panel', '.start-card', '.pause-overlay', '.end-actions', '.daily-panel', '.upgrade-grid', '.run-report', '.monetization-panel', '.resume-panel', '.coop-panel', '.evolution-plan', '.level-evolution-plan', '.evolution-plan-row.ready', '.evolution-banner', '.evolution-banner.visible', '.choice-tag', '.choice-tag.weapon-lv', '.choice-tag.slash-support', '.weapon-slot.slash-support-slot', '#hpBar.critical'];
   const missingCssMarkers = requiredCssMarkers.filter((marker) => !css.includes(marker));
   if (missingCssMarkers.length) {
     throw new Error(`Vampire Survivors UI CSS missing: ${missingCssMarkers.join(', ')}`);
@@ -886,6 +904,11 @@ async function main() {
     const parsed = JSON.parse(status.body);
     if (!parsed.rooms || !parsed.players) {
       throw new Error('/api/status did not return expected health payload');
+    }
+    const forwardedStatus = await httpRequest('GET', '/api/status', null, { 'X-Forwarded-For': '203.0.113.25' });
+    const forwardedParsed = JSON.parse(forwardedStatus.body);
+    if (forwardedParsed.shutdownKey) {
+      throw new Error('/api/status exposed shutdownKey to forwarded/proxied traffic');
     }
 
     checkHandlers();

@@ -16,6 +16,7 @@
 - Vampire Survivors evolution payoff: successful evolutions now trigger a transient banner, stronger particle burst, screen shake, and a defensive WebAudio chime.
 - Vampire Survivors level-up tension: non-evolution cards now use weighted selection and visible reason tags such as `Build starter`, `Power up`, and `Combo passive`.
 - Vampire Survivors near-miss feedback: low health now triggers throttled `LOW HP` / `CRITICAL HP` alerts, a pulsing player ring, edge vignette, and a critical HP bar state without stacking warnings every frame.
+- Vampire Survivors hack-and-slash layer: level-up choices can now add `Cleave Edge`, `Rupture Mark`, and `Echo Step` slash supports that widen dash slashes, apply bleed/burst pressure, and create delayed after-slashes.
 - Smoke-check coverage for Vampire Survivors character/difficulty/meta/pause/revive markers.
 - `docs/vampire-survivors-director-loop.md` with verification targets and remaining design work.
 
