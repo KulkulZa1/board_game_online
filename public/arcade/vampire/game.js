@@ -18,8 +18,8 @@
   const PLAYER_SPEED   = 160;  // px/s
   const BASE_HP        = 100;
   // 레벨업 필요 XP는 xpNeeded() 의 다항식 곡선으로 계산 (무한 레벨 지원)
-  const WAVE_INTERVAL  = 5;    // 초마다 적 추가 웨이브
-  const MAX_ENEMIES    = 200;
+  const WAVE_INTERVAL  = 3.5;  // 초마다 적 추가 웨이브 (핵앤슬래시 밀도)
+  const MAX_ENEMIES    = 400;
   const DASH_COOLDOWN  = 1.8;  // 대쉬 공격 쿨다운(초)
   const DASH_DMG       = 50;   // 대쉬 공격 데미지
   const DASH_RANGE     = 75;   // 대쉬 공격 범위(px)
@@ -28,30 +28,30 @@
   const BOSS_INTERVAL      = 300;  // 5분마다 보스 등장
   const ITEM_BOX_INTERVAL  = 40;   // 40초마다 아이템 박스
   const ITEM_BOX_LIFETIME  = 28;   // 아이템 박스 수명(초)
-  const HORDE_WAVE_EVERY   = 3;    // N번째 웨이브마다 대규모 하드 웨이브
+  const HORDE_WAVE_EVERY   = 2;    // N번째 웨이브마다 대규모 하드 웨이브 (핵앤슬래시: 더 자주)
 
   // 무기 강화 한계
   const MAX_WEAPON_LEVEL = 5;   // 같은 무기를 다시 고르면 레벨업 (최대 5)
-  const MAX_WEAPONS      = 6;   // 보유 가능한 무기 슬롯 수
+  const MAX_WEAPONS      = 8;   // 보유 가능한 무기 슬롯 수 (핵앤슬래시: 더 많이)
   const COMBO_MILESTONES = [10, 25, 50, 100, 200];  // 콤보 보너스 지급 구간
 
   // 무기 정의 (기본 무기 + 진화 무기)
   const WEAPON_DEFS = {
-    orb:       { name: '에너지 구',  icon: '🔵', desc: '주위를 회전하며 공격',             dmg: 20, cd: 0.7,  range: 80 },
-    arrow:     { name: '화살',       icon: '🏹', desc: '가장 가까운 적 관통',               dmg: 22, cd: 0.6,  range: 320 },
-    nova:      { name: '폭발',       icon: '💥', desc: '범위 폭발 공격',                   dmg: 70, cd: 2.0,  range: 110 },
+    orb:       { name: '에너지 구',  icon: '🔵', desc: '주위를 회전하며 공격',             dmg: 28, cd: 0.65, range: 85 },
+    arrow:     { name: '화살',       icon: '🏹', desc: '가장 가까운 적 관통',               dmg: 30, cd: 0.55, range: 320 },
+    nova:      { name: '폭발',       icon: '💥', desc: '범위 폭발 공격',                   dmg: 95, cd: 1.8,  range: 120 },
     shield:    { name: '방패',       icon: '🛡', desc: '주기적 피해 감소',                 dmg: 0,  cd: 8,    range: 0 },
-    laser:     { name: '레이저',     icon: '⚡', desc: '전방 레이저 빔',                   dmg: 38, cd: 1.0,  range: 280 },
-    boomerang: { name: '부메랑',     icon: '🪃', desc: '전방으로 발사 후 귀환, 왕복 타격', dmg: 34, cd: 1.25, range: 300 },
-    chain:     { name: '번개 사슬',  icon: '🔗', desc: '최대 3연쇄 즉시 타격 번개',        dmg: 52, cd: 1.5,  range: 220 },
+    laser:     { name: '레이저',     icon: '⚡', desc: '전방 레이저 빔',                   dmg: 52, cd: 0.9,  range: 290 },
+    boomerang: { name: '부메랑',     icon: '🪃', desc: '전방으로 발사 후 귀환, 왕복 타격', dmg: 46, cd: 1.1,  range: 310 },
+    chain:     { name: '번개 사슬',  icon: '🔗', desc: '최대 3연쇄 즉시 타격 번개',        dmg: 68, cd: 1.3,  range: 240 },
     // ── 진화 무기 (evolved) — 기본 무기 최대레벨 + 필요 패시브로 진화 ──
-    blackhole: { name: '블랙홀',    icon: '🌀', desc: '적을 끌어당기는 거대 궤도',   dmg: 36, cd: 0.6,  range: 120, evolved: true },
-    stormbow:  { name: '폭풍의 활', icon: '🌩', desc: '5연발 강화 관통 화살',        dmg: 32, cd: 0.42, range: 360, evolved: true },
-    supernova: { name: '슈퍼노바',  icon: '☀',  desc: '연쇄 대폭발',                dmg: 95, cd: 1.8,  range: 150, evolved: true },
-    deathray:  { name: '데스레이',  icon: '☠',  desc: '관통 즉사 광선',              dmg: 82, cd: 0.9,  range: 360, evolved: true },
-    aegis:     { name: '이지스',    icon: '🛡', desc: '반사 보호막',                 dmg: 30, cd: 6,    range: 140, evolved: true },
-    cyclone:   { name: '사이클론',  icon: '🌪', desc: '3방향 귀환 부메랑, 무한 관통', dmg: 55, cd: 1.0,  range: 360, evolved: true },
-    tempest:   { name: '폭풍 사슬', icon: '⛈',  desc: '5연쇄 번개, 적 빙결',         dmg: 75, cd: 1.2,  range: 260, evolved: true },
+    blackhole: { name: '블랙홀',    icon: '🌀', desc: '적을 끌어당기는 거대 궤도',   dmg: 48, cd: 0.55, range: 130, evolved: true },
+    stormbow:  { name: '폭풍의 활', icon: '🌩', desc: '5연발 강화 관통 화살',        dmg: 42, cd: 0.38, range: 380, evolved: true },
+    supernova: { name: '슈퍼노바',  icon: '☀',  desc: '연쇄 대폭발',                dmg: 130,cd: 1.6,  range: 160, evolved: true },
+    deathray:  { name: '데스레이',  icon: '☠',  desc: '관통 즉사 광선',              dmg: 110,cd: 0.8,  range: 380, evolved: true },
+    aegis:     { name: '이지스',    icon: '🛡', desc: '반사 보호막',                 dmg: 40, cd: 6,    range: 150, evolved: true },
+    cyclone:   { name: '사이클론',  icon: '🌪', desc: '3방향 귀환 부메랑, 무한 관통', dmg: 72, cd: 0.9,  range: 380, evolved: true },
+    tempest:   { name: '폭풍 사슬', icon: '⛈',  desc: '5연쇄 번개, 적 빙결',         dmg: 98, cd: 1.1,  range: 280, evolved: true },
   };
 
   // 진화 규칙: base 무기가 최대 레벨 + req 패시브 보유 시 evolved(id) 무기로 진화
@@ -76,7 +76,7 @@
     { id: 'cd_up',    name: '⏩ 쿨다운 감소', desc: '모든 무기 쿨다운 -12%',         max: 5,    apply: (p) => { p.cdMult  *= 0.88; } },
     { id: 'magnet',   name: '🧲 경험치 자석', desc: 'XP 획득 반경 +60%',             max: 4,    apply: (p) => { p.xpRange *= 1.6; } },
     { id: 'crit',     name: '⚡ 치명타',       desc: '15% 확률 2배 피해 (중첩 가능)',  max: 6,    apply: (p) => { p.critChance = (p.critChance || 0) + 0.15; } },
-    { id: 'pierce_up',name: '🔱 관통 강화',   desc: '화살·부메랑 관통 +2, 번개 연쇄 +1',           max: null, apply: (p) => { p.pierceBonus = (p.pierceBonus || 0) + 2; } },
+    { id: 'pierce_up',name: '🔱 관통 강화',   desc: '화살·부메랑 관통 +2, 번개 연쇄 +3',           max: null, apply: (p) => { p.pierceBonus = (p.pierceBonus || 0) + 2; } },
     { id: 'regen',    name: '💚 체력 재생',   desc: '초당 최대 체력 2% 자동 회복',    max: 5,    apply: (p) => { p.regenRate = (p.regenRate || 0) + 0.02; } },
   ];
 
@@ -280,6 +280,7 @@
   let enemyProjectiles = [];   // 적이 발사한 투사체
   let elapsed = 0;
   let kills = 0;
+  let lastKillTime = -1;   // 마지막 처치 elapsed 시간 — AoE 동시 처치 구분용
   let waveTimer = 0;
   let frameId;
   let camera = { x: 0, y: 0 };
@@ -455,6 +456,7 @@
     enemyProjectiles = [];
     elapsed    = 0;
     kills      = 0;
+    lastKillTime = -1;
     waveTimer  = 0;
     camera     = { x: 0, y: 0 };
     dashCd      = 0;
@@ -2183,7 +2185,7 @@
     //   1분=1.87, 3분=3.97, 5분=6.25, 10분=13.0, 15분=21.75
     const m = elapsed / 60;
     const difficulty = 1 + 0.9 * m + 0.03 * m * m;
-    const baseCount = Math.ceil((isHorde ? Math.min(20 + Math.floor(elapsed / 10), 60) : Math.min(8 + Math.floor(elapsed / 12), 38)) * spawnMult);
+    const baseCount = Math.ceil((isHorde ? Math.min(35 + Math.floor(elapsed / 8), 120) : Math.min(14 + Math.floor(elapsed / 9), 70)) * spawnMult);
     for (let i = 0; i < baseCount; i++) {
       if (enemies.length >= MAX_ENEMIES) break;
       const angle = Math.random() * Math.PI * 2;
@@ -2316,7 +2318,8 @@
       // 사슬 번개: 가장 가까운 적부터 연쇄 즉시 타격 + 시각적 아크 생성
       const evolved  = id === 'tempest';
       // 관통 강화 패시브: 연쇄 횟수도 증가 (2 관통 = +1 연쇄)
-      const bounces = (evolved ? 5 : 3) + Math.floor((player.pierceBonus || 0) / 2);
+      // 관통 강화 1스택 = 연쇄 +3 (관통=2씩 증가하므로 pierceBonus/2 * 3)
+      const bounces = (evolved ? 5 : 3) + (player.passives['pierce_up'] || 0) * 3;
       let cx = player.x, cy = player.y;
       const hit = new Set();
       for (let b = 0; b < bounces; b++) {
@@ -2477,11 +2480,13 @@
     }
     awardComboMilestone(enemy);
 
-    // 연속 처치 스트릭 텍스트 (빠른 연속 처치 보상 피드백)
+    // 연속 처치 스트릭 텍스트 — AoE 동시 처치(같은 프레임)에는 표시 안 함
+    const timeSinceLast = elapsed - lastKillTime;
     const STREAK_TEXTS = ['', '', '💀 DOUBLE KILL!', '💀 TRIPLE KILL!', '⚔ QUAD KILL!', '🔥 RAMPAGE!'];
-    if (comboCount >= 2 && comboCount <= 5) {
+    if (comboCount >= 2 && comboCount <= 5 && timeSinceLast > 0.12) {
       floatTexts.push({ x: enemy.x, y: enemy.y - 36, text: STREAK_TEXTS[comboCount], life: 1.1, maxLife: 1.1, color: comboCount >= 5 ? '#ff2222' : '#ff6b35', size: 13 + comboCount });
     }
+    lastKillTime = elapsed;
 
     // 처치 충격파 링 + 강화 파티클
     const deathR = enemy.size * 5 + 30 + (enemy.tier * 20);
