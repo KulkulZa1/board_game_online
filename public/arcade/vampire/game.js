@@ -45,7 +45,7 @@
     boomerang: { name: '부메랑',     icon: '🪃', desc: '전방으로 발사 후 귀환, 왕복 타격', dmg: 46, cd: 1.1,  range: 310 },
     chain:     { name: '번개 사슬',  icon: '🔗', desc: '최대 3연쇄 즉시 타격 번개',        dmg: 68, cd: 1.3,  range: 240 },
     // ── 진화 무기 (evolved) — 기본 무기 최대레벨 + 필요 패시브로 진화 ──
-    blackhole: { name: '블랙홀',    icon: '🌀', desc: '적을 끌어당기는 거대 궤도',   dmg: 48, cd: 0.55, range: 130, evolved: true },
+    blackhole: { name: '블랙홀',    icon: '🌀', desc: '적·투사체를 빨아들여 가두는 사건의 지평선', dmg: 48, cd: 0.55, range: 130, evolved: true },
     stormbow:  { name: '폭풍의 활', icon: '🌩', desc: '5연발 강화 관통 화살',        dmg: 42, cd: 0.38, range: 380, evolved: true },
     supernova: { name: '슈퍼노바',  icon: '☀',  desc: '연쇄 대폭발',                dmg: 130,cd: 1.6,  range: 160, evolved: true },
     deathray:  { name: '데스레이',  icon: '☠',  desc: '관통 즉사 광선',              dmg: 110,cd: 0.8,  range: 380, evolved: true },
@@ -227,6 +227,18 @@
         }
       }
     },
+    // 진공 청소기 — 화면의 XP 젬 전체 흡수 + 현재 파워업 드롭 전부 즉시 적용
+    { id: 'sweep',   icon: '🌀', name: '진공 청소기', apply: ()  => {
+        let xpTotal = 0;
+        for (const g of xpGems) xpTotal += g.val;
+        xpGems.length = 0;
+        if (xpTotal > 0) gainXP(xpTotal);
+        for (const pu of powerups) pu.def.apply(player);
+        powerups.length = 0;
+        floatTexts.push({ text: '🌀 전체 흡수!', life: 2.0, maxLife: 2.0, screenSpace: true, color: '#9b59b6', size: 22 });
+        for (let _k = 0; _k < 20; _k++) spawnParticle(player.x, player.y, '#9b59b6', 6 + Math.random()*6, 0.5);
+      }
+    },
   ];
 
   // ── 사운드 (경량 Web Audio 절차적 효과음) ───────────────────────
@@ -301,13 +313,18 @@
   let evolveFlash = 0;         // 무기 진화 시 화면 금빛 섬광 잔여 시간
   let rings = [];              // 처치·타격 충격파 링 (시각 전용)
   let powerups = [];           // 정예 처치 시 떨어지는 즉시 발동 파워업
+  let overdriveCharge = 0;     // 오버드라이브 게이지 (0–100, 처치마다 충전)
+  let overdriveActive = 0;     // 오버드라이브 남은 지속 시간(초)
+  let overdriveFlash  = 0;     // 활성화 순간 금빛 섬광 잔여 시간
   let lastMoveDir = { dx: 1, dy: 0 }; // 마지막 이동 방향 (대쉬 방향 결정)
   let itemBoxes     = [];        // 월드에 존재하는 아이템 박스
   let hybridTowers  = [];
   let selectedTowerTypeIdx = 0;
   let towerRecharge = 0;
   let itemBoxTimer  = 0;
+  let goblinTimer   = 0;         // 보물 고블린 등장 타이머
   let nextBossTime  = BOSS_INTERVAL;
+  const GOBLIN_INTERVAL = 48;    // 보물 고블린 등장 주기(초)
   let bossActive    = false;
   let bossWarning   = 0;         // 보스 경고 효과 잔여 시간
   let damageNumbers = [];        // 플로팅 데미지 숫자
@@ -476,6 +493,9 @@
     evolveFlash = 0;
     rings = [];
     powerups = [];
+    overdriveCharge = 0;
+    overdriveActive = 0;
+    overdriveFlash  = 0;
     lastMoveDir = { dx: 1, dy: 0 };
     itemBoxes     = [];
     hybridTowers  = [];
@@ -483,6 +503,7 @@
     selectedTowerTypeIdx = 0;
     towerRecharge = 0;
     itemBoxTimer  = 0;
+    goblinTimer   = 0;
     nextBossTime  = difficulty.bossInterval || BOSS_INTERVAL;
     bossActive    = false;
     bossWarning   = 0;
@@ -2089,6 +2110,11 @@
       cycleHybridTowerType();
       return;
     }
+    if (e.key === 'q' || e.key === 'Q') {
+      e.preventDefault();
+      activateOverdrive();
+      return;
+    }
     // 레벨업 / 아이템 선택 화면에서 숫자키로 선택 / 리롤
     if (state === 'levelup' || state === 'itembox') {
       if (['1','2','3'].includes(e.key)) {
@@ -2155,6 +2181,24 @@
     joyActive = false;
     joyDx = joyDy = 0;
     joyKnob.style.transform = '';
+  }, { passive: false });
+
+  // 모바일: 오버드라이브 게이지 바 탭으로 발동 지원
+  canvas.addEventListener('touchstart', (e) => {
+    if (overdriveCharge < 100 || overdriveActive > 0 || state !== 'playing') return;
+    const t = e.touches[0];
+    const r = canvas.getBoundingClientRect();
+    const cx = t.clientX - r.left;
+    const cy = t.clientY - r.top;
+    const W  = canvas.width, H = canvas.height;
+    const scaleX = W / r.width, scaleY = H / r.height;
+    const gx = cx * scaleX, gy = cy * scaleY;
+    const odW = Math.min(180, W * 0.36), odH = 11;
+    const odX = W / 2 - odW / 2, odY = H - 58;
+    if (gx >= odX - 10 && gx <= odX + odW + 10 && gy >= odY - 16 && gy <= odY + odH + 6) {
+      activateOverdrive();
+      e.preventDefault();
+    }
   }, { passive: false });
 
   function getMoveDir() {
@@ -2248,6 +2292,69 @@
   function dropPowerup(x, y) {
     const def = POWERUP_POOL[Math.floor(Math.random() * POWERUP_POOL.length)];
     powerups.push({ x, y, def, life: 16, maxLife: 16, pulseT: 0 });
+  }
+
+  // 보물 고블린 — 플레이어에게서 도망치는 황금 적. 처치 시 잭팟(XP·아이템·파워업) / 도망치면 사라짐
+  function spawnTreasureGoblin() {
+    const ang = Math.random() * Math.PI * 2;
+    const hp = (450 + elapsed * 1.6) * currentDifficulty().enemyHpMult;
+    enemies.push({
+      x: player.x + Math.cos(ang) * 280,
+      y: player.y + Math.sin(ang) * 280,
+      hp, maxHp: hp,
+      speed: 130 * currentDifficulty().enemySpeedMult,
+      size: 16,
+      color: '#f1c40f',
+      xpVal: 40,
+      tier: 1,
+      hurtFlash: 0,
+      frozen: 0,
+      spawnT: 0.35,
+      behavior: 'goblin',
+      goblin: true,
+      goblinLife: 13,      // 13초 내에 처치 못하면 도주
+      attackCd: 0, attackBase: 0, attackRange: 0, attackDmg: 0,
+    });
+    floatTexts.push({ text: '💰 보물 고블린 출현! 잡아라!', life: 2.4, maxLife: 2.4, screenSpace: true, color: '#f1c40f', size: 20 });
+    SFX.combo();
+  }
+
+  // 보물 고블린 잭팟 — 처치 위치에 XP 폭발 + 아이템 박스 2개 + 파워업 2개
+  function dropGoblinJackpot(x, y) {
+    for (let i = 0; i < 14; i++) {
+      const a = Math.random() * Math.PI * 2, d = 10 + Math.random() * 60;
+      xpGems.push({ x: x + Math.cos(a) * d, y: y + Math.sin(a) * d, val: 18 });
+    }
+    for (let k = 0; k < 2; k++) {
+      const a = (k / 2) * Math.PI * 2;
+      itemBoxes.push({ x: x + Math.cos(a) * 45, y: y + Math.sin(a) * 45, life: ITEM_BOX_LIFETIME, pulseT: 0 });
+    }
+    dropPowerup(x + 30, y);
+    dropPowerup(x - 30, y);
+    rings.push({ x, y, r: 12, maxR: 160, life: 0.5, maxLife: 0.5, color: '#f1c40f' });
+    for (let k = 0; k < 30; k++) spawnParticle(x, y, '#f1c40f', 5 + Math.random() * 7, 0.6);
+    floatTexts.push({ text: '💰 JACKPOT!', life: 2.2, maxLife: 2.2, screenSpace: true, color: '#f1c40f', size: 26 });
+  }
+
+  // 오버드라이브 발동 — Q키 또는 HUD 바 탭으로 활성화 (충전 100% 도달 시)
+  function activateOverdrive() {
+    if (overdriveCharge < 100 || overdriveActive > 0 || state !== 'playing') return;
+    overdriveCharge = 0;
+    overdriveActive = 6;
+    overdriveFlash  = 0.55;
+    // 기존 임시 버프보다 클 때만 덮어씀 (스택 방지)
+    player.tempDmgMult   = Math.max(player.tempDmgMult,   3.0);
+    player.tempDmgTimer  = Math.max(player.tempDmgTimer,  6);
+    player.tempSpeedMult = Math.max(player.tempSpeedMult, 1.3);
+    player.tempSpeedTimer= Math.max(player.tempSpeedTimer,6);
+    // 화면 청소 노바 폭발
+    spawnExplosion(player.x, player.y, 280, 80 * player.dmgMult, false);
+    for (let _k = 0; _k < 28; _k++) spawnParticle(player.x, player.y, '#f1c40f', 7 + Math.random() * 9, 0.55);
+    rings.push({ x: player.x, y: player.y, r: 12, maxR: 300, life: 0.5, maxLife: 0.5, color: '#f1c40f' });
+    rings.push({ x: player.x, y: player.y, r: 12, maxR: 220, life: 0.38, maxLife: 0.38, color: '#fff' });
+    screenShake = Math.min(screenShake + 0.45, 0.7);
+    floatTexts.push({ text: '⚡ OVERDRIVE!', life: 2.2, maxLife: 2.2, screenSpace: true, color: '#f1c40f', size: 28 });
+    SFX.boss();
   }
 
   function spawnSandboxEnemy(typeKey) {
@@ -2501,6 +2608,10 @@
     kills++;
     comboCount++;
     comboTimer = 1.5;
+    // 오버드라이브 게이지 충전 — 보스 +20, 정예 +5, 일반 +1
+    if (enemy.isBoss)       overdriveCharge = Math.min(100, overdriveCharge + 20);
+    else if (enemy.elite)   overdriveCharge = Math.min(100, overdriveCharge + 5);
+    else                    overdriveCharge = Math.min(100, overdriveCharge + 1);
     // vital_surge 시너지: 처치마다 HP 3 회복
     if (hasSynergy('vital_surge') && player) {
       player.hp = Math.min(player.hp + 3, player.maxHp);
@@ -2520,6 +2631,14 @@
       dropPowerup(enemy.x, enemy.y);
       floatTexts.push({ x: enemy.x, y: enemy.y - 30, text: '👑 정예 처치!', life: 1.6, maxLife: 1.6, color: '#f1c40f', size: 15 });
       rings.push({ x: enemy.x, y: enemy.y, r: enemy.size, maxR: enemy.size * 7, life: 0.45, maxLife: 0.45, color: enemy.eliteHue || '#f1c40f' });
+    }
+
+    // 보물 고블린 처치 — 잭팟!
+    if (enemy.goblin) {
+      dropGoblinJackpot(enemy.x, enemy.y);
+      overdriveCharge = Math.min(100, overdriveCharge + 10);
+      screenShake = Math.min(screenShake + 0.3, 0.6);
+      SFX.boss();
     }
 
     // 처치 충격파 링 + 강화 파티클
@@ -3088,6 +3207,13 @@
       itemBoxes.push({ x: player.x + Math.cos(_ba) * _bd, y: player.y + Math.sin(_ba) * _bd, life: ITEM_BOX_LIFETIME, pulseT: 0 });
     }
 
+    // 보물 고블린 등장 (45초 첫 등장 이후 주기적, 이미 맵에 있으면 대기)
+    goblinTimer += dt;
+    if (goblinTimer >= GOBLIN_INTERVAL && elapsed > 40 && !enemies.some(e => e.goblin)) {
+      goblinTimer = 0;
+      spawnTreasureGoblin();
+    }
+
     // 아이템 박스 업데이트 및 수집
     for (let i = itemBoxes.length - 1; i >= 0; i--) {
       const box = itemBoxes[i];
@@ -3126,6 +3252,9 @@
     // 임시 버프 타이머
     if (player.tempDmgTimer > 0) { player.tempDmgTimer -= dt; if (player.tempDmgTimer <= 0) { player.tempDmgMult = 1; player.tempDmgTimer = 0; } }
     if (player.tempSpeedTimer > 0) { player.tempSpeedTimer -= dt; if (player.tempSpeedTimer <= 0) { player.tempSpeedMult = 1; player.tempSpeedTimer = 0; } }
+    // 오버드라이브 타이머 (시각적 HUD 상태용, 실제 버프는 tempDmgTimer가 관리)
+    if (overdriveActive > 0) overdriveActive = Math.max(0, overdriveActive - dt);
+    if (overdriveFlash  > 0) overdriveFlash  = Math.max(0, overdriveFlash  - dt);
     // regen 패시브: 초당 maxHp * regenRate 회복
     if ((player.regenRate || 0) > 0 && player.hp < player.maxHp) {
       player.hp = Math.min(player.hp + player.maxHp * player.regenRate * dt, player.maxHp);
@@ -3148,24 +3277,35 @@
         p.x = player.x + Math.cos(baseAngle) * R;
         p.y = player.y + Math.sin(baseAngle) * R;
         const evolved = p.type === 'blackhole';
+        // 블랙홀: 사건의 지평선(흡입 반경) — 적을 블랙홀 중심으로 빨아들여 유저와 격리
+        const captureR = evolved ? p.r + 78 : p.r;
         for (const e of enemies) {
-          if (dist(p, e) < p.r + e.size) dealDamage(e, p.dmg * dt * 3);
-          if (evolved) {   // 블랙홀: 주변 적을 플레이어 쪽으로 끌어당김
-            const a = Math.atan2(player.y - e.y, player.x - e.x);
-            e.x += Math.cos(a) * 45 * dt;
-            e.y += Math.sin(a) * 45 * dt;
+          const de = dist(p, e);
+          if (de < p.r + e.size) dealDamage(e, p.dmg * dt * 3);
+          if (evolved && !e.isBoss && de < captureR + e.size) {
+            // 가까울수록 강한 흡입력 — 적을 플레이어가 아닌 블랙홀 쪽으로 끌어당김
+            const pullStr = 60 + 150 * (1 - de / (captureR + e.size));
+            const a = Math.atan2(p.y - e.y, p.x - e.x);
+            e.x += Math.cos(a) * pullStr * dt;
+            e.y += Math.sin(a) * pullStr * dt;
+            // 사건의 지평선 안쪽이면 지속 흡입 피해
+            if (de < captureR) {
+              dealDamage(e, p.dmg * dt * 1.6);
+              if (Math.random() < 0.25) spawnParticle(e.x, e.y, '#b388ff', 3, 0.2);
+            }
           }
         }
-        // 레벨2+ 오브: 적 투사체 요격 — 회전 방패 역할
+        // 레벨2+ 오브 / 블랙홀: 적 투사체 흡수 (블랙홀은 사건의 지평선 전체에서 흡수)
         const orbLevel = p.type === 'blackhole'
           ? 5
           : (player.weaponLevels['orb'] || 1);
         if (orbLevel >= 2) {
+          const interceptR = evolved ? captureR : p.r + 8;
           for (let j = enemyProjectiles.length - 1; j >= 0; j--) {
             const ep = enemyProjectiles[j];
-            if (dist(p, ep) < p.r + ep.r + 8) {
-              rings.push({ x: ep.x, y: ep.y, r: 3, maxR: 22, life: 0.14, maxLife: 0.14, color: '#3498db' });
-              for (let s = 0; s < 4; s++) spawnParticle(ep.x, ep.y, '#74b9ff', 3, 0.18);
+            if (dist(p, ep) < interceptR + ep.r) {
+              rings.push({ x: ep.x, y: ep.y, r: 3, maxR: 22, life: 0.14, maxLife: 0.14, color: evolved ? '#9b59b6' : '#3498db' });
+              for (let s = 0; s < 4; s++) spawnParticle(ep.x, ep.y, evolved ? '#b388ff' : '#74b9ff', 3, 0.18);
               enemyProjectiles.splice(j, 1);
             }
           }
@@ -3272,6 +3412,19 @@
       if (e.frozen > 0) {
         // 빙결 상태: 이동·공격 없음
         e.frozen -= dt;
+      } else if (e.behavior === 'goblin') {
+        // 보물 고블린: 플레이어 반대 방향으로 도주 (지그재그)
+        const flee = ang + Math.PI + Math.sin(elapsed * 4) * 0.5;
+        e.x += Math.cos(flee) * e.speed * dt;
+        e.y += Math.sin(flee) * e.speed * dt;
+        e.goblinLife -= dt;
+        if (e.goblinLife <= 0) {
+          // 도주 성공 — 사라짐 (잭팟 없음)
+          floatTexts.push({ text: '💨 고블린이 도망쳤다...', life: 1.8, maxLife: 1.8, screenSpace: true, color: '#95a5a6', size: 16 });
+          for (let k = 0; k < 8; k++) spawnParticle(e.x, e.y, '#bdc3c7', 4, 0.4);
+          enemies.splice(i, 1);
+          continue;
+        }
       } else if (e.isBoss) {
         // 보스: 추적 + 예비 동작(telegraph) 후 원형 폭발 발사
         const bSpeed = e.bossPhase === 1 ? e.speed * 1.4 : e.speed;
@@ -3334,7 +3487,7 @@
         }
       }
 
-      if (player.invincible <= 0 && d < e.size + 12) {
+      if (!e.goblin && player.invincible <= 0 && d < e.size + 12) {
         const contactDmg = e.isBoss ? 55 : [8, 18, 38][Math.min(e.tier, 2)];
         player.hp -= contactDmg * dt * (hasSynergy('iron_fortress') ? 0.70 : 1.0);
         screenShake = Math.min(screenShake + 0.15, 0.35);
@@ -3545,17 +3698,44 @@
     for (const p of projectiles) {
       if (p.type === 'orb' || p.type === 'blackhole') {
         const evolved = p.type === 'blackhole';
+        if (evolved) {
+          // 블랙홀 사건의 지평선 — 회전하는 흡입 소용돌이
+          const captureR = p.r + 78;
+          const swirl = elapsed * 3;
+          const hgrad = ctx.createRadialGradient(p.x, p.y, p.r * 0.4, p.x, p.y, captureR);
+          hgrad.addColorStop(0, 'rgba(20,0,30,0.85)');
+          hgrad.addColorStop(0.5, 'rgba(142,68,173,0.35)');
+          hgrad.addColorStop(1, 'rgba(142,68,173,0)');
+          ctx.fillStyle = hgrad;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, captureR, 0, Math.PI * 2);
+          ctx.fill();
+          // 나선 팔 2개
+          ctx.strokeStyle = 'rgba(179,136,255,0.5)';
+          ctx.lineWidth = 2;
+          for (let arm = 0; arm < 2; arm++) {
+            ctx.beginPath();
+            for (let t = 0; t <= 1; t += 0.1) {
+              const rr = p.r + t * (captureR - p.r);
+              const aa = swirl + arm * Math.PI + t * 5;
+              const sx = p.x + Math.cos(aa) * rr;
+              const sy = p.y + Math.sin(aa) * rr;
+              t === 0 ? ctx.moveTo(sx, sy) : ctx.lineTo(sx, sy);
+            }
+            ctx.stroke();
+          }
+        }
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-        ctx.fillStyle  = evolved ? '#8e44ad' : '#3498db';
-        ctx.shadowBlur = evolved ? 22 : 12;
+        ctx.fillStyle  = evolved ? '#1a0a24' : '#3498db';
+        ctx.shadowBlur = evolved ? 26 : 12;
         ctx.shadowColor = evolved ? '#9b59b6' : '#3498db';
         ctx.fill();
-        if (evolved) {   // 블랙홀 소용돌이 링
-          ctx.strokeStyle = 'rgba(155,89,182,0.6)';
-          ctx.lineWidth = 2;
+        if (evolved) {   // 블랙홀 코어 링
+          ctx.strokeStyle = 'rgba(179,136,255,0.85)';
+          ctx.lineWidth = 2.5;
           ctx.beginPath();
-          ctx.arc(p.x, p.y, p.r + 5, 0, Math.PI * 2);
+          ctx.arc(p.x, p.y, p.r + 3, 0, Math.PI * 2);
           ctx.stroke();
         }
         ctx.shadowBlur = 0;
@@ -3690,7 +3870,13 @@
       ctx.shadowColor = rageActive ? '#ff4500' : e.color;
 
       // 적 모양: boss=특수 별형, tier2=육각형, tier1 archer=마름모, tier1=사각형, tier0=원
-      if (e.isBoss) {
+      if (e.goblin) {
+        // 보물 고블린: 황금빛 둥근 몸체
+        ctx.fillStyle = flash ? '#ffffff' : '#f1c40f';
+        ctx.shadowBlur = 16; ctx.shadowColor = '#f39c12';
+        ctx.beginPath();
+        ctx.arc(0, 0, e.size, 0, Math.PI * 2);
+      } else if (e.isBoss) {
         // 보스: 8각 별 모양 + 이중 링
         ctx.beginPath();
         for (let i = 0; i < 8; i++) {
@@ -3760,6 +3946,30 @@
         ctx.font = '13px serif';
         ctx.textAlign = 'center';
         ctx.fillText('👑', 0, -e.size - 11);
+        ctx.restore();
+      }
+
+      // 보물 고블린 — 💰 아이콘 + 반짝임 + 남은 시간 게이지
+      if (e.goblin && e.spawnT <= 0) {
+        ctx.save();
+        ctx.translate(e.x, e.y);
+        // 반짝이는 후광
+        const gr = e.size + 5 + Math.sin(elapsed * 8) * 3;
+        ctx.strokeStyle = '#ffd700';
+        ctx.shadowBlur = 16; ctx.shadowColor = '#ffd700';
+        ctx.globalAlpha = 0.7 + Math.sin(elapsed * 8) * 0.25;
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(0, 0, gr, 0, Math.PI * 2); ctx.stroke();
+        ctx.shadowBlur = 0; ctx.globalAlpha = 1;
+        ctx.font = '15px serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('💰', 0, 5);
+        // 남은 시간 게이지 (도주까지)
+        const gPct = Math.max(0, e.goblinLife / 13);
+        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        ctx.fillRect(-e.size, -e.size - 12, e.size * 2, 4);
+        ctx.fillStyle = gPct > 0.35 ? '#2ecc71' : '#e74c3c';
+        ctx.fillRect(-e.size, -e.size - 12, e.size * 2 * gPct, 4);
         ctx.restore();
       }
 
@@ -3957,6 +4167,17 @@
       ctx.fillRect(0, 0, W, H);
     }
 
+    // 오버드라이브 활성 금빛 섬광 (발동 순간)
+    if (overdriveFlash > 0) {
+      const of2 = overdriveFlash / 0.55;
+      const ogr = ctx.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, Math.max(W, H) * 0.75);
+      ogr.addColorStop(0, `rgba(255,215,0,${of2 * 0.65})`);
+      ogr.addColorStop(0.45, `rgba(255,165,0,${of2 * 0.35})`);
+      ogr.addColorStop(1, 'rgba(255,165,0,0)');
+      ctx.fillStyle = ogr;
+      ctx.fillRect(0, 0, W, H);
+    }
+
     // 보스 경고 화면 플래시
     if (bossWarning > 0) {
       const wAlpha = (Math.sin(bossWarning * 9) * 0.5 + 0.5) * 0.35;
@@ -4094,6 +4315,50 @@
       ctx.fillStyle = 'rgba(255,255,255,0.75)';
       ctx.font = '9px sans-serif';
       ctx.fillText('T/Y', tx, ty + 25);
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'alphabetic';
+
+      // 오버드라이브 게이지 바 (하단 중앙)
+      const odFull  = overdriveCharge >= 100;
+      const odRatio = overdriveCharge / 100;
+      const odW = Math.min(180, W * 0.36), odH = 11;
+      const odX = W / 2 - odW / 2;
+      const odY = H - 58;
+
+      ctx.fillStyle = 'rgba(0,0,0,0.55)';
+      ctx.fillRect(odX - 2, odY - 2, odW + 4, odH + 4);
+
+      if (overdriveActive > 0) {
+        const odPulse = 0.75 + Math.sin(elapsed * 20) * 0.25;
+        ctx.fillStyle = `rgba(255,215,0,${odPulse})`;
+        ctx.fillRect(odX, odY, odW, odH);
+        ctx.shadowBlur = 14; ctx.shadowColor = '#f1c40f';
+        ctx.strokeStyle = '#f1c40f';
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(odX, odY, odW, odH);
+        ctx.shadowBlur = 0;
+      } else {
+        const odCol = odFull ? '#f1c40f' : '#b03030';
+        ctx.fillStyle = odCol;
+        ctx.fillRect(odX, odY, odW * odRatio, odH);
+        if (odFull) { ctx.shadowBlur = 10; ctx.shadowColor = '#f1c40f'; }
+        ctx.strokeStyle = odFull ? '#f1c40f' : '#555';
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(odX, odY, odW, odH);
+        ctx.shadowBlur = 0;
+      }
+
+      ctx.fillStyle = overdriveActive > 0 ? '#fff' : (odFull ? '#f1c40f' : '#aaa');
+      ctx.font = `bold 9px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      const odLabel = overdriveActive > 0
+        ? `⚡ OVERDRIVE ${Math.ceil(overdriveActive)}s`
+        : (odFull ? '⚡ OVERDRIVE  [Q]' : `OVERDRIVE  ${Math.floor(overdriveCharge)}%`);
+      ctx.shadowBlur = odFull || overdriveActive > 0 ? 8 : 0;
+      ctx.shadowColor = '#f1c40f';
+      ctx.fillText(odLabel, W / 2, odY - 8);
+      ctx.shadowBlur = 0;
       ctx.textAlign = 'left';
       ctx.textBaseline = 'alphabetic';
     }
