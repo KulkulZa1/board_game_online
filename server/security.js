@@ -13,7 +13,14 @@ function isLoopbackAddress(address) {
 }
 
 function isLocalRequest(req) {
-  return isLoopbackAddress(req && req.socket && req.socket.remoteAddress);
+  if (!req) return false;
+  const hasForwardedClient = Boolean(
+    req.headers &&
+    (req.headers['x-forwarded-for'] ||
+     req.headers['x-real-ip'] ||
+     req.headers['cf-connecting-ip'])
+  );
+  return isLoopbackAddress(req.socket && req.socket.remoteAddress) && !hasForwardedClient;
 }
 
 function isAdminEnabled(req) {

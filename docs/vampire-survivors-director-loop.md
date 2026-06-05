@@ -59,6 +59,10 @@ This note records the launch-readiness work for `/arcade/vampire/`.
 - Near-miss feedback.
   - Runs below 25% HP now show throttled `LOW HP` / `CRITICAL HP` alerts, a pulsing ring around the player, a canvas edge warning, and a critical HP bar state.
   - The feedback is transient runtime state only; it does not enter run snapshots or alter the existing near-miss clear achievement calculation.
+- Hack-and-slash support layer.
+  - Level-up choices can now offer `Cleave Edge`, `Rupture Mark`, and `Echo Step` as simple support-modifier cards for the dash slash.
+  - Dash now cuts along its movement path instead of only checking a small end-position circle. Cleave widens and strengthens the cut, Rupture adds bleed plus kill bursts, and Echo Step leaves delayed after-slashes.
+  - Slash supports live in `player.slashMods`, so they are serializable with run snapshots and do not require a separate renderer-owned state model.
 - Sandbox evolution mirror.
   - `sandbox/vampire-survivors/` now stores evolved skills and `EVOLUTIONS` recipes in `VS_CONFIG`, exposes editable base/passive/result rows, shows golden evolution cards, and swaps max-level base skills into evolved skills at runtime.
   - Old local sandbox saves are migrated by appending missing default evolved skills and recipes.
@@ -78,6 +82,7 @@ This note records the launch-readiness work for `/arcade/vampire/`.
   - pause overlay appears with `P` and resumes without time jump.
   - death screen shows coin rewards and a revive action.
   - `T` places a tower, tower projectiles damage enemies, Frost freezes enemies, and Tesla chains to nearby enemies.
+  - dash through a cluster after choosing slash supports and confirm the wider slash path, rupture ring, and echo slash visuals are readable.
   - lowering HP during a run produces visible low-health pressure without stacking repeated alerts.
   - end screen displays evolution count and missed evolution hints when a run ends without all possible evolutions.
   - mobile viewport stacks selection cards without covering controls.
