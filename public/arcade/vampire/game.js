@@ -179,6 +179,18 @@
         }
       }
     },
+    // 진공 청소기 — 화면의 XP 젬 전체 흡수 + 현재 파워업 드롭 전부 즉시 적용
+    { id: 'sweep',   icon: '🌀', name: '진공 청소기', apply: ()  => {
+        let xpTotal = 0;
+        for (const g of xpGems) xpTotal += g.val;
+        xpGems.length = 0;
+        if (xpTotal > 0) gainXP(xpTotal);
+        for (const pu of powerups) pu.def.apply(player);
+        powerups.length = 0;
+        floatTexts.push({ text: '🌀 전체 흡수!', life: 2.0, maxLife: 2.0, screenSpace: true, color: '#9b59b6', size: 22 });
+        for (let _k = 0; _k < 20; _k++) spawnParticle(player.x, player.y, '#9b59b6', 6 + Math.random()*6, 0.5);
+      }
+    },
   ];
 
   // ── 사운드 (경량 Web Audio 절차적 효과음) ───────────────────────
@@ -250,6 +262,11 @@
   let hitStop = 0;             // 히트스톱(타격 정지) 잔여 시간 — 큰 타격 순간 짧게 정지
   let hurtScreenFlash = 0;     // 피격 시 화면 붉은 플래시 잔여 시간
   let evolveFlash = 0;         // 무기 진화 시 화면 금빛 섬광 잔여 시간
+  let rings = [];              // 처치·타격 충격파 링 (시각 전용)
+  let powerups = [];           // 정예 처치 시 떨어지는 즉시 발동 파워업
+  let overdriveCharge = 0;     // 오버드라이브 게이지 (0–100, 처치마다 충전)
+  let overdriveActive = 0;     // 오버드라이브 남은 지속 시간(초)
+  let overdriveFlash  = 0;     // 활성화 순간 금빛 섬광 잔여 시간
   let lastMoveDir = { dx: 1, dy: 0 }; // 마지막 이동 방향 (대쉬 방향 결정)
   let itemBoxes     = [];        // 월드에 존재하는 아이템 박스
   let hybridTowers  = [];
@@ -422,6 +439,11 @@
     hitStop = 0;
     hurtScreenFlash = 0;
     evolveFlash = 0;
+    rings = [];
+    powerups = [];
+    overdriveCharge = 0;
+    overdriveActive = 0;
+    overdriveFlash  = 0;
     lastMoveDir = { dx: 1, dy: 0 };
     itemBoxes     = [];
     hybridTowers  = [];
@@ -2020,6 +2042,11 @@
       cycleHybridTowerType();
       return;
     }
+    if (e.key === 'q' || e.key === 'Q') {
+      e.preventDefault();
+      activateOverdrive();
+      return;
+    }
     // 레벨업 / 아이템 선택 화면에서 숫자키로 선택 / 리롤
     if (state === 'levelup' || state === 'itembox') {
       if (['1','2','3'].includes(e.key)) {
@@ -2086,6 +2113,24 @@
     joyActive = false;
     joyDx = joyDy = 0;
     joyKnob.style.transform = '';
+  }, { passive: false });
+
+  // 모바일: 오버드라이브 게이지 바 탭으로 발동 지원
+  canvas.addEventListener('touchstart', (e) => {
+    if (overdriveCharge < 100 || overdriveActive > 0 || state !== 'playing') return;
+    const t = e.touches[0];
+    const r = canvas.getBoundingClientRect();
+    const cx = t.clientX - r.left;
+    const cy = t.clientY - r.top;
+    const W  = canvas.width, H = canvas.height;
+    const scaleX = W / r.width, scaleY = H / r.height;
+    const gx = cx * scaleX, gy = cy * scaleY;
+    const odW = Math.min(180, W * 0.36), odH = 11;
+    const odX = W / 2 - odW / 2, odY = H - 58;
+    if (gx >= odX - 10 && gx <= odX + odW + 10 && gy >= odY - 16 && gy <= odY + odH + 6) {
+      activateOverdrive();
+      e.preventDefault();
+    }
   }, { passive: false });
 
   function getMoveDir() {
@@ -2162,6 +2207,33 @@
         attackDmg: Math.round([10, 20, 38][tier] * (1 + elapsed / 500) * runDifficulty.enemyDmgMult),  // 적 공격력 완만 상승 (후반 위협 유지)
       });
     }
+  }
+
+  // 정예 처치 시 무작위 파워업 드롭
+  function dropPowerup(x, y) {
+    const def = POWERUP_POOL[Math.floor(Math.random() * POWERUP_POOL.length)];
+    powerups.push({ x, y, def, life: 16, maxLife: 16, pulseT: 0 });
+  }
+
+  // 오버드라이브 발동 — Q키 또는 HUD 바 탭으로 활성화 (충전 100% 도달 시)
+  function activateOverdrive() {
+    if (overdriveCharge < 100 || overdriveActive > 0 || state !== 'playing') return;
+    overdriveCharge = 0;
+    overdriveActive = 6;
+    overdriveFlash  = 0.55;
+    // 기존 임시 버프보다 클 때만 덮어씀 (스택 방지)
+    player.tempDmgMult   = Math.max(player.tempDmgMult,   3.0);
+    player.tempDmgTimer  = Math.max(player.tempDmgTimer,  6);
+    player.tempSpeedMult = Math.max(player.tempSpeedMult, 1.3);
+    player.tempSpeedTimer= Math.max(player.tempSpeedTimer,6);
+    // 화면 청소 노바 폭발
+    spawnExplosion(player.x, player.y, 280, 80 * player.dmgMult, false);
+    for (let _k = 0; _k < 28; _k++) spawnParticle(player.x, player.y, '#f1c40f', 7 + Math.random() * 9, 0.55);
+    rings.push({ x: player.x, y: player.y, r: 12, maxR: 300, life: 0.5, maxLife: 0.5, color: '#f1c40f' });
+    rings.push({ x: player.x, y: player.y, r: 12, maxR: 220, life: 0.38, maxLife: 0.38, color: '#fff' });
+    screenShake = Math.min(screenShake + 0.45, 0.7);
+    floatTexts.push({ text: '⚡ OVERDRIVE!', life: 2.2, maxLife: 2.2, screenSpace: true, color: '#f1c40f', size: 28 });
+    SFX.boss();
   }
 
   function spawnSandboxEnemy(typeKey) {
@@ -2375,6 +2447,14 @@
     kills++;
     comboCount++;
     comboTimer = 1.5;
+    // 오버드라이브 게이지 충전 — 보스 +20, 정예 +5, 일반 +1
+    if (enemy.isBoss)       overdriveCharge = Math.min(100, overdriveCharge + 20);
+    else if (enemy.elite)   overdriveCharge = Math.min(100, overdriveCharge + 5);
+    else                    overdriveCharge = Math.min(100, overdriveCharge + 1);
+    // vital_surge 시너지: 처치마다 HP 3 회복
+    if (hasSynergy('vital_surge') && player) {
+      player.hp = Math.min(player.hp + 3, player.maxHp);
+    }
     awardComboMilestone(enemy);
     const pCount = enemy.isBoss ? 30 : 3 + enemy.tier * 3;
     for (let i = 0; i < pCount; i++) {
@@ -2951,6 +3031,9 @@
     // 임시 버프 타이머
     if (player.tempDmgTimer > 0) { player.tempDmgTimer -= dt; if (player.tempDmgTimer <= 0) { player.tempDmgMult = 1; player.tempDmgTimer = 0; } }
     if (player.tempSpeedTimer > 0) { player.tempSpeedTimer -= dt; if (player.tempSpeedTimer <= 0) { player.tempSpeedMult = 1; player.tempSpeedTimer = 0; } }
+    // 오버드라이브 타이머 (시각적 HUD 상태용, 실제 버프는 tempDmgTimer가 관리)
+    if (overdriveActive > 0) overdriveActive = Math.max(0, overdriveActive - dt);
+    if (overdriveFlash  > 0) overdriveFlash  = Math.max(0, overdriveFlash  - dt);
     // regen 패시브: 초당 maxHp * regenRate 회복
     if ((player.regenRate || 0) > 0 && player.hp < player.maxHp) {
       player.hp = Math.min(player.hp + player.maxHp * player.regenRate * dt, player.maxHp);
@@ -3635,6 +3718,17 @@
       ctx.fillRect(0, 0, W, H);
     }
 
+    // 오버드라이브 활성 금빛 섬광 (발동 순간)
+    if (overdriveFlash > 0) {
+      const of2 = overdriveFlash / 0.55;
+      const ogr = ctx.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, Math.max(W, H) * 0.75);
+      ogr.addColorStop(0, `rgba(255,215,0,${of2 * 0.65})`);
+      ogr.addColorStop(0.45, `rgba(255,165,0,${of2 * 0.35})`);
+      ogr.addColorStop(1, 'rgba(255,165,0,0)');
+      ctx.fillStyle = ogr;
+      ctx.fillRect(0, 0, W, H);
+    }
+
     // 보스 경고 화면 플래시
     if (bossWarning > 0) {
       const wAlpha = (Math.sin(bossWarning * 9) * 0.5 + 0.5) * 0.35;
@@ -3762,6 +3856,52 @@
       ctx.fillStyle = 'rgba(255,255,255,0.75)';
       ctx.font = '9px sans-serif';
       ctx.fillText('T/Y', tx, ty + 25);
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'alphabetic';
+
+      // 오버드라이브 게이지 바 (하단 중앙)
+      const odFull  = overdriveCharge >= 100;
+      const odRatio = overdriveCharge / 100;
+      const odW = Math.min(180, W * 0.36), odH = 11;
+      const odX = W / 2 - odW / 2;
+      const odY = H - 58;
+
+      ctx.fillStyle = 'rgba(0,0,0,0.55)';
+      ctx.fillRect(odX - 2, odY - 2, odW + 4, odH + 4);
+
+      if (overdriveActive > 0) {
+        // 활성 중: 황금 파동 바
+        const odPulse = 0.75 + Math.sin(elapsed * 20) * 0.25;
+        ctx.fillStyle = `rgba(255,215,0,${odPulse})`;
+        ctx.fillRect(odX, odY, odW, odH);
+        ctx.shadowBlur = 14; ctx.shadowColor = '#f1c40f';
+        ctx.strokeStyle = '#f1c40f';
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(odX, odY, odW, odH);
+        ctx.shadowBlur = 0;
+      } else {
+        // 충전 중
+        const odCol = odFull ? '#f1c40f' : '#b03030';
+        ctx.fillStyle = odCol;
+        ctx.fillRect(odX, odY, odW * odRatio, odH);
+        if (odFull) { ctx.shadowBlur = 10; ctx.shadowColor = '#f1c40f'; }
+        ctx.strokeStyle = odFull ? '#f1c40f' : '#555';
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(odX, odY, odW, odH);
+        ctx.shadowBlur = 0;
+      }
+
+      ctx.fillStyle = overdriveActive > 0 ? '#fff' : (odFull ? '#f1c40f' : '#aaa');
+      ctx.font = `bold 9px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      const odLabel = overdriveActive > 0
+        ? `⚡ OVERDRIVE ${Math.ceil(overdriveActive)}s`
+        : (odFull ? '⚡ OVERDRIVE  [Q]' : `OVERDRIVE  ${Math.floor(overdriveCharge)}%`);
+      ctx.shadowBlur = odFull || overdriveActive > 0 ? 8 : 0;
+      ctx.shadowColor = '#f1c40f';
+      ctx.fillText(odLabel, W / 2, odY - 8);
+      ctx.shadowBlur = 0;
       ctx.textAlign = 'left';
       ctx.textBaseline = 'alphabetic';
     }
