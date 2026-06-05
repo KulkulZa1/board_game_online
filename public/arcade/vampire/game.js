@@ -250,6 +250,7 @@
   let hitStop = 0;             // 히트스톱(타격 정지) 잔여 시간 — 큰 타격 순간 짧게 정지
   let hurtScreenFlash = 0;     // 피격 시 화면 붉은 플래시 잔여 시간
   let evolveFlash = 0;         // 무기 진화 시 화면 금빛 섬광 잔여 시간
+  let rings = [];              // 처치·타격 충격파 링 (시각 전용)
   let lastMoveDir = { dx: 1, dy: 0 }; // 마지막 이동 방향 (대쉬 방향 결정)
   let itemBoxes     = [];        // 월드에 존재하는 아이템 박스
   let hybridTowers  = [];
@@ -422,6 +423,7 @@
     hitStop = 0;
     hurtScreenFlash = 0;
     evolveFlash = 0;
+    rings = [];
     lastMoveDir = { dx: 1, dy: 0 };
     itemBoxes     = [];
     hybridTowers  = [];
@@ -2333,9 +2335,16 @@
     }
     enemy.hp -= dmg;
     enemy.hurtFlash = 0.12;
+    // 넉백: 피격 충격으로 플레이어 방향 반대로 밀림 (보스는 10% 강도)
+    if (player) {
+      const kbAng = Math.atan2(enemy.y - player.y, enemy.x - player.x);
+      const kbStr = Math.min(dmg * 1.5, enemy.isBoss ? 20 : 200) * (enemy.isBoss ? 0.1 : 1);
+      enemy.knockVx = (enemy.knockVx || 0) + Math.cos(kbAng) * kbStr;
+      enemy.knockVy = (enemy.knockVy || 0) + Math.sin(kbAng) * kbStr;
+    }
     if (dmg >= 8) {
       const rounded = Math.round(dmg);
-      const isCrit = dmg >= 80;
+      const isCrit = dmg >= 60;   // 치명타 임계값 완화 (더 자주 오렌지 숫자)
       // 데미지 등급: 0=소(흰색) 1=중(노랑) 2=치명타(주황·대형)
       const tier = isCrit ? 2 : (rounded >= 25 ? 1 : 0);
       damageNumbers.push({
@@ -2346,10 +2355,15 @@
         crit: isCrit,
         tier,
       });
-      // 큰 치명타 → 짧은 히트스톱 + 효과음 (살아있지 않은 적엔 생략)
+      // 타격 스파크 + 충격파 링 (크릿은 더 강렬하게)
+      const sparkCol = isCrit ? '#ff8c00' : (tier === 1 ? '#ffd700' : '#e8e8e8');
+      const sparkN = isCrit ? 6 : (tier === 1 ? 4 : 2);
+      for (let s = 0; s < sparkN; s++) {
+        spawnParticle(enemy.x, enemy.y, sparkCol, 2 + Math.random() * 4, 0.12 + Math.random() * 0.08);
+      }
       if (isCrit && enemy.hp > 0) {
-        hitStop = Math.max(hitStop, 0.045);
-        screenShake = Math.min(screenShake + 0.2, 0.5);
+        rings.push({ x: enemy.x, y: enemy.y, r: 6, maxR: 36, life: 0.18, maxLife: 0.18, color: '#ff8c00' });
+        screenShake = Math.min(screenShake + 0.18, 0.5);
         SFX.crit();
       }
     }
@@ -2376,9 +2390,22 @@
     comboCount++;
     comboTimer = 1.5;
     awardComboMilestone(enemy);
-    const pCount = enemy.isBoss ? 30 : 3 + enemy.tier * 3;
+
+    // 연속 처치 스트릭 텍스트 (빠른 연속 처치 보상 피드백)
+    const STREAK_TEXTS = ['', '', '💀 DOUBLE KILL!', '💀 TRIPLE KILL!', '⚔ QUAD KILL!', '🔥 RAMPAGE!'];
+    if (comboCount >= 2 && comboCount <= 5) {
+      floatTexts.push({ x: enemy.x, y: enemy.y - 36, text: STREAK_TEXTS[comboCount], life: 1.1, maxLife: 1.1, color: comboCount >= 5 ? '#ff2222' : '#ff6b35', size: 13 + comboCount });
+    }
+
+    // 처치 충격파 링 + 강화 파티클
+    const deathR = enemy.size * 5 + 30 + (enemy.tier * 20);
+    rings.push({ x: enemy.x, y: enemy.y, r: enemy.size * 0.5, maxR: deathR, life: 0.38, maxLife: 0.38, color: enemy.color });
+    const pCount = enemy.isBoss ? 50 : (enemy.tier >= 2 ? 24 : 8 + enemy.tier * 8);
     for (let i = 0; i < pCount; i++) {
-      spawnParticle(enemy.x, enemy.y, enemy.color, (enemy.tier + 1) * 4 + Math.random() * 5, 0.3 + Math.random() * 0.4);
+      const big = i < pCount * 0.25;  // 상위 25%는 큼직한 파티클
+      spawnParticle(enemy.x, enemy.y, enemy.color,
+        big ? (enemy.tier + 2) * 7 + Math.random() * 8 : (enemy.tier + 1) * 4 + Math.random() * 5,
+        big ? 0.5 + Math.random() * 0.55 : 0.25 + Math.random() * 0.4);
     }
     if (enemy.isBoss) {
       bossActive = false;
@@ -3127,6 +3154,18 @@
         e.y += Math.sin(ang) * e.speed * rageMult * dt;
       }
 
+      // 피격 넉백 감속 처리 (빙결 중에는 적용 안 함)
+      if (!e.frozen && (e.knockVx || e.knockVy)) {
+        e.x += (e.knockVx || 0) * dt;
+        e.y += (e.knockVy || 0) * dt;
+        const kDecay = Math.exp(-10 * dt);
+        e.knockVx = (e.knockVx || 0) * kDecay;
+        e.knockVy = (e.knockVy || 0) * kDecay;
+        if (Math.abs(e.knockVx) < 0.1 && Math.abs(e.knockVy) < 0.1) {
+          e.knockVx = 0; e.knockVy = 0;
+        }
+      }
+
       if (player.invincible <= 0 && d < e.size + 12) {
         const contactDmg = e.isBoss ? 55 : [8, 18, 38][Math.min(e.tier, 2)];
         player.hp -= contactDmg * dt;
@@ -3548,6 +3587,25 @@
       ctx.restore();
     }
 
+    // 충격파 링 (처치·크릿 시각 피드백)
+    for (let i = rings.length - 1; i >= 0; i--) {
+      const rg = rings[i];
+      rg.life -= dt;
+      if (rg.life <= 0) { rings.splice(i, 1); continue; }
+      const t = 1 - rg.life / rg.maxLife;      // 0→1 (팽창 진행)
+      const r = rg.r + (rg.maxR - rg.r) * t;
+      ctx.globalAlpha = (1 - t) * 0.85;
+      ctx.strokeStyle = rg.color;
+      ctx.lineWidth = Math.max(0.5, 3 - t * 2.5);
+      ctx.shadowBlur = 8;
+      ctx.shadowColor = rg.color;
+      ctx.beginPath();
+      ctx.arc(rg.x, rg.y, r, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = 1;
+
     // 데미지 숫자 (월드 공간)
     ctx.textAlign = 'center';
     const DN_SIZE  = [12, 15, 21];
@@ -3731,14 +3789,24 @@
       ctx.fillRect(0, 0, W, H);
     }
 
-    // 콤보 표시
+    // 콤보 표시 — 단계별 색상·크기·타이틀 변화
     if (comboCount >= 5 && comboTimer > 0) {
-      const cPulse = 1 + Math.sin(elapsed * 14) * 0.08;
-      ctx.font = `bold ${Math.floor(26 * cPulse)}px sans-serif`;
+      // 콤보 티어: 0=노랑 1=주황 2=빨강 3=보라 4=빨강(깜빡)
+      const cTier = comboCount >= 200 ? 4 : comboCount >= 100 ? 3 : comboCount >= 50 ? 2 : comboCount >= 20 ? 1 : 0;
+      const CTIER_COL  = ['#f1c40f', '#f39c12', '#e74c3c', '#9b59b6', '#e74c3c'];
+      const CTIER_TAGS = ['', '', '⚡ FRENZY', '🔥 UNSTOPPABLE!', '💀 GODLIKE!!!'];
+      const pulseAmt = 0.07 + cTier * 0.03;
+      const cPulse = 1 + Math.sin(elapsed * (14 + cTier * 4)) * pulseAmt;
+      const baseSize = 22 + cTier * 4;
       ctx.textAlign = 'center';
-      ctx.fillStyle = comboCount >= 20 ? '#e74c3c' : comboCount >= 10 ? '#f39c12' : '#f1c40f';
-      ctx.shadowBlur = 14; ctx.shadowColor = ctx.fillStyle;
+      ctx.fillStyle = CTIER_COL[cTier];
+      ctx.shadowBlur = 14 + cTier * 8; ctx.shadowColor = ctx.fillStyle;
+      ctx.font = `bold ${Math.floor(baseSize * cPulse)}px sans-serif`;
       ctx.fillText(`COMBO ×${comboCount}!`, W / 2, 92);
+      if (CTIER_TAGS[cTier]) {
+        ctx.font = `bold ${Math.floor((11 + cTier * 2) * cPulse)}px sans-serif`;
+        ctx.fillText(CTIER_TAGS[cTier], W / 2, 108);
+      }
       ctx.shadowBlur = 0; ctx.textAlign = 'left';
     }
 
