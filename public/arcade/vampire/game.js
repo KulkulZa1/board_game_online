@@ -202,6 +202,14 @@
     noReviveClear: 180,
   };
 
+  // 정예(엘리트) 처치 시 떨어지는 즉시 발동 파워업 — 모달 없이 줍는 즉시 적용(핵앤슬래시 흐름 유지)
+  const POWERUP_POOL = [
+    { id: 'berserk', icon: '⚡', color: '#e74c3c', name: '광폭화', apply: (p) => { p.tempDmgMult = 2.0; p.tempDmgTimer = 8; } },
+    { id: 'haste',   icon: '👟', color: '#3498db', name: '쾌속',   apply: (p) => { p.tempSpeedMult = 1.5; p.tempSpeedTimer = 8; } },
+    { id: 'heal',    icon: '❤', color: '#2ecc71', name: '회복',   apply: (p) => { p.hp = Math.min(p.hp + p.maxHp * 0.4, p.maxHp); } },
+    { id: 'vacuum',  icon: '🧲', color: '#9b59b6', name: '흡수',   apply: (p) => { let s = 0; for (const g of xpGems) s += g.val; xpGems.length = 0; if (s > 0) gainXP(s); } },
+  ];
+
   // 랜덤 아이템 박스 — 40초마다 맵에 등장, 플레이어가 수집
   const ITEM_BOX_POOL = [
     { id: 'medkit',  icon: '💊', name: '긴급 치료',   apply: (p) => { p.hp = Math.min(p.hp + p.maxHp * 0.5, p.maxHp); } },
@@ -292,6 +300,7 @@
   let hurtScreenFlash = 0;     // 피격 시 화면 붉은 플래시 잔여 시간
   let evolveFlash = 0;         // 무기 진화 시 화면 금빛 섬광 잔여 시간
   let rings = [];              // 처치·타격 충격파 링 (시각 전용)
+  let powerups = [];           // 정예 처치 시 떨어지는 즉시 발동 파워업
   let lastMoveDir = { dx: 1, dy: 0 }; // 마지막 이동 방향 (대쉬 방향 결정)
   let itemBoxes     = [];        // 월드에 존재하는 아이템 박스
   let hybridTowers  = [];
@@ -466,6 +475,7 @@
     hurtScreenFlash = 0;
     evolveFlash = 0;
     rings = [];
+    powerups = [];
     lastMoveDir = { dx: 1, dy: 0 };
     itemBoxes     = [];
     hybridTowers  = [];
@@ -2201,7 +2211,7 @@
       const bRoll = Math.random();
       const behavior = (tier === 2 || (tier === 1 && bRoll < 0.4)) ? 'archer' : 'chase';
       const attackBase = behavior === 'archer' ? (tier === 2 ? 4.0 : 3.2) : 0;
-      enemies.push({
+      const newEnemy = {
         x: player.x + Math.cos(angle) * spawnDist,
         y: player.y + Math.sin(angle) * spawnDist,
         hp:    [30, 80, 200][tier] * difficulty * hpMult,
@@ -2219,8 +2229,25 @@
         attackBase,
         attackRange: behavior === 'archer' ? (tier === 2 ? 280 : 220) : 0,
         attackDmg: Math.round([10, 20, 38][tier] * (1 + elapsed / 500) * runDifficulty.enemyDmgMult),  // 적 공격력 완만 상승 (후반 위협 유지)
-      });
+      };
+      // 정예 승격 — tier1/2 중 6%가 정예로 등장. HP·보상·위협 강화, 처치 시 파워업 드롭
+      if (tier >= 1 && Math.random() < 0.06) {
+        newEnemy.elite = true;
+        newEnemy.eliteHue = Math.random() < 0.5 ? '#f1c40f' : '#ff7675';
+        newEnemy.hp *= 2.6; newEnemy.maxHp *= 2.6;
+        newEnemy.size += 4;
+        newEnemy.speed *= 1.1;
+        newEnemy.xpVal = Math.round(newEnemy.xpVal * 3);
+        newEnemy.attackDmg = Math.round(newEnemy.attackDmg * 1.25);
+      }
+      enemies.push(newEnemy);
     }
+  }
+
+  // 정예 처치 시 무작위 파워업 드롭
+  function dropPowerup(x, y) {
+    const def = POWERUP_POOL[Math.floor(Math.random() * POWERUP_POOL.length)];
+    powerups.push({ x, y, def, life: 16, maxLife: 16, pulseT: 0 });
   }
 
   function spawnSandboxEnemy(typeKey) {
@@ -2487,6 +2514,13 @@
       floatTexts.push({ x: enemy.x, y: enemy.y - 36, text: STREAK_TEXTS[comboCount], life: 1.1, maxLife: 1.1, color: comboCount >= 5 ? '#ff2222' : '#ff6b35', size: 13 + comboCount });
     }
     lastKillTime = elapsed;
+
+    // 정예 처치 — 파워업 드롭 + 알림
+    if (enemy.elite) {
+      dropPowerup(enemy.x, enemy.y);
+      floatTexts.push({ x: enemy.x, y: enemy.y - 30, text: '👑 정예 처치!', life: 1.6, maxLife: 1.6, color: '#f1c40f', size: 15 });
+      rings.push({ x: enemy.x, y: enemy.y, r: enemy.size, maxR: enemy.size * 7, life: 0.45, maxLife: 0.45, color: enemy.eliteHue || '#f1c40f' });
+    }
 
     // 처치 충격파 링 + 강화 파티클
     const deathR = enemy.size * 5 + 30 + (enemy.tier * 20);
@@ -3068,6 +3102,27 @@
       }
     }
 
+    // 파워업 수집 (즉시 적용 — 모달 없음)
+    for (let i = powerups.length - 1; i >= 0; i--) {
+      const pu = powerups[i];
+      pu.life -= dt;
+      pu.pulseT += dt;
+      if (pu.life <= 0) { powerups.splice(i, 1); continue; }
+      // 획득 반경 안이면 플레이어 쪽으로 끌어당김 (자석 효과)
+      if (dist(pu, player) < player.xpRange * 0.9) {
+        const a = Math.atan2(player.y - pu.y, player.x - pu.x);
+        pu.x += Math.cos(a) * 280 * dt;
+        pu.y += Math.sin(a) * 280 * dt;
+      }
+      if (dist(pu, player) < 22 || (allyPlayer && dist(pu, allyPlayer) < 22)) {
+        pu.def.apply(player);
+        floatTexts.push({ text: `${pu.def.icon} ${pu.def.name}!`, life: 1.5, maxLife: 1.5, screenSpace: true, color: pu.def.color, size: 18 });
+        for (let k = 0; k < 12; k++) spawnParticle(pu.x, pu.y, pu.def.color, 4 + Math.random() * 4, 0.4);
+        SFX.levelup();
+        powerups.splice(i, 1);
+      }
+    }
+
     // 임시 버프 타이머
     if (player.tempDmgTimer > 0) { player.tempDmgTimer -= dt; if (player.tempDmgTimer <= 0) { player.tempDmgMult = 1; player.tempDmgTimer = 0; } }
     if (player.tempSpeedTimer > 0) { player.tempSpeedTimer -= dt; if (player.tempSpeedTimer <= 0) { player.tempSpeedMult = 1; player.tempSpeedTimer = 0; } }
@@ -3427,6 +3482,29 @@
       ctx.restore();
     }
 
+    // 파워업 젬 렌더 (정예 드롭)
+    for (const pu of powerups) {
+      const pulse = 1 + Math.sin(pu.pulseT * 6) * 0.16;
+      const fade = Math.min(pu.life * 0.5, 1);
+      ctx.save();
+      ctx.translate(pu.x, pu.y);
+      ctx.globalAlpha = fade;
+      ctx.shadowBlur = 16;
+      ctx.shadowColor = pu.def.color;
+      ctx.fillStyle = pu.def.color;
+      ctx.beginPath();
+      ctx.arc(0, 0, 11 * pulse, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.font = '13px serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(pu.def.icon, 0, 0);
+      ctx.restore();
+    }
+    ctx.globalAlpha = 1;
+    ctx.textBaseline = 'alphabetic';
+
     // 파티클
     for (const tower of hybridTowers) {
       const def = HYBRID_TOWER_TYPES.find(t => t.id === tower.type) || HYBRID_TOWER_TYPES[0];
@@ -3663,6 +3741,27 @@
       }
       ctx.shadowBlur = 0;
       ctx.restore();
+
+      // 정예 오라 — 맥동하는 이중 링 + 왕관 (회전 변환 없이 별도 렌더)
+      if (e.elite && e.spawnT <= 0) {
+        ctx.save();
+        ctx.translate(e.x, e.y);
+        const er = e.size + 6 + Math.sin(elapsed * 5) * 2;
+        ctx.strokeStyle = e.eliteHue || '#f1c40f';
+        ctx.shadowBlur = 14;
+        ctx.shadowColor = e.eliteHue || '#f1c40f';
+        ctx.globalAlpha = 0.85;
+        ctx.lineWidth = 2.5;
+        ctx.beginPath(); ctx.arc(0, 0, er, 0, Math.PI * 2); ctx.stroke();
+        ctx.globalAlpha = 0.4;
+        ctx.beginPath(); ctx.arc(0, 0, er + 4, 0, Math.PI * 2); ctx.stroke();
+        ctx.shadowBlur = 0;
+        ctx.globalAlpha = 1;
+        ctx.font = '13px serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('👑', 0, -e.size - 11);
+        ctx.restore();
+      }
 
       // 보스 공격 예비 동작 경고 (telegraph) — 팽창하는 붉은 경고원
       if (e.isBoss && e.windupActive && e.windupTimer > 0) {
