@@ -3334,6 +3334,12 @@
       dn.y -= 40 * dt;
     }
 
+    // 충격파 링 수명 업데이트 (그리기는 render에서, 수명 갱신은 여기서)
+    for (let i = rings.length - 1; i >= 0; i--) {
+      rings[i].life -= dt;
+      if (rings[i].life <= 0) rings.splice(i, 1);
+    }
+
     // XP 수집
     for (let i = xpGems.length - 1; i >= 0; i--) {
       const g = xpGems[i];
@@ -3700,11 +3706,9 @@
       ctx.restore();
     }
 
-    // 충격파 링 (처치·크릿 시각 피드백)
-    for (let i = rings.length - 1; i >= 0; i--) {
+    // 충격파 링 그리기 (수명 갱신은 update에서 처리 — render는 그리기 전용)
+    for (let i = 0; i < rings.length; i++) {
       const rg = rings[i];
-      rg.life -= dt;
-      if (rg.life <= 0) { rings.splice(i, 1); continue; }
       const t = 1 - rg.life / rg.maxLife;      // 0→1 (팽창 진행)
       const r = rg.r + (rg.maxR - rg.r) * t;
       ctx.globalAlpha = (1 - t) * 0.85;
