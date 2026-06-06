@@ -168,6 +168,14 @@ Compounding ensures the run eventually ends even though tower levels cap at 5
 - **Keep curves here in sync with code.** Each formula above maps to a labelled
   comment in `game.js` / `config.js`.
 - TD is config-driven: prefer editing `config.js` (`TD_CONFIG`) over `game.js`.
+- TD now starts with 160g so the first wave supports an actual combo decision
+  instead of a single-tower wait state.
+- TD Meteor is an active panic button, not baseline DPS. Tune `METEOR.cost`,
+  `cooldownSec`, `radius`, and `damage` together so it saves broken lanes but
+  cannot replace tower placement.
+- TD perfect-wave rewards use `waveLeaks === 0` and should remain small
+  capacity bonuses; they are meant to make clean defense satisfying, not to
+  trivialize later pressure.
 - VPS is currently hardcoded in `game.js` (see ARCHITECTURE plan for the
   config-extraction proposal).
 - When changing a damage/HP number, re-derive the **time-to-kill** target
