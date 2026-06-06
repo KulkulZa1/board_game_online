@@ -115,6 +115,11 @@ setTimeout(() => {
     { path: '/arcade/plant/',    label: '/arcade/plant/ → 200',    expect: 200 },
     { path: '/arcade/tower-defense/', label: '/arcade/tower-defense/ → 200', expect: 200 },
     { path: '/arcade/tower-defense/runtime/game.js', label: '/arcade/tower-defense/runtime/game.js → 200', expect: 200 },
+    // VPS 분리 모듈 — game.js 보다 먼저 로드되어야 하므로 서빙 여부 확인
+    { path: '/arcade/vampire/vps-config.js',    label: '/arcade/vampire/vps-config.js → 200',    expect: 200 },
+    { path: '/arcade/vampire/vps-sfx.js',       label: '/arcade/vampire/vps-sfx.js → 200',       expect: 200 },
+    { path: '/arcade/vampire/vps-utils.js',     label: '/arcade/vampire/vps-utils.js → 200',     expect: 200 },
+    { path: '/arcade/vampire/vps-equipment.js', label: '/arcade/vampire/vps-equipment.js → 200', expect: 200 },
   ];
 
   let pending = ROUTES.length + 1; // +1 for JSON structure check
