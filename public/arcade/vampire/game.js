@@ -78,6 +78,7 @@
     { id: 'crit',     name: '⚡ 치명타',       desc: '15% 확률 2배 피해 (중첩 가능)',  max: 6,    apply: (p) => { p.critChance = (p.critChance || 0) + 0.15; } },
     { id: 'pierce_up',name: '🔱 관통 강화',   desc: '화살·부메랑 관통 +2, 번개 연쇄 +3',           max: null, apply: (p) => { p.pierceBonus = (p.pierceBonus || 0) + 2; } },
     { id: 'regen',    name: '💚 체력 재생',   desc: '초당 최대 체력 2% 자동 회복',    max: 5,    apply: (p) => { p.regenRate = (p.regenRate || 0) + 0.02; } },
+    { id: 'range_up', name: '🎯 사거리 확장', desc: '모든 무기 사거리·AoE +18%',      max: 5,    apply: (p) => { p.rangeBonus = (p.rangeBonus || 1) * 1.18; } },
   ];
 
   // 패시브 시너지 — 두 패시브를 조합하면 특수 효과 해금
@@ -342,6 +343,8 @@
   let milestones    = new Set(); // 이미 알림한 분 단위 마일스톤
   let waveCount          = 0;     // 총 웨이브 카운터 (horde 판정)
   let freeRerollUsed     = false; // 현재 선택창 무료 리롤 사용 여부 (창마다 초기화)
+  let gearDrops          = [];    // 월드에 존재하는 장비 드롭
+  let equipUiVisible     = false; // 장비 UI 표시 여부
   let currentChoiceBuilder = null; // 현재 선택지 생성 함수 (리롤 시 재호출)
   let audioCtx = null;
   let evolutionBannerTimer = null;
@@ -479,6 +482,11 @@
       critChance: 0,        // 치명타 확률 (crit 패시브)
       pierceBonus: 0,       // 화살·부메랑 추가 관통 (pierce_up 패시브)
       regenRate: 0,         // 초당 체력 재생 비율 (regen 패시브)
+      rangeBonus: 1,        // 사거리·AoE 배율 (range_up 패시브 + 장비)
+      equip: { helm: null, armor: null, boots: null, ring: null },
+      equipStats: {},       // 캐시: 장비 합산 스탯
+      setEffects: [],       // 활성 세트 효과 목록
+      crossEffects: [],     // 활성 교차 시너지 목록
     };
     enemies    = [];
     projectiles= [];
@@ -526,6 +534,8 @@
     milestones    = new Set();
     waveCount     = 0;
     runRewardsGranted = false;
+    gearDrops     = [];
+    equipUiVisible = false;
 
     // 시작 무기
     character.startWeapons.forEach(id => addWeapon(id));
@@ -2173,6 +2183,11 @@
         doReroll();
       }
     }
+    if (e.key === 'e' || e.key === 'E') {
+      e.preventDefault();
+      toggleEquipUI();
+      return;
+    }
     // ? 키로 조합 가이드 토글
     if (e.key === '?' || e.key === 'h') toggleComboGuide();
     // ESC로 조합 가이드 닫기
@@ -2431,6 +2446,49 @@
     });
   }
 
+  // ── 장비 시스템 ─────────────────────────────────────────────────
+  function refreshEquipCache() {
+    if (!player || !window.VPS || !window.VPS.equipment) return;
+    const eq = window.VPS.equipment;
+    const combined = { maxHp: 0, dmgMult: 1, cdMult: 1, speedMult: 1, xpRange: 1, rangeBonus: 1, critChance: 0 };
+    for (const slot of eq.SLOTS) {
+      const item = player.equip[slot];
+      if (!item) continue;
+      const s = eq.getEquipStats(item);
+      combined.maxHp      += (s.maxHp      || 0);
+      combined.dmgMult    *= (s.dmgMult    || 1);
+      combined.cdMult     *= (s.cdMult     || 1);
+      combined.speedMult  *= (s.speedMult  || 1);
+      combined.xpRange    *= (s.xpRange    || 1);
+      combined.rangeBonus *= (s.rangeBonus || 1);
+      combined.critChance += (s.critChance || 0);
+    }
+    // Apply set bonuses
+    const setEffects = eq.getActiveSetEffects(player.equip);
+    for (const se of setEffects) {
+      if (se.bonus.effect === 'dmgMult')   combined.dmgMult  *= se.bonus.val;
+      if (se.bonus.effect === 'cdMult')    combined.cdMult   *= se.bonus.val;
+      if (se.bonus.effect === 'speedMult') combined.speedMult *= se.bonus.val;
+      if (se.bonus.effect === 'maxHp')     combined.maxHp    += se.bonus.val;
+    }
+    player.equipStats   = combined;
+    player.setEffects   = setEffects;
+    player.crossEffects = eq.getActiveCrossEffects(player.equip);
+  }
+
+  function equipItem(item) {
+    if (!player || !item) return;
+    player.equip[item.slot] = item;
+    refreshEquipCache();
+    // Apply maxHp change
+    const hpGain = player.equipStats.maxHp || 0;
+    player.maxHp = BASE_HP + hpGain;
+    player.hp    = Math.min(player.hp + (hpGain > 0 ? hpGain * 0.5 : 0), player.maxHp);
+    updateHUD();
+    floatTexts.push({ text: '⚔ 장비 장착!', life: 1.4, maxLife: 1.4, screenSpace: true, color: '#f39c12', size: 15 });
+    renderEquipUI();
+  }
+
   // ── 투사체 발사 ─────────────────────────────────────────────────
   function fireWeapon(id, dt) {
     if (player.weaponCDs[id] === undefined) return;   // 미보유 무기 무시
@@ -2440,14 +2498,16 @@
     const def    = WEAPON_DEFS[id];
     const lvl    = player.weaponLevels[id] || 1;
     const lvlMul = 1 + 0.22 * (lvl - 1);              // 레벨당 데미지 +22%
-    const cd     = def.cd * player.cdMult;
-    const dmg    = def.dmg * player.dmgMult * (player.tempDmgMult || 1) * lvlMul;
+    const eqStats = (player.equipStats) || {};
+    const cd     = def.cd * player.cdMult * (eqStats.cdMult || 1);
+    const dmg    = def.dmg * player.dmgMult * (player.tempDmgMult || 1) * lvlMul * (eqStats.dmgMult || 1);
+    const range  = def.range * (player.rangeBonus || 1) * (eqStats.rangeBonus || 1);
     player.weaponCDs[id] = cd;
 
     if (id === 'orb' || id === 'blackhole') {
       const evolved  = id === 'blackhole';
       const orbCount = (evolved ? 5 : 3) + Math.floor((lvl - 1) / 2); // 레벨업 시 궤도 추가
-      const R = def.range;
+      const R = range;
       for (let i = 0; i < orbCount; i++) {
         const baseAngle = (elapsed * 1.8) + (i / orbCount) * Math.PI * 2;
         projectiles.push({ type: evolved ? 'blackhole' : 'orb', x: player.x, y: player.y, angle: baseAngle, r: evolved ? 12 : 8, dmg, life: cd + 0.05, orbIdx: i, orbTotal: orbCount, R });
@@ -2461,27 +2521,27 @@
       for (let s = 0; s < shots; s++) {
         const spread = (s - (shots - 1) / 2) * 0.12;
         const ang = baseAng + spread;
-        projectiles.push({ type: 'arrow', x: player.x, y: player.y, vx: Math.cos(ang) * 420, vy: Math.sin(ang) * 420, r: 5, dmg, life: def.range / 420, pierce: (evolved ? 6 : 3) + lvl + (player.pierceBonus || 0) });
+        projectiles.push({ type: 'arrow', x: player.x, y: player.y, vx: Math.cos(ang) * 420, vy: Math.sin(ang) * 420, r: 5, dmg, life: range / 420, pierce: (evolved ? 6 : 3) + lvl + (player.pierceBonus || 0) });
       }
     } else if (id === 'nova' || id === 'supernova') {
-      spawnExplosion(player.x, player.y, def.range, dmg, id === 'supernova');
+      spawnExplosion(player.x, player.y, range, dmg, id === 'supernova');
     } else if (id === 'shield' || id === 'aegis') {
       const dur = (id === 'aegis' ? 2.2 : 1.5) + 0.15 * (lvl - 1);
       player.invincible = Math.max(player.invincible, dur);
-      if (id === 'aegis') aegisReflect(dmg, def.range);
+      if (id === 'aegis') aegisReflect(dmg, range);
       spawnParticle(player.x, player.y, '#3498db', 24, 0.8);
     } else if (id === 'laser' || id === 'deathray') {
       const evolved = id === 'deathray';
       const target  = nearestEnemy();
       const ang = target ? Math.atan2(target.y - player.y, target.x - player.x) : 0;
-      projectiles.push({ type: evolved ? 'deathray' : 'laser', x: player.x, y: player.y, angle: ang, r: 6, dmg, life: 0.45, length: def.range });
+      projectiles.push({ type: evolved ? 'deathray' : 'laser', x: player.x, y: player.y, angle: ang, r: 6, dmg, life: 0.45, length: range });
     } else if (id === 'boomerang' || id === 'cyclone') {
       // 부메랑: 이동 방향(또는 가장 가까운 적 방향)으로 발사 후 반환, 왕복 타격
       const evolved = id === 'cyclone';
       const count   = evolved ? 3 : 1;
       const pierce  = (evolved ? 99 : 4) + (player.pierceBonus || 0);
       const spd     = 320;
-      const halfLife = def.range / spd;
+      const halfLife = range / spd;
       const baseAng  = nearestEnemy()
         ? Math.atan2(nearestEnemy().y - player.y, nearestEnemy().x - player.x)
         : Math.atan2(lastMoveDir.dy, lastMoveDir.dx);
@@ -2508,7 +2568,7 @@
         for (const e of enemies) {
           if (hit.has(e)) continue;
           const d = dist({ x: cx, y: cy }, e);
-          if (d < def.range && d < bd) { bd = d; best = e; }
+          if (d < range && d < bd) { bd = d; best = e; }
         }
         if (!best) break;
         hit.add(best);
@@ -2791,6 +2851,16 @@
     if (!enemy.isBoss && Math.random() < 0.05 && player.rerolls < 9) {
       player.rerolls++;
       floatTexts.push({ x: enemy.x, y: enemy.y - 20, text: '🎲 리롤권 획득!', life: 1.8, maxLife: 1.8, color: '#a29bfe', size: 13 });
+    }
+    // 장비 드롭: 보스 35%, 일반 몬스터 4%
+    if (window.VPS && window.VPS.equipment) {
+      const dropChance = enemy.isBoss ? 0.35 : 0.04;
+      if (Math.random() < dropChance) {
+        const eq = window.VPS.equipment;
+        const slot = eq.SLOTS[Math.floor(Math.random() * eq.SLOTS.length)];
+        const item = eq.rollItem(slot);
+        gearDrops.push({ x: enemy.x, y: enemy.y, item, life: 18, pulseT: 0 });
+      }
     }
     if (!enemy.isBoss && kills % 35 === 0 && player.towerCharges < player.maxTowerCharges) {
       player.towerCharges++;
@@ -3389,6 +3459,20 @@
       }
     }
 
+    // 장비 드롭 업데이트 및 수집
+    for (let i = gearDrops.length - 1; i >= 0; i--) {
+      const gd = gearDrops[i];
+      gd.life -= dt;
+      gd.pulseT = (gd.pulseT || 0) + dt;
+      if (gd.life <= 0) { gearDrops.splice(i, 1); continue; }
+      if (dist(gd, player) < 28) {
+        for (let k = 0; k < 8; k++) spawnParticle(gd.x, gd.y, '#f39c12', 4 + Math.random() * 4, 0.4);
+        gearDrops.splice(i, 1);
+        showGearPickupModal(gd.item);
+        break;
+      }
+    }
+
     // 파워업 수집 (즉시 적용 — 모달 없음)
     for (let i = powerups.length - 1; i >= 0; i--) {
       const pu = powerups[i];
@@ -3794,6 +3878,33 @@
       ctx.textBaseline = 'middle';
       ctx.fillText('📦', 0, 0);
       ctx.restore();
+    }
+
+    // 장비 드롭 렌더
+    if (window.VPS && window.VPS.equipment) {
+      const eq = window.VPS.equipment;
+      for (const gd of gearDrops) {
+        const pulse = 0.8 + Math.sin((gd.pulseT || 0) * 4) * 0.2;
+        const fade  = Math.min(gd.life * 0.3, 1);
+        const grade = eq.getGradeData(gd.item.grade);
+        const base  = eq.getItemBase(gd.item);
+        ctx.save();
+        ctx.translate(gd.x, gd.y);
+        ctx.globalAlpha = fade;
+        ctx.shadowBlur = 20;
+        ctx.shadowColor = grade.color;
+        ctx.strokeStyle = grade.color;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(0, 0, 14 * pulse, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+        ctx.font = '16px serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(base.icon, 0, 0);
+        ctx.restore();
+      }
     }
 
     // 파워업 젬 렌더 (정예 드롭)
@@ -4751,6 +4862,114 @@
     lastTime = performance.now();
     frameId = requestAnimationFrame(loop);
   });
+
+  // ── 장비 UI ─────────────────────────────────────────────────────
+  function buildEquipUIHTML() {
+    if (!player || !window.VPS || !window.VPS.equipment) return '';
+    const eq = window.VPS.equipment;
+    const slotNames = { helm: '투구', armor: '갑옷', boots: '장화', ring: '반지' };
+    let html = '<div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center;">';
+    for (const slot of eq.SLOTS) {
+      const item = player.equip[slot];
+      let content = `<div style="font-size:11px;color:#888;">${slotNames[slot]}<br><span style="font-size:20px;">❌</span><br><span style="color:#555;">비어있음</span></div>`;
+      if (item) {
+        const grade = eq.getGradeData(item.grade);
+        const base  = eq.getItemBase(item);
+        const stats = eq.getEquipStats(item);
+        const statLines = [];
+        if (stats.maxHp)      statLines.push(`❤ HP +${Math.round(stats.maxHp)}`);
+        if (stats.dmgMult && stats.dmgMult !== 1) statLines.push(`⚔ 데미지 ×${stats.dmgMult.toFixed(2)}`);
+        if (stats.cdMult  && stats.cdMult  !== 1) statLines.push(`⏩ CD ×${stats.cdMult.toFixed(2)}`);
+        if (stats.speedMult && stats.speedMult !== 1) statLines.push(`👟 속도 ×${stats.speedMult.toFixed(2)}`);
+        if (stats.rangeBonus && stats.rangeBonus !== 1) statLines.push(`🎯 사거리 ×${stats.rangeBonus.toFixed(2)}`);
+        if (stats.xpRange && stats.xpRange !== 1) statLines.push(`🧲 XP범위 ×${stats.xpRange.toFixed(2)}`);
+        if (stats.critChance) statLines.push(`⚡ 치명 +${(stats.critChance*100).toFixed(0)}%`);
+        const gemIcons = (item.gems || []).map(g => g.icon || '').join('');
+        content = `<div style="font-size:11px;color:#ccc;">${slotNames[slot]}<br><span style="font-size:20px;">${base.icon}</span><br><span style="color:${grade.color};font-weight:bold;">[${grade.name}]</span> ${base.name}<br><span style="color:#aaa;font-size:10px;">${statLines.join(' · ')}</span>${gemIcons ? `<br><span style="font-size:13px;">${gemIcons}</span>` : ''}</div>`;
+      }
+      html += `<div style="background:#1a2035;border:1px solid #2a3050;border-radius:8px;padding:10px;min-width:90px;text-align:center;">${content}</div>`;
+    }
+    html += '</div>';
+    const bonuses = eq.getActiveBonusDescriptions(player.equip);
+    if (bonuses.length) {
+      html += `<div style="margin-top:10px;padding:8px;background:#0d1628;border-radius:6px;font-size:11px;color:#f1c40f;">${bonuses.map(b => `✦ ${b}`).join('<br>')}</div>`;
+    }
+    return html;
+  }
+
+  function renderEquipUI() {
+    const panel = document.getElementById('equipPanel');
+    if (panel) panel.innerHTML = buildEquipUIHTML();
+  }
+
+  function toggleEquipUI() {
+    if (!player) return;
+    equipUiVisible = !equipUiVisible;
+    let panel = document.getElementById('equipPanel');
+    if (!panel) {
+      panel = document.createElement('div');
+      panel.id = 'equipPanel';
+      panel.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#111827;border:2px solid #39445a;border-radius:12px;padding:18px;z-index:900;max-width:420px;width:94%;color:#fff;font-family:sans-serif;';
+      panel.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><strong>⚔ 장비 창 (E키)</strong><button id="equipClose" style="background:none;border:none;color:#fff;font-size:20px;cursor:pointer;">✕</button></div><div id="equipBody"></div>`;
+      document.body.appendChild(panel);
+      document.getElementById('equipClose').addEventListener('click', () => toggleEquipUI());
+    }
+    panel.style.display = equipUiVisible ? 'block' : 'none';
+    if (equipUiVisible) {
+      const body = document.getElementById('equipBody');
+      if (body) body.innerHTML = buildEquipUIHTML();
+      if (state === 'playing') setPaused(true);
+    } else {
+      if (state === 'paused') setPaused(false);
+    }
+  }
+
+  function showGearPickupModal(item) {
+    if (!item || !window.VPS || !window.VPS.equipment) return;
+    const eq = window.VPS.equipment;
+    const grade = eq.getGradeData(item.grade);
+    const base  = eq.getItemBase(item);
+    const stats = eq.getEquipStats(item);
+    const statLines = [];
+    if (stats.maxHp)      statLines.push(`❤ HP +${Math.round(stats.maxHp)}`);
+    if (stats.dmgMult && stats.dmgMult !== 1) statLines.push(`⚔ 데미지 ×${stats.dmgMult.toFixed(2)}`);
+    if (stats.cdMult  && stats.cdMult  !== 1) statLines.push(`⏩ CD ×${stats.cdMult.toFixed(2)}`);
+    if (stats.speedMult && stats.speedMult !== 1) statLines.push(`👟 속도 ×${stats.speedMult.toFixed(2)}`);
+    if (stats.rangeBonus && stats.rangeBonus !== 1) statLines.push(`🎯 사거리 ×${stats.rangeBonus.toFixed(2)}`);
+    if (stats.critChance) statLines.push(`⚡ 치명 +${(stats.critChance*100).toFixed(0)}%`);
+    const gemIcons = (item.gems || []).map(g => g.icon || '').join(' ');
+
+    let modal = document.getElementById('gearModal');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'gearModal';
+      modal.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#111827;border:2px solid #39445a;border-radius:12px;padding:20px;z-index:950;max-width:340px;width:92%;color:#fff;font-family:sans-serif;text-align:center;';
+      document.body.appendChild(modal);
+    }
+    modal.innerHTML = `
+      <div style="font-size:32px;">${base.icon}</div>
+      <div style="color:${grade.color};font-weight:bold;font-size:1.1em;">[${grade.name}] ${base.name}</div>
+      <div style="color:#aaa;font-size:12px;margin:6px 0;">${statLines.join(' · ')}</div>
+      ${gemIcons ? `<div style="font-size:16px;">${gemIcons}</div>` : ''}
+      <div style="display:flex;gap:10px;justify-content:center;margin-top:14px;">
+        <button id="gearEquip" style="background:#2563eb;border:none;color:#fff;padding:8px 20px;border-radius:8px;cursor:pointer;font-size:14px;">장착</button>
+        <button id="gearDrop" style="background:#374151;border:none;color:#fff;padding:8px 20px;border-radius:8px;cursor:pointer;font-size:14px;">버리기</button>
+      </div>
+    `;
+    modal.style.display = 'block';
+    if (state === 'playing') setPaused(true);
+
+    document.getElementById('gearEquip').onclick = () => {
+      modal.style.display = 'none';
+      equipItem(item);
+      if (state === 'paused') setPaused(false);
+    };
+    document.getElementById('gearDrop').onclick = () => {
+      modal.style.display = 'none';
+      floatTexts.push({ text: '🗑 버림', life: 1.0, maxLife: 1.0, screenSpace: true, color: '#888', size: 13 });
+      if (state === 'paused') setPaused(false);
+    };
+  }
 
   // 첫 프레임 시작
   ensureStartPanels();
