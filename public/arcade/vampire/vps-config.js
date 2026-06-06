@@ -115,6 +115,13 @@
     },
   ];
 
+  // 대시 슬래시 강화 모드 — 레벨업 시 선택 가능, 최대 3스택
+  const SLASH_SUPPORT_DEFS = [
+    { id: 'cleave',  name: 'Cleave Edge',  desc: '+18% dash-slash damage and a wider cutting path.', max: 3 },
+    { id: 'rupture', name: 'Rupture Mark', desc: 'Dash-hit enemies bleed, then burst when killed.', max: 3 },
+    { id: 'echo',    name: 'Echo Step',    desc: 'Dash leaves delayed after-slashes along your path.', max: 3 },
+  ];
+
   const WEAPON_POOL = ['orb', 'arrow', 'nova', 'shield', 'laser', 'boomerang', 'chain'];
   const META_KEY = 'vps_meta_v2';
   const RUN_SNAPSHOT_KEY = 'vps_run_snapshot_v1';
@@ -200,7 +207,7 @@
     PLAYER_SPEED, BASE_HP, WAVE_INTERVAL, MAX_ENEMIES, DASH_COOLDOWN, DASH_DMG, DASH_RANGE,
     SURVIVE_GOAL, BOSS_INTERVAL, ITEM_BOX_INTERVAL, ITEM_BOX_LIFETIME, HORDE_WAVE_EVERY,
     MAX_WEAPON_LEVEL, MAX_WEAPONS, COMBO_MILESTONES,
-    WEAPON_DEFS, EVOLUTION_DEFS, PASSIVE_POOL, SYNERGY_DEFS, WEAPON_POOL,
+    WEAPON_DEFS, EVOLUTION_DEFS, PASSIVE_POOL, SYNERGY_DEFS, SLASH_SUPPORT_DEFS, WEAPON_POOL,
     META_KEY, RUN_SNAPSHOT_KEY, RUN_SNAPSHOT_MAX_AGE_MS, RUN_SNAPSHOT_INTERVAL,
     CHARACTER_DEFS, DIFFICULTY_DEFS, META_UPGRADE_DEFS, MAP_DEFS, START_BOOST_COST,
     HYBRID_TOWER_TYPES, MAX_HYBRID_TOWERS, TOWER_RECHARGE_SECONDS, ACHIEVEMENT_REWARDS,
