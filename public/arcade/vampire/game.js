@@ -98,6 +98,7 @@
   let particles = [];
   let playerTrail = [];        // 플레이어 이동 잔상 (질주감 연출, 최대 10개)
   let chainExplosions = [];
+  let slashEchoes = [];
   let enemyProjectiles = [];   // 적이 발사한 투사체
   let elapsed = 0;
   let kills = 0;
@@ -270,6 +271,7 @@
       towerCharges: 2,
       maxTowerCharges: 4,
       towersPlaced: 0,
+      slashMods: {},
       lowestHpPct: 1,
       rerolls: 0,          // 추가 리롤권 (몬스터 드롭)
       critChance: 0,        // 치명타 확률 (crit 패시브)
@@ -287,6 +289,7 @@
     particles  = [];
     playerTrail = [];
     chainExplosions = [];
+    slashEchoes = [];
     enemyProjectiles = [];
     elapsed    = 0;
     kills      = 0;
@@ -492,6 +495,43 @@
     return pv.max != null && passiveLevel(pv.id) >= pv.max;
   }
 
+  function slashModLevel(id) {
+    return player && player.slashMods ? (player.slashMods[id] || 0) : 0;
+  }
+
+  function applySlashSupport(def) {
+    if (!player.slashMods) player.slashMods = {};
+    const current = slashModLevel(def.id);
+    if (current >= def.max) return;
+    player.slashMods[def.id] = current + 1;
+    renderWeaponSlots();
+    floatTexts.push({
+      text: `SLASH SUPPORT: ${def.name}`,
+      life: 1.8,
+      maxLife: 1.8,
+      screenSpace: true,
+      color: '#f8c8ff',
+      size: 17,
+    });
+  }
+
+  function slashStats() {
+    const cleave = slashModLevel('cleave');
+    const rupture = slashModLevel('rupture');
+    const echo = slashModLevel('echo');
+    return {
+      cleave,
+      rupture,
+      echo,
+      range: DASH_RANGE + cleave * 18,
+      width: 26 + cleave * 9,
+      damageMult: 1 + cleave * 0.18 + Math.min(comboCount, 30) * 0.01,
+      ruptureDpsMult: rupture ? 0.16 + rupture * 0.08 : 0,
+      ruptureTime: rupture ? 1.8 + rupture * 0.35 : 0,
+      echoCount: echo,
+    };
+  }
+
   // 시너지 조건 충족 여부 확인
   function hasSynergy(id) {
     if (!player) return false;
@@ -693,6 +733,7 @@
       xpGems: cloneForSnapshot(xpGems),
       itemBoxes: cloneForSnapshot(itemBoxes),
       hybridTowers: cloneForSnapshot(hybridTowers),
+      slashEchoes: cloneForSnapshot(slashEchoes),
       enemyProjectiles: cloneForSnapshot(enemyProjectiles),
       damageNumbers: cloneForSnapshot(damageNumbers),
       floatTexts: cloneForSnapshot(floatTexts.filter(text => !text.screenSpace)),
@@ -764,6 +805,7 @@
     chainExplosions = [];
     itemBoxes = Array.isArray(snapshot.itemBoxes) ? snapshot.itemBoxes : [];
     hybridTowers = Array.isArray(snapshot.hybridTowers) ? snapshot.hybridTowers : [];
+    slashEchoes = Array.isArray(snapshot.slashEchoes) ? snapshot.slashEchoes : [];
     enemyProjectiles = Array.isArray(snapshot.enemyProjectiles) ? snapshot.enemyProjectiles : [];
     damageNumbers = Array.isArray(snapshot.damageNumbers) ? snapshot.damageNumbers : [];
     floatTexts = [{ text: 'Saved run restored', life: 2, maxLife: 2, screenSpace: true, color: '#f1c40f', size: 18 }]
@@ -2398,6 +2440,79 @@
     particles.push({ x, y, vx: Math.cos(angle)*spd, vy: Math.sin(angle)*spd, color, size, maxLife: life, life });
   }
 
+  function performDashSlash(start, end, angle, stats, source) {
+    const dmg = DASH_DMG * (source && source.dmgMult ? source.dmgMult : player.dmgMult) * stats.damageMult;
+    let hitCount = 0;
+    for (const e of [...enemies]) {
+      if (!enemies.includes(e) || e.dying) continue;
+      const pathHit = distToSegment(e, start, end) < e.size + stats.width;
+      const endHit = dist(e, end) < e.size + stats.range;
+      if (!pathHit && !endHit) continue;
+      hitCount++;
+      dealDamage(e, dmg);
+      if (stats.rupture && enemies.includes(e) && e.hp > 0 && !e.dying) {
+        e.rupture = {
+          time: stats.ruptureTime,
+          maxTime: stats.ruptureTime,
+          dps: dmg * stats.ruptureDpsMult,
+          burst: dmg * (0.28 + stats.rupture * 0.08),
+        };
+      }
+      for (let k = 0; k < 5; k++) spawnParticle(e.x, e.y, stats.rupture ? '#ff6b6b' : '#f8c8ff', 5 + stats.cleave, 0.25);
+    }
+    if (hitCount >= 5) {
+      floatTexts.push({ x: end.x, y: end.y - 38, text: `${hitCount} SLASH`, life: 0.9, maxLife: 0.9, color: '#f8c8ff', size: 15 });
+      screenShake = Math.min(screenShake + 0.12, 0.5);
+      hitStop = Math.max(hitStop, 0.035);
+    }
+    return hitCount;
+  }
+
+  function queueSlashEchoes(start, end, angle, stats) {
+    if (!stats.echoCount) return;
+    for (let i = 0; i < stats.echoCount; i++) {
+      slashEchoes.push({
+        start: { x: start.x, y: start.y },
+        end: { x: end.x + Math.cos(angle) * (10 + i * 8), y: end.y + Math.sin(angle) * (10 + i * 8) },
+        angle,
+        delay: 0.12 + i * 0.1,
+        life: 0.28,
+        maxLife: 0.28,
+        range: stats.range,
+        width: stats.width,
+        damageMult: stats.damageMult * 0.48,
+        cleave: stats.cleave,
+        rupture: 0,
+        echo: true,
+        triggered: false,
+      });
+    }
+  }
+
+  function updateSlashEchoes(dt) {
+    for (let i = slashEchoes.length - 1; i >= 0; i--) {
+      const echo = slashEchoes[i];
+      echo.delay -= dt;
+      if (echo.delay <= 0 && !echo.triggered) {
+        echo.triggered = true;
+        performDashSlash(echo.start, echo.end, echo.angle, echo, player);
+      }
+      if (echo.triggered) echo.life -= dt;
+      if (echo.life <= 0) slashEchoes.splice(i, 1);
+    }
+  }
+
+  function updateRuptures(dt) {
+    for (let i = enemies.length - 1; i >= 0; i--) {
+      const e = enemies[i];
+      if (!e.rupture || e.rupture.time <= 0 || e.dying) continue;
+      e.rupture.time -= dt;
+      dealDamage(e, e.rupture.dps * dt);
+      if (!enemies.includes(e) || e.dying) continue;
+      if (e.rupture.time <= 0) delete e.rupture;
+    }
+  }
+
   // 적 투사체 발사 — 플레이어 방향 + spread 각도
   function fireEnemyProjectile(enemy, spread, target) {
     spread = spread || 0;
@@ -2522,6 +2637,9 @@
 
   function killEnemy(enemy) {
     if (enemy.dying) return;  // 재진입 방지 — 동일 적 중복 처치 방지
+    const enemyIdx = enemies.indexOf(enemy);
+    if (enemyIdx === -1) return;
+    const ruptureBurst = enemy.rupture && enemy.rupture.burst;
     enemy.dying = true;
     kills++;
     comboCount++;
@@ -2618,7 +2736,10 @@
       towerRecharge = 0;
       floatTexts.push({ x: enemy.x, y: enemy.y - 32, text: 'Tower charge +1', life: 1.6, maxLife: 1.6, color: '#5dade2', size: 13 });
     }
-    enemies.splice(enemies.indexOf(enemy), 1);
+    enemies.splice(enemyIdx, 1);
+    if (ruptureBurst) {
+      spawnExplosion(enemy.x, enemy.y, 46 + slashModLevel('rupture') * 12, ruptureBurst, false);
+    }
     document.getElementById('killDisp').textContent = kills;
   }
 
@@ -2775,6 +2896,11 @@
     if (choice.kind === 'weapon-new') {
       const earlyRun = player.level <= 4 || player.weapons.length <= 2;
       return earlyRun ? 4 : 2.4;
+    }
+    if (choice.kind === 'slash-support') {
+      const level = slashModLevel(choice.supportId);
+      const hasAnySupport = Object.values(player.slashMods || {}).some(Boolean);
+      return hasAnySupport ? (3.6 - level * 0.25) : 3.4;
     }
     return 1;
   }
@@ -2943,12 +3069,36 @@
   }
 
   // 레벨업 선택지 3개 구성: 진화(최우선) → 무기 레벨업 / 신규 무기 / 패시브
+  function slashSupportChoices() {
+    return SLASH_SUPPORT_DEFS
+      .filter(def => slashModLevel(def.id) < def.max)
+      .map(def => {
+        const lvl = slashModLevel(def.id);
+        return {
+          kind: 'slash-support',
+          supportId: def.id,
+          tag: lvl ? 'Slash combo' : 'Hack support',
+          name: `${def.name} Lv.${lvl}->${lvl + 1}`,
+          desc: def.desc,
+          choose: () => applySlashSupport(def),
+        };
+      });
+  }
+
   function buildChoices() {
     const result = [];
     const evos = evolutionChoices();
     if (evos.length) result.push(evos[0]);   // 진화 1개 보장
 
-    const pool = [...weaponLevelChoices(), ...newWeaponChoices(), ...passiveChoices()];
+    const hasSlashSupport = Object.values(player.slashMods || {}).some(Boolean);
+    if (!hasSlashSupport && result.length < 3) {
+      const firstSupport = takeWeightedChoices(slashSupportChoices(), 1)[0];
+      if (firstSupport) result.push(firstSupport);
+    }
+
+    const alreadyPicked = new Set(result.map(c => `${c.kind}:${c.supportId || c.weaponId || c.passiveId || c.name}`));
+    const pool = [...weaponLevelChoices(), ...newWeaponChoices(), ...passiveChoices(), ...slashSupportChoices()]
+      .filter(c => !alreadyPicked.has(`${c.kind}:${c.supportId || c.weaponId || c.passiveId || c.name}`));
     result.push(...takeWeightedChoices(pool, 3 - result.length));
 
     // 후보가 부족하면(전부 최대치) 안전망 보너스로 1개 이상 보장 → 소프트락 방지
@@ -3030,6 +3180,11 @@
       const maxed = !d.evolved && lvl >= MAX_WEAPON_LEVEL ? ' weapon-maxed' : '';
       return `<span class="weapon-slot${d.evolved ? ' weapon-evolved' : ''}${maxed}">${star}${d.icon} ${d.name} <b>Lv.${lvl}</b></span>`;
     }).join('');
+    const supportHtml = SLASH_SUPPORT_DEFS
+      .filter(def => slashModLevel(def.id) > 0)
+      .map(def => `<span class="weapon-slot slash-support-slot">Slash ${def.name} <b>Lv.${slashModLevel(def.id)}</b></span>`)
+      .join('');
+    if (supportHtml) el.innerHTML += supportHtml;
   }
 
   // ── 메인 루프 ───────────────────────────────────────────────────
@@ -3103,7 +3258,8 @@
     if (dashCd > 0) dashCd -= dt;
     if ((keys[' '] || keys['x'] || keys['X']) && dashCd <= 0) {
       const da = Math.atan2(lastMoveDir.dy, lastMoveDir.dx);
-      dashEffect = { x: player.x, y: player.y, angle: da, life: 0.3, maxLife: 0.3 };
+      const start = { x: player.x, y: player.y };
+      const stats = slashStats();
       dashCd = DASH_COOLDOWN;
       SFX.dash();
       // 대쉬 경로에 잔상 5개 추가 → 질주 잔영 강조
@@ -3139,6 +3295,8 @@
       }
     }
     if (dashEffect) { dashEffect.life -= dt; if (dashEffect.life <= 0) dashEffect = null; }
+    updateSlashEchoes(dt);
+    updateRuptures(dt);
 
     // 화면 흔들림 감쇠
     if (screenShake > 0) screenShake = Math.max(0, screenShake - dt * 2.5);
@@ -3905,6 +4063,28 @@
     }
 
     // 대쉬 슬래시 효과
+    for (const echo of slashEchoes) {
+      if (!echo.triggered) continue;
+      const echoAlpha = Math.max(0, echo.life / echo.maxLife);
+      ctx.globalAlpha = echoAlpha * 0.52;
+      ctx.strokeStyle = '#ff8fd8';
+      ctx.shadowBlur = 14;
+      ctx.shadowColor = '#ff8fd8';
+      const esa = echo.angle;
+      for (let sl = 0; sl < 3; sl++) {
+        const offset = (sl - 1) * (10 + (echo.cleave || 0) * 3);
+        const ox = Math.cos(esa + Math.PI / 2) * offset;
+        const oy = Math.sin(esa + Math.PI / 2) * offset;
+        ctx.lineWidth = 1.5 + (echo.cleave || 0) * 0.45;
+        ctx.beginPath();
+        ctx.moveTo(echo.start.x + ox, echo.start.y + oy);
+        ctx.lineTo(echo.end.x + ox, echo.end.y + oy);
+        ctx.stroke();
+      }
+      ctx.shadowBlur = 0;
+      ctx.globalAlpha = 1;
+    }
+
     if (dashEffect) {
       const alpha = dashEffect.life / dashEffect.maxLife;
       ctx.globalAlpha = alpha * 0.85;
@@ -3912,14 +4092,16 @@
       ctx.shadowBlur = 18;
       ctx.shadowColor = '#d7a3f5';
       const sa = dashEffect.angle;
+      const ex = dashEffect.endX !== undefined ? dashEffect.endX : dashEffect.x + Math.cos(sa) * (dashEffect.range || DASH_RANGE);
+      const ey = dashEffect.endY !== undefined ? dashEffect.endY : dashEffect.y + Math.sin(sa) * (dashEffect.range || DASH_RANGE);
       for (let sl = 0; sl < 4; sl++) {
-        const offset = (sl - 1.5) * 12;
+        const offset = (sl - 1.5) * (12 + (dashEffect.cleave || 0) * 3);
         const ox = Math.cos(sa + Math.PI / 2) * offset;
         const oy = Math.sin(sa + Math.PI / 2) * offset;
-        ctx.lineWidth = 2 - sl * 0.3;
+        ctx.lineWidth = 2 - sl * 0.3 + (dashEffect.cleave || 0) * 0.5;
         ctx.beginPath();
         ctx.moveTo(dashEffect.x + ox - Math.cos(sa) * 20, dashEffect.y + oy - Math.sin(sa) * 20);
-        ctx.lineTo(dashEffect.x + ox + Math.cos(sa) * DASH_RANGE, dashEffect.y + oy + Math.sin(sa) * DASH_RANGE);
+        ctx.lineTo(ex + ox, ey + oy);
         ctx.stroke();
       }
       ctx.shadowBlur = 0;

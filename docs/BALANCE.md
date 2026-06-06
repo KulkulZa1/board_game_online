@@ -35,6 +35,18 @@ Non-evolution level-up cards are weighted, not flat-random:
 - New weapons are favored in the first few levels to create an early build fork, then become less common.
 - Cards expose short reason tags (`Build starter`, `Power up`, `Combo passive`, `Near evolution`) so the RNG friction is readable rather than opaque.
 
+### Vampire Survivors - Dash Slash Supports
+
+The first hack-and-slash modifier layer uses three support cards:
+
+- `Cleave Edge`: wider, stronger dash slash path.
+- `Rupture Mark`: dash hits bleed and burst when killed.
+- `Echo Step`: dash leaves delayed after-slashes.
+
+These cards compete with weapon level-ups, new weapons, and passive/evolution setup. They are useful early but not mandatory: auto-attacks still carry baseline DPS, while slash supports reward active movement through enemy clusters.
+
+The first unowned slash support is guaranteed into early level-up choices before pure RNG resumes. This makes the active hack-and-slash layer visible quickly without replacing the weapon evolution chase.
+
 ### Tower Defense Synergies
 Towers within a synergy radius of a partner type gain bonuses, recomputed on
 every place/sell/upgrade. Source: `SYNERGIES` in `sandbox/tower-defense/config.js`,
@@ -156,6 +168,14 @@ Compounding ensures the run eventually ends even though tower levels cap at 5
 - **Keep curves here in sync with code.** Each formula above maps to a labelled
   comment in `game.js` / `config.js`.
 - TD is config-driven: prefer editing `config.js` (`TD_CONFIG`) over `game.js`.
+- TD now starts with 160g so the first wave supports an actual combo decision
+  instead of a single-tower wait state.
+- TD Meteor is an active panic button, not baseline DPS. Tune `METEOR.cost`,
+  `cooldownSec`, `radius`, and `damage` together so it saves broken lanes but
+  cannot replace tower placement.
+- TD perfect-wave rewards use `waveLeaks === 0` and should remain small
+  capacity bonuses; they are meant to make clean defense satisfying, not to
+  trivialize later pressure.
 - VPS is currently hardcoded in `game.js` (see ARCHITECTURE plan for the
   config-extraction proposal).
 - When changing a damage/HP number, re-derive the **time-to-kill** target
