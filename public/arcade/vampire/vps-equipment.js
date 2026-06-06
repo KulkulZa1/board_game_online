@@ -52,6 +52,25 @@
     ],
   };
 
+  Object.assign(SLOT_ITEMS, {
+    weapon: [
+      { id: 'thunder_bow', name: 'Thunder Bow', icon: 'TB', stats: { dmgMult: 1.10, rangeBonus: 1.08 } },
+      { id: 'storm_lance', name: 'Storm Lance', icon: 'SL', stats: { dmgMult: 1.12, cdMult: 0.96 } },
+      { id: 'dragon_bow', name: 'Dragon Bow', icon: 'DB', stats: { dmgMult: 1.16, critChance: 0.04 } },
+      { id: 'frost_focus', name: 'Frost Focus', icon: 'FF', stats: { rangeBonus: 1.14, cdMult: 0.94 } },
+      { id: 'shadow_blade', name: 'Shadow Blade', icon: 'SB', stats: { speedMult: 1.10, critChance: 0.06 } },
+      { id: 'titan_core', name: 'Titan Core', icon: 'TC', stats: { maxHp: 35, dmgMult: 1.05 } },
+    ],
+    head: SLOT_ITEMS.helm.slice(),
+    shoes: SLOT_ITEMS.boots.slice(),
+  });
+
+  const SLOT_ALIASES = { helm: 'head', boots: 'shoes' };
+
+  function normalizeSlot(slot) {
+    return SLOT_ALIASES[slot] || slot;
+  }
+
   const GEM_DEFS = [
     { id: 'ruby',      icon: '🔴', name: '루비',       rarity: 'common',    stat: 'dmgMult',   val: 1.08 },
     { id: 'sapphire',  icon: '🔵', name: '사파이어',   rarity: 'common',    stat: 'rangeBonus',val: 1.08 },
@@ -66,6 +85,13 @@
   ];
 
   // 5 set definitions — each with 2-piece and 4-piece bonuses
+  GEM_DEFS.push(
+    { id: 'storm_rune', icon: 'SR', name: 'Storm Rune', rarity: 'rare', stat: 'dmgMult', val: 1.04, effect: 'gem_storm_chain', desc: 'Arrow hits can arc lightning.' },
+    { id: 'frost_rune', icon: 'FR', name: 'Frost Rune', rarity: 'rare', stat: 'rangeBonus', val: 1.05, effect: 'gem_frost_lock', desc: 'Orb and laser hits chill enemies.' },
+    { id: 'blood_rune', icon: 'BR', name: 'Blood Rune', rarity: 'epic', stat: 'critChance', val: 0.04, effect: 'gem_blood_surge', desc: 'Kills restore a small amount of HP.' },
+    { id: 'echo_rune', icon: 'ER', name: 'Echo Rune', rarity: 'epic', stat: 'speedMult', val: 1.04, effect: 'gem_echo_slash', desc: 'Dash slash leaves an extra afterimage.' }
+  );
+
   const SET_DEFS = [
     {
       id: 'zeus', name: '⚡ 제우스', color: '#f1c40f',
@@ -100,6 +126,18 @@
   ];
 
   // Cross-synergies: combining 2 different set pieces triggers special hit effects
+  const SET_WEAPON_PIECES = {
+    zeus: ['thunder_bow', 'storm_lance'],
+    dragon: ['dragon_bow'],
+    shadow: ['shadow_blade'],
+    frost: ['frost_focus'],
+    titan: ['titan_core'],
+  };
+
+  for (const set of SET_DEFS) {
+    set.pieces = set.pieces.concat(SET_WEAPON_PIECES[set.id] || []);
+  }
+
   const CROSS_SYNERGIES = [
     { id: 'zeus_arrow_chain',  sets: ['zeus', 'shadow'],  desc: '화살 적중 시 번개 연쇄 발동', effect: 'zeus_arrow_chain' },
     { id: 'zeus_crit_nova',    sets: ['zeus', 'dragon'],  desc: '치명타 적중 시 전기 폭발(40px)', effect: 'zeus_crit_nova' },
@@ -109,9 +147,52 @@
     { id: 'titan_thorns',      sets: ['titan', 'dragon'], desc: '피격 시 주변 60px 폭발 반격', effect: 'titan_thorns' },
   ];
 
+  const WEAPON_SET_COMBOS = [
+    {
+      id: 'zeus_arrow_chain',
+      set: 'zeus',
+      minPieces: 2,
+      weapons: ['arrow', 'stormbow'],
+      desc: 'Zeus set + Arrow: arrow hits chain lightning through nearby enemies.',
+      effect: 'zeus_arrow_chain',
+    },
+    {
+      id: 'dragon_nova_spread',
+      set: 'dragon',
+      minPieces: 2,
+      weapons: ['nova', 'supernova'],
+      desc: 'Dragon set + Nova: explosions leave delayed burning bursts.',
+      effect: 'dragon_nova_spread',
+    },
+    {
+      id: 'frost_orb_lock',
+      set: 'frost',
+      minPieces: 2,
+      weapons: ['orb', 'blackhole', 'laser', 'deathray'],
+      desc: 'Frost set + Orb/Laser: repeated hits chill and briefly freeze.',
+      effect: 'frost_orb_lock',
+    },
+    {
+      id: 'shadow_dash_echo',
+      set: 'shadow',
+      minPieces: 2,
+      weapons: ['boomerang', 'cyclone'],
+      desc: 'Shadow set + Boomerang: dash slash gains extra echo cuts.',
+      effect: 'shadow_dash_echo',
+    },
+    {
+      id: 'titan_aegis_retaliate',
+      set: 'titan',
+      minPieces: 2,
+      weapons: ['shield', 'aegis'],
+      desc: 'Titan set + Shield: contact and projectile hits retaliate with a pulse.',
+      effect: 'titan_aegis_retaliate',
+    },
+  ];
+
   const GRADE_DROP_WEIGHTS = [55, 25, 11, 5, 3, 1]; // normal→antique
   const GEM_RARITY_WEIGHTS = { common: 55, uncommon: 28, rare: 13, epic: 4 };
-  const SLOTS = ['helm', 'armor', 'boots', 'ring'];
+  const SLOTS = ['weapon', 'head', 'armor', 'shoes', 'ring'];
 
   function gradeIndex(grade) {
     return GRADES.findIndex(g => g.id === grade);
@@ -128,7 +209,8 @@
   }
 
   function rollItem(slot, forceGrade) {
-    const slotItems = SLOT_ITEMS[slot];
+    const normalizedSlot = normalizeSlot(slot);
+    const slotItems = SLOT_ITEMS[normalizedSlot] || SLOT_ITEMS.head;
     const base = slotItems[Math.floor(Math.random() * slotItems.length)];
     const grade = forceGrade
       ? GRADES.find(g => g.id === forceGrade) || GRADES[0]
@@ -136,7 +218,7 @@
     const gemCount = Math.floor(Math.random() * (grade.maxGems + 1));
     const gems = [];
     for (let i = 0; i < gemCount; i++) gems.push(rollGem());
-    return { slot, baseId: base.id, grade: grade.id, gems };
+    return { slot: normalizedSlot, baseId: base.id, grade: grade.id, gems };
   }
 
   function rollGem(forceRarity) {
@@ -148,7 +230,9 @@
   }
 
   function getItemBase(item) {
-    return (SLOT_ITEMS[item.slot] || []).find(b => b.id === item.baseId) || SLOT_ITEMS[item.slot][0];
+    const slot = normalizeSlot(item.slot);
+    const slotItems = SLOT_ITEMS[slot] || SLOT_ITEMS.head;
+    return slotItems.find(b => b.id === item.baseId) || slotItems[0];
   }
 
   function getGradeData(gradeId) {
@@ -192,14 +276,34 @@
     return stats;
   }
 
-  // Returns which set bonuses are active given current equip map {helm,armor,boots,ring}
+  function equippedItems(equipMap) {
+    return Object.values(equipMap || {}).filter(Boolean);
+  }
+
+  function equippedBaseIds(equipMap) {
+    return equippedItems(equipMap).map(item => item.baseId);
+  }
+
+  function activeSetCounts(equipMap) {
+    const equippedIds = equippedBaseIds(equipMap);
+    const counts = {};
+    for (const set of SET_DEFS) {
+      counts[set.id] = set.pieces.filter(p => equippedIds.includes(p)).length;
+    }
+    return counts;
+  }
+
+  function ownedWeaponIds(weapons) {
+    if (!Array.isArray(weapons)) return new Set();
+    return new Set(weapons.filter(Boolean));
+  }
+
+  // Returns which set bonuses are active given current equip map
   function getActiveSetEffects(equipMap) {
     const active = [];
+    const counts = activeSetCounts(equipMap);
     for (const set of SET_DEFS) {
-      const equippedIds = Object.values(equipMap)
-        .filter(Boolean)
-        .map(item => item.baseId);
-      const count = set.pieces.filter(p => equippedIds.includes(p)).length;
+      const count = counts[set.id] || 0;
       if (count >= 2) active.push({ setId: set.id, level: 2, bonus: set.bonus2 });
       if (count >= 4) active.push({ setId: set.id, level: 4, bonus: set.bonus4 });
     }
@@ -209,10 +313,9 @@
   // Returns which cross-synergies are active
   function getActiveCrossEffects(equipMap) {
     const activeSets = new Set();
+    const counts = activeSetCounts(equipMap);
     for (const set of SET_DEFS) {
-      const equippedIds = Object.values(equipMap).filter(Boolean).map(i => i.baseId);
-      const count = set.pieces.filter(p => equippedIds.includes(p)).length;
-      if (count >= 2) activeSets.add(set.id);
+      if ((counts[set.id] || 0) >= 2) activeSets.add(set.id);
     }
     const active = [];
     for (const syn of CROSS_SYNERGIES) {
@@ -221,8 +324,28 @@
     return active;
   }
 
+  function getActiveWeaponCombos(equipMap, weapons) {
+    const counts = activeSetCounts(equipMap);
+    const owned = ownedWeaponIds(weapons);
+    return WEAPON_SET_COMBOS.filter(combo =>
+      (counts[combo.set] || 0) >= combo.minPieces &&
+      combo.weapons.some(weaponId => owned.has(weaponId))
+    );
+  }
+
+  function getActiveGemEffects(equipMap) {
+    const effects = [];
+    for (const item of equippedItems(equipMap)) {
+      for (const gem of (item.gems || [])) {
+        const g = typeof gem === 'object' ? gem : GEM_DEFS.find(d => d.id === gem);
+        if (g && g.effect) effects.push({ id: g.id, effect: g.effect, desc: g.desc || g.name });
+      }
+    }
+    return effects;
+  }
+
   // Human-readable bonus descriptions for UI
-  function getActiveBonusDescriptions(equipMap) {
+  function getActiveBonusDescriptions(equipMap, weapons) {
     const lines = [];
     const setEffects = getActiveSetEffects(equipMap);
     for (const e of setEffects) {
@@ -231,6 +354,10 @@
     }
     const cross = getActiveCrossEffects(equipMap);
     for (const c of cross) lines.push(`✦ 교차: ${c.desc}`);
+    const weaponCombos = getActiveWeaponCombos(equipMap, weapons);
+    for (const c of weaponCombos) lines.push(`Weapon combo: ${c.desc}`);
+    const gemEffects = getActiveGemEffects(equipMap);
+    for (const g of gemEffects) lines.push(`Gem: ${g.desc}`);
     return lines;
   }
 
@@ -249,8 +376,11 @@
     GEM_DEFS,
     SET_DEFS,
     CROSS_SYNERGIES,
+    WEAPON_SET_COMBOS,
     SLOTS,
+    SLOT_ALIASES,
     gradeIndex,
+    normalizeSlot,
     rollItem,
     rollGem,
     getItemBase,
@@ -258,6 +388,8 @@
     getEquipStats,
     getActiveSetEffects,
     getActiveCrossEffects,
+    getActiveWeaponCombos,
+    getActiveGemEffects,
     getActiveBonusDescriptions,
     itemDisplayName,
   };

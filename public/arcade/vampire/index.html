@@ -81,6 +81,12 @@
         <div id="joystickKnob"></div>
       </div>
     </div>
+
+    <div id="mobileActionBar" class="mobile-action-bar" aria-label="Mobile action controls">
+      <button id="mobileDashBtn" class="mobile-action-btn primary" type="button">Dash</button>
+      <button id="mobileTowerBtn" class="mobile-action-btn" type="button">Tower</button>
+      <button id="mobileEquipBtn" class="mobile-action-btn" type="button">Gear</button>
+    </div>
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
@@ -91,8 +97,8 @@
       window.VS_CONFIG = window.SandboxConfigBridge.read('sandbox_vs_config');
     }
   </script>
-  <script src="vps-equipment.js?v=1.0"></script>
-  <script src="game.js?v=2.7"></script>
+  <script src="vps-equipment.js?v=1.1"></script>
+  <script src="game.js?v=2.8"></script>
   <script src="/js/sw-update.js?v=20260520b"></script>
 </body>
 </html>

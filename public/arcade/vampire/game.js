@@ -314,6 +314,7 @@
   let selectedStageIdx = 0;
   let dashCd = 0;              // 대쉬 잔여 쿨다운
   let dashEffect = null;       // 대쉬 슬래시 시각 효과
+  let mobileDashQueued = false;
   let screenShake = 0;         // 화면 흔들림 강도
   let hitStop = 0;             // 히트스톱(타격 정지) 잔여 시간 — 큰 타격 순간 짧게 정지
   let hurtScreenFlash = 0;     // 피격 시 화면 붉은 플래시 잔여 시간
@@ -483,10 +484,12 @@
       pierceBonus: 0,       // 화살·부메랑 추가 관통 (pierce_up 패시브)
       regenRate: 0,         // 초당 체력 재생 비율 (regen 패시브)
       rangeBonus: 1,        // 사거리·AoE 배율 (range_up 패시브 + 장비)
-      equip: { helm: null, armor: null, boots: null, ring: null },
+      equip: { weapon: null, head: null, armor: null, shoes: null, ring: null },
       equipStats: {},       // 캐시: 장비 합산 스탯
       setEffects: [],       // 활성 세트 효과 목록
       crossEffects: [],     // 활성 교차 시너지 목록
+      weaponCombos: [],     // 활성 장비+무기 콤보 목록
+      gemEffects: [],       // 활성 트리거 젬 효과 목록
     };
     enemies    = [];
     projectiles= [];
@@ -503,6 +506,7 @@
     camera     = { x: 0, y: 0 };
     dashCd      = 0;
     dashEffect  = null;
+    mobileDashQueued = false;
     screenShake = 0;
     hitStop = 0;
     hurtScreenFlash = 0;
@@ -557,12 +561,14 @@
     if (player.weapons.includes(id)) {
       // 이미 보유 → 레벨업 (최대 레벨까지)
       if ((player.weaponLevels[id] || 1) < MAX_WEAPON_LEVEL) player.weaponLevels[id]++;
+      refreshEquipCache();
       renderWeaponSlots();
       return;
     }
     player.weapons.push(id);
     player.weaponLevels[id] = 1;
     player.weaponCDs[id] = 0;
+    refreshEquipCache();
     renderWeaponSlots();
   }
 
@@ -575,6 +581,7 @@
     delete player.weaponLevels[evo.base];
     delete player.weaponCDs[evo.base];
     player.weaponCDs[evo.id] = 0;
+    refreshEquipCache();
     showEvolutionCelebration(evo);
     renderWeaponSlots();
     if (!meta.achievements.evolve1) {
@@ -2263,6 +2270,29 @@
     }
   }, { passive: false });
 
+  function bindMobileActionButton(id, handler) {
+    const btn = document.getElementById(id);
+    if (!btn) return;
+    let lastRunAt = 0;
+    const run = (e) => {
+      e.preventDefault();
+      const now = Date.now();
+      if (now - lastRunAt < 250) return;
+      lastRunAt = now;
+      handler();
+    };
+    btn.addEventListener('pointerdown', run);
+    btn.addEventListener('click', run);
+  }
+
+  bindMobileActionButton('mobileDashBtn', () => {
+    if (state !== 'playing') return;
+    mobileDashQueued = true;
+    setTimeout(() => { mobileDashQueued = false; }, 180);
+  });
+  bindMobileActionButton('mobileEquipBtn', () => toggleEquipUI());
+  bindMobileActionButton('mobileTowerBtn', () => placeHybridTower());
+
   function getMoveDir() {
     let dx = 0, dy = 0;
     if (keys['ArrowLeft']  || keys['a'] || keys['A']) dx -= 1;
@@ -2474,11 +2504,19 @@
     player.equipStats   = combined;
     player.setEffects   = setEffects;
     player.crossEffects = eq.getActiveCrossEffects(player.equip);
+    player.weaponCombos = typeof eq.getActiveWeaponCombos === 'function'
+      ? eq.getActiveWeaponCombos(player.equip, player.weapons)
+      : [];
+    player.gemEffects = typeof eq.getActiveGemEffects === 'function'
+      ? eq.getActiveGemEffects(player.equip)
+      : [];
   }
 
   function equipItem(item) {
     if (!player || !item) return;
-    player.equip[item.slot] = item;
+    const eq = window.VPS && window.VPS.equipment;
+    const slot = eq && typeof eq.normalizeSlot === 'function' ? eq.normalizeSlot(item.slot) : item.slot;
+    player.equip[slot] = Object.assign({}, item, { slot });
     refreshEquipCache();
     // Apply maxHp change
     const hpGain = player.equipStats.maxHp || 0;
@@ -2525,6 +2563,19 @@
       }
     } else if (id === 'nova' || id === 'supernova') {
       spawnExplosion(player.x, player.y, range, dmg, id === 'supernova');
+      if (hasEquipmentEffect('dragon_nova_spread')) {
+        for (let i = 0; i < 3; i++) {
+          const a = Math.random() * Math.PI * 2;
+          const d = range * (0.35 + Math.random() * 0.55);
+          chainExplosions.push({
+            x: player.x + Math.cos(a) * d,
+            y: player.y + Math.sin(a) * d,
+            range: range * 0.42,
+            dmg: dmg * 0.38,
+            delay: 0.08 + i * 0.08,
+          });
+        }
+      }
     } else if (id === 'shield' || id === 'aegis') {
       const dur = (id === 'aegis' ? 2.2 : 1.5) + 0.15 * (lvl - 1);
       player.invincible = Math.max(player.invincible, dur);
@@ -2616,6 +2667,57 @@
     const angle = Math.random() * Math.PI * 2;
     const spd   = 40 + Math.random() * 80;
     particles.push({ x, y, vx: Math.cos(angle)*spd, vy: Math.sin(angle)*spd, color, size, maxLife: life, life });
+  }
+
+  function activeEquipmentEffects() {
+    if (!player) return [];
+    return [
+      ...(player.setEffects || []).map(e => e.bonus && e.bonus.effect),
+      ...(player.crossEffects || []).map(e => e.effect),
+      ...(player.weaponCombos || []).map(e => e.effect),
+      ...(player.gemEffects || []).map(e => e.effect),
+    ].filter(Boolean);
+  }
+
+  function hasEquipmentEffect(effect) {
+    return activeEquipmentEffects().includes(effect);
+  }
+
+  function triggerEquipmentLightning(origin, dmg, bounces, range, color) {
+    if (!origin || dmg <= 0) return;
+    let cx = origin.x;
+    let cy = origin.y;
+    const hit = new Set([origin]);
+    const maxBounces = bounces || 3;
+    const maxRange = range || 190;
+    const boltColor = color || '#f1c40f';
+    for (let b = 0; b < maxBounces; b++) {
+      let best = null;
+      let bd = Infinity;
+      for (const e of enemies) {
+        if (!e || e.dying || hit.has(e)) continue;
+        const d = dist({ x: cx, y: cy }, e);
+        if (d < maxRange && d < bd) { bd = d; best = e; }
+      }
+      if (!best) break;
+      hit.add(best);
+      projectiles.push({ type: 'arc', x: cx, y: cy, tx: best.x, ty: best.y, life: 0.18, dmg: 0 });
+      dealDamage(best, dmg * Math.pow(0.72, b), true);
+      for (let k = 0; k < 3; k++) spawnParticle(best.x, best.y, boltColor, 4, 0.18);
+      cx = best.x;
+      cy = best.y;
+    }
+  }
+
+  function queueEquipmentBurst(enemy, dmg, range, delay) {
+    if (!enemy || dmg <= 0) return;
+    chainExplosions.push({
+      x: enemy.x,
+      y: enemy.y,
+      range: range || 48,
+      dmg,
+      delay: delay || 0.06,
+    });
   }
 
   function performDashSlash(start, end, angle, stats, source) {
@@ -2798,6 +2900,9 @@
     // vital_surge 시너지: 처치마다 HP 3 회복
     if (hasSynergy('vital_surge') && player) {
       player.hp = Math.min(player.hp + 3, player.maxHp);
+    }
+    if (hasEquipmentEffect('gem_blood_surge') && player) {
+      player.hp = Math.min(player.hp + (enemy.isBoss ? 12 : 2), player.maxHp);
     }
     awardComboMilestone(enemy);
 
@@ -3386,10 +3491,15 @@
 
     // 대쉬 공격 (Space / X)
     if (dashCd > 0) dashCd -= dt;
-    if ((keys[' '] || keys['x'] || keys['X']) && dashCd <= 0) {
+    const dashRequested = keys[' '] || keys['x'] || keys['X'] || mobileDashQueued;
+    if (dashRequested && dashCd <= 0) {
+      mobileDashQueued = false;
       const da = Math.atan2(lastMoveDir.dy, lastMoveDir.dx);
       const start = { x: player.x, y: player.y };
       const stats = slashStats();
+      if (hasEquipmentEffect('shadow_dash_echo') || hasEquipmentEffect('gem_echo_slash')) {
+        stats.echoCount = Math.max(stats.echoCount || 0, hasEquipmentEffect('shadow_dash_echo') ? 3 : 1);
+      }
       dashCd = DASH_COOLDOWN;
       SFX.dash();
       // 대쉬 경로에 잔상 5개 추가 → 질주 잔영 강조
@@ -3526,7 +3636,12 @@
         const captureR = evolved ? p.r + 78 : p.r;
         for (const e of enemies) {
           const de = dist(p, e);
-          if (de < p.r + e.size) dealDamage(e, p.dmg * dt * 3);
+          if (de < p.r + e.size) {
+            dealDamage(e, p.dmg * dt * 3);
+            if (hasEquipmentEffect('frost_orb_lock') || hasEquipmentEffect('gem_frost_lock')) {
+              e.frozen = Math.max(e.frozen || 0, evolved ? 0.65 : 0.28);
+            }
+          }
           if (evolved && !e.isBoss && de < captureR + e.size) {
             // 가까울수록 강한 흡입력 — 적을 플레이어가 아닌 블랙홀 쪽으로 끌어당김
             const pullStr = 60 + 150 * (1 - de / (captureR + e.size));
@@ -3536,6 +3651,9 @@
             // 사건의 지평선 안쪽이면 지속 흡입 피해
             if (de < captureR) {
               dealDamage(e, p.dmg * dt * 1.6);
+              if (hasEquipmentEffect('frost_orb_lock') || hasEquipmentEffect('gem_frost_lock')) {
+                e.frozen = Math.max(e.frozen || 0, evolved ? 0.8 : 0.35);
+              }
               if (Math.random() < 0.25) spawnParticle(e.x, e.y, '#b388ff', 3, 0.2);
             }
           }
@@ -3562,6 +3680,9 @@
           const e = enemies[j];
           if (dist(p, e) < p.r + e.size) {
             dealDamage(e, p.dmg);
+            if (hasEquipmentEffect('zeus_arrow_chain') || hasEquipmentEffect('gem_storm_chain')) {
+              triggerEquipmentLightning(e, p.dmg * 0.42, hasEquipmentEffect('zeus_arrow_chain') ? 4 : 2, 210, '#f1c40f');
+            }
             // armor_breaker 시너지: 관통 적중 시 40% 범위 피해
             if (hasSynergy('armor_breaker')) {
               chainExplosions.push({ x: e.x, y: e.y, range: 42, dmg: p.dmg * 0.4, delay: 0 });
@@ -3579,6 +3700,9 @@
         for (const e of enemies) {
           if (distToSegment(e, p, { x: ex, y: ey }) < e.size + hitW) {
             dealDamage(e, p.dmg * dt * mult);
+            if (hasEquipmentEffect('frost_orb_lock') || hasEquipmentEffect('gem_frost_lock')) {
+              e.frozen = Math.max(e.frozen || 0, evolved ? 0.55 : 0.22);
+            }
           }
         }
       } else if (p.type === 'explosion') {
@@ -3739,6 +3863,9 @@
         hurtScreenFlash = 0.28;
         SFX.hurt();
         player.invincible = 0.15;
+        if (hasEquipmentEffect('titan_aegis_retaliate')) {
+          queueEquipmentBurst(e, contactDmg * 1.7, 62, 0);
+        }
         if (player.hp <= 0) { endGame('dead'); return; }
       }
     }
@@ -3757,6 +3884,9 @@
         hurtScreenFlash = 0.28;
         SFX.hurt();
         player.invincible = 0.1;
+        if (hasEquipmentEffect('titan_aegis_retaliate')) {
+          queueEquipmentBurst(projectileTarget, ep.dmg * 1.4, 58, 0);
+        }
         enemyProjectiles.splice(i, 1);
         if (player.hp <= 0) { endGame('dead'); return; }
       }
@@ -4868,8 +4998,9 @@
     if (!player || !window.VPS || !window.VPS.equipment) return '';
     const eq = window.VPS.equipment;
     const slotNames = { helm: '투구', armor: '갑옷', boots: '장화', ring: '반지' };
-    let html = '<div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center;">';
+    let html = '<div class="equip-grid">';
     for (const slot of eq.SLOTS) {
+      slotNames[slot] = ({ weapon: 'Weapon', head: 'Head', shoes: 'Shoes', helm: 'Head', boots: 'Shoes' })[slot] || slotNames[slot] || slot;
       const item = player.equip[slot];
       let content = `<div style="font-size:11px;color:#888;">${slotNames[slot]}<br><span style="font-size:20px;">❌</span><br><span style="color:#555;">비어있음</span></div>`;
       if (item) {
@@ -4890,7 +5021,7 @@
       html += `<div style="background:#1a2035;border:1px solid #2a3050;border-radius:8px;padding:10px;min-width:90px;text-align:center;">${content}</div>`;
     }
     html += '</div>';
-    const bonuses = eq.getActiveBonusDescriptions(player.equip);
+    const bonuses = eq.getActiveBonusDescriptions(player.equip, player.weapons);
     if (bonuses.length) {
       html += `<div style="margin-top:10px;padding:8px;background:#0d1628;border-radius:6px;font-size:11px;color:#f1c40f;">${bonuses.map(b => `✦ ${b}`).join('<br>')}</div>`;
     }
@@ -4909,7 +5040,7 @@
     if (!panel) {
       panel = document.createElement('div');
       panel.id = 'equipPanel';
-      panel.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#111827;border:2px solid #39445a;border-radius:12px;padding:18px;z-index:900;max-width:420px;width:94%;color:#fff;font-family:sans-serif;';
+      panel.className = 'equip-panel';
       panel.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><strong>⚔ 장비 창 (E키)</strong><button id="equipClose" style="background:none;border:none;color:#fff;font-size:20px;cursor:pointer;">✕</button></div><div id="equipBody"></div>`;
       document.body.appendChild(panel);
       document.getElementById('equipClose').addEventListener('click', () => toggleEquipUI());
@@ -4943,7 +5074,7 @@
     if (!modal) {
       modal = document.createElement('div');
       modal.id = 'gearModal';
-      modal.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#111827;border:2px solid #39445a;border-radius:12px;padding:20px;z-index:950;max-width:340px;width:92%;color:#fff;font-family:sans-serif;text-align:center;';
+      modal.className = 'gear-modal';
       document.body.appendChild(modal);
     }
     modal.innerHTML = `

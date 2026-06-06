@@ -909,6 +909,91 @@ async function runVampireCoopSocketSmokeCheck() {
   }
 }
 
+function checkVampireEquipmentSystemCoverage() {
+  const equipmentScript = fs.readFileSync(path.join(root, 'public/arcade/vampire/vps-equipment.js'), 'utf8');
+  const game = fs.readFileSync(path.join(root, 'public/arcade/vampire/game.js'), 'utf8');
+  const css = fs.readFileSync(path.join(root, 'public/arcade/vampire/style.css'), 'utf8');
+  const page = fs.readFileSync(path.join(root, 'public/arcade/vampire/index.html'), 'utf8');
+
+  const equipmentMarkers = [
+    'SLOT_ALIASES',
+    "SLOTS = ['weapon', 'head', 'armor', 'shoes', 'ring']",
+    'WEAPON_SET_COMBOS',
+    'getActiveWeaponCombos',
+    'getActiveGemEffects',
+    'storm_rune',
+    'echo_rune',
+    'blood_rune',
+    'zeus_arrow_chain',
+  ];
+  const missingEquipment = equipmentMarkers.filter((marker) => !equipmentScript.includes(marker));
+  if (missingEquipment.length) {
+    throw new Error(`Vampire equipment config missing: ${missingEquipment.join(', ')}`);
+  }
+
+  const gameMarkers = [
+    'weaponCombos',
+    'gemEffects',
+    'hasEquipmentEffect',
+    'triggerEquipmentLightning',
+    'queueEquipmentBurst',
+    'mobileDashQueued',
+    'mobileDashBtn',
+    'mobileEquipBtn',
+    'mobileTowerBtn',
+  ];
+  const missingGame = gameMarkers.filter((marker) => !game.includes(marker));
+  if (missingGame.length) {
+    throw new Error(`Vampire equipment runtime missing: ${missingGame.join(', ')}`);
+  }
+
+  const cssMarkers = ['.mobile-action-bar', '.mobile-action-btn', '.equip-panel', '.gear-modal', '.equip-grid'];
+  const missingCss = cssMarkers.filter((marker) => !css.includes(marker));
+  if (missingCss.length) {
+    throw new Error(`Vampire mobile/equipment CSS missing: ${missingCss.join(', ')}`);
+  }
+
+  ['mobileActionBar', 'vps-equipment.js?v=1.1', 'game.js?v=2.8'].forEach((marker) => {
+    if (!page.includes(marker)) {
+      throw new Error(`Vampire page missing mobile/cache marker: ${marker}`);
+    }
+  });
+
+  const context = { window: {}, Math, Set, Object, Array };
+  vm.createContext(context);
+  vm.runInContext(equipmentScript, context, { filename: 'public/arcade/vampire/vps-equipment.js' });
+  const eq = context.window.VPS && context.window.VPS.equipment;
+  if (!eq) throw new Error('Vampire equipment module did not expose window.VPS.equipment');
+
+  const weaponDrop = eq.rollItem('weapon', 'antique');
+  if (weaponDrop.slot !== 'weapon' || !eq.getItemBase(weaponDrop).id) {
+    throw new Error('Vampire equipment should roll canonical weapon-slot items');
+  }
+  if (weaponDrop.gems.length > eq.getGradeData('antique').maxGems) {
+    throw new Error('Vampire equipment roll exceeded antique gem socket limit');
+  }
+  const legacyHead = eq.rollItem('helm', 'rare');
+  if (legacyHead.slot !== 'head') {
+    throw new Error('Legacy helm rolls should normalize to head');
+  }
+
+  const equip = {
+    weapon: { slot: 'weapon', baseId: 'thunder_bow', grade: 'unique', gems: ['storm_rune'] },
+    head: { slot: 'head', baseId: 'arcane_crown', grade: 'rare', gems: [] },
+    armor: { slot: 'armor', baseId: 'silk_robe', grade: 'rare', gems: [] },
+    shoes: null,
+    ring: null,
+  };
+  const combos = eq.getActiveWeaponCombos(equip, ['arrow']);
+  if (!combos.some((combo) => combo.effect === 'zeus_arrow_chain')) {
+    throw new Error('Zeus set + arrow should activate zeus_arrow_chain equipment combo');
+  }
+  const gemEffects = eq.getActiveGemEffects(equip);
+  if (!gemEffects.some((gem) => gem.effect === 'gem_storm_chain')) {
+    throw new Error('Socketed storm_rune should expose gem_storm_chain');
+  }
+}
+
 async function main() {
   process.env.PORT = String(port);
   require(path.join(root, 'server.js'));
@@ -980,6 +1065,7 @@ async function main() {
     checkSandboxConfigBridgeRead();
     checkTowerDefenseSandboxCoverage();
     checkVampireDirectorLoopCoverage();
+    checkVampireEquipmentSystemCoverage();
     checkVampireSandboxEvolutionCoverage();
     await checkVersionBadgeUi();
     runSyntaxCheck();

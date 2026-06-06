@@ -367,13 +367,104 @@ html, body {
   transition: none;
 }
 
+.mobile-action-bar {
+  position: fixed;
+  right: max(12px, env(safe-area-inset-right));
+  bottom: max(14px, env(safe-area-inset-bottom));
+  z-index: 120;
+  display: none;
+  gap: 8px;
+  align-items: center;
+  pointer-events: none;
+}
+.mobile-action-btn {
+  min-width: 58px;
+  min-height: 46px;
+  border: 1px solid rgba(255,255,255,0.18);
+  border-radius: 8px;
+  background: rgba(17,24,39,0.88);
+  color: #f8fafc;
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  box-shadow: 0 10px 24px rgba(0,0,0,0.28);
+  pointer-events: auto;
+  touch-action: manipulation;
+}
+.mobile-action-btn.primary {
+  background: linear-gradient(135deg, rgba(241,196,15,0.95), rgba(230,126,34,0.95));
+  color: #1f1300;
+  border-color: rgba(255,236,150,0.7);
+}
+.mobile-action-btn:active {
+  transform: translateY(1px) scale(0.98);
+}
+
+.equip-panel,
+.gear-modal {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: #111827;
+  border: 2px solid #39445a;
+  border-radius: 10px;
+  color: #fff;
+  font-family: sans-serif;
+  z-index: 900;
+  width: min(94vw, 520px);
+  max-height: min(86vh, 620px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  box-shadow: 0 22px 60px rgba(0,0,0,0.48);
+}
+.equip-panel {
+  padding: 18px;
+}
+.gear-modal {
+  z-index: 950;
+  max-width: 360px;
+  padding: 20px;
+  text-align: center;
+}
+.equip-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(98px, 1fr));
+  gap: 10px;
+  justify-content: center;
+}
+
 @media (pointer: coarse) {
   #joystickZone { display: block; }
+  .mobile-action-bar { display: flex; }
 }
 
 @media (max-height: 500px) {
   #weaponSlots { display: none; }
   #joystickZone { display: none; }
+  .mobile-action-bar {
+    right: 8px;
+    bottom: 8px;
+  }
+  .mobile-action-btn {
+    min-height: 40px;
+    min-width: 52px;
+    font-size: 0.68rem;
+  }
+}
+
+@media (max-width: 520px) {
+  .equip-panel,
+  .gear-modal {
+    width: calc(100vw - 18px);
+    max-height: calc(100vh - 24px);
+    border-radius: 8px;
+  }
+  .equip-panel { padding: 14px; }
+  .gear-modal { padding: 16px; }
+  .equip-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 /* ── Key hint below level-up title ─────────────────── */

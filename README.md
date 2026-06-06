@@ -105,6 +105,18 @@ Tower Defense has an explicit publish/import workflow for the common case where 
 
 See `docs/launch-readiness.md` for the current security, deployment, and manual verification checklist.
 
+## Vampire equipment and mobile controls
+
+`/arcade/vampire/` includes a patchable equipment layer in `public/arcade/vampire/vps-equipment.js`.
+
+- Slots: `weapon`, `head`, `armor`, `shoes`, `ring` (`helm` and `boots` remain legacy aliases).
+- Grades control stat scaling and gem socket caps from `normal` through `antique`.
+- Trigger gems and set/weapon combos are data-defined, then consumed by small runtime hooks in `game.js`.
+- Current combo examples include Zeus set + Arrow chain lightning, Dragon set + Nova burst spread, Frost set + Orb/Laser chill, Shadow set + Boomerang dash echoes, and Titan set + Shield retaliation.
+- Mobile players get explicit Dash, Tower, and Gear buttons; PC controls remain keyboard/mouse friendly.
+
+Balance and patch guidance live in `docs/BALANCE.md`.
+
 ---
 
 ## 주요 기능

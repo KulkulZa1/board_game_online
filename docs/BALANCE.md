@@ -47,6 +47,18 @@ These cards compete with weapon level-ups, new weapons, and passive/evolution se
 
 The first unowned slash support is guaranteed into early level-up choices before pure RNG resumes. This makes the active hack-and-slash layer visible quickly without replacing the weapon evolution chase.
 
+### Vampire Survivors - Equipment, Sets, and Gems
+
+Equipment data lives in `public/arcade/vampire/vps-equipment.js` and should stay mostly data-driven:
+
+- Canonical slots are `weapon`, `head`, `armor`, `shoes`, and `ring`; `helm` and `boots` remain aliases for older saves.
+- Grades scale base stats and define socket caps: `normal` has no sockets, while `antique` can roll up to five gems.
+- Set membership can include armor pieces and weapon-slot gear. Set bonuses activate at two and four pieces.
+- `WEAPON_SET_COMBOS` defines weapon-aware set effects without changing the main loop for each new combo. Current examples include Zeus set + Arrow chain lightning, Dragon set + Nova burn bursts, Frost set + Orb/Laser chill, Shadow set + Boomerang dash echoes, and Titan set + Shield retaliation.
+- Trigger gems expose `effect` ids such as `gem_storm_chain`, `gem_frost_lock`, `gem_blood_surge`, and `gem_echo_slash`. Runtime hooks read these ids through `getActiveGemEffects()`.
+
+Patch guidance: add or tune combos in `vps-equipment.js` first, then add a small generic runtime hook only when a new effect type cannot reuse existing lightning, burst, freeze, heal, or dash-echo hooks.
+
 ### Tower Defense Synergies
 Towers within a synergy radius of a partner type gain bonuses, recomputed on
 every place/sell/upgrade. Source: `SYNERGIES` in `sandbox/tower-defense/config.js`,
