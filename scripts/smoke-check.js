@@ -378,14 +378,25 @@ function checkTowerDefenseSandboxCoverage() {
   if (!config.includes('amplifier') || !config.includes("attack: 'support'")) {
     throw new Error('Tower Defense sandbox should define the amplifier support tower');
   }
+  if (!config.includes('METEOR') || !config.includes('cooldownSec') || !config.includes('STARTING_GOLD: 160')) {
+    throw new Error('Tower Defense config should expose the Meteor active ability and early combo economy');
+  }
   if (!config.includes('barrage') || !config.includes('supercharge')) {
     throw new Error('Tower Defense sandbox should include the new barrage and supercharge synergies');
   }
   if (!game.includes("mode === 'support'") || !game.includes('auraBonus')) {
     throw new Error('Tower Defense runtime should apply amplifier auras and skip support attacks');
   }
+  ['castMeteor', 'findMeteorTarget', 'spendGold', 'waveLeaks', 'Perfect wave!', 'touchstart'].forEach((marker) => {
+    if (!game.includes(marker)) {
+      throw new Error(`Tower Defense runtime missing gameplay marker: ${marker}`);
+    }
+  });
   if (!ui.includes("label: 'Synergies'") || !ui.includes("type: 'amplifier'")) {
     throw new Error('Tower Defense editor should expose synergies and amplifier placement');
+  }
+  if (!ui.includes("case 'play-stage'") || !ui.includes("case 'meteor'") || !ui.includes('TDGame.spendGold(rerollCost)')) {
+    throw new Error('Tower Defense UI should expose game-first start, Meteor, and paid rerolls');
   }
   if (!ui.includes('td_published_config') || !ui.includes('validateConfig') || !ui.includes('publishJSON')) {
     throw new Error('Tower Defense editor should validate and publish configs for arcade import');
@@ -397,6 +408,9 @@ function checkTowerDefenseSandboxCoverage() {
   }
   if (!arcadePage.includes('td_published_config') || !arcadePage.includes('Published config loaded')) {
     throw new Error('Tower Defense arcade route should prefer published config and show load status');
+  }
+  if (!arcadePage.includes('data-action="play-stage"') || !arcadePage.includes('data-action="meteor"') || !arcadePage.includes('data-place-type="amplifier"')) {
+    throw new Error('Tower Defense arcade page should expose game-first controls and quick tower placement');
   }
 }
 
