@@ -416,11 +416,14 @@ function checkTowerDefenseSandboxCoverage() {
 
 function checkVampireDirectorLoopCoverage() {
   const game = fs.readFileSync(path.join(root, 'public/arcade/vampire/game.js'), 'utf8');
+  const vpsConfig = fs.readFileSync(path.join(root, 'public/arcade/vampire/vps-config.js'), 'utf8');
   const css = fs.readFileSync(path.join(root, 'public/arcade/vampire/style.css'), 'utf8');
   const page = fs.readFileSync(path.join(root, 'public/arcade/vampire/index.html'), 'utf8');
   const serverEvents = fs.readFileSync(path.join(root, 'server/events.js'), 'utf8');
   const serverState = fs.readFileSync(path.join(root, 'server/state.js'), 'utf8');
   const admob = fs.readFileSync(path.join(root, 'public/js/admob.js'), 'utf8');
+  // content-level markers may live in vps-config.js (static data) or game.js (runtime)
+  const gameOrConfig = game + vpsConfig;
 
   const requiredGameMarkers = [
     'CHARACTER_DEFS',
@@ -501,7 +504,7 @@ function checkVampireDirectorLoopCoverage() {
     'nearMissClear',
     'towerBuilder',
   ];
-  const missingGameMarkers = requiredGameMarkers.filter((marker) => !game.includes(marker));
+  const missingGameMarkers = requiredGameMarkers.filter((marker) => !gameOrConfig.includes(marker));
   if (missingGameMarkers.length) {
     throw new Error(`Vampire Survivors loop coverage missing: ${missingGameMarkers.join(', ')}`);
   }
