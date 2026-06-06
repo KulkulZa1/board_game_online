@@ -41,7 +41,6 @@ This launch-readiness pass found and fixed:
 - Vampire Survivors low-health runs now have near-miss feedback during play: throttled screen-space alerts, player-ring pulse, canvas edge warning, and a critical HP bar state. This makes the existing near-miss achievement legible before the end screen.
 - Vampire Survivors now has a first hack-and-slash support layer. Level-up cards can modify the dash slash with `Cleave Edge`, `Rupture Mark`, and `Echo Step`, creating wider path cuts, bleed/burst pressure, and delayed after-slashes without replacing the existing auto-attack/evolution loop.
 - Tower Defense sandbox now has a validated `Publish` action. Published configs save under `td_published_config`, export as `td-published-config.json`, and `/arcade/tower-defense/` prefers that published key before falling back to draft/default config.
-- Tower Defense arcade now exposes game-first controls: `Play Stage 1`, quick Cannon/Frost/Tesla/Amplifier placement, and a Meteor panic ability. The editor remains available, but the route is no longer dependent on the Stages tab for the first playable action.
 - Service worker caching no longer serves old JS/CSS before checking the network; this prevents deployed game logic from appearing stale after Render deploys.
 - All HTML pages now load `/js/sw-update.js`, which registers the service worker consistently and reloads controlled pages once after an updated worker takes control.
 - Server responses for HTML, `sw.js`, JS, CSS, and `manifest.json` now send `Cache-Control: no-cache, no-store, must-revalidate`.

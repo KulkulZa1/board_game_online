@@ -9,19 +9,14 @@
   <style>
     *, *::before, *::after { box-sizing: border-box; }
     html, body { height: 100%; margin: 0; overflow: hidden; background: #080810; color: #d0d8f0; font-family: "Segoe UI", system-ui, sans-serif; font-size: 13px; }
-    #toolbar { display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 6px 12px; background: linear-gradient(90deg, #0d0d18, #111827); border-bottom: 1px solid #1e2030; box-shadow: 0 8px 24px rgba(0,0,0,0.24); }
+    #toolbar { display: flex; align-items: center; gap: 8px; height: 42px; padding: 6px 12px; background: #0d0d18; border-bottom: 1px solid #1e2030; }
     #toolbar a { color: #8a90a8; text-decoration: none; }
-    #toolbar .title { font-weight: 800; letter-spacing: 0; }
+    #toolbar .title { font-weight: 700; }
     #toolbar .sep { flex: 1; }
     .runtime-note { color: #8a90a8; font-size: 0.78rem; white-space: nowrap; }
-    #toolbar button, .btn-small { background: rgba(255,255,255,0.06); border: 1px solid #1e2030; border-radius: 6px; color: #d0d8f0; padding: 4px 10px; cursor: pointer; min-height: 32px; }
+    #toolbar button, .btn-small { background: rgba(255,255,255,0.06); border: 1px solid #1e2030; border-radius: 6px; color: #d0d8f0; padding: 4px 10px; cursor: pointer; }
     #toolbar button:hover, .btn-small:hover { background: rgba(255,255,255,0.1); }
-    #toolbar .primary { background: linear-gradient(135deg, #27ae60, #1e8449); border-color: rgba(125, 206, 160, 0.5); color: #fff; font-weight: 800; }
-    #toolbar .danger { background: linear-gradient(135deg, rgba(231,76,60,0.32), rgba(142,68,173,0.24)); border-color: rgba(231,76,60,0.55); color: #ffd6d6; font-weight: 800; }
-    .tower-quick { display: flex; align-items: center; gap: 4px; padding: 3px; border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; background: rgba(0,0,0,0.18); }
-    .tower-quick button { padding: 4px 8px; min-width: 44px; }
-    .tower-quick button.active { background: rgba(52,152,219,0.26); border-color: rgba(93,173,226,0.7); box-shadow: 0 0 0 1px rgba(93,173,226,0.25) inset; }
-    #main { display: flex; height: calc(100vh - 48px); }
+    #main { display: flex; height: calc(100vh - 42px); }
     #game-canvas-wrap { flex: 1; display: flex; align-items: center; justify-content: center; position: relative; background: #050508; overflow: hidden; }
     #game-canvas { display: block; max-width: 100%; max-height: 100%; cursor: crosshair; }
     #td-modal-overlay { display: none; position: absolute; inset: 0; z-index: 40; }
@@ -42,10 +37,7 @@
     #panel-toggle { display: none; }
     @media (max-width: 768px) {
       #main { flex-direction: column; }
-      #toolbar { flex-wrap: wrap; align-content: center; gap: 6px; }
-      .runtime-note { display: none; }
-      #main { height: calc(100vh - 92px); }
-      #game-canvas-wrap { height: calc(100vh - 92px - 48px); }
+      #game-canvas-wrap { height: calc(100vh - 42px - 48px); }
       #editor-panel { position: fixed; bottom: 0; left: 0; right: 0; width: 100%; height: 60vh; transform: translateY(100%); transition: transform 0.3s ease; z-index: 30; border-left: none; border-top: 1px solid #1e2030; }
       #editor-panel.panel-open { transform: translateY(0); }
       #panel-toggle { display: flex; position: fixed; bottom: 0; left: 0; right: 0; height: 48px; align-items: center; justify-content: center; background: #0d0d18; border-top: 1px solid #1e2030; z-index: 25; font-weight: 700; }
@@ -57,15 +49,8 @@
     <a class="back-link" href="/">Back</a>
     <span class="title">Tower Defense</span>
     <span id="unsaved-dot">*</span>
-    <button class="primary" data-action="play-stage">Play Stage 1</button>
+    <button data-action="place">Place Tower</button>
     <button data-action="start-wave">Start Wave</button>
-    <div class="tower-quick" aria-label="Tower quick build">
-      <button data-place-type="cannon" title="Cannon">C</button>
-      <button data-place-type="frost" title="Frost">F</button>
-      <button data-place-type="tesla" title="Tesla">T</button>
-      <button data-place-type="amplifier" title="Amplifier">A</button>
-    </div>
-    <button class="danger" data-action="meteor">Meteor</button>
     <span class="sep"></span>
     <button data-action="import">Import</button>
     <button data-action="export">Export</button>

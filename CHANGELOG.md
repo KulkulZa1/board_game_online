@@ -10,7 +10,6 @@
 - Native monetization boundary for `/arcade/vampire/`: ad-removal ownership suppresses interstitial ads, restore purchase is exposed, and locked premium characters can be unlocked through the purchase helper when a Capacitor billing plugin is present.
 - Production-safe Tower Defense arcade runtime path: `/arcade/tower-defense/` now loads reused TD engine files from `/arcade/tower-defense/runtime/` instead of broken `/sandbox/...` URLs.
 - Tower Defense sandbox-to-arcade publish/import flow: the editor validates configs, saves `td_published_config`, exports `td-published-config.json`, and the arcade route prefers published config before draft/default config.
-- Tower Defense game-first pass: `/arcade/tower-defense/` now has a direct play button, quick tower build controls, a Meteor active ability, visible enemy lanes, tower firing/aura feedback, paid passive rerolls, mobile tap placement, and a more generous 160g opening economy.
 - Vampire Survivors mid-run resume: active runs save locally on start, pause, periodic play, revive, visibility change, and page unload; valid saved runs can be continued from the start overlay.
 - Vampire Survivors co-op relay MVP: a host can create a shareable Socket.io co-op room, a guest can join from `?vpsRoom=...`, control an ally in the host simulation, and receive a compact live state mirror.
 - Vampire Survivors evolution planning UI: start, pause, and level-up surfaces now show recipe progress so failed or near-ready evolutions are visible during the run.

@@ -150,16 +150,6 @@
       attack: 'projectile'   // 기본 캐논: 투사체 발사
     },
 
-    METEOR: {
-      cost: 45,
-      cooldownSec: 16,
-      radius: 92,
-      damage: 120,
-      bossDamageMult: 0.65,
-      slowDur: 1.4,
-      slowFactor: 0.55
-    },
-
     // ── Tower types (캐논 외 추가 타워) ─────────────────────────────
     // 각 타입은 TOWER 와 동일한 필드 구조 + attack 모드로 동작한다.
     // attack: 'projectile'(캐논) | 'frost'(둔화 투사체) | 'tesla'(즉시 연쇄 번개)
@@ -330,7 +320,7 @@
     BASE_RADIUS: 35,
     SPAWN_COUNT: 8,
     SPAWN_MARGIN: 40,
-    STARTING_GOLD: 160
+    STARTING_GOLD: 120
   };
 
   window.TD_CONFIG   = JSON.parse(JSON.stringify(DEFAULTS));

@@ -26,8 +26,6 @@ window.TDGame = (function () {
     bossTimeLeft: 0,
     bossActive: false,
     bossTimerFull: 30,
-    waveLeaks: 0,
-    meteorCooldown: 0,
     placingMode: false,
     placingType: 'cannon',
     chosenPassives: [],
@@ -138,19 +136,6 @@ window.TDGame = (function () {
     var cfg = getTowerTypeCfg(type || 'cannon');
     var mult = 1 + (passiveStacks['costMult'] || 0);
     return Math.max(10, Math.round(cfg.cost * mult));
-  }
-
-  function spendGold(amount) {
-    amount = Math.max(0, Math.round(amount || 0));
-    if (state.gold < amount) return false;
-    state.gold -= amount;
-    if (window.TDUI) TDUI.refresh();
-    return true;
-  }
-
-  function meteorReady() {
-    var cfg = TD_CONFIG.METEOR || {};
-    return state.meteorCooldown <= 0 && state.gold >= (cfg.cost || 0) && (phase === 'wave' || phase === 'infinity');
   }
 
   // ── Adjacency synergy ────────────────────────────────────────────
@@ -316,7 +301,6 @@ window.TDGame = (function () {
 
   function startWave() {
     if (phase === 'gameover') return;
-    if (phase === 'title') startStage(0);
     var waves = getCurrentWaves();
     if (phase === 'infinity') {
       startInfinityWave();
@@ -326,7 +310,6 @@ window.TDGame = (function () {
     var wave = waves[state.waveIdx];
     buildSpawnQueue(wave);
     state.waveKills = 0;
-    state.waveLeaks = 0;
     if (wave.isBoss) {
       state.bossActive = true;
       state.bossTimeLeft = wave.bossTimerSec;
@@ -357,7 +340,6 @@ window.TDGame = (function () {
     }
     spawnTimer = 0;
     state.waveKills = 0;
-    state.waveLeaks = 0;
     if (isBoss) {
       state.bossActive = true;
       state.bossTimeLeft = inf.bossTimerSec;
@@ -423,9 +405,9 @@ window.TDGame = (function () {
       addToast('🌟 Blessing! +' + ev.blessingCapacityBonus + ' capacity restored', '#f1c40f', 2500);
     }
     // Perfect wave
-    if (state.waveKills > 0 && state.waveLeaks === 0 && ev.perfectWaveBonus > 0) {
-      state.capacity += ev.perfectWaveBonus;
-      addToast('Perfect wave! +' + ev.perfectWaveBonus + ' capacity', '#7dcea0', 2200);
+    if (state.waveKills > 0) {
+      var wave = phase === 'infinity' ? null : (getCurrentWaves() ? getCurrentWaves()[state.waveIdx - 1] : null);
+      var hadPerfect = state.mobsReached === 0 || (wave && state.waveKills > 0);
     }
     // Bounty
     if (state.waveKills >= ev.bountyKillTarget) {
@@ -514,9 +496,6 @@ window.TDGame = (function () {
       });
     }
 
-    tower.fireFlash = 0.18;
-    tower.targetX = target.x;
-    tower.targetY = target.y;
     tower.voidCount = ((tower.voidCount || 0) + 1);
   }
 
@@ -542,9 +521,6 @@ window.TDGame = (function () {
       towerId: tower.id,
       life: 2.0
     });
-    tower.fireFlash = 0.18;
-    tower.targetX = target.x;
-    tower.targetY = target.y;
   }
 
   // Tesla 타워: 즉시 연쇄 번개 (투사체 없음)
@@ -578,9 +554,6 @@ window.TDGame = (function () {
         .filter(function (e) { return !hit[e.id] && dist(e, src) < radius; })
         .sort(function (a, b) { return dist(a, src) - dist(b, src); })[0];
     }
-    tower.fireFlash = 0.16;
-    tower.targetX = target.x;
-    tower.targetY = target.y;
   }
 
   // 번개 시각 효과 (particles 에 line 타입 추가)
@@ -663,58 +636,6 @@ window.TDGame = (function () {
     enemies = enemies.filter(function (e) { return e.id !== enemy.id; });
   }
 
-  function findMeteorTarget(radius) {
-    if (!enemies.length) return null;
-    var best = null;
-    var bestScore = -1;
-    enemies.forEach(function (candidate) {
-      var score = candidate.isBoss ? 4 : 1;
-      enemies.forEach(function (e) {
-        if (e.id !== candidate.id && dist(candidate, e) <= radius) {
-          score += e.isBoss ? 4 : 1;
-        }
-      });
-      var urgency = 1 / Math.max(1, dist(candidate, BASE));
-      score += urgency * 900;
-      if (score > bestScore) {
-        bestScore = score;
-        best = candidate;
-      }
-    });
-    return best;
-  }
-
-  function castMeteor() {
-    var cfg = TD_CONFIG.METEOR || {};
-    var cost = cfg.cost || 45;
-    if (!meteorReady()) return false;
-    var radius = cfg.radius || 90;
-    var target = findMeteorTarget(radius);
-    if (!target) return false;
-    if (!spendGold(cost)) return false;
-
-    state.meteorCooldown = cfg.cooldownSec || 16;
-    var cx = target.x;
-    var cy = target.y;
-    var hitCount = 0;
-    enemies.slice().forEach(function (e) {
-      if (dist({ x: cx, y: cy }, e) > radius + e.size) return;
-      var dmg = (cfg.damage || 120) * (e.isBoss ? (cfg.bossDamageMult || 0.65) : 1);
-      e.hp -= dmg;
-      e.slowed = Math.max(e.slowed || 0, cfg.slowDur || 1.4);
-      e.slowFactor = Math.min(e.slowFactor || 1, cfg.slowFactor || 0.55);
-      spawnDmgNum(e.x, e.y, dmg, true);
-      spawnParticle(e.x, e.y, '#ff9f43', e.isBoss ? 18 : 10, 0.45);
-      hitCount++;
-      if (e.hp <= 0) killEnemy(e, { special: 'meteor' });
-    });
-    particles.push({ type: 'ring', x: cx, y: cy, r: 0, maxR: radius, life: 0.55, maxLife: 0.55, color: 'rgba(255,159,67,0.78)' });
-    particles.push({ type: 'ring', x: cx, y: cy, r: 0, maxR: radius * 0.55, life: 0.35, maxLife: 0.35, color: 'rgba(231,76,60,0.8)' });
-    addToast('Meteor strike! ' + hitCount + ' hit', '#ff9f43', 1800);
-    if (window.TDUI) TDUI.refresh();
-    return true;
-  }
-
   // ── Arc chain ─────────────────────────────────────────────────────
   function doArcChain(proj, sourceEnemy) {
     if (!proj.arcChain || proj.arcChain <= 0) return;
@@ -791,9 +712,6 @@ window.TDGame = (function () {
 
   // ── Main update loop ─────────────────────────────────────────────
   function update(dt) {
-    if (state.meteorCooldown > 0) {
-      state.meteorCooldown = Math.max(0, state.meteorCooldown - dt);
-    }
     if (phase !== 'wave' && phase !== 'infinity') return;
 
     // Boss timer
@@ -829,7 +747,6 @@ window.TDGame = (function () {
       e.y += Math.sin(ang) * spd * dt;
       if (dist(e, BASE) < TD_CONFIG.BASE_RADIUS + e.size / 2) {
         state.mobsReached += e.damage;
-        state.waveLeaks += e.damage;
         state.baseFlash = 0.4;
         enemies.splice(i, 1);
         checkGameOver();
@@ -838,7 +755,6 @@ window.TDGame = (function () {
 
     // Towers fire
     towers.forEach(function (tower) {
-      if (tower.fireFlash > 0) tower.fireFlash = Math.max(0, tower.fireFlash - dt);
       if (getTowerCfg(tower).attack === 'support') return;
       tower.cd = (tower.cd || 0) - dt * 1000;
       if (tower.cd > 0) return;
@@ -975,25 +891,6 @@ window.TDGame = (function () {
     ctx.lineWidth = 1;
     for (var gx = 0; gx < W; gx += 40) { ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, H); ctx.stroke(); }
     for (var gy = 0; gy < H; gy += 40) { ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(W, gy); ctx.stroke(); }
-
-    // Enemy lanes
-    spawnPoints.forEach(function (sp) {
-      var grad = ctx.createLinearGradient(sp.x, sp.y, BASE.x, BASE.y);
-      grad.addColorStop(0, 'rgba(231,76,60,0.22)');
-      grad.addColorStop(1, 'rgba(241,196,15,0.08)');
-      ctx.beginPath();
-      ctx.moveTo(sp.x, sp.y);
-      ctx.lineTo(BASE.x, BASE.y);
-      ctx.strokeStyle = grad;
-      ctx.lineWidth = 8;
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(sp.x, sp.y);
-      ctx.lineTo(BASE.x, BASE.y);
-      ctx.strokeStyle = 'rgba(255,255,255,0.08)';
-      ctx.lineWidth = 1;
-      ctx.stroke();
-    });
 
     // Spawn points
     spawnPoints.forEach(function (sp) {
@@ -1158,29 +1055,6 @@ window.TDGame = (function () {
       var isHovered = (t === hoveredTower);
       var tType = t.type || 'cannon';
       var fillBase = TYPE_FILL[tType] || TYPE_FILL.cannon;
-      var tCfg = getTowerCfg(t);
-      if (tCfg.attack === 'support') {
-        ctx.beginPath();
-        ctx.arc(t.x, t.y, getTowerRange(t), 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(155,89,182,0.075)';
-        ctx.fill();
-        ctx.strokeStyle = 'rgba(195,155,247,0.28)';
-        ctx.lineWidth = 1;
-        ctx.stroke();
-      }
-      if (t.fireFlash > 0 && t.targetX !== undefined) {
-        ctx.globalAlpha = Math.min(1, t.fireFlash / 0.16);
-        ctx.beginPath();
-        ctx.moveTo(t.x, t.y);
-        ctx.lineTo(t.targetX, t.targetY);
-        ctx.strokeStyle = tType === 'tesla' ? tokenColor('proj_chain') : (tType === 'frost' ? '#88ddff' : '#ffbf69');
-        ctx.lineWidth = tType === 'tesla' ? 3 : 1.5;
-        ctx.shadowBlur = 10;
-        ctx.shadowColor = ctx.strokeStyle;
-        ctx.stroke();
-        ctx.shadowBlur = 0;
-        ctx.globalAlpha = 1;
-      }
       // 시너지 활성 시 황금 링
       if (t.synergyIds && t.synergyIds.length) {
         ctx.beginPath();
@@ -1190,7 +1064,7 @@ window.TDGame = (function () {
         ctx.stroke();
       }
       ctx.beginPath();
-      ctx.arc(t.x, t.y, 14 + (t.fireFlash > 0 ? 3 : 0), 0, Math.PI * 2);
+      ctx.arc(t.x, t.y, 14, 0, Math.PI * 2);
       ctx.fillStyle = fillBase + (isHovered ? '0.4)' : '0.22)');
       ctx.fill();
       ctx.strokeStyle = tokenColor('tower_color');
@@ -1311,18 +1185,6 @@ window.TDGame = (function () {
     ctx.textBaseline = 'middle';
     ctx.fillText('💰 ' + state.gold + 'g', W - pad, pad + 11);
 
-    // Meteor ability
-    var meteorCfg = TD_CONFIG.METEOR || {};
-    var mCost = meteorCfg.cost || 45;
-    var mReady = meteorReady();
-    var mText = mReady ? 'Meteor ready' : (state.meteorCooldown > 0 ? 'Meteor ' + Math.ceil(state.meteorCooldown) + 's' : 'Meteor ' + mCost + 'g');
-    ctx.fillStyle = 'rgba(0,0,0,0.6)';
-    ctx.fillRect(W - 160, pad + 28, 150, 22);
-    ctx.fillStyle = mReady ? '#ff9f43' : '#8a90a8';
-    ctx.font = 'bold 11px sans-serif';
-    ctx.textAlign = 'right';
-    ctx.fillText(mText, W - pad, pad + 39);
-
     // Stage / wave info
     var stageText = phase === 'infinity'
       ? 'Infinity Wave ' + state.infinityWave
@@ -1398,10 +1260,10 @@ window.TDGame = (function () {
     ctx.fillText('🏰 Tower Defense', W / 2, H / 2 - 60);
     ctx.fillStyle = '#aaa';
     ctx.font = '16px sans-serif';
-    ctx.fillText('Press Play Stage 1, build a combo, then call Meteor when the lane breaks.', W / 2, H / 2);
+    ctx.fillText('Click "Play Stage 1" in the Stages tab to begin', W / 2, H / 2);
     ctx.fillStyle = '#666';
     ctx.font = '13px sans-serif';
-    ctx.fillText('Cannon bursts, Frost slows, Tesla chains, Amplifier turns clusters into engines.', W / 2, H / 2 + 30);
+    ctx.fillText('Place towers · Defend the base · Survive all waves', W / 2, H / 2 + 30);
   }
 
   function drawPrepOverlay() {
@@ -1484,12 +1346,6 @@ window.TDGame = (function () {
     }
   }
 
-  function onCanvasTouchStart(e) {
-    if (!e.touches || !e.touches.length) return;
-    e.preventDefault();
-    onCanvasClick(e.touches[0]);
-  }
-
   function showContextMenu(tower, clientX, clientY) {
     closeContextMenu();
     var div = document.createElement('div');
@@ -1563,7 +1419,6 @@ window.TDGame = (function () {
     try { state.bestInfinity = parseInt(localStorage.getItem('td_best_infinity') || '0'); } catch(e) {}
 
     canvas.addEventListener('click', onCanvasClick);
-    canvas.addEventListener('touchstart', onCanvasTouchStart, { passive: false });
     canvas.addEventListener('contextmenu', onCanvasRightClick);
     canvas.addEventListener('mousemove', onCanvasMouseMove);
 
@@ -1584,8 +1439,6 @@ window.TDGame = (function () {
     state.bossActive = false;
     state.bossTimeLeft = 0;
     state.baseFlash = 0;
-    state.waveLeaks = 0;
-    state.meteorCooldown = 0;
     state.chosenPassives = [];
     towers = [];
     enemies = [];
@@ -1627,9 +1480,6 @@ window.TDGame = (function () {
       infinityWave: state.infinityWave,
       bossTimeLeft: state.bossTimeLeft,
       bossActive: state.bossActive,
-      waveLeaks: state.waveLeaks,
-      meteorCooldown: state.meteorCooldown,
-      meteorReady: meteorReady(),
       placingMode: state.placingMode,
       placingType: state.placingType,
       towers: towers,
@@ -1683,12 +1533,10 @@ window.TDGame = (function () {
     startStage: startStage,
     startInfinity: startInfinity,
     startWave: startWave,
-    castMeteor: castMeteor,
     placeTower: placeTower,
     sellTower: sellTower,
     upgradeTower: upgradeTower,
     applyPassive: applyPassive,
-    spendGold: spendGold,
     onConfigChange: onConfigChange,
     getState: getState,
     getStats: getStats,
