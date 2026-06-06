@@ -7,10 +7,11 @@ and loaded in a fixed order from `index.html`. The runtime is a single closure
 ## Load order (index.html)
 
 ```
-vps-utils.js   → window.VPS.utils   (pure helpers: dist, distToSegment, fmtTime, shuffled)
-vps-sfx.js     → window.VPS.SFX      (Web Audio sound singleton)
-vps-config.js  → window.VPS.config   (pure static data: constants, WEAPON_DEFS, PASSIVE_POOL, …)
-game.js        → the game runtime (IIFE). Destructures the three modules at the top.
+vps-utils.js     → window.VPS.utils      (pure helpers: dist, distToSegment, fmtTime, shuffled)
+vps-sfx.js       → window.VPS.SFX        (Web Audio sound singleton)
+vps-config.js    → window.VPS.config     (pure static data: constants, WEAPON_DEFS, PASSIVE_POOL, …)
+vps-equipment.js → window.VPS.equipment  (equipment grades, items, gems, set/cross-synergy data + utils)
+game.js          → the game runtime (IIFE). Destructures all four modules at the top.
 ```
 
 `game.js` **must** load last. The first thing its IIFE does is
@@ -23,6 +24,16 @@ so the helper modules must already be present on `window`.
 helpers — were extracted into their own files. They have no dependency on the
 game's mutable state, so they move cleanly and are independently testable/editable.
 Everything still runs in one closure, so no behavior changed.
+
+## Adding new equipment content (patching guide)
+
+All equipment/gem/set data lives in `vps-equipment.js`. To add content:
+- **New set**: add an entry to `SET_DEFS`. Effects keys prefixed `crossEffect_<id>` are
+  auto-detected. Add a handler case in `applyCrossEffect` if the effect key is new.
+- **New base item**: add to the relevant `EQUIP_BASES[slot]` array.
+- **New gem**: add to `GEM_DEFS`.
+- **New cross-synergy behavior**: add to `CROSS_SYNERGIES` and add one `if` branch in the
+  appropriate game.js hit handler (`arrow hit`, `orb hit`, `dealDamage`, etc.).
 
 ## What stayed in game.js (and why)
 

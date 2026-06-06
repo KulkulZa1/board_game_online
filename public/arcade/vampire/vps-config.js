@@ -70,8 +70,9 @@
     { id: 'crit',     name: '⚡ 치명타',       desc: '15% 확률 2배 피해 (중첩 가능)',  max: 6,    apply: (p) => { p.critChance = (p.critChance || 0) + 0.15; } },
     { id: 'pierce_up',name: '🔱 관통 강화',   desc: '화살·부메랑 관통 +2, 번개 연쇄 +3',           max: null, apply: (p) => { p.pierceBonus = (p.pierceBonus || 0) + 2; } },
     { id: 'regen',    name: '💚 체력 재생',   desc: '초당 최대 체력 2% 자동 회복',    max: 5,    apply: (p) => { p.regenRate = (p.regenRate || 0) + 0.02; } },
-    { id: 'ignite',   name: '🔥 점화',        desc: '적중 시 10% 확률로 화상 (초당 피해, 중첩)',     max: 5,    apply: (p) => { p.igniteChance = (p.igniteChance || 0) + 0.10; } },
-    { id: 'venom',    name: '☠ 맹독',         desc: '적중 시 10% 확률로 독 (빠른 약한 틱, 중첩)', max: 5,    apply: (p) => { p.venomChance  = (p.venomChance  || 0) + 0.10; } },
+    { id: 'ignite',   name: '🔥 점화',        desc: '적중 시 10% 확률로 화상 (초당 피해, 중첩)',          max: 5,    apply: (p) => { p.igniteChance = (p.igniteChance || 0) + 0.10; } },
+    { id: 'venom',    name: '☠ 맹독',         desc: '적중 시 10% 확률로 독 (빠른 약한 틱, 중첩)',         max: 5,    apply: (p) => { p.venomChance  = (p.venomChance  || 0) + 0.10; } },
+    { id: 'range_up', name: '🎯 사거리 확장', desc: '모든 무기 사거리·투사체 크기·AoE +18%',              max: 5,    apply: (p) => { p.rangeBonus = (p.rangeBonus || 1) * 1.18; } },
   ];
 
   // 패시브 시너지 — 두 패시브를 조합하면 특수 효과 해금

@@ -28,6 +28,10 @@
   // ── 순수 유틸은 vps-utils.js 에서 로드 (window.VPS.utils) — 최상단에 두어 어디서든 사용 가능 ──
   const { dist, distToSegment, fmtTime, shuffled } = window.VPS.utils;
 
+  // ── 장비·젬·세트 시스템은 vps-equipment.js 에서 로드 (window.VPS.equipment) ──
+  const { rollItem, rollGem, getEquipStats, getActiveSetEffects, getActiveCrossEffects,
+          getActiveBonusDescriptions, gradeIndex } = window.VPS.equipment;
+
   // 정예(엘리트) 처치 시 떨어지는 즉시 발동 파워업 — 모달 없이 줍는 즉시 적용(핵앤슬래시 흐름 유지)
   const POWERUP_POOL = [
     { id: 'berserk', icon: '⚡', color: '#e74c3c', name: '광폭화', apply: (p) => { p.tempDmgMult = 2.0; p.tempDmgTimer = 8; } },
@@ -115,6 +119,8 @@
   let overdriveFlash  = 0;     // 활성화 순간 금빛 섬광 잔여 시간
   let lastMoveDir = { dx: 1, dy: 0 }; // 마지막 이동 방향 (대쉬 방향 결정)
   let itemBoxes     = [];        // 월드에 존재하는 아이템 박스
+  let gearDrops     = [];        // 바닥에 떨어진 장비 아이템 (플레이어가 밟으면 자동 장착)
+  let equipUiVisible = false;    // 장비 UI 오버레이 표시 여부 (E 키)
   let hybridTowers  = [];
   let selectedTowerTypeIdx = 0;
   let towerRecharge = 0;
@@ -269,6 +275,11 @@
       critChance: 0,        // 치명타 확률 (crit 패시브)
       pierceBonus: 0,       // 화살·부메랑 추가 관통 (pierce_up 패시브)
       regenRate: 0,         // 초당 체력 재생 비율 (regen 패시브)
+      rangeBonus: 1,        // 사거리 배율 (range_up 패시브)
+      equip: { helm: null, armor: null, boots: null, ring: null },
+      equipStats: getEquipStats(null),
+      setEffects: {},
+      crossEffects: [],
     };
     enemies    = [];
     projectiles= [];
@@ -295,6 +306,8 @@
     overdriveFlash  = 0;
     lastMoveDir = { dx: 1, dy: 0 };
     itemBoxes     = [];
+    gearDrops     = [];
+    equipUiVisible = false;
     hybridTowers  = [];
     allyPlayer = null;
     selectedTowerTypeIdx = 0;
@@ -343,6 +356,37 @@
     player.weaponLevels[id] = 1;
     player.weaponCDs[id] = 0;
     renderWeaponSlots();
+  }
+
+  // 장비 캐시 갱신 — 장착/해제 시 호출. 세트/교차 시너지 캐시도 동시 갱신.
+  function refreshEquipCache() {
+    if (!player) return;
+    const oldHpBonus = player.equipStats.hpBonus || 0;
+    player.equipStats  = getEquipStats(player.equip);
+    player.setEffects  = getActiveSetEffects(player.equip);
+    player.crossEffects = getActiveCrossEffects(player.equip);
+    // HP 보너스 변분 즉시 반영
+    const delta = player.equipStats.hpBonus - oldHpBonus;
+    if (delta !== 0) {
+      player.maxHp += delta;
+      player.hp     = Math.min(player.hp + Math.max(0, delta), player.maxHp);
+    }
+  }
+
+  // 아이템 장착 — 슬롯에 기존 아이템이 있으면 바닥에 되돌림
+  function equipItem(item) {
+    if (!item || !player) return;
+    const old = player.equip[item.slot];
+    if (old) {
+      // 기존 아이템은 근처 바닥에 떨어뜨림
+      const ang = Math.random() * Math.PI * 2;
+      gearDrops.push({ item: old, x: player.x + Math.cos(ang) * 36, y: player.y + Math.sin(ang) * 36, life: 40 });
+    }
+    player.equip[item.slot] = item;
+    refreshEquipCache();
+    const g = window.VPS.equipment.GRADES[item.grade];
+    floatTexts.push({ text: `${item.icon} ${item.name} 장착!`, life: 2.2, maxLife: 2.2, screenSpace: true, color: g.color, size: 15 });
+    if (equipUiVisible) renderEquipUI();
   }
 
   // 진화: 기본 무기를 진화 무기로 교체 (최대 레벨 상태 유지)
@@ -1927,8 +1971,11 @@
     }
     // ? 키로 조합 가이드 토글
     if (e.key === '?' || e.key === 'h') toggleComboGuide();
-    // ESC로 조합 가이드 닫기
+    // E 키로 장비 UI 토글
+    if (e.key === 'e' || e.key === 'E') { e.preventDefault(); toggleEquipUI(); }
+    // ESC로 오버레이 닫기 (장비 UI > 가이드 > 일시정지 순)
     if (e.key === 'Escape') {
+      if (equipUiVisible) { closeEquipUI(); return; }
       const guide = document.getElementById('comboGuide');
       if (guide && guide.style.display === 'flex') closeComboGuide();
       else togglePause();
@@ -2217,17 +2264,23 @@
     const def    = WEAPON_DEFS[id];
     const lvl    = player.weaponLevels[id] || 1;
     const lvlMul = 1 + 0.22 * (lvl - 1);              // 레벨당 데미지 +22%
-    const cd     = def.cd * player.cdMult;
-    const dmg    = def.dmg * player.dmgMult * (player.tempDmgMult || 1) * lvlMul;
+    // 사거리: range_up 패시브 + 장비 rangeMult 적용
+    const rangeM = (player.rangeBonus || 1) * ((player.equipStats && player.equipStats.rangeMult) || 1);
+    // 데미지: 장비 dmgMult 추가
+    const equipDmgM = (player.equipStats && player.equipStats.dmgMult) || 1;
+    // 쿨다운: 장비 cdMult 추가
+    const cd     = def.cd * player.cdMult * ((player.equipStats && player.equipStats.cdMult) || 1);
+    const dmg    = def.dmg * player.dmgMult * equipDmgM * (player.tempDmgMult || 1) * lvlMul;
     player.weaponCDs[id] = cd;
 
     if (id === 'orb' || id === 'blackhole') {
       const evolved  = id === 'blackhole';
       const orbCount = (evolved ? 5 : 3) + Math.floor((lvl - 1) / 2); // 레벨업 시 궤도 추가
-      const R = def.range;
+      const R = def.range * rangeM;
       for (let i = 0; i < orbCount; i++) {
         const baseAngle = (elapsed * 1.8) + (i / orbCount) * Math.PI * 2;
-        projectiles.push({ type: evolved ? 'blackhole' : 'orb', x: player.x, y: player.y, angle: baseAngle, r: evolved ? 12 : 8, dmg, life: cd + 0.05, orbIdx: i, orbTotal: orbCount, R });
+        const orbR = (evolved ? 12 : 8) * Math.max(1, rangeM * 0.5 + 0.5);  // 크기도 약간 반영
+        projectiles.push({ type: evolved ? 'blackhole' : 'orb', x: player.x, y: player.y, angle: baseAngle, r: orbR, dmg, life: cd + 0.05, orbIdx: i, orbTotal: orbCount, R });
       }
     } else if (id === 'arrow' || id === 'stormbow') {
       const evolved = id === 'stormbow';
@@ -2235,30 +2288,34 @@
       const target  = nearestEnemy();
       if (!target) return;
       const baseAng = Math.atan2(target.y - player.y, target.x - player.x);
+      const arrowR  = 5 * Math.max(1, rangeM * 0.4 + 0.6);
       for (let s = 0; s < shots; s++) {
         const spread = (s - (shots - 1) / 2) * 0.12;
         const ang = baseAng + spread;
-        projectiles.push({ type: 'arrow', x: player.x, y: player.y, vx: Math.cos(ang) * 420, vy: Math.sin(ang) * 420, r: 5, dmg, life: def.range / 420, pierce: (evolved ? 6 : 3) + lvl + (player.pierceBonus || 0) });
+        projectiles.push({ type: 'arrow', x: player.x, y: player.y, vx: Math.cos(ang) * 420, vy: Math.sin(ang) * 420, r: arrowR, dmg, life: def.range * rangeM / 420, pierce: (evolved ? 6 : 3) + lvl + (player.pierceBonus || 0) });
       }
     } else if (id === 'nova' || id === 'supernova') {
-      spawnExplosion(player.x, player.y, def.range, dmg, id === 'supernova');
+      // AoE: aoeMult (세트) + rangeM (range_up) 적용
+      const aoeMult = (player.setEffects && player.setEffects.aoeMult) || 1;
+      const novaRangeMult = (player.setEffects && player.setEffects.novaRangeMult) || 1;
+      spawnExplosion(player.x, player.y, def.range * rangeM * aoeMult * novaRangeMult, dmg, id === 'supernova');
     } else if (id === 'shield' || id === 'aegis') {
       const dur = (id === 'aegis' ? 2.2 : 1.5) + 0.15 * (lvl - 1);
       player.invincible = Math.max(player.invincible, dur);
-      if (id === 'aegis') aegisReflect(dmg, def.range);
+      if (id === 'aegis') aegisReflect(dmg, def.range * rangeM);
       spawnParticle(player.x, player.y, '#3498db', 24, 0.8);
     } else if (id === 'laser' || id === 'deathray') {
       const evolved = id === 'deathray';
       const target  = nearestEnemy();
       const ang = target ? Math.atan2(target.y - player.y, target.x - player.x) : 0;
-      projectiles.push({ type: evolved ? 'deathray' : 'laser', x: player.x, y: player.y, angle: ang, r: 6, dmg, life: 0.45, length: def.range });
+      projectiles.push({ type: evolved ? 'deathray' : 'laser', x: player.x, y: player.y, angle: ang, r: 6, dmg, life: 0.45, length: def.range * rangeM });
     } else if (id === 'boomerang' || id === 'cyclone') {
       // 부메랑: 이동 방향(또는 가장 가까운 적 방향)으로 발사 후 반환, 왕복 타격
       const evolved = id === 'cyclone';
       const count   = evolved ? 3 : 1;
       const pierce  = (evolved ? 99 : 4) + (player.pierceBonus || 0);
       const spd     = 320;
-      const halfLife = def.range / spd;
+      const halfLife = def.range * rangeM / spd;
       const baseAng  = nearestEnemy()
         ? Math.atan2(nearestEnemy().y - player.y, nearestEnemy().x - player.x)
         : Math.atan2(lastMoveDir.dy, lastMoveDir.dx);
@@ -2275,9 +2332,12 @@
     } else if (id === 'chain' || id === 'tempest') {
       // 사슬 번개: 가장 가까운 적부터 연쇄 즉시 타격 + 시각적 아크 생성
       const evolved  = id === 'tempest';
-      // 관통 강화 패시브: 연쇄 횟수도 증가 (2 관통 = +1 연쇄)
-      // 관통 강화 1스택 = 연쇄 +3 (관통=2씩 증가하므로 pierceBonus/2 * 3)
-      const bounces = (evolved ? 5 : 3) + (player.passives['pierce_up'] || 0) * 3;
+      // 관통 강화 패시브: 연쇄 횟수 증가 / 제우스 세트 4피스: +2 연쇄
+      const chainBonusBounces = (player.setEffects && player.setEffects.chainBounceBonus) || 0;
+      const bounces = (evolved ? 5 : 3) + (player.passives['pierce_up'] || 0) * 3 + chainBonusBounces;
+      const chainRng = def.range * rangeM;
+      // 제우스 2피스: 연쇄 피해 추가 배율
+      const chainDmgM = (player.setEffects && player.setEffects.chainDmgMult) || 1;
       let cx = player.x, cy = player.y;
       const hit = new Set();
       for (let b = 0; b < bounces; b++) {
@@ -2285,12 +2345,15 @@
         for (const e of enemies) {
           if (hit.has(e)) continue;
           const d = dist({ x: cx, y: cy }, e);
-          if (d < def.range && d < bd) { bd = d; best = e; }
+          if (d < chainRng && d < bd) { bd = d; best = e; }
         }
         if (!best) break;
         hit.add(best);
-        dealDamage(best, dmg);
-        if (evolved && best.hp > 0) best.frozen = Math.max(best.frozen || 0, 1.5);
+        dealDamage(best, dmg * chainDmgM);
+        if (evolved && best.hp > 0) {
+          const freeDur = 1.5 * ((player.setEffects && player.setEffects.freezeMult) || 1);
+          best.frozen = Math.max(best.frozen || 0, freeDur);
+        }
         projectiles.push({ type: 'arc', x: cx, y: cy, tx: best.x, ty: best.y, life: 0.22, dmg: 0 });
         for (let k = 0; k < 3; k++) spawnParticle(best.x, best.y, evolved ? '#74b9ff' : '#a29bfe', 4, 0.2);
         cx = best.x; cy = best.y;
@@ -2347,13 +2410,20 @@
   }
 
   // ── 데미지 처리 ─────────────────────────────────────────────────
-  // skipChain: chain_crit 연쇄 피해에서 재귀 방지용 플래그
+  // skipChain: chain_crit / 교차 시너지 연쇄에서 재귀 방지용 플래그
   function dealDamage(enemy, dmg, skipChain) {
     // 0 이하 피해 무시 — 보스 사망 폭발(dmg=0)이 재귀 호출하는 버그 방지
     if (dmg <= 0) return;
-    // 치명타: critChance 퍼센트로 2배(집행자 시너지 시 3배) 피해
+    // 서리 세트: 빙결 적에게 추가 피해
+    if (player && (enemy.frozen || 0) > 0) {
+      dmg *= (player.setEffects && player.setEffects.frozenDmgMult) || 1;
+    }
+    // 치명타: critChance 퍼센트로 2배(집행자 시너지 시 3배) 피해 — 장비 critChance 포함
     let isCritRoll = false;
-    if (player && (player.critChance || 0) > 0 && Math.random() < player.critChance) {
+    const totalCrit = (player ? (player.critChance || 0) : 0)
+                    + (player && player.equipStats ? (player.equipStats.critChance || 0) : 0)
+                    + (player && player.setEffects  ? (player.setEffects.critChance  || 0) : 0);
+    if (player && totalCrit > 0 && Math.random() < totalCrit) {
       dmg *= hasSynergy('executioner') ? 3 : 2;
       isCritRoll = true;
     }
@@ -2362,8 +2432,9 @@
     // 상태이상: ignite 패시브 → 화상, venom 패시브 → 독
     if (player && !enemy.dying) {
       if ((player.igniteChance || 0) > 0 && Math.random() < player.igniteChance) {
+        const burnMult = (player.setEffects && player.setEffects.burnDmgMult) || 1;
         enemy.burnTimer = Math.max(enemy.burnTimer || 0, 4);
-        enemy.burnDmg   = Math.max(enemy.burnDmg   || 0, player.dmgMult * 7);
+        enemy.burnDmg   = Math.max(enemy.burnDmg   || 0, player.dmgMult * 7 * burnMult);
       }
       if ((player.venomChance || 0) > 0 && Math.random() < player.venomChance) {
         enemy.poisonTimer = Math.max(enemy.poisonTimer || 0, 5);
@@ -2417,6 +2488,18 @@
             projectiles.push({ type: 'arc', x: cx, y: cy, tx: best.x, ty: best.y, life: 0.22, dmg: 0 });
             for (let k = 0; k < 2; k++) spawnParticle(best.x, best.y, '#9b59b6', 4, 0.2);
             cx = best.x; cy = best.y;
+          }
+        }
+        // 제우스 세트 4피스: 치명타 → 소형 번개 폭발
+        if (isCritRoll && !skipChain && player.crossEffects && player.crossEffects.includes('crit_lightning_nova')) {
+          spawnExplosion(enemy.x, enemy.y, 75, dmg * 0.5, false);
+          for (let k = 0; k < 4; k++) spawnParticle(enemy.x, enemy.y, '#f1c40f', 4, 0.22);
+        }
+        // 그림자 세트 4피스: 치명타 → 0.15초 무적 잔상
+        if (isCritRoll && player.crossEffects && player.crossEffects.includes('crit_shadow_dash')) {
+          player.invincible = Math.max(player.invincible, 0.15);
+          for (let k = 0; k < 3; k++) {
+            spawnParticle(player.x + (Math.random()-0.5)*14, player.y + (Math.random()-0.5)*14, '#9b59b6', 5, 0.22);
           }
         }
       }
@@ -2492,17 +2575,43 @@
         const ba = (k / 4) * Math.PI * 2;
         itemBoxes.push({ x: enemy.x + Math.cos(ba) * 55, y: enemy.y + Math.sin(ba) * 55, life: ITEM_BOX_LIFETIME, pulseT: 0 });
       }
+      // 보스 처치 — 장비 드롭 (legend 이상)
+      const bossSlots = ['helm', 'armor', 'boots', 'ring'];
+      const bossSlot = bossSlots[Math.floor(Math.random() * bossSlots.length)];
+      const bossItem = rollItem(bossSlot, Math.random() < 0.3 ? 'legend' : (Math.random() < 0.5 ? 'unique' : 'rare'));
+      if (bossItem) {
+        const g = window.VPS.equipment.GRADES[bossItem.grade];
+        gearDrops.push({ item: bossItem, x: enemy.x, y: enemy.y + 30, life: 60 });
+        floatTexts.push({ text: `✨ ${bossItem.name} 드롭!`, life: 3.0, maxLife: 3.0, screenSpace: true, color: g.color, size: 16 });
+      }
       spawnExplosion(enemy.x, enemy.y, 200, 0, true);
       screenShake = Math.min(screenShake + 0.5, 0.7);
       hitStop = Math.max(hitStop, 0.13);   // 보스 처치 임팩트
       SFX.boss();
       floatTexts.push({ text: '🏆 BOSS SLAIN!', life: 3.5, maxLife: 3.5, screenSpace: true, color: '#f1c40f', size: 26 });
     }
+    // 드래곤 세트 4피스: 화상 적 사망 시 주변 전파
+    if ((enemy.burnTimer || 0) > 0 && player.crossEffects && player.crossEffects.includes('burn_on_kill_spread')) {
+      for (const ne of enemies) {
+        if (!ne.dying && dist(ne, enemy) < 80) {
+          ne.burnTimer = Math.max(ne.burnTimer || 0, 3.5);
+          ne.burnDmg   = Math.max(ne.burnDmg || 0, player.dmgMult * 6);
+          spawnParticle(ne.x, ne.y, '#e74c3c', 4, 0.3);
+        }
+      }
+    }
     xpGems.push({ x: enemy.x, y: enemy.y, val: enemy.xpVal });
     // 일반 몬스터 5% 확률로 리롤권 드롭 (최대 9개 보유)
     if (!enemy.isBoss && Math.random() < 0.05 && player.rerolls < 9) {
       player.rerolls++;
       floatTexts.push({ x: enemy.x, y: enemy.y - 20, text: '🎲 리롤권 획득!', life: 1.8, maxLife: 1.8, color: '#a29bfe', size: 13 });
+    }
+    // 정예 처치: 8% 확률로 랜덤 장비 드롭 (normal~rare)
+    if (enemy.elite && Math.random() < 0.08) {
+      const slots = ['helm', 'armor', 'boots', 'ring'];
+      const slot  = slots[Math.floor(Math.random() * slots.length)];
+      const item  = rollItem(slot, Math.random() < 0.4 ? 'rare' : 'normal');
+      if (item) gearDrops.push({ item, x: enemy.x + (Math.random()-0.5)*40, y: enemy.y + (Math.random()-0.5)*40, life: 45 });
     }
     if (!enemy.isBoss && kills % 35 === 0 && player.towerCharges < player.maxTowerCharges) {
       player.towerCharges++;
@@ -2976,8 +3085,9 @@
     // 이동
     const { dx, dy } = getMoveDir();
     if (dx !== 0 || dy !== 0) lastMoveDir = { dx, dy };
-    player.x += dx * player.speed * (player.tempSpeedMult || 1) * dt;
-    player.y += dy * player.speed * (player.tempSpeedMult || 1) * dt;
+    const equipSpeedM = (player.equipStats && player.equipStats.speedMult) || 1;
+    player.x += dx * player.speed * (player.tempSpeedMult || 1) * equipSpeedM * dt;
+    player.y += dy * player.speed * (player.tempSpeedMult || 1) * equipSpeedM * dt;
 
     // 이동 잔상 — 움직일 때만 위치를 찍어 질주감 연출 (최대 10개로 제한)
     if (dx !== 0 || dy !== 0) {
@@ -3136,7 +3246,15 @@
         for (let ei = enemies.length - 1; ei >= 0; ei--) {
           const e = enemies[ei];
           const de = dist(p, e);
-          if (de < p.r + e.size) dealDamage(e, p.dmg * dt * 3);
+          if (de < p.r + e.size) {
+            dealDamage(e, p.dmg * dt * 3);
+            // 서리 세트 4피스: 궤도 구체 적중 시 15% 확률 빙결
+            if (!evolved && !e.dying && player.crossEffects && player.crossEffects.includes('orb_on_hit_freeze') && Math.random() < 0.15) {
+              const freeDur = 1.2 * ((player.setEffects && player.setEffects.freezeMult) || 1);
+              e.frozen = Math.max(e.frozen || 0, freeDur);
+              spawnParticle(e.x, e.y, '#74b9ff', 5, 0.25);
+            }
+          }
           if (e.dying) continue;
           if (evolved && !e.isBoss && de < captureR + e.size) {
             // 가까울수록 강한 흡입력 — 적을 플레이어가 아닌 블랙홀 쪽으로 끌어당김
@@ -3176,6 +3294,26 @@
             // armor_breaker 시너지: 관통 적중 시 40% 범위 피해
             if (hasSynergy('armor_breaker')) {
               chainExplosions.push({ x: e.x, y: e.y, range: 42, dmg: p.dmg * 0.4, delay: 0 });
+            }
+            // 제우스 세트 4피스: 화살 적중 시 연쇄 번개 (2명)
+            if (player.crossEffects && player.crossEffects.includes('arrow_on_hit_chain') && !e.dying) {
+              const chainDmgM = (player.setEffects && player.setEffects.chainDmgMult) || 1;
+              let cx = e.x, cy = e.y;
+              const chainHit = new Set([e]);
+              for (let b = 0; b < 2; b++) {
+                let best = null, bd = Infinity;
+                for (const ce of enemies) {
+                  if (chainHit.has(ce) || ce.dying) continue;
+                  const d = dist({ x: cx, y: cy }, ce);
+                  if (d < 180 && d < bd) { bd = d; best = ce; }
+                }
+                if (!best) break;
+                chainHit.add(best);
+                dealDamage(best, p.dmg * 0.45 * chainDmgM, true);
+                projectiles.push({ type: 'arc', x: cx, y: cy, tx: best.x, ty: best.y, life: 0.22, dmg: 0 });
+                for (let k = 0; k < 2; k++) spawnParticle(best.x, best.y, '#f1c40f', 4, 0.18);
+                cx = best.x; cy = best.y;
+              }
             }
             p.pierce--;
             if (p.pierce <= 0) { projectiles.splice(i, 1); break; }
@@ -3363,11 +3501,19 @@
 
       if (!e.goblin && player.invincible <= 0 && d < e.size + 12) {
         const contactDmg = e.isBoss ? 55 : [8, 18, 38][Math.min(e.tier, 2)];
-        player.hp -= contactDmg * dt * (hasSynergy('iron_fortress') ? 0.70 : 1.0);
+        // 장비 방어력: 고정값 흡수 + 티탄 세트 퍼센트 감소
+        const defAbs = (player.equipStats && player.equipStats.defenseAbs) || 0;
+        const defPct = (player.setEffects && player.setEffects.damageReductionPct) || 0;
+        const mitigatedDmg = Math.max(0, contactDmg - defAbs) * (1 - defPct) * dt;
+        player.hp -= mitigatedDmg * (hasSynergy('iron_fortress') ? 0.70 : 1.0);
         screenShake = Math.min(screenShake + 0.15, 0.35);
         hurtScreenFlash = 0.28;
         SFX.hurt();
         player.invincible = 0.15;
+        // 티탄 세트 4피스: 가시 오라 — 근접 적에게 반격 피해
+        if (player.crossEffects && player.crossEffects.includes('shield_aoe_thorns') && player.invincible > 0) {
+          dealDamage(e, 15);
+        }
         if (player.hp <= 0) { endGame('dead'); return; }
       }
     }
@@ -3381,7 +3527,10 @@
       ep.y += ep.vy * dt;
       const projectileTarget = allyPlayer && dist(ep, allyPlayer) < dist(ep, player) ? allyPlayer : player;
       if (player.invincible <= 0 && dist(ep, projectileTarget) < ep.r + 12) {
-        player.hp -= ep.dmg * (hasSynergy('iron_fortress') ? 0.70 : 1.0);
+        const defAbs2 = (player.equipStats && player.equipStats.defenseAbs) || 0;
+        const defPct2 = (player.setEffects && player.setEffects.damageReductionPct) || 0;
+        const rawDmg = Math.max(0, ep.dmg - defAbs2) * (1 - defPct2);
+        player.hp -= rawDmg * (hasSynergy('iron_fortress') ? 0.70 : 1.0);
         screenShake = Math.min(screenShake + 0.22, 0.45);
         hurtScreenFlash = 0.28;
         SFX.hurt();
@@ -3426,7 +3575,8 @@
     for (let i = xpGems.length - 1; i >= 0; i--) {
       const g = xpGems[i];
       const dp = dist(g, player);
-      if (dp < player.xpRange || (allyPlayer && dist(g, allyPlayer) < player.xpRange * 0.75)) {
+      const xpPickupRange = player.xpRange * ((player.equipStats && player.equipStats.xpRangeMult) || 1);
+      if (dp < xpPickupRange || (allyPlayer && dist(g, allyPlayer) < xpPickupRange * 0.75)) {
         gainXP(g.val);
         spawnParticle(g.x, g.y, '#f1c40f', 3, 0.22);
         spawnParticle(g.x, g.y, '#ffe9a8', 2, 0.18);
@@ -3450,6 +3600,25 @@
       if (p.life <= 0) { particles.splice(i, 1); continue; }
       p.x += p.vx * dt; p.y += p.vy * dt;
       p.vx *= 0.92; p.vy *= 0.92;
+    }
+
+    // 바닥 장비 드롭 — 수명 차감, 플레이어 접촉 시 자동 장착
+    for (let i = gearDrops.length - 1; i >= 0; i--) {
+      const gd = gearDrops[i];
+      gd.life -= dt;
+      if (gd.life <= 0) { gearDrops.splice(i, 1); continue; }
+      if (dist(gd, player) < 24) {
+        const cur = player.equip[gd.item.slot];
+        // 현재 슬롯이 비어있거나 새 아이템 등급이 같거나 높으면 자동 장착
+        if (!cur || gradeIndex(gd.item.grade) >= gradeIndex(cur.grade)) {
+          equipItem(gd.item);
+        } else {
+          // 등급이 낮으면 바닥 아이템 무시(짧은 안내 텍스트)
+          const g = window.VPS.equipment.GRADES[gd.item.grade];
+          floatTexts.push({ text: `${gd.item.icon} ${gd.item.name} (등급 미달)`, life: 1.2, maxLife: 1.2, screenSpace: true, color: g.color, size: 12 });
+        }
+        gearDrops.splice(i, 1);
+      }
     }
   }
 
@@ -3515,6 +3684,29 @@
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText('📦', 0, 0);
+      ctx.restore();
+    }
+
+    // 바닥 장비 드롭 렌더 — 등급 색상 글로우 + 아이콘
+    for (const gd of gearDrops) {
+      const gInfo = window.VPS.equipment.GRADES[gd.item.grade];
+      const pulse  = 0.75 + Math.sin(elapsed * 3.2 + gd.item.id.charCodeAt(0)) * 0.25;
+      const fade   = Math.min(gd.life * 0.15, 1);
+      ctx.save();
+      ctx.translate(gd.x, gd.y);
+      ctx.globalAlpha = fade * pulse;
+      ctx.shadowBlur  = 22;
+      ctx.shadowColor = gInfo.color;
+      ctx.beginPath();
+      ctx.arc(0, 0, 14, 0, Math.PI * 2);
+      ctx.fillStyle = gInfo.color + '44';
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.globalAlpha = fade;
+      ctx.font = '16px serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(gd.item.icon, 0, 0);
       ctx.restore();
     }
 
@@ -4393,6 +4585,98 @@
   function closeComboGuide() {
     const el = document.getElementById('comboGuide');
     if (el) el.style.display = 'none';
+  }
+
+  // ── 장비 UI ───────────────────────────────────────────────────────
+  function buildEquipUIHTML() {
+    if (!player) return '<p style="color:#aaa">게임 중이 아닙니다.</p>';
+    const { GRADES } = window.VPS.equipment;
+    const slotNames = { helm: '🪖 투구', armor: '🧥 갑옷', boots: '👟 부츠', ring: '💍 반지' };
+    let html = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">';
+    for (const [slot, label] of Object.entries(slotNames)) {
+      const item = player.equip[slot];
+      const gInfo = item ? GRADES[item.grade] : null;
+      html += `<div style="background:#1a2540;border-radius:8px;padding:10px;border:1px solid ${gInfo ? gInfo.color : '#39445a'}">`;
+      html += `<div style="font-size:0.8em;color:#9fb4d8;margin-bottom:4px">${label}</div>`;
+      if (item) {
+        html += `<div style="color:${gInfo.color};font-weight:bold;font-size:0.85em">${item.name}</div>`;
+        html += '<div style="font-size:0.75em;color:#ccc;margin-top:4px">';
+        for (const [k, v] of Object.entries(item.stats)) {
+          const pct = (v > 1 || v < 0) ? Math.round((v - 1) * 100) + '%' : (v < 1 && k !== 'hpBonus' && k !== 'defenseAbs' && k !== 'chainBonus' && k !== 'critChance' ? Math.round((1 - v) * 100) + '% 감소' : String(v));
+          html += `<div>• ${k}: ${typeof v === 'number' && v < 1 && k.endsWith('Mult') ? '-' + Math.round((1-v)*100) + '%' : (k === 'hpBonus' ? '+' + Math.round(v) + ' HP' : (k === 'defenseAbs' ? '+' + Math.round(v) + ' 방어' : (k === 'critChance' ? '+' + Math.round(v*100) + '% 치명타' : (k === 'chainBonus' ? '+' + Math.round(v) + ' 연쇄' : (typeof v === 'number' && v >= 1 ? '+' + Math.round((v-1)*100) + '%' : String(v))))))}</div>`;
+        }
+        html += '</div>';
+        // 젬 슬롯 표시
+        if (item.gems.length > 0) {
+          html += '<div style="margin-top:6px;display:flex;gap:4px;flex-wrap:wrap">';
+          for (let gi = 0; gi < item.gems.length; gi++) {
+            const gem = item.gems[gi];
+            html += gem
+              ? `<span title="${gem.name}" style="font-size:1.1em;cursor:default">${gem.icon}</span>`
+              : `<span style="width:18px;height:18px;border:1px dashed #39445a;border-radius:50%;display:inline-block"></span>`;
+          }
+          html += '</div>';
+        }
+      } else {
+        html += '<div style="color:#555;font-size:0.8em;font-style:italic">장착 없음</div>';
+      }
+      html += '</div>';
+    }
+    html += '</div>';
+    // 세트 효과 현황
+    const bonuses = getActiveBonusDescriptions(player.equip);
+    if (bonuses.length > 0) {
+      html += '<div style="margin-top:12px;border-top:1px solid #39445a;padding-top:10px">';
+      html += '<div style="color:#9fb4d8;font-size:0.8em;margin-bottom:6px">세트 효과</div>';
+      for (const b of bonuses) {
+        html += `<div style="font-size:0.78em;margin-bottom:3px;color:${b.active ? '#2ecc71' : '#555'}">`;
+        html += `${b.icon} ${b.name} (${b.have}/${b.need}): ${b.desc}${b.active ? ' ✓' : ''}`;
+        html += '</div>';
+      }
+      html += '</div>';
+    }
+    return html;
+  }
+
+  function renderEquipUI() {
+    const el = document.getElementById('equipOverlay');
+    if (el) el.querySelector('.equip-body').innerHTML = buildEquipUIHTML();
+  }
+
+  function toggleEquipUI() {
+    let el = document.getElementById('equipOverlay');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'equipOverlay';
+      el.style.cssText = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:#0f1c32;border:1px solid #39445a;border-radius:12px;padding:16px;z-index:200;min-width:320px;max-width:500px;max-height:80vh;overflow-y:auto;box-shadow:0 0 30px rgba(0,0,0,0.8)';
+      el.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+          <span style="color:#e2e8f0;font-weight:bold">🛡 장비 (E키로 닫기)</span>
+          <button id="equipClose" style="background:none;border:none;color:#aaa;cursor:pointer;font-size:1.2em">✕</button>
+        </div>
+        <div class="equip-body">${buildEquipUIHTML()}</div>
+      `;
+      document.getElementById('gameWrapper').appendChild(el);
+      el.querySelector('#equipClose').addEventListener('click', closeEquipUI);
+    } else {
+      if (el.style.display === 'none') {
+        el.style.display = '';
+        el.querySelector('.equip-body').innerHTML = buildEquipUIHTML();
+      } else {
+        el.style.display = 'none';
+        equipUiVisible = false;
+        return;
+      }
+    }
+    equipUiVisible = true;
+    if (state === 'playing') setPaused(true);
+  }
+
+  function closeEquipUI() {
+    const el = document.getElementById('equipOverlay');
+    if (el) el.style.display = 'none';
+    equipUiVisible = false;
+    if (state === 'paused') setPaused(false);
   }
 
   // 가이드 버튼 연결 — 요소가 없어도(구버전 캐시 등) 게임이 멈추지 않도록 방어
