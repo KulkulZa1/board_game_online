@@ -213,6 +213,26 @@
     return stats;
   }
 
+  // 아이템 전투력 점수 (분해 비교, 자동 분해 판정용)
+  function calcItemPower(item) {
+    if (!item) return 0;
+    const stats = getEquipStats(item);
+    let power = 0;
+    if (stats.dmgMult)    power += (stats.dmgMult - 1) * 1000;
+    if (stats.cdMult && stats.cdMult < 1) power += (1 - stats.cdMult) * 800;
+    if (stats.rangeBonus) power += (stats.rangeBonus - 1) * 400;
+    if (stats.maxHp)      power += stats.maxHp * 1.5;
+    if (stats.speedMult)  power += (stats.speedMult - 1) * 250;
+    if (stats.critChance) power += stats.critChance * 250;
+    if (stats.xpRange)    power += (stats.xpRange - 1) * 150;
+    const gemBonus = { common: 15, uncommon: 30, rare: 55, epic: 90, special: 75 };
+    for (const gem of (item.gems || [])) {
+      const gd = typeof gem === 'object' ? gem : GEM_DEFS.find(d => d.id === gem);
+      if (gd) power += gemBonus[gd.rarity] || 15;
+    }
+    return Math.round(power);
+  }
+
   // Returns which set bonuses are active given current equip map {helm,armor,boots,ring}
   function getActiveSetEffects(equipMap) {
     const active = [];
@@ -315,5 +335,6 @@
     aggregateGemEffects,
     gemEffectDesc,
     itemDisplayName,
+    calcItemPower,
   };
 })();
