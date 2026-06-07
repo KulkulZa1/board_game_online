@@ -68,6 +68,16 @@
     { id: 'obsidian',  icon: '⚫', name: '흑요석',     rarity: 'rare',      stat: 'maxHp',     val: 35 },
     { id: 'diamond',   icon: '💎', name: '다이아몬드', rarity: 'rare',      stat: 'dmgMult',   val: 1.12, also: { stat: 'rangeBonus', val: 1.06 } },
     { id: 'void_shard',icon: '🌑', name: '공허 파편',  rarity: 'epic',      stat: 'dmgMult',   val: 1.15, also: { stat: 'cdMult', val: 0.91 } },
+    // ── 특수 젬 (Path of Exile 영감) — 스탯 대신 적중 시 특수 효과 부여 ──
+    //   stat 없음 → getEquipStats 는 건너뛰고, game.js 가 effect 를 집계해 전투에 적용
+    { id: 'chain_gem',   icon: '🔗', name: '연쇄',   rarity: 'special', effect: 'chain',   procChance: 0.28, val: 2,    desc: '28% 확률로 가까운 적 2명에게 번개 연쇄 (60% 피해)' },
+    { id: 'cleave_gem',  icon: '🪓', name: '가르기', rarity: 'special', effect: 'cleave',  procChance: 1.0,  val: 0.45, desc: '적중 시 주변 적에게 45% 광역 분할 피해' },
+    { id: 'freeze_gem',  icon: '❄',  name: '빙결',   rarity: 'special', effect: 'freeze',  procChance: 0.22, val: 1.3,  desc: '22% 확률로 1.3초 빙결' },
+    { id: 'fork_gem',    icon: '🔱', name: '부채꼴', rarity: 'special', effect: 'fork',    procChance: 0.30, val: 3,    desc: '30% 확률로 3갈래 파편 발사 (50% 피해)' },
+    { id: 'combust_gem', icon: '🔥', name: '점화',   rarity: 'special', effect: 'combust', procChance: 0.30, val: 2,    desc: '30% 확률로 화상 2중첩 부착 (화염 패시브 불필요)' },
+    { id: 'shock_gem',   icon: '⚡', name: '감전',   rarity: 'special', effect: 'shock',   procChance: 0.25, val: 1.30, desc: '25% 확률로 3초간 적이 받는 피해 +30%' },
+    { id: 'leech_gem',   icon: '🩸', name: '흡수',   rarity: 'special', effect: 'leech',   procChance: 1.0,  val: 0.04, desc: '적중 피해의 4%만큼 체력 회복' },
+    { id: 'culling_gem', icon: '☠',  name: '참수',   rarity: 'special', effect: 'culling', procChance: 1.0,  val: 0.12, desc: '체력 12% 이하 적 즉시 처형' },
   ];
 
   // 5 set definitions — each with 2-piece and 4-piece bonuses
@@ -121,7 +131,7 @@
   ];
 
   const GRADE_DROP_WEIGHTS = [55, 25, 11, 5, 3, 1]; // normal→antique
-  const GEM_RARITY_WEIGHTS = { common: 55, uncommon: 28, rare: 13, epic: 4 };
+  const GEM_RARITY_WEIGHTS = { common: 50, uncommon: 26, rare: 13, epic: 4, special: 7 };
   const SLOTS = ['helm', 'armor', 'boots', 'ring'];
 
   function gradeIndex(grade) {
@@ -183,10 +193,10 @@
         stats[k] = (stats[k] || 0) + v * grade.statMult;
       }
     }
-    // Apply gems additively
+    // Apply gems additively (특수 젬은 stat 이 없으므로 건너뜀 — effect 는 game.js 가 처리)
     for (const gem of (item.gems || [])) {
       const g = typeof gem === 'object' ? gem : GEM_DEFS.find(d => d.id === gem);
-      if (!g) continue;
+      if (!g || !g.stat) continue;
       if (g.stat === 'maxHp') {
         stats[g.stat] = (stats[g.stat] || 0) + g.val;
       } else if (g.stat === 'critChance') {
@@ -201,6 +211,26 @@
       }
     }
     return stats;
+  }
+
+  // 아이템 전투력 점수 (분해 비교, 자동 분해 판정용)
+  function calcItemPower(item) {
+    if (!item) return 0;
+    const stats = getEquipStats(item);
+    let power = 0;
+    if (stats.dmgMult)    power += (stats.dmgMult - 1) * 1000;
+    if (stats.cdMult && stats.cdMult < 1) power += (1 - stats.cdMult) * 800;
+    if (stats.rangeBonus) power += (stats.rangeBonus - 1) * 400;
+    if (stats.maxHp)      power += stats.maxHp * 1.5;
+    if (stats.speedMult)  power += (stats.speedMult - 1) * 250;
+    if (stats.critChance) power += stats.critChance * 250;
+    if (stats.xpRange)    power += (stats.xpRange - 1) * 150;
+    const gemBonus = { common: 15, uncommon: 30, rare: 55, epic: 90, special: 75 };
+    for (const gem of (item.gems || [])) {
+      const gd = typeof gem === 'object' ? gem : GEM_DEFS.find(d => d.id === gem);
+      if (gd) power += gemBonus[gd.rarity] || 15;
+    }
+    return Math.round(power);
   }
 
   // Returns which set bonuses are active given current equip map {helm,armor,boots,ring}
@@ -230,6 +260,38 @@
       if (syn.sets.every(s => activeSets.has(s))) active.push(syn);
     }
     return active;
+  }
+
+  // 장착된 모든 아이템의 특수 젬 효과를 집계 → { effect: { procChance, val, count } }
+  //   같은 효과 젬을 여러 개 박으면 procChance 합산(상한 적용), val 은 누적/최대
+  function aggregateGemEffects(equipMap) {
+    const fx = {};
+    for (const slot of SLOTS) {
+      const item = equipMap[slot];
+      if (!item || !item.gems) continue;
+      for (const gem of item.gems) {
+        const g = typeof gem === 'object' ? gem : GEM_DEFS.find(d => d.id === gem);
+        if (!g || !g.effect) continue;
+        if (!fx[g.effect]) fx[g.effect] = { procChance: 0, val: 0, count: 0 };
+        // procChance 1.0(상시)인 효과는 누적하지 않고 1.0 유지, 그 외는 합산(상한 0.85)
+        if (g.procChance >= 1) fx[g.effect].procChance = 1;
+        else fx[g.effect].procChance = Math.min(0.85, fx[g.effect].procChance + (g.procChance || 0));
+        // val: leech/cleave/culling 등은 누적, freeze 지속 등은 최대값
+        if (g.effect === 'leech' || g.effect === 'cleave' || g.effect === 'fork') {
+          fx[g.effect].val += (g.val || 0);
+        } else {
+          fx[g.effect].val = Math.max(fx[g.effect].val, g.val || 0);
+        }
+        fx[g.effect].count++;
+      }
+    }
+    return fx;
+  }
+
+  // 젬 단일 효과 설명 (UI 툴팁용)
+  function gemEffectDesc(gemOrId) {
+    const g = typeof gemOrId === 'object' ? gemOrId : GEM_DEFS.find(d => d.id === gemOrId);
+    return g && g.desc ? g.desc : '';
   }
 
   // Human-readable bonus descriptions for UI
@@ -270,6 +332,9 @@
     getActiveSetEffects,
     getActiveCrossEffects,
     getActiveBonusDescriptions,
+    aggregateGemEffects,
+    gemEffectDesc,
     itemDisplayName,
+    calcItemPower,
   };
 })();

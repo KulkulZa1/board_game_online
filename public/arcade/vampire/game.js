@@ -390,6 +390,11 @@
   let infiniteElapsed = 0;       // 무한 모드 경과 시간(초)
   let spectralFields = [];       // spectral_blade 잔향 검기 필드
   let killStreakTimestamps = [];  // cascade_collapse: 5초 내 처치 타임스탬프
+  let dashChainWindow = 0;       // 연쇄 대쉬 가능 잔여 시간 (첫 대쉬 적중 후 1초)
+  let dashChainCount = 0;        // 현재 연쇄 대쉬 횟수 (최대 2)
+  let dashAfterimages = [];      // 대쉬 잔상 폭발 필드 (DoT AoE)
+  let autoDismantleEnabled = false; // 자동 분해 활성화 (장비 전투력이 낮으면 자동 분해)
+  let _lastDashKeyState = false; // 대쉬 키 이전 프레임 상태 (연쇄 대쉬 중복 방지)
   let nextBossTime  = BOSS_INTERVAL;
   const GOBLIN_INTERVAL = 48;    // 보물 고블린 등장 주기(초)
   let bossActive    = false;
@@ -550,6 +555,8 @@
       equipStats: {},       // 캐시: 장비 합산 스탯
       setEffects: [],       // 활성 세트 효과 목록
       crossEffects: [],     // 활성 교차 시너지 목록
+      gemEffects: {},       // 캐시: 특수 젬 효과 집계 { effect: {procChance,val,count} }
+      setFlags: {},         // 캐시: 활성 세트/교차 효과 플래그 { effectName: true }
     };
     enemies    = [];
     projectiles= [];
@@ -588,6 +595,10 @@
     infiniteElapsed = 0;
     spectralFields = [];
     killStreakTimestamps = [];
+    dashChainWindow = 0;
+    dashChainCount = 0;
+    dashAfterimages = [];
+    _lastDashKeyState = false;
     nextBossTime  = difficulty.bossInterval || BOSS_INTERVAL;
     bossActive    = false;
     bossWarning   = 0;
@@ -2607,6 +2618,17 @@
     player.equipStats   = combined;
     player.setEffects   = setEffects;
     player.crossEffects = eq.getActiveCrossEffects(player.equip);
+    // 특수 젬 효과 집계
+    player.gemEffects   = eq.aggregateGemEffects(player.equip);
+    // 세트 4세트 + 교차 시너지의 특수 hit-effect 플래그 집계
+    const flags = {};
+    for (const se of setEffects) {
+      if (se.bonus && se.bonus.effect) flags[se.bonus.effect] = true;
+    }
+    for (const c of player.crossEffects) {
+      if (c.effect) flags[c.effect] = true;
+    }
+    player.setFlags = flags;
   }
 
   function equipItem(item) {
@@ -2953,6 +2975,8 @@
   function dealDamage(enemy, dmg, skipChain, isDot) {
     // 0 이하 피해 무시 — 보스 사망 폭발(dmg=0)이 재귀 호출하는 버그 방지
     if (dmg <= 0) return;
+    // 감전(shock) 젬 디버프: 적이 받는 모든 피해 증가
+    if ((enemy.shockTimer || 0) > 0 && enemy.shockMult) dmg *= enemy.shockMult;
     // 치명타: critChance 퍼센트로 2배(집행자 시너지 시 3배) 피해 — 도트 피해는 치명타 없음
     let isCritRoll = false;
     if (!isDot && player && (player.critChance || 0) > 0 && Math.random() < player.critChance) {
@@ -2996,6 +3020,10 @@
         enemy.poisonTimer = 6.0;
         enemy.poisonDmg   = Math.max(3, dmg * 0.06);
       }
+    }
+    // 장비 특수 젬 + 세트/교차 적중 효과 (직접 타격 한정 — 2차 피해/도트는 제외)
+    if (!isDot && !skipChain && player) {
+      applyEquipHitEffects(enemy, dmg, isCritRoll);
     }
     // 넉백: 피격 충격으로 플레이어 방향 반대로 밀림 (보스는 10% 강도)
     if (player) {
@@ -3049,6 +3077,142 @@
       }
     }
     if (enemy.hp <= 0) killEnemy(enemy);
+  }
+
+  // ── 장비 특수 젬 + 세트/교차 적중 효과 ──────────────────────────
+  //   직접 타격(dealDamage, !isDot && !skipChain) 시에만 호출됨.
+  //   2차 피해는 dealDamage(.., skipChain=true)로 호출해 무한 재귀를 막는다.
+  function applyEquipHitEffects(enemy, dmg, isCritRoll) {
+    const gx = player.gemEffects || {};
+    const sf = player.setFlags || {};
+    const rb = (player.rangeBonus || 1) * ((player.equipStats && player.equipStats.rangeBonus) || 1);
+
+    // ── 특수 젬 ──
+    // 🔗 연쇄: 가까운 적에게 번개 연쇄
+    if (gx.chain && Math.random() < gx.chain.procChance) {
+      let cx = enemy.x, cy = enemy.y;
+      const hit = new Set([enemy]);
+      const links = gx.chain.val || 2;
+      for (let b = 0; b < links; b++) {
+        let best = null, bd = Infinity;
+        for (const e of enemies) {
+          if (hit.has(e) || e.dying) continue;
+          const d = dist({ x: cx, y: cy }, e);
+          if (d < 220 && d < bd) { bd = d; best = e; }
+        }
+        if (!best) break;
+        hit.add(best);
+        dealDamage(best, dmg * 0.6, true);
+        projectiles.push({ type: 'arc', x: cx, y: cy, tx: best.x, ty: best.y, life: 0.2, dmg: 0 });
+        cx = best.x; cy = best.y;
+      }
+    }
+    // 🪓 가르기: 주변 광역 분할 피해 (상시 발동)
+    if (gx.cleave) {
+      const r = 70 * rb;
+      const cd = dmg * gx.cleave.val;
+      for (const e of enemies) {
+        if (e === enemy || e.dying) continue;
+        if (dist(enemy, e) < r) dealDamage(e, cd, true);
+      }
+      rings.push({ x: enemy.x, y: enemy.y, r: 4, maxR: r, life: 0.16, maxLife: 0.16, color: '#ff9f43' });
+    }
+    // ❄ 빙결: 확률로 적 빙결
+    if (gx.freeze && enemy.hp > 0 && Math.random() < gx.freeze.procChance) {
+      enemy.frozen = Math.max(enemy.frozen || 0, gx.freeze.val || 1.3);
+      for (let k = 0; k < 4; k++) spawnParticle(enemy.x, enemy.y, '#74b9ff', 4, 0.3);
+      rings.push({ x: enemy.x, y: enemy.y, r: 2, maxR: enemy.size + 14, life: 0.2, maxLife: 0.2, color: '#74b9ff' });
+    }
+    // 🔱 부채꼴: 확률로 파편 발사
+    if (gx.fork && Math.random() < gx.fork.procChance) {
+      const n = Math.max(2, Math.round(gx.fork.val || 3));
+      const base = Math.random() * Math.PI * 2;
+      for (let s = 0; s < n; s++) {
+        const a = base + (s - (n - 1) / 2) * 0.42;
+        projectiles.push({ type: 'arrow', x: enemy.x, y: enemy.y, vx: Math.cos(a) * 380, vy: Math.sin(a) * 380, r: 4, dmg: dmg * 0.5, life: 0.55, pierce: 2, noGemFx: true });
+      }
+    }
+    // 🔥 점화: 확률로 화상 부착 (화염 패시브 불필요)
+    if (gx.combust && enemy.hp > 0 && Math.random() < gx.combust.procChance) {
+      enemy.burnStacks = Math.min((enemy.burnStacks || 0) + Math.round(gx.combust.val || 2), 5);
+      enemy.burnTimer  = Math.max(enemy.burnTimer || 0, 3.0);
+      enemy.burnDmg    = enemy.burnDmg || Math.max(4, dmg * 0.10);
+    }
+    // ⚡ 감전: 확률로 받피 증가 디버프
+    if (gx.shock && enemy.hp > 0 && Math.random() < gx.shock.procChance) {
+      enemy.shockTimer = 3.0;
+      enemy.shockMult  = gx.shock.val || 1.3;
+    }
+    // 🩸 흡수: 입힌 피해 비율만큼 회복 (상시)
+    if (gx.leech && player.hp < player.maxHp) {
+      player.hp = Math.min(player.hp + dmg * gx.leech.val, player.maxHp);
+    }
+    // ☠ 참수: 체력 비율 이하 적 즉시 처형 (상시, 보스 제외)
+    if (gx.culling && enemy.hp > 0 && !enemy.isBoss && enemy.hp <= enemy.maxHp * gx.culling.val) {
+      enemy.hp = 0;
+      floatTexts.push({ x: enemy.x, y: enemy.y - 30, text: '☠ 처형!', life: 1.0, maxLife: 1.0, color: '#e74c3c', size: 14 });
+    }
+
+    // ── 세트 4세트 / 교차 시너지 적중 효과 ──
+    // 치명타 시 번개 폭발 (제우스)
+    if (isCritRoll && (sf.zeus_nova || sf.zeus_crit_nova)) {
+      const r = 60 * rb;
+      chainExplosions.push({ x: enemy.x, y: enemy.y, range: r, dmg: dmg * 0.5, delay: 0 });
+      rings.push({ x: enemy.x, y: enemy.y, r: 6, maxR: r, life: 0.25, maxLife: 0.25, color: '#f1c40f' });
+      for (let k = 0; k < 6; k++) spawnParticle(enemy.x, enemy.y, '#f1c40f', 4, 0.25);
+    }
+    // 치명타 시 그림자 대쉬 (속도 버스트 + 잔상)
+    if (isCritRoll && (sf.shadow_dash || sf.shadow_crit_dash)) {
+      player.tempSpeedMult  = Math.max(player.tempSpeedMult || 1, 1.4);
+      player.tempSpeedTimer = Math.max(player.tempSpeedTimer || 0, 0.8);
+      for (let s = 0; s < 3; s++) playerTrail.push({ x: player.x, y: player.y, life: 0.3 });
+    }
+    // 화상 적 적중 시 화염 확산 (드래곤)
+    if ((sf.dragon_spread || sf.dragon_burn_spread) && (enemy.burnStacks || 0) > 0) {
+      const r = 90 * rb;
+      for (const e of enemies) {
+        if (e === enemy || e.dying) continue;
+        if (dist(enemy, e) < r && (e.burnStacks || 0) < (enemy.burnStacks || 1)) {
+          e.burnStacks = Math.min((e.burnStacks || 0) + 1, 5);
+          e.burnTimer  = Math.max(e.burnTimer || 0, 2.5);
+          e.burnDmg    = e.burnDmg || Math.max(4, dmg * 0.08);
+        }
+      }
+    }
+    // 적중 시 주변 빙결 (서리)
+    if ((sf.frost_freeze || sf.frost_orb_freeze) && Math.random() < 0.18) {
+      const r = 75 * rb;
+      for (const e of enemies) {
+        if (e.dying) continue;
+        if (dist(enemy, e) < r) { e.frozen = Math.max(e.frozen || 0, 1.0); spawnParticle(e.x, e.y, '#74b9ff', 3, 0.25); }
+      }
+    }
+    // 화살/구슬 번개 연쇄 (제우스 교차)
+    if (sf.zeus_arrow_chain && Math.random() < 0.25) {
+      let cx = enemy.x, cy = enemy.y;
+      const hit = new Set([enemy]);
+      for (let b = 0; b < 2; b++) {
+        let best = null, bd = Infinity;
+        for (const e of enemies) { if (hit.has(e) || e.dying) continue; const d = dist({ x: cx, y: cy }, e); if (d < 200 && d < bd) { bd = d; best = e; } }
+        if (!best) break;
+        hit.add(best); dealDamage(best, dmg * 0.5, true);
+        projectiles.push({ type: 'arc', x: cx, y: cy, tx: best.x, ty: best.y, life: 0.2, dmg: 0 });
+        cx = best.x; cy = best.y;
+      }
+    }
+  }
+
+  // 거인 세트 가시 반격 (titan_thorns) — 피격 시 주변 적에게 폭발 반격
+  function triggerThorns() {
+    if (!player || !player.setFlags || !player.setFlags.titan_thorns) return;
+    const r = 75 * (player.rangeBonus || 1) * ((player.equipStats && player.equipStats.rangeBonus) || 1);
+    const tdmg = (player.maxHp || BASE_HP) * 0.5 * player.dmgMult;
+    for (const e of enemies) {
+      if (e.dying) continue;
+      if (dist(player, e) < r) dealDamage(e, tdmg, true);
+    }
+    rings.push({ x: player.x, y: player.y, r: 8, maxR: r, life: 0.3, maxLife: 0.3, color: '#b2bec3' });
+    for (let k = 0; k < 10; k++) spawnParticle(player.x, player.y, '#dfe6e9', 5, 0.35);
   }
 
   // 콤보 마일스톤 보상 — 데미지/처치 경로를 다시 타지 않는 안전한 보상(XP·코인)만 지급
@@ -3190,9 +3354,12 @@
       player.rerolls++;
       floatTexts.push({ x: enemy.x, y: enemy.y - 20, text: '🎲 리롤권 획득!', life: 1.8, maxLife: 1.8, color: '#a29bfe', size: 13 });
     }
-    // 장비 드롭: 보스 35%, 일반 몬스터 4% (고블린 도둑은 2배)
+    // 장비 드롭: 보스 30%→12% (경과 시간 비례 감소), 일반 4%→1.5% 감소 (고블린 2배)
     if (window.VPS && window.VPS.equipment) {
-      const baseDropChance = enemy.isBoss ? 0.35 : 0.04;
+      const progressRatio = Math.min(1, elapsed / getSurviveGoal());
+      const baseDropChance = enemy.isBoss
+        ? Math.max(0.12, 0.30 - progressRatio * 0.18)
+        : Math.max(0.015, 0.04 - progressRatio * 0.025);
       const gearMult = (player && player.characterId === 'goblin') ? 2 : 1;
       const dropChance = baseDropChance * gearMult;
       if (Math.random() < dropChance) {
@@ -3717,8 +3884,9 @@
     // 이동
     const { dx, dy } = getMoveDir();
     if (dx !== 0 || dy !== 0) lastMoveDir = { dx, dy };
-    player.x += dx * player.speed * (player.tempSpeedMult || 1) * dt;
-    player.y += dy * player.speed * (player.tempSpeedMult || 1) * dt;
+    const _dashBoostMult = player._dashSpeedBoost > 0 ? 1.35 : 1;
+    player.x += dx * player.speed * (player.tempSpeedMult || 1) * _dashBoostMult * dt;
+    player.y += dy * player.speed * (player.tempSpeedMult || 1) * _dashBoostMult * dt;
 
     // 이동 잔상 — 움직일 때만 위치를 찍어 질주감 연출 (최대 10개로 제한)
     if (dx !== 0 || dy !== 0) {
@@ -3730,30 +3898,94 @@
       if (playerTrail[i].life <= 0) playerTrail.splice(i, 1);
     }
 
-    // 대쉬 공격 (Space / X)
+    // 대쉬 공격 (Space / X) — 연쇄 대쉬 시스템
     if (dashCd > 0) dashCd -= dt;
-    if ((keys[' '] || keys['x'] || keys['X']) && dashCd <= 0) {
+    if (dashChainWindow > 0) dashChainWindow -= dt;
+    const _dashKeyNow = !!(keys[' '] || keys['x'] || keys['X']);
+    const _dashJustPressed = _dashKeyNow && !_lastDashKeyState;
+    _lastDashKeyState = _dashKeyNow;
+    // 연쇄 대쉬: 직전 대쉬가 적중했을 때, 체인 윈도 내에 다시 누르면 추가 대쉬
+    const canChainDash = _dashJustPressed && dashChainWindow > 0 && dashChainCount < 2;
+    const canNormalDash = _dashKeyNow && dashCd <= 0;
+    if (canChainDash || canNormalDash) {
+      const isChain = canChainDash && !canNormalDash;
       const da = Math.atan2(lastMoveDir.dy, lastMoveDir.dx);
       const start = { x: player.x, y: player.y };
       const stats = slashStats();
-      dashCd = DASH_COOLDOWN;
-      SFX.dash();
-      // 대쉬 경로에 잔상 5개 추가 → 질주 잔영 강조
-      for (let s = 1; s <= 5; s++) {
-        playerTrail.push({ x: player.x + Math.cos(da) * 11 * s, y: player.y + Math.sin(da) * 11 * s, life: 0.32 });
+      // 연쇄 대쉬: 데미지 70%, 이동거리 증가; 일반 대쉬: 이동거리 90px
+      const chainMult = isChain ? Math.pow(0.70, dashChainCount + 1) : 1.0;
+      const dashDist = isChain ? 105 + dashChainCount * 18 : 90;
+      if (isChain) {
+        dashChainCount++;
+        dashChainWindow = dashChainCount < 2 ? 0.9 : 0;
+        dashCd = Math.max(dashCd, 0.2); // 짧은 대기 (연속 발동 방지)
+      } else {
+        dashCd = DASH_COOLDOWN;
+        dashChainCount = 0;
+        dashChainWindow = 0;
       }
-      while (playerTrail.length > 16) playerTrail.shift();
-      player.x += Math.cos(da) * 55;
-      player.y += Math.sin(da) * 55;
+      SFX.dash();
+      // 잔상: 연쇄 색상 변화 (일반=보라, 1차=청, 2차=백)
+      const trailColor = isChain ? (dashChainCount === 1 ? '#74b9ff' : '#ffffff') : null;
+      for (let s = 1; s <= 6; s++) {
+        playerTrail.push({ x: player.x + Math.cos(da) * 13 * s, y: player.y + Math.sin(da) * 13 * s, life: 0.34, chainColor: trailColor });
+      }
+      while (playerTrail.length > 20) playerTrail.shift();
+      player.x += Math.cos(da) * dashDist;
+      player.y += Math.sin(da) * dashDist;
       const end = { x: player.x, y: player.y };
-      dashEffect = { x: start.x, y: start.y, endX: end.x, endY: end.y, angle: da, life: 0.3, maxLife: 0.3, range: stats.range, width: stats.width, cleave: stats.cleave };
-      performDashSlash(start, end, da, stats, player);
+      dashEffect = { x: start.x, y: start.y, endX: end.x, endY: end.y, angle: da, life: 0.3, maxLife: 0.3, range: stats.range, width: stats.width, cleave: stats.cleave, isChain, chainIdx: dashChainCount };
+      const hitCount = performDashSlash(start, end, da, { ...stats, damageMult: stats.damageMult * chainMult }, player);
       queueSlashEchoes(start, end, da, stats);
+      // 잔상 폭발 필드: 도착점에 0.8초 지속 DoT 영역 생성
+      dashAfterimages.push({ x: end.x, y: end.y, life: 0.8, maxLife: 0.8, tickTimer: 0,
+        dmg: DASH_DMG * player.dmgMult * stats.damageMult * chainMult * 0.28,
+        range: 52 + stats.cleave * 10, isChain });
+      // 첫 대쉬 적중 시 → 연쇄 윈도 열기
+      if (!isChain && hitCount > 0 && dashChainWindow <= 0) {
+        dashChainWindow = 1.0;
+        floatTexts.push({ text: '⚡ CHAIN!', x: end.x, y: end.y - 30, life: 0.75, maxLife: 0.75, color: '#74b9ff', size: 14 });
+      }
+      // 5명 이상 동시 적중 → 첫 번째 무기 CD 즉시 초기화
+      if (hitCount >= 5 && player.weaponCds) {
+        const firstW = player.weapons[0];
+        if (firstW && (player.weaponCds[firstW] || 0) > 0) {
+          player.weaponCds[firstW] = 0;
+          floatTexts.push({ x: end.x, y: end.y - 46, text: '💥 CD RESET!', life: 1.2, maxLife: 1.2, color: '#f1c40f', size: 14 });
+        }
+      }
+      // 3연쇄 완성 → 충격파 폭발 + 속도 부스트
+      if (isChain && dashChainCount >= 2) {
+        const burstRange = 90 * (player.rangeBonus || 1);
+        chainExplosions.push({ x: end.x, y: end.y, range: burstRange, dmg: DASH_DMG * player.dmgMult * 1.8, delay: 0 });
+        rings.push({ x: end.x, y: end.y, r: 10, maxR: burstRange, life: 0.45, maxLife: 0.45, color: '#ffffff' });
+        rings.push({ x: end.x, y: end.y, r: 4, maxR: burstRange * 0.5, life: 0.28, maxLife: 0.28, color: '#74b9ff' });
+        floatTexts.push({ text: '🌟 TRIPLE DASH!', life: 1.8, maxLife: 1.8, screenSpace: true, color: '#ffffff', size: 22 });
+        screenShake = Math.min(screenShake + 0.3, 0.65);
+        player._dashSpeedBoost = 0.5; // 0.5초 속도 부스트
+        dashChainWindow = 0;
+      }
     }
     if (dashEffect) { dashEffect.life -= dt; if (dashEffect.life <= 0) dashEffect = null; }
     updateSlashEchoes(dt);
     updateRuptures(dt);
     updateSpectralFields(dt);
+    // 대쉬 잔상 폭발 필드 업데이트 (0.1초마다 DoT 틱)
+    for (let i = dashAfterimages.length - 1; i >= 0; i--) {
+      const af = dashAfterimages[i];
+      af.life -= dt;
+      if (af.life <= 0) { dashAfterimages.splice(i, 1); continue; }
+      af.tickTimer += dt;
+      if (af.tickTimer >= 0.1) {
+        af.tickTimer = 0;
+        for (const e of [...enemies]) {
+          if (e.dying) continue;
+          if (dist(af, e) < af.range + e.size) dealDamage(e, af.dmg, false, true);
+        }
+      }
+    }
+    // 대쉬 속도 부스트 감소
+    if (player._dashSpeedBoost > 0) player._dashSpeedBoost = Math.max(0, player._dashSpeedBoost - dt);
 
     // 화면 흔들림 감쇠
     if (screenShake > 0) screenShake = Math.max(0, screenShake - dt * 2.5);
@@ -3815,6 +4047,19 @@
       if (dist(gd, player) < 28) {
         for (let k = 0; k < 8; k++) spawnParticle(gd.x, gd.y, '#f39c12', 4 + Math.random() * 4, 0.4);
         gearDrops.splice(i, 1);
+        // 자동 분해: 현재 장착보다 약한 아이템을 경험치로 즉시 변환
+        if (autoDismantleEnabled && window.VPS && window.VPS.equipment) {
+          const _eq = window.VPS.equipment;
+          const _newPwr = _eq.calcItemPower(gd.item);
+          const _curItm = player.equip && player.equip[gd.item.slot];
+          const _curPwr = _curItm ? _eq.calcItemPower(_curItm) : 0;
+          if (_curItm && _newPwr < _curPwr) {
+            const _xpGain = Math.max(1, Math.round(_newPwr / 5));
+            gainXP(_xpGain);
+            floatTexts.push({ text: `⚗ 자동 분해 +${_xpGain} XP`, life: 1.4, maxLife: 1.4, screenSpace: true, color: '#a78bfa', size: 14 });
+            break;
+          }
+        }
         showGearPickupModal(gd.item);
         break;
       }
@@ -3934,7 +4179,8 @@
         for (let j = enemies.length - 1; j >= 0; j--) {
           const e = enemies[j];
           if (dist(p, e) < p.r + e.size) {
-            dealDamage(e, p.dmg);
+            // 부채꼴(fork) 젬이 생성한 파편은 젬 효과를 재발동하지 않음 (연쇄 폭주 방지)
+            dealDamage(e, p.dmg, p.noGemFx);
             // armor_breaker 시너지: 관통 적중 시 40% 범위 피해
             if (hasSynergy('armor_breaker')) {
               chainExplosions.push({ x: e.x, y: e.y, range: 42, dmg: p.dmg * 0.4, delay: 0 });
@@ -4019,6 +4265,11 @@
         e.poisonTimer -= dt;
         dealDamage(e, (e.poisonDmg || 3) * dt, true, true);
         if (Math.random() < 0.2) spawnParticle(e.x, e.y - e.size * 0.5, '#27ae60', 3, 0.25);
+      }
+      // 감전(shock) 디버프 지속 시간 감소
+      if ((e.shockTimer || 0) > 0) {
+        e.shockTimer -= dt;
+        if (Math.random() < 0.15) spawnParticle(e.x, e.y - e.size * 0.5, '#f1c40f', 3, 0.2);
       }
       if (e.dying || e.hp <= 0) continue;
       const targetActor = allyPlayer && dist(e, allyPlayer) < dist(e, player) ? allyPlayer : player;
@@ -4125,6 +4376,7 @@
         hurtScreenFlash = 0.28;
         SFX.hurt();
         player.invincible = 0.15;
+        triggerThorns();
         if (player.hp <= 0) { endGame('dead'); return; }
       }
     }
@@ -4144,6 +4396,7 @@
         SFX.hurt();
         player.invincible = 0.1;
         enemyProjectiles.splice(i, 1);
+        triggerThorns();
         if (player.hp <= 0) { endGame('dead'); return; }
       }
     }
@@ -4179,12 +4432,25 @@
       if (rings[i].life <= 0) rings.splice(i, 1);
     }
 
-    // XP 수집
+    // XP 수집 — 끌어당김 물리 + 가속
     for (let i = xpGems.length - 1; i >= 0; i--) {
       const g = xpGems[i];
-      if (dist(g, player) < player.xpRange || (allyPlayer && dist(g, allyPlayer) < player.xpRange * 0.75)) {
+      const d = dist(g, player);
+      const attractRange = player.xpRange * 2.2; // 끌어당김 시작 거리 (수집 거리의 2.2배)
+      if (d < attractRange) {
+        // 끌어당김 가속: 가까울수록 빠르게
+        const pull = Math.min(1, 1 - (d / attractRange));
+        const speed = 180 + pull * pull * 520;
+        const ang = Math.atan2(player.y - g.y, player.x - g.x);
+        g.x += Math.cos(ang) * speed * dt;
+        g.y += Math.sin(ang) * speed * dt;
+        g._attracting = true;
+      }
+      // 수집 (수집 반경 또는 완전히 도달)
+      if (dist(g, player) < Math.max(player.xpRange, 20) || (allyPlayer && dist(g, allyPlayer) < player.xpRange * 0.75)) {
         gainXP(g.val);
-        spawnParticle(g.x, g.y, '#f1c40f', 3, 0.22);
+        const gc = g.val >= 80 ? '#ffd700' : g.val >= 30 ? '#f39c12' : g.val >= 10 ? '#f1c40f' : '#ffe082';
+        spawnParticle(g.x, g.y, gc, 3 + (g.val >= 30 ? 2 : 0), 0.22);
         spawnParticle(g.x, g.y, '#ffe9a8', 2, 0.18);
         SFX.pickup();
         xpGems.splice(i, 1);
@@ -4233,15 +4499,40 @@
     ctx.save();
     ctx.translate(-camera.x, -camera.y);
 
-    // XP 젬
+    // XP 젬 — 가치별 크기·색상·광채 구분
     for (const g of xpGems) {
+      // 가치 단계: tiny(<5), small(5-14), medium(15-30), large(31-80), huge(81+)
+      const isHuge   = g.val >= 81;
+      const isLarge  = g.val >= 31;
+      const isMedium = g.val >= 15;
+      const isSmall  = g.val >= 5;
+      const r    = isHuge ? 9 : isLarge ? 7 : isMedium ? 6 : isSmall ? 5 : 3.5;
+      const col  = isHuge ? '#ffd700' : isLarge ? '#f39c12' : isMedium ? '#e67e22' : isSmall ? '#f1c40f' : '#ffe082';
+      const glow = isHuge ? '#ffd700' : isLarge ? '#f39c12' : isMedium ? '#e67e22' : '#f1c40f';
+      ctx.save();
+      ctx.shadowBlur = isHuge ? 18 : isLarge ? 12 : isMedium ? 8 : 5;
+      ctx.shadowColor = glow;
+      // 끌어당김 중 펄스 효과
+      const pulse = g._attracting ? 1 + Math.sin(elapsed * 28) * 0.18 : 1;
       ctx.beginPath();
-      ctx.arc(g.x, g.y, 5, 0, Math.PI * 2);
-      ctx.fillStyle = '#f39c12';
+      ctx.arc(g.x, g.y, r * pulse, 0, Math.PI * 2);
+      ctx.fillStyle = col;
       ctx.fill();
-      ctx.strokeStyle = '#f1c40f';
-      ctx.lineWidth = 1;
-      ctx.stroke();
+      if (isLarge) {
+        ctx.strokeStyle = isHuge ? '#fffacd' : '#f1c40f';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
+      // 거대 XP: 내부 별 표시
+      if (isHuge) {
+        ctx.fillStyle = '#fffacd';
+        ctx.font = '8px serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('★', g.x, g.y);
+      }
+      ctx.shadowBlur = 0;
+      ctx.restore();
     }
 
     // 아이템 박스 렌더
@@ -4266,29 +4557,80 @@
       ctx.restore();
     }
 
-    // 장비 드롭 렌더
+    // 장비 드롭 렌더 — 등급별 시각 구분 강화
     if (window.VPS && window.VPS.equipment) {
       const eq = window.VPS.equipment;
+      const _gradeIdx = { normal: 0, rare: 1, unique: 2, legend: 3, mystic: 4, antique: 5 };
       for (const gd of gearDrops) {
-        const pulse = 0.8 + Math.sin((gd.pulseT || 0) * 4) * 0.2;
+        const pT = gd.pulseT || 0;
+        const pulse = 0.8 + Math.sin(pT * 4) * 0.2;
         const fade  = Math.min(gd.life * 0.3, 1);
         const grade = eq.getGradeData(gd.item.grade);
         const base  = eq.getItemBase(gd.item);
+        const gi = _gradeIdx[gd.item.grade] || 0;
         ctx.save();
         ctx.translate(gd.x, gd.y);
         ctx.globalAlpha = fade;
-        ctx.shadowBlur = 20;
+        // 등급별 아우라 반경
+        const auraR = 12 + gi * 4;
+        const spinSpeed = [0, 0.8, 1.2, 2.0, 2.5, 3.2][gi] || 0;
+        // 배경 광채 (고등급일수록 넓고 강하게)
+        if (gi >= 1) {
+          const bgGrad = ctx.createRadialGradient(0, 0, auraR * 0.3, 0, 0, auraR * 1.6);
+          bgGrad.addColorStop(0, grade.color + '55');
+          bgGrad.addColorStop(1, grade.color + '00');
+          ctx.fillStyle = bgGrad;
+          ctx.beginPath();
+          ctx.arc(0, 0, auraR * 1.6, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        // 외곽 링 (회전, 두껍게)
+        ctx.save();
+        ctx.rotate(pT * spinSpeed);
+        ctx.shadowBlur = 8 + gi * 7;
         ctx.shadowColor = grade.color;
         ctx.strokeStyle = grade.color;
-        ctx.lineWidth = 2;
+        ctx.lineWidth = 1.5 + gi * 0.5;
         ctx.beginPath();
-        ctx.arc(0, 0, 14 * pulse, 0, Math.PI * 2);
+        ctx.arc(0, 0, auraR * pulse, 0, Math.PI * 2);
         ctx.stroke();
+        // 고등급: 2차 링
+        if (gi >= 2) {
+          ctx.globalAlpha = 0.45;
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.arc(0, 0, (auraR + 6) * pulse, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.globalAlpha = 1;
+        }
+        // 전설+: 회전 별 파티클
+        if (gi >= 3) {
+          const starCount = gi - 1;
+          for (let si = 0; si < starCount; si++) {
+            const sa = (si / starCount) * Math.PI * 2 + pT * spinSpeed;
+            const sr = auraR * 1.4;
+            ctx.fillStyle = grade.color;
+            ctx.beginPath();
+            ctx.arc(Math.cos(sa) * sr, Math.sin(sa) * sr, 2.5, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+        ctx.restore();
+        // 이하 아이템 아이콘
         ctx.shadowBlur = 0;
-        ctx.font = '16px serif';
+        ctx.font = `${14 + gi * 1.5}px serif`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText(base.icon, 0, 0);
+        // 등급 배지 (희귀+)
+        if (gi >= 1) {
+          ctx.font = '8px sans-serif';
+          ctx.fillStyle = grade.color;
+          ctx.shadowBlur = 4;
+          ctx.shadowColor = grade.color;
+          ctx.fillText(grade.name, 0, auraR + 10);
+          ctx.shadowBlur = 0;
+        }
         ctx.restore();
       }
     }
@@ -4559,18 +4901,21 @@
         ctx.beginPath();
         ctx.arc(0, 0, e.size, 0, Math.PI * 2);
       } else if (e.isBoss) {
-        // 보스: 8각 별 모양 + 이중 링
+        // 보스: 8각 별 모양 + 맥동 광채
+        ctx.shadowBlur = 28; ctx.shadowColor = e.color;
         ctx.beginPath();
         for (let i = 0; i < 8; i++) {
           const a1 = (i / 8) * Math.PI * 2 - Math.PI / 2;
           const a2 = ((i + 0.5) / 8) * Math.PI * 2 - Math.PI / 2;
-          const outerR = e.size * (1 + Math.sin(elapsed * 3) * 0.06);
+          const outerR = e.size * (1 + Math.sin(elapsed * 3) * 0.08);
           i === 0 ? ctx.moveTo(Math.cos(a1) * outerR, Math.sin(a1) * outerR)
                   : ctx.lineTo(Math.cos(a1) * outerR, Math.sin(a1) * outerR);
           ctx.lineTo(Math.cos(a2) * e.size * 0.55, Math.sin(a2) * e.size * 0.55);
         }
         ctx.closePath();
       } else if (e.tier === 2) {
+        // 티어2: 육각형 + 강한 광채 + 내부 삼각형 마킹
+        ctx.shadowBlur = 16; ctx.shadowColor = e.color;
         ctx.beginPath();
         for (let i = 0; i < 6; i++) {
           const a = (i / 6) * Math.PI * 2 - Math.PI / 2;
@@ -4579,23 +4924,40 @@
         }
         ctx.closePath();
       } else if (e.tier === 1 && e.behavior === 'archer') {
-        // 마름모 (원거리 유형 구별)
+        // 마름모 (원거리 유형 구별) + 중간 광채
+        ctx.shadowBlur = 10; ctx.shadowColor = '#1abc9c';
+        ctx.fillStyle = flash ? '#ffffff' : '#1abc9c';
         ctx.beginPath();
-        ctx.moveTo(0, -e.size); ctx.lineTo(e.size, 0);
-        ctx.lineTo(0, e.size);  ctx.lineTo(-e.size, 0);
+        ctx.moveTo(0, -e.size); ctx.lineTo(e.size * 1.1, 0);
+        ctx.lineTo(0, e.size);  ctx.lineTo(-e.size * 1.1, 0);
         ctx.closePath();
       } else if (e.tier === 1) {
+        // 티어1: 사각형 + 약한 광채
+        ctx.shadowBlur = 8; ctx.shadowColor = e.color;
         ctx.beginPath();
         ctx.rect(-e.size, -e.size, e.size*2, e.size*2);
       } else {
+        // 티어0: 원형, 작고 다수
+        ctx.shadowBlur = 5;
         ctx.beginPath();
         ctx.arc(0, 0, e.size, 0, Math.PI*2);
       }
       ctx.fill();
-      // 분노 상태: 적색 테두리
+      // 티어2: 내부 마킹 (삼각형 무늬)
+      if (!flash && e.tier === 2 && !e.isBoss) {
+        ctx.fillStyle = 'rgba(255,255,255,0.22)';
+        ctx.beginPath();
+        const im = e.size * 0.5;
+        ctx.moveTo(0, -im); ctx.lineTo(im * 0.87, im * 0.5); ctx.lineTo(-im * 0.87, im * 0.5);
+        ctx.closePath();
+        ctx.fill();
+      }
+      // 분노 상태: 적색 테두리 + 강화 광채
       if (rageActive && !flash) {
+        ctx.shadowBlur = 18;
+        ctx.shadowColor = '#ff4500';
         ctx.strokeStyle = '#ff4500';
-        ctx.lineWidth = 2;
+        ctx.lineWidth = 2.5;
         ctx.stroke();
       }
       // 빙결 상태 오버레이
@@ -4731,6 +5093,24 @@
       ctx.arc(sf.x, sf.y, sf.range, 0, Math.PI * 2);
       ctx.stroke();
     }
+    // 대쉬 잔상 폭발 필드 렌더
+    for (const af of dashAfterimages) {
+      const t = af.life / af.maxLife;
+      const col = af.isChain ? '#74b9ff' : '#d7a3f5';
+      ctx.globalAlpha = t * 0.38;
+      ctx.fillStyle = col;
+      ctx.shadowBlur = 18;
+      ctx.shadowColor = col;
+      ctx.beginPath();
+      ctx.arc(af.x, af.y, af.range * (0.7 + Math.sin(elapsed * 14) * 0.18), 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = t * 0.65;
+      ctx.strokeStyle = af.isChain ? '#b0d4ff' : '#f0d0ff';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(af.x, af.y, af.range, 0, Math.PI * 2);
+      ctx.stroke();
+    }
     ctx.shadowBlur = 0;
     ctx.globalAlpha = 1;
 
@@ -4787,13 +5167,16 @@
 
     // 플레이어 이동 잔상 (질주감)
     for (const t of playerTrail) {
-      ctx.globalAlpha = Math.max(0, t.life / 0.3) * 0.22;
-      ctx.fillStyle = '#d7a3f5';
+      ctx.globalAlpha = Math.max(0, t.life / 0.34) * 0.24;
+      ctx.fillStyle = t.chainColor || '#d7a3f5';
+      ctx.shadowBlur = t.chainColor ? 8 : 0;
+      ctx.shadowColor = t.chainColor || 'transparent';
       ctx.beginPath();
       ctx.arc(t.x, t.y, 7, 0, Math.PI * 2);
       ctx.fill();
     }
     ctx.globalAlpha = 1;
+    ctx.shadowBlur = 0;
 
     // 플레이어
     ctx.save();
@@ -5008,15 +5391,26 @@
       ctx.strokeRect(0, 0, W, H);
     }
 
-    // 대쉬 쿨다운 표시 (우하단)
+    // 대쉬 쿨다운 표시 (우하단) + 연쇄 윈도우 표시
     if (state === 'playing') {
       const dcRatio = dashCd > 0 ? dashCd / DASH_COOLDOWN : 0;
+      const chainActive = dashChainWindow > 0;
       const cx = W - 36, cy = H - 36, rad = 18;
       ctx.beginPath();
       ctx.arc(cx, cy, rad, 0, Math.PI * 2);
       ctx.fillStyle = 'rgba(0,0,0,0.5)';
       ctx.fill();
-      if (dcRatio > 0) {
+      if (chainActive) {
+        // 연쇄 대쉬 가능: 청색 맥동 표시
+        const chainPulse = 0.7 + Math.sin(elapsed * 18) * 0.3;
+        ctx.beginPath();
+        ctx.arc(cx, cy, rad, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(116,185,255,${chainPulse * 0.9})`;
+        ctx.fill();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      } else if (dcRatio > 0) {
         ctx.beginPath();
         ctx.moveTo(cx, cy);
         ctx.arc(cx, cy, rad, -Math.PI / 2, -Math.PI / 2 + (1 - dcRatio) * Math.PI * 2);
@@ -5028,11 +5422,11 @@
         ctx.fillStyle = 'rgba(215,163,245,0.9)';
         ctx.fill();
       }
-      ctx.fillStyle = '#fff';
-      ctx.font = '11px sans-serif';
+      ctx.fillStyle = chainActive ? '#001a33' : '#fff';
+      ctx.font = chainActive ? 'bold 10px sans-serif' : '11px sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText('DASH', cx, cy);
+      ctx.fillText(chainActive ? `⚡×${2 - dashChainCount}` : 'DASH', cx, cy);
       ctx.textAlign = 'left';
       ctx.textBaseline = 'alphabetic';
 
@@ -5354,7 +5748,13 @@
         if (stats.xpRange && stats.xpRange !== 1) statLines.push(`🧲 XP범위 ×${stats.xpRange.toFixed(2)}`);
         if (stats.critChance) statLines.push(`⚡ 치명 +${(stats.critChance*100).toFixed(0)}%`);
         const gemIcons = (item.gems || []).map(g => g.icon || '').join('');
-        content = `<div style="font-size:11px;color:#ccc;">${slotNames[slot]}<br><span style="font-size:20px;">${base.icon}</span><br><span style="color:${grade.color};font-weight:bold;">[${grade.name}]</span> ${base.name}<br><span style="color:#aaa;font-size:10px;">${statLines.join(' · ')}</span>${gemIcons ? `<br><span style="font-size:13px;">${gemIcons}</span>` : ''}</div>`;
+        // 특수 젬 이름 태그 (effect 보유 젬만)
+        const specialGemTags = (item.gems || [])
+          .map(g => (typeof g === 'object' ? g : eq.GEM_DEFS.find(d => d.id === g)))
+          .filter(g => g && g.effect)
+          .map(g => `<span style="color:#d7bfff;">${g.icon}${g.name}</span>`)
+          .join(' ');
+        content = `<div style="font-size:11px;color:#ccc;">${slotNames[slot]}<br><span style="font-size:20px;">${base.icon}</span><br><span style="color:${grade.color};font-weight:bold;">[${grade.name}]</span> ${base.name}<br><span style="color:#aaa;font-size:10px;">${statLines.join(' · ')}</span>${gemIcons ? `<br><span style="font-size:13px;">${gemIcons}</span>` : ''}${specialGemTags ? `<br><span style="font-size:9.5px;">${specialGemTags}</span>` : ''}</div>`;
       }
       html += `<div style="background:#1a2035;border:1px solid #2a3050;border-radius:8px;padding:10px;min-width:90px;text-align:center;">${content}</div>`;
     }
@@ -5362,6 +5762,21 @@
     const bonuses = eq.getActiveBonusDescriptions(player.equip);
     if (bonuses.length) {
       html += `<div style="margin-top:10px;padding:8px;background:#0d1628;border-radius:6px;font-size:11px;color:#f1c40f;">${bonuses.map(b => `✦ ${b}`).join('<br>')}</div>`;
+    }
+    // 활성 특수 젬 효과 요약
+    const gfx = eq.aggregateGemEffects(player.equip);
+    const gfxKeys = Object.keys(gfx);
+    if (gfxKeys.length) {
+      const GFX_LABEL = {
+        chain: '🔗 연쇄', cleave: '🪓 가르기', freeze: '❄ 빙결', fork: '🔱 부채꼴',
+        combust: '🔥 점화', shock: '⚡ 감전', leech: '🩸 흡수', culling: '☠ 참수',
+      };
+      const lines = gfxKeys.map(k => {
+        const e = gfx[k];
+        const pc = e.procChance >= 1 ? '상시' : `${Math.round(e.procChance * 100)}%`;
+        return `${GFX_LABEL[k] || k} <span style="color:#9a86c4;">(${pc}${e.count > 1 ? ` ×${e.count}` : ''})</span>`;
+      });
+      html += `<div style="margin-top:8px;padding:8px;background:#1a1230;border:1px solid #4a2d6e;border-radius:6px;font-size:11px;color:#d7bfff;">💠 특수 젬: ${lines.join(' · ')}</div>`;
     }
     return html;
   }
@@ -5412,8 +5827,20 @@
     const curGrade = curItem ? eq.getGradeData(curItem.grade) : null;
     const curStats = curItem ? eq.getEquipStats(curItem) : {};
 
+    // 전투력 비교
+    const newPower = eq.calcItemPower(item);
+    const curPower = curItem ? eq.calcItemPower(curItem) : 0;
+    const isWeaker = curItem && newPower < curPower;
+
     const slotKor = { helm: '투구', armor: '갑옷', boots: '장화', ring: '반지' }[item.slot] || item.slot;
     const gemIcons = (item.gems || []).map(g => g.icon || '').join(' ');
+    // 특수 젬 효과 설명 (있을 때만)
+    const gemEffectLines = (item.gems || [])
+      .map(g => {
+        const gd = typeof g === 'object' ? g : eq.GEM_DEFS.find(d => d.id === g);
+        return gd && gd.effect && gd.desc ? `${gd.icon} ${gd.desc}` : '';
+      })
+      .filter(Boolean);
 
     // 스탯 비교 정의
     const STAT_DEFS = [
@@ -5470,6 +5897,10 @@
       modal.style.cssText = 'display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#111827;border:2px solid #39445a;border-radius:12px;padding:14px;z-index:950;max-width:420px;width:96%;color:#fff;font-family:sans-serif;max-height:90vh;overflow-y:auto;';
       document.body.appendChild(modal);
     }
+    // 전투력 델타 표시
+    const pwrDiff = newPower - curPower;
+    const pwrColor = pwrDiff > 0 ? '#2ecc71' : pwrDiff < 0 ? '#e74c3c' : '#9ca3af';
+    const pwrDiffStr = pwrDiff > 0 ? `▲ +${pwrDiff}` : pwrDiff < 0 ? `▼ ${pwrDiff}` : '=';
     modal.innerHTML = `
       <div style="font-size:10px;color:#9ca3af;letter-spacing:1px;text-transform:uppercase;text-align:center;margin-bottom:10px;">⚔ ${slotKor} 비교</div>
       <div style="display:grid;grid-template-columns:1fr 22px 1fr;gap:5px;align-items:center;margin-bottom:10px;">
@@ -5479,6 +5910,7 @@
             <div style="font-size:20px;">${curBase.icon}</div>
             <div style="color:${curGrade.color};font-size:0.75em;font-weight:bold;">[${curGrade.name}]</div>
             <div style="font-size:0.72em;color:#ccc;">${curBase.name}</div>
+            <div style="font-size:0.7em;color:#9ca3af;margin-top:2px;">전투력 ${curPower}</div>
           ` : `
             <div style="font-size:20px;opacity:0.25;">—</div>
             <div style="font-size:0.72em;color:#4b5563;margin-top:2px;">비어있음</div>
@@ -5491,12 +5923,21 @@
           <div style="color:${grade.color};font-size:0.75em;font-weight:bold;">[${grade.name}]</div>
           <div style="font-size:0.72em;color:#ccc;">${base.name}</div>
           ${gemIcons ? `<div style="font-size:11px;margin-top:2px;">${gemIcons}</div>` : ''}
+          <div style="font-size:0.7em;color:${pwrColor};margin-top:2px;font-weight:bold;">전투력 ${newPower} <span style="font-size:0.85em;">${pwrDiffStr}</span></div>
         </div>
       </div>
       <div style="background:#0d1117;border-radius:6px;padding:8px;margin-bottom:12px;font-size:11px;">${deltaRows}</div>
-      <div style="display:flex;gap:10px;justify-content:center;">
-        <button id="gearEquip" style="background:#2563eb;border:none;color:#fff;padding:8px 20px;border-radius:8px;cursor:pointer;font-size:14px;"><strong>[1]</strong> 장착</button>
-        <button id="gearDrop" style="background:#374151;border:none;color:#fff;padding:8px 20px;border-radius:8px;cursor:pointer;font-size:14px;"><strong>[2]</strong> 버리기</button>
+      ${gemEffectLines.length ? `<div style="background:#1a1230;border:1px solid #4a2d6e;border-radius:6px;padding:7px 9px;margin-bottom:12px;font-size:10.5px;line-height:1.5;color:#d7bfff;">${gemEffectLines.map(l => `<div>${l}</div>`).join('')}</div>` : ''}
+      <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
+        <button id="gearEquip" style="background:#2563eb;border:none;color:#fff;padding:8px 18px;border-radius:8px;cursor:pointer;font-size:13px;"><strong>[1]</strong> 장착</button>
+        ${isWeaker ? `<button id="gearDismantle" style="background:#7c3aed;border:none;color:#fff;padding:8px 14px;border-radius:8px;cursor:pointer;font-size:13px;"><strong>[3]</strong> 분해 (+${Math.max(1,Math.round(newPower/5))} XP)</button>` : ''}
+        <button id="gearDrop" style="background:#374151;border:none;color:#fff;padding:8px 18px;border-radius:8px;cursor:pointer;font-size:13px;"><strong>[2]</strong> 버리기</button>
+      </div>
+      <div style="margin-top:8px;text-align:center;">
+        <label style="font-size:10px;color:#6b7280;cursor:pointer;">
+          <input type="checkbox" id="autoDismantleChk" ${autoDismantleEnabled ? 'checked' : ''} style="margin-right:4px;">
+          자동 분해 (약한 장비 자동으로 경험치 변환)
+        </label>
       </div>
     `;
     modal.style.display = 'block';
@@ -5516,13 +5957,30 @@
       floatTexts.push({ text: '🗑 버림', life: 1.0, maxLife: 1.0, screenSpace: true, color: '#888', size: 13 });
       if (state === 'paused') setPaused(false);
     }
+    function doDismantle() {
+      if (modal.style.display === 'none') return;
+      modal.style.display = 'none';
+      document.removeEventListener('keydown', gearKeyHandler);
+      const xpGain = Math.max(1, Math.round(newPower / 5));
+      gainXP(xpGain);
+      floatTexts.push({ text: `⚗ 분해! +${xpGain} XP`, life: 1.6, maxLife: 1.6, screenSpace: true, color: '#a78bfa', size: 15 });
+      if (state === 'paused') setPaused(false);
+    }
     function gearKeyHandler(ev) {
       if (ev.key === '1') { ev.preventDefault(); doEquip(); }
       if (ev.key === '2') { ev.preventDefault(); doDrop(); }
+      if (ev.key === '3' && isWeaker) { ev.preventDefault(); doDismantle(); }
     }
     document.addEventListener('keydown', gearKeyHandler);
     document.getElementById('gearEquip').onclick = doEquip;
     document.getElementById('gearDrop').onclick  = doDrop;
+    if (isWeaker) {
+      const dismantleBtn = document.getElementById('gearDismantle');
+      if (dismantleBtn) dismantleBtn.onclick = doDismantle;
+    }
+    // 자동 분해 체크박스
+    const chk = document.getElementById('autoDismantleChk');
+    if (chk) chk.onchange = () => { autoDismantleEnabled = chk.checked; };
   }
 
   // 첫 프레임 시작
