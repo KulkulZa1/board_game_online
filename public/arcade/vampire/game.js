@@ -58,6 +58,19 @@
     inferno:   { name: '인페르노', icon: '🔥',  desc: '5발 분열 화염 폭탄',          dmg: 70, cd: 1.2,  range: 175, evolved: true },
   };
 
+  // 무기 레벨업 시 강화되는 부가 효과 설명 (계열 기준) — 레벨업 선택지 표시용
+  const WEAPON_LVUP_DESC = {
+    orb:       '궤도 구슬 +1(2레벨)·구슬 크기 증가',
+    arrow:     '발사 수 +1(2레벨)·관통 +1',
+    nova:      '폭발 범위 확대',
+    shield:    '보호막 지속시간 증가',
+    laser:     '빔 사거리 증가',
+    boomerang: '관통 +1·비행 거리 증가',
+    chain:     '연쇄 +1(2레벨)·사거리 증가',
+    scythe:    '베기 범위·부채꼴 각도 확대',
+    bomb:      '폭발 범위 확대·분열 수 증가',
+  };
+
   // 진화 규칙: base 무기가 최대 레벨 + req 패시브 보유 시 evolved(id) 무기로 진화
   const EVOLUTION_DEFS = [
     { id: 'blackhole', base: 'orb',       req: 'magnet',    reqName: '🧲 경험치 자석' },
@@ -2825,10 +2838,12 @@
     const def    = WEAPON_DEFS[id];
     const lvl    = player.weaponLevels[id] || 1;
     const lvlMul = 1 + 0.22 * (lvl - 1);              // 레벨당 데미지 +22%
+    const lvlRangeMul = 1 + 0.05 * (lvl - 1);         // 레벨당 사거리·범위 +5% (부가 효과 강화)
+    const lvlExtra = lvl - 1;                          // 레벨 추가량 (관통·연쇄 등 정수 보너스 산정용)
     const eqStats = (player.equipStats) || {};
     const cd     = def.cd * player.cdMult * (eqStats.cdMult || 1);
     const dmg    = def.dmg * player.dmgMult * (player.tempDmgMult || 1) * lvlMul * (eqStats.dmgMult || 1);
-    const range  = def.range * (player.rangeBonus || 1) * (eqStats.rangeBonus || 1);
+    const range  = def.range * (player.rangeBonus || 1) * (eqStats.rangeBonus || 1) * lvlRangeMul;
     player.weaponCDs[id] = cd;
 
     // cascade_collapse: 충전 완료 시 다음 공격에 충격파 폭발
@@ -2846,10 +2861,11 @@
     if (id === 'orb' || id === 'blackhole') {
       const evolved  = id === 'blackhole';
       const orbCount = (evolved ? 5 : 3) + Math.floor((lvl - 1) / 2); // 레벨업 시 궤도 추가
+      const orbR     = (evolved ? 12 : 8) + lvlExtra;                  // 레벨업 시 구슬 크기(히트박스) 증가
       const R = range;
       for (let i = 0; i < orbCount; i++) {
         const baseAngle = (elapsed * 1.8) + (i / orbCount) * Math.PI * 2;
-        projectiles.push({ type: evolved ? 'blackhole' : 'orb', x: player.x, y: player.y, angle: baseAngle, r: evolved ? 12 : 8, dmg, life: cd + 0.05, orbIdx: i, orbTotal: orbCount, R });
+        projectiles.push({ type: evolved ? 'blackhole' : 'orb', x: player.x, y: player.y, angle: baseAngle, r: orbR, dmg, life: cd + 0.05, orbIdx: i, orbTotal: orbCount, R });
       }
     } else if (id === 'arrow' || id === 'stormbow') {
       const evolved = id === 'stormbow';
@@ -2878,7 +2894,7 @@
       // 부메랑: 이동 방향(또는 가장 가까운 적 방향)으로 발사 후 반환, 왕복 타격
       const evolved = id === 'cyclone';
       const count   = evolved ? 3 : 1;
-      const pierce  = (evolved ? 99 : 4) + (player.pierceBonus || 0);
+      const pierce  = (evolved ? 99 : 4) + (player.pierceBonus || 0) + lvlExtra; // 레벨업 시 관통 +1
       const spd     = 320;
       const halfLife = range / spd;
       const baseAng  = nearestEnemy()
@@ -2897,8 +2913,8 @@
     } else if (id === 'chain' || id === 'tempest') {
       // 사슬 번개: 가장 가까운 적부터 연쇄 즉시 타격 + 시각적 아크 생성
       const evolved  = id === 'tempest';
-      // 관통 강화 패시브: 연쇄 횟수도 증가 (관통 1스택 = 연쇄 +3)
-      const bounces = (evolved ? 5 : 3) + (player.passives['pierce_up'] || 0) * 3;
+      // 관통 강화 패시브: 연쇄 횟수도 증가 (관통 1스택 = 연쇄 +3) + 레벨업 시 2레벨당 +1 연쇄
+      const bounces = (evolved ? 5 : 3) + (player.passives['pierce_up'] || 0) * 3 + Math.floor(lvlExtra / 2);
       let cx = player.x, cy = player.y;
       const hit = new Set();
       for (let b = 0; b < bounces; b++) {
@@ -2939,7 +2955,8 @@
       const baseAng  = target
         ? Math.atan2(target.y - player.y, target.x - player.x)
         : Math.atan2(lastMoveDir.dy, lastMoveDir.dx);
-      const arc      = evolved ? Math.PI * 2 : Math.PI * 0.66;   // 사신: 전방위 / 낫: 약 120°
+      // 사신: 전방위 / 낫: 약 120° + 레벨업 시 부채꼴 확대 (최대 약 180°)
+      const arc      = evolved ? Math.PI * 2 : Math.min(Math.PI, Math.PI * 0.66 + 0.07 * lvlExtra);
       let reaperHits  = 0;
       for (let _i = enemies.length - 1; _i >= 0; _i--) {
         const e = enemies[_i];
@@ -2982,14 +2999,16 @@
       const target  = nearestEnemy();
       const tx = target ? target.x : player.x + lastMoveDir.dx * range;
       const ty = target ? target.y : player.y + lastMoveDir.dy * range;
-      const aoe = (evolved ? 95 : 80) * (player.rangeBonus || 1) * ((player.equipStats && player.equipStats.rangeBonus) || 1);
+      // 폭발 범위도 레벨업 시 확대 (lvlRangeMul 반영)
+      const aoe = (evolved ? 95 : 80) * (player.rangeBonus || 1) * ((player.equipStats && player.equipStats.rangeBonus) || 1) * lvlRangeMul;
       chainExplosions.push({ x: tx, y: ty, range: aoe, dmg, delay: 0.45 });
       // 투척 시각 효과 — 착탄 지점 텔레그래프 링
       rings.push({ x: tx, y: ty, r: aoe, maxR: 6, life: 0.45, maxLife: 0.45, color: '#e67e22' });
       for (let k = 0; k < 5; k++) spawnParticle(player.x, player.y, '#e67e22', 4, 0.3);
       if (evolved) {
-        for (let s = 0; s < 5; s++) {
-          const a = (s / 5) * Math.PI * 2;
+        const splits = 5 + Math.floor(lvlExtra / 2); // 레벨업 시 분열 폭발 수 증가
+        for (let s = 0; s < splits; s++) {
+          const a = (s / splits) * Math.PI * 2;
           chainExplosions.push({ x: tx + Math.cos(a) * aoe * 0.8, y: ty + Math.sin(a) * aoe * 0.8, range: aoe * 0.6, dmg: dmg * 0.6, delay: 0.6 + s * 0.05 });
         }
       }
@@ -3824,12 +3843,13 @@
       const lvl = player.weaponLevels[id] || 1;
       if (lvl >= MAX_WEAPON_LEVEL || WEAPON_DEFS[id].evolved) continue;
       const w = WEAPON_DEFS[id];
+      const extraDesc = WEAPON_LVUP_DESC[weaponFamily(id)] || '';
       out.push({
         kind: 'weapon-lv',
         weaponId: id,
         tag: lvl >= MAX_WEAPON_LEVEL - 1 ? 'Near evolution' : 'Power up',
         name: `${w.icon} ${w.name} Lv.${lvl}→${lvl + 1}`,
-        desc: w.desc + ' 강화',
+        desc: `데미지 +22% · 사거리·범위 +5%${extraDesc ? ' · ' + extraDesc : ''}`,
         choose: () => addWeapon(id),
       });
     }
