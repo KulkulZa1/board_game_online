@@ -319,15 +319,25 @@
         }
       }
     },
-    // 진공 청소기 — 화면의 XP 젬 전체 흡수 + 현재 파워업 드롭 전부 즉시 적용
+    // 진공 청소기 — 맵의 모든 드랍 물품을 흡수: XP 젬·파워업 즉시 적용, 장비·아이템 박스는
+    //   플레이어 위치로 끌어당겨 일반 수집 로직이 처리(약한 장비 자동 분해, 보관 장비는 모달 순차 표시)
     { id: 'sweep',   icon: '🌀', name: '진공 청소기', apply: ()  => {
+        // 1) XP 젬 전부 즉시 흡수
         let xpTotal = 0;
         for (const g of xpGems) xpTotal += g.val;
         xpGems.length = 0;
         if (xpTotal > 0) gainXP(xpTotal);
+        // 2) 파워업 전부 즉시 적용
         for (const pu of powerups) pu.def.apply(player);
         powerups.length = 0;
-        floatTexts.push({ text: '🌀 전체 흡수!', life: 2.0, maxLife: 2.0, screenSpace: true, color: '#9b59b6', size: 22 });
+        // 3) 장비 드롭 — 플레이어 위치로 끌어당김 (다음 프레임 수집 로직이 자동 분해/모달 처리)
+        const gearCount = gearDrops.length;
+        for (const gd of gearDrops) { gd.x = player.x; gd.y = player.y; }
+        // 4) 아이템 박스 — 플레이어 위치로 끌어당김 (수집 시 선택창 순차 표시)
+        const boxCount = itemBoxes.length;
+        for (const box of itemBoxes) { box.x = player.x; box.y = player.y; }
+        const absorbed = gearCount + boxCount;
+        floatTexts.push({ text: absorbed > 0 ? `🌀 전체 흡수! (+${absorbed} 드랍)` : '🌀 전체 흡수!', life: 2.0, maxLife: 2.0, screenSpace: true, color: '#9b59b6', size: 22 });
         for (let _k = 0; _k < 20; _k++) spawnParticle(player.x, player.y, '#9b59b6', 6 + Math.random()*6, 0.5);
       }
     },
@@ -1406,6 +1416,7 @@
   }
 
   function renderCoopGuestMirror() {
+    ctx.setTransform(1, 0, 0, 1, 0, 0); // 누적 변환 자가 복구 (render와 동일)
     const W = canvas.width, H = canvas.height;
     const snap = coop.mirrorSnapshot;
     ctx.clearRect(0, 0, W, H);
@@ -4049,8 +4060,19 @@
       floatTexts.push({ text: `⏱ ${mins}분 생존!`, life: 2.5, maxLife: 2.5, screenSpace: true, color: '#2ecc71', size: 18 });
     }
 
-    update(dt);
-    render(dt);
+    // update/render를 보호 — 한 프레임에서 예외가 나도 게임 루프가 멈추거나
+    // 캔버스 변환이 영구히 깨지지 않도록 격리 (render는 매 프레임 변환을 초기화함)
+    try {
+      update(dt);
+    } catch (err) {
+      console.error('[VS] update() 예외:', err);
+    }
+    try {
+      render(dt);
+    } catch (err) {
+      console.error('[VS] render() 예외:', err);
+      ctx.setTransform(1, 0, 0, 1, 0, 0); // 변환 누수 즉시 복구
+    }
     updateHUD();
     sendHostCoopState();
     if (elapsed - lastRunSnapshotAt >= RUN_SNAPSHOT_INTERVAL) {
@@ -4124,11 +4146,11 @@
         dashChainWindow = 1.0;
         floatTexts.push({ text: '⚡ CHAIN!', x: end.x, y: end.y - 30, life: 0.75, maxLife: 0.75, color: '#74b9ff', size: 14 });
       }
-      // 5명 이상 동시 적중 → 첫 번째 무기 CD 즉시 초기화
-      if (hitCount >= 5 && player.weaponCds) {
-        const firstW = player.weapons[0];
-        if (firstW && (player.weaponCds[firstW] || 0) > 0) {
-          player.weaponCds[firstW] = 0;
+      // 5명 이상 동시 적중 → 메인 무기 CD 즉시 초기화 (필드명: weaponCDs)
+      if (hitCount >= 5 && player.weaponCDs) {
+        const firstW = getMainWeapon() || player.weapons[0];
+        if (firstW && (player.weaponCDs[firstW] || 0) > 0) {
+          player.weaponCDs[firstW] = 0;
           floatTexts.push({ x: end.x, y: end.y - 46, text: '💥 CD RESET!', life: 1.2, maxLife: 1.2, color: '#f1c40f', size: 14 });
         }
       }
@@ -4650,10 +4672,18 @@
 
   // ── 렌더링 ──────────────────────────────────────────────────────
   function render() {
+    // 프레임 시작 시 변환행렬을 항상 단위행렬로 초기화 — 이전 프레임에서 예외 등으로
+    // ctx.save()/restore() 균형이 깨져 카메라 translate가 누적·잔류해도 자가 복구됨
+    // (이 누적이 "게임은 진행되는데 화면이 렌더링 안 되는" 증상의 원인)
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+
     const W = canvas.width, H = canvas.height;
     ctx.clearRect(0, 0, W, H);
     ctx.fillStyle = currentMap().bg || '#101827';
     ctx.fillRect(0, 0, W, H);
+
+    // player 미생성 시(시작 화면 등) 배경만 그리고 종료 — save 누수 방지를 위해 save 이전에 반환
+    if (!player) return;
 
     // 화면 흔들기 (최외곽 save)
     ctx.save();
@@ -4674,8 +4704,6 @@
       ctx.beginPath(); ctx.moveTo(-60, y); ctx.lineTo(W + 60, y); ctx.stroke();
     }
     ctx.restore();
-
-    if (!player) return;
 
     ctx.save();
     ctx.translate(-camera.x, -camera.y);
