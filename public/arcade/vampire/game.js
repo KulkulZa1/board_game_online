@@ -71,11 +71,11 @@
     { id: 'inferno',   base: 'bomb',      req: 'ignite',    reqName: '🔥 화염 부착' },
   ];
 
-  // 동시에 활성화 가능한 공격 무기 수 (방패/이지스 같은 방어 무기는 제외)
-  const MAX_ACTIVE_WEAPONS = 3;
+  // 메인+보조 무기 시스템 — 메인 무기 1개만 독립 발사, 나머지 공격 무기는 보조
+  // 방패/이지스(방어 무기)는 항상 독립 발사
   const NON_ATTACK_WEAPONS = new Set(['shield', 'aegis']);
 
-  // 무기 계열 — 진화 무기를 기본 계열로 매핑 (시너지 판정용, 진화 후에도 시너지 유지)
+  // 무기 계열 — 진화 무기를 기본 계열로 매핑 (보조 효과 판정용, 진화 후에도 유지)
   const WEAPON_FAMILY = {
     orb: 'orb', blackhole: 'orb',
     arrow: 'arrow', stormbow: 'arrow',
@@ -88,18 +88,19 @@
     bomb: 'bomb', inferno: 'bomb',
   };
 
-  // 무기 시너지 — 두 계열을 모두 "보유"하면, 활성화된 계열이 상대 계열의 효과를 차용
-  //   비활성 무기도 보유만 하면 시너지가 적용됨 (활성 무기 슬롯을 아끼면서 효과 유지)
-  const WEAPON_SYNERGY_DEFS = [
-    { id: 'blast_arrow',  a: 'arrow',     b: 'bomb',  icon: '💥', name: '작렬탄',
-      descA: '화살 적중 시 소형 폭발 (40% 피해)', descB: '폭탄 폭발 시 6발 화살 산탄' },
-    { id: 'static_orbit', a: 'orb',       b: 'chain', icon: '⚡', name: '감전 궤도',
-      descA: '구슬 접촉 시 번개 연쇄 (60% 피해)', descB: '번개 사슬 연쇄 +2회' },
-    { id: 'void_reap',    a: 'scythe',    b: 'nova',  icon: '🌑', name: '폭심 베기',
-      descA: '베기 명중 지점에 소형 폭발', descB: '폭발 시 360° 검기 링 추가' },
-    { id: 'photon_rang',  a: 'boomerang', b: 'laser', icon: '🪃', name: '광자 부메랑',
-      descA: '부메랑 적중 시 전방 레이저 섬광', descB: '레이저 명중 시 부메랑 파편 사출' },
-  ];
+  // 보조 무기 계열별 오버레이 효과 — 메인 무기 발사마다 보유한 각 보조 계열 효과가 발동
+  // proc: 발동 확률 (1.0 = 항상)
+  const AUX_EFFECT_DEFS = {
+    bomb:      { icon: '💥', name: '폭발 증폭',   desc: '주 공격마다 소형 폭발 (45% 피해)',           proc: 1.0 },
+    chain:     { icon: '⚡', name: '전격 연쇄',   desc: '주 공격마다 2연쇄 번개 (55% 피해)',          proc: 1.0 },
+    laser:     { icon: '☀',  name: '섬광 방출',   desc: '주 공격 60% 확률 관통 레이저 (65% 피해)',    proc: 0.6 },
+    boomerang: { icon: '🪃', name: '파편 사출',   desc: '주 공격 50% 확률 3방향 파편 (35%×3)',       proc: 0.5 },
+    orb:       { icon: '🔵', name: '에너지 파동', desc: '주 공격마다 환형 충격파 (40% 피해)',         proc: 1.0 },
+    nova:      { icon: '💥', name: '연쇄 폭발',   desc: '주 공격 70% 확률 2차 폭발 (50% 피해)',      proc: 0.7 },
+    scythe:    { icon: '🌾', name: '검기 방출',   desc: '주 공격 80% 확률 부채꼴 베기 (50% 피해)',    proc: 0.8 },
+    arrow:     { icon: '🏹', name: '추격 화살',   desc: '주 공격 70% 확률 추가 관통 화살 (50%)',      proc: 0.7 },
+    shield:    { icon: '🛡', name: '방어 증폭',   desc: '주 공격마다 0.5초 피해 30% 감소',           proc: 1.0 },
+  };
 
   // 패시브(능력치) 업그레이드 — 진화 재료로도 사용됨
   // max: 최대 스택 수. 도달 시 선택지에서 자동 제외. max:null = 무제한(성장 판타지 핵심 스탯)
@@ -553,7 +554,7 @@
       weapons: [],       // 보유 무기 id 목록
       weaponLevels: {},  // 무기별 레벨 (1~MAX_WEAPON_LEVEL)
       weaponCDs: {},     // 무기별 쿨다운 잔여 시간
-      weaponActive: {},  // 무기별 활성화 여부 (false=비활성, 시너지는 유지) — 공격 무기 최대 3개 활성
+      mainWeapon: null,  // 메인 무기 id (첫 공격 무기 자동 지정, E키로 변경 가능)
       passives: {},      // 보유 패시브 id → 스택 수 (진화 조건 판정)
       dmgMult: character.dmgMult * metaStats.dmgMult,
       cdMult:  character.cdMult * metaStats.cdMult,
@@ -670,18 +671,14 @@
       renderWeaponSlots();
       return;
     }
-    if (!player.weaponActive) player.weaponActive = {};
-    // 기존 활성 공격 무기 수 (새 무기 추가 전 기준)
-    const atkActiveBefore = activeAttackCount();
     player.weapons.push(id);
     player.weaponLevels[id] = 1;
     player.weaponCDs[id] = 0;
-    // 방어 무기는 항상 활성. 공격 무기는 활성 슬롯(3)이 남으면 활성, 아니면 비활성(E키로 교체)
-    if (!isAttackWeapon(id) || atkActiveBefore < MAX_ACTIVE_WEAPONS) {
-      player.weaponActive[id] = true;
-    } else {
-      player.weaponActive[id] = false;
-      floatTexts.push({ text: `🔒 ${WEAPON_DEFS[id].name} 비활성 — E키로 교체`, life: 2.6, maxLife: 2.6, screenSpace: true, color: '#f39c12', size: 15 });
+    // 공격 무기 중 메인이 없으면 첫 공격 무기를 자동으로 메인 지정
+    if (isAttackWeapon(id) && !player.mainWeapon) {
+      player.mainWeapon = id;
+    } else if (isAttackWeapon(id)) {
+      floatTexts.push({ text: `⚙ ${WEAPON_DEFS[id].name} 보조로 추가 — E키로 메인 변경`, life: 2.6, maxLife: 2.6, screenSpace: true, color: '#74b9ff', size: 15 });
     }
     renderWeaponSlots();
   }
@@ -696,9 +693,8 @@
     delete player.weaponLevels[evo.base];
     delete player.weaponCDs[evo.base];
     player.weaponCDs[evo.id] = 0;
-    if (!player.weaponActive) player.weaponActive = {};
-    player.weaponActive[evo.id] = wasActive;
-    delete player.weaponActive[evo.base];
+    // 진화 전 무기가 메인이었으면 진화 후 무기도 메인으로 유지
+    if (player.mainWeapon === evo.base) player.mainWeapon = evo.id;
     showEvolutionCelebration(evo);
     renderWeaponSlots();
     if (!meta.achievements.evolve1) {
@@ -833,25 +829,112 @@
   // ── 무기 활성화 / 시너지 헬퍼 ────────────────────────────────────
   function weaponFamily(id) { return WEAPON_FAMILY[id] || id; }
   function isAttackWeapon(id) { return !NON_ATTACK_WEAPONS.has(id); }
-  function isWeaponActive(id) {
-    if (!player || !player.weaponActive) return true;
-    return player.weaponActive[id] !== false;
+  // 메인 무기 반환 (미지정 시 첫 번째 공격 무기 자동 선택)
+  function getMainWeapon() {
+    if (!player) return null;
+    if (player.mainWeapon && player.weapons.includes(player.mainWeapon)) return player.mainWeapon;
+    return player.weapons.find(w => isAttackWeapon(w)) || null;
   }
-  // 활성화된 공격 무기 수 (방어 무기는 카운트 제외)
-  function activeAttackCount() {
-    if (!player) return 0;
-    return player.weapons.filter(w => isAttackWeapon(w) && isWeaponActive(w)).length;
+  // 해당 무기가 현재 메인인지 여부 (방어 무기는 항상 독립 발사)
+  function isWeaponActive(id) {
+    if (!player) return true;
+    if (!isAttackWeapon(id)) return true;
+    return id === getMainWeapon();
+  }
+  // 보조 무기 계열 목록 (보유 중, 공격 무기, 메인 계열 제외, 중복 제거)
+  function getAuxFamilies() {
+    if (!player) return [];
+    const mainId = getMainWeapon();
+    const mainFam = mainId ? weaponFamily(mainId) : null;
+    const seen = new Set();
+    return player.weapons
+      .filter(w => isAttackWeapon(w) && w !== mainId)
+      .map(w => weaponFamily(w))
+      .filter(f => { if (f === mainFam || seen.has(f)) return false; seen.add(f); return true; });
   }
   function ownsFamily(fam) {
     return !!(player && player.weapons.some(w => weaponFamily(w) === fam));
   }
-  function familyActive(fam) {
-    return !!(player && player.weapons.some(w => weaponFamily(w) === fam && isWeaponActive(w)));
-  }
-  // 현재 두 계열을 모두 보유한 시너지 목록
-  function activeWeaponSynergies() {
-    if (!player) return [];
-    return WEAPON_SYNERGY_DEFS.filter(s => ownsFamily(s.a) && ownsFamily(s.b));
+  // 보조 효과 발동 — 메인 무기 발사 시 각 보조 계열의 오버레이 효과를 적용
+  function triggerAuxEffects(target, baseDmg) {
+    if (!player || !target) return;
+    const auxFams = getAuxFamilies();
+    if (!auxFams.length) return;
+    const tx = target.x, ty = target.y;
+    const rng = (player.rangeBonus || 1) * ((player.equipStats && player.equipStats.rangeBonus) || 1);
+    for (const fam of auxFams) {
+      const def = AUX_EFFECT_DEFS[fam];
+      if (!def || Math.random() > def.proc) continue;
+      switch (fam) {
+        case 'bomb':
+          chainExplosions.push({ x: tx, y: ty, range: 65 * rng, dmg: baseDmg * 0.45, delay: 0 });
+          rings.push({ x: tx, y: ty, r: 4, maxR: 60 * rng, life: 0.18, maxLife: 0.18, color: '#e67e22' });
+          break;
+        case 'chain': {
+          let cx = tx, cy = ty;
+          const hitSet = new Set();
+          hitSet.add(target);
+          for (let b = 0; b < 2; b++) {
+            let best = null, bd2 = 240;
+            for (const e of enemies) {
+              if (e.dying || hitSet.has(e)) continue;
+              const d2 = Math.hypot(e.x - cx, e.y - cy);
+              if (d2 < bd2) { bd2 = d2; best = e; }
+            }
+            if (!best) break;
+            hitSet.add(best);
+            projectiles.push({ type: 'arc', x: cx, y: cy, tx: best.x, ty: best.y, life: 0.18, dmg: 0 });
+            dealDamage(best, baseDmg * 0.55);
+            cx = best.x; cy = best.y;
+          }
+          break;
+        }
+        case 'laser': {
+          const ang = Math.atan2(ty - player.y, tx - player.x);
+          projectiles.push({ type: 'laser', x: player.x, y: player.y, angle: ang, r: 5, dmg: baseDmg * 0.65, life: 0.16, length: 160 * rng, noSyn: true });
+          break;
+        }
+        case 'boomerang':
+          for (let b = 0; b < 3; b++) {
+            const ba = Math.atan2(ty - player.y, tx - player.x) + (b - 1) * 0.38;
+            projectiles.push({ type: 'boomerang', x: player.x, y: player.y, vx: Math.cos(ba) * 310, vy: Math.sin(ba) * 310, r: 5, dmg: baseDmg * 0.35, life: 0.9, halfLife: 0.45, flipped: false, pierceOut: 2, pierceIn: 2, hitOut: new Set(), hitIn: new Set(), noSyn: true });
+          }
+          break;
+        case 'orb': {
+          const aoeR = 70 * rng;
+          for (const e of enemies) {
+            if (!e.dying && Math.hypot(e.x - tx, e.y - ty) < aoeR) dealDamage(e, baseDmg * 0.40);
+          }
+          rings.push({ x: tx, y: ty, r: 4, maxR: aoeR, life: 0.25, maxLife: 0.25, color: '#3498db' });
+          break;
+        }
+        case 'nova':
+          chainExplosions.push({ x: tx, y: ty, range: 85 * rng, dmg: baseDmg * 0.50, delay: 0 });
+          break;
+        case 'scythe': {
+          const sAng = Math.atan2(ty - player.y, tx - player.x);
+          const sR = 100 * rng;
+          for (const e of enemies) {
+            if (e.dying) continue;
+            const eDist = Math.hypot(e.x - player.x, e.y - player.y);
+            if (eDist > sR) continue;
+            const eA = Math.atan2(e.y - player.y, e.x - player.x);
+            let diff = Math.abs(((eA - sAng + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
+            if (diff < Math.PI * 0.55) dealDamage(e, baseDmg * 0.50);
+          }
+          rings.push({ x: player.x, y: player.y, r: 6, maxR: sR, life: 0.2, maxLife: 0.2, color: '#ecf0f1' });
+          break;
+        }
+        case 'arrow': {
+          const aA = Math.atan2(ty - player.y, tx - player.x);
+          projectiles.push({ type: 'arrow', x: player.x, y: player.y, vx: Math.cos(aA) * 420, vy: Math.sin(aA) * 420, r: 5, dmg: baseDmg * 0.50, life: 0.8, pierce: 3 + (player.pierceBonus || 0), noSyn: true });
+          break;
+        }
+        case 'shield':
+          player._auxShieldTime = (player._auxShieldTime || 0) + 0.5;
+          break;
+      }
+    }
   }
 
   // 시너지 조건 충족 여부 확인
@@ -1120,11 +1203,11 @@
     dailyChallengeEnabled = !!snapshot.dailyChallengeEnabled;
     selectedStageIdx = Number(snapshot.selectedStageIdx) || 0;
     player = snapshot.player;
-    // 구버전 저장본 호환: weaponActive 누락 시 보유 무기 전부 활성으로 초기화
-    if (player && !player.weaponActive) {
-      player.weaponActive = {};
-      (player.weapons || []).forEach(w => { player.weaponActive[w] = true; });
+    // 구버전 저장본 호환: mainWeapon 누락 시 첫 공격 무기를 메인으로 자동 지정
+    if (player && player.mainWeapon === undefined) {
+      player.mainWeapon = (player.weapons || []).find(w => isAttackWeapon(w)) || null;
     }
+    // weaponActive 키가 있는 구버전 저장본은 그냥 무시 (새 시스템에서 사용 안 함)
     allyPlayer = snapshot.allyPlayer || null;
     enemies = Array.isArray(snapshot.enemies) ? snapshot.enemies : [];
     projectiles = Array.isArray(snapshot.projectiles) ? snapshot.projectiles : [];
@@ -2770,15 +2853,6 @@
       }
     } else if (id === 'nova' || id === 'supernova') {
       spawnExplosion(player.x, player.y, range, dmg, id === 'supernova');
-      // void_reap 시너지(nova 활성 + scythe 보유): 360° 검기 링 추가 (50% 피해)
-      if (ownsFamily('scythe')) {
-        for (let _i = enemies.length - 1; _i >= 0; _i--) {
-          const e = enemies[_i];
-          if (e && !e.dying && dist(player, e) < range * 1.15) dealDamage(e, dmg * 0.5);
-        }
-        rings.push({ x: player.x, y: player.y, r: 10, maxR: range * 1.15, life: 0.3, maxLife: 0.3, color: '#bdc3c7' });
-        for (let k = 0; k < 10; k++) { const pa = (k / 10) * Math.PI * 2; spawnParticle(player.x + Math.cos(pa) * range * 0.6, player.y + Math.sin(pa) * range * 0.6, '#ecf0f1', 4, 0.25); }
-      }
     } else if (id === 'shield' || id === 'aegis') {
       const dur = (id === 'aegis' ? 2.2 : 1.5) + 0.15 * (lvl - 1);
       player.invincible = Math.max(player.invincible, dur);
@@ -2812,11 +2886,8 @@
     } else if (id === 'chain' || id === 'tempest') {
       // 사슬 번개: 가장 가까운 적부터 연쇄 즉시 타격 + 시각적 아크 생성
       const evolved  = id === 'tempest';
-      // 관통 강화 패시브: 연쇄 횟수도 증가 (2 관통 = +1 연쇄)
-      // 관통 강화 1스택 = 연쇄 +3 (관통=2씩 증가하므로 pierceBonus/2 * 3)
-      // static_orbit 시너지(chain 활성 + orb 보유): 연쇄 +2회
-      const synBounce = ownsFamily('orb') ? 2 : 0;
-      const bounces = (evolved ? 5 : 3) + (player.passives['pierce_up'] || 0) * 3 + synBounce;
+      // 관통 강화 패시브: 연쇄 횟수도 증가 (관통 1스택 = 연쇄 +3)
+      const bounces = (evolved ? 5 : 3) + (player.passives['pierce_up'] || 0) * 3;
       let cx = player.x, cy = player.y;
       const hit = new Set();
       for (let b = 0; b < bounces; b++) {
@@ -2877,12 +2948,6 @@
         dealDamage(e, dmg);
         reaperHits++;
       }
-      // void_reap 시너지(scythe 활성 + nova 보유): 베기 명중 시 명중 지점에 소형 폭발
-      if (ownsFamily('nova') && reaperHits > 0) {
-        const bx = target ? target.x : player.x + Math.cos(baseAng) * range * 0.6;
-        const by = target ? target.y : player.y + Math.sin(baseAng) * range * 0.6;
-        chainExplosions.push({ x: bx, y: by, range: range * 0.55, dmg: dmg * 0.4, delay: 0 });
-      }
       // 사신의 낫 — 5명 이상 동시 베기 시 영혼 수확: 스펙트럴 파동 폭발
       if (evolved && reaperHits >= 5 && player) {
         const soulRange = range * 1.6;
@@ -2907,9 +2972,7 @@
       const tx = target ? target.x : player.x + lastMoveDir.dx * range;
       const ty = target ? target.y : player.y + lastMoveDir.dy * range;
       const aoe = (evolved ? 95 : 80) * (player.rangeBonus || 1) * ((player.equipStats && player.equipStats.rangeBonus) || 1);
-      // blast_arrow 시너지(bomb 활성 + arrow 보유): 폭발 시 화살 산탄 사출
-      const scatterArrows = ownsFamily('arrow');
-      chainExplosions.push({ x: tx, y: ty, range: aoe, dmg, delay: 0.45, scatterArrows, scatterDmg: dmg * 0.45 });
+      chainExplosions.push({ x: tx, y: ty, range: aoe, dmg, delay: 0.45 });
       // 투척 시각 효과 — 착탄 지점 텔레그래프 링
       rings.push({ x: tx, y: ty, r: aoe, maxR: 6, life: 0.45, maxLife: 0.45, color: '#e67e22' });
       for (let k = 0; k < 5; k++) spawnParticle(player.x, player.y, '#e67e22', 4, 0.3);
@@ -2919,6 +2982,11 @@
           chainExplosions.push({ x: tx + Math.cos(a) * aoe * 0.8, y: ty + Math.sin(a) * aoe * 0.8, range: aoe * 0.6, dmg: dmg * 0.6, delay: 0.6 + s * 0.05 });
         }
       }
+    }
+    // 보조 무기 오버레이 효과 — 메인 무기 발사 시마다 각 보조 계열 효과 함께 발동
+    if (id === getMainWeapon()) {
+      const auxTarget = nearestEnemy();
+      if (auxTarget) triggerAuxEffects(auxTarget, dmg);
     }
     // 블리츠 시너지: 15% 확률로 쿨다운 없이 즉시 재발동
     if (hasSynergy('blitz') && Math.random() < 0.15) {
@@ -3913,10 +3981,10 @@
       const lvl = player.weaponLevels[id] || 1;
       const star = d.evolved ? '✨' : '';
       const maxed = !d.evolved && lvl >= MAX_WEAPON_LEVEL ? ' weapon-maxed' : '';
-      const inactive = !isWeaponActive(id);
-      const dim = inactive ? 'opacity:0.38;filter:grayscale(0.6);' : '';
-      const zzz = inactive ? '💤' : '';
-      return `<span class="weapon-slot${d.evolved ? ' weapon-evolved' : ''}${maxed}" style="${dim}">${zzz}${star}${d.icon} ${d.name} <b>Lv.${lvl}</b></span>`;
+      const isMain = isWeaponActive(id) && isAttackWeapon(id);
+      const dim = (!isAttackWeapon(id) || isMain) ? '' : 'opacity:0.55;';
+      const badge = isMain ? '⭐' : (isAttackWeapon(id) ? '⚙' : '');
+      return `<span class="weapon-slot${d.evolved ? ' weapon-evolved' : ''}${maxed}" style="${dim}">${badge}${star}${d.icon} ${d.name} <b>Lv.${lvl}</b></span>`;
     }).join('');
     const supportHtml = SLASH_SUPPORT_DEFS
       .filter(def => slashModLevel(def.id) > 0)
@@ -3925,19 +3993,12 @@
     if (supportHtml) el.innerHTML += supportHtml;
   }
 
-  // 무기 활성/비활성 토글 (장비창에서 호출) — 공격 무기는 최대 3개까지만 활성
-  function toggleWeaponActive(id) {
-    if (!player || !player.weaponActive || !WEAPON_DEFS[id]) return;
-    if (isWeaponActive(id)) {
-      player.weaponActive[id] = false;
-    } else {
-      if (isAttackWeapon(id) && activeAttackCount() >= MAX_ACTIVE_WEAPONS) {
-        floatTexts.push({ text: `⚠ 공격 무기는 최대 ${MAX_ACTIVE_WEAPONS}개만 활성화돼요`, life: 1.8, maxLife: 1.8, screenSpace: true, color: '#e74c3c', size: 15 });
-        renderEquipUI();
-        return;
-      }
-      player.weaponActive[id] = true;
-    }
+  // 메인 무기 지정 (장비창에서 호출) — 공격 무기만 메인으로 지정 가능
+  function setMainWeapon(id) {
+    if (!player || !WEAPON_DEFS[id] || !isAttackWeapon(id)) return;
+    if (!player.weapons.includes(id)) return;
+    player.mainWeapon = id;
+    floatTexts.push({ text: `⭐ ${WEAPON_DEFS[id].name} 메인 지정`, life: 1.8, maxLife: 1.8, screenSpace: true, color: '#f1c40f', size: 16 });
     renderWeaponSlots();
     renderEquipUI();
   }
@@ -4206,6 +4267,8 @@
     // 임시 버프 타이머
     if (player.tempDmgTimer > 0) { player.tempDmgTimer -= dt; if (player.tempDmgTimer <= 0) { player.tempDmgMult = 1; player.tempDmgTimer = 0; } }
     if (player.tempSpeedTimer > 0) { player.tempSpeedTimer -= dt; if (player.tempSpeedTimer <= 0) { player.tempSpeedMult = 1; player.tempSpeedTimer = 0; } }
+    // 보조 방패 버프 (shield 계열 보조 무기 오버레이 효과)
+    if ((player._auxShieldTime || 0) > 0) player._auxShieldTime -= dt;
     // 오버드라이브 타이머 (시각적 HUD 상태용, 실제 버프는 tempDmgTimer가 관리)
     if (overdriveActive > 0) overdriveActive = Math.max(0, overdriveActive - dt);
     if (overdriveFlash  > 0) overdriveFlash  = Math.max(0, overdriveFlash  - dt);
@@ -4237,16 +4300,6 @@
           const de = dist(p, e);
           if (de < p.r + e.size) {
             dealDamage(e, p.dmg * dt * 3);
-            // static_orbit 시너지(orb 활성 + chain 보유): 접촉 시 낮은 확률로 번개 연쇄 1회
-            if (ownsFamily('chain') && Math.random() < 0.05) {
-              let best = null, bd = 220;
-              for (const o of enemies) { if (o === e || o.dying) continue; const od = dist(e, o); if (od < bd) { bd = od; best = o; } }
-              if (best) {
-                dealDamage(best, p.dmg * 0.6);
-                projectiles.push({ type: 'arc', x: e.x, y: e.y, tx: best.x, ty: best.y, life: 0.18, dmg: 0 });
-                for (let _z = 0; _z < 3; _z++) spawnParticle(best.x, best.y, '#a29bfe', 4, 0.2);
-              }
-            }
             // 블랙홀 중력 누적 — 0.3초 쿨다운, 3스택 시 중력 폭발
             if (evolved && !e.isBoss && elapsed - (e._gravLastStack || -1) > 0.3) {
               e._gravLastStack = elapsed;
@@ -4312,11 +4365,6 @@
             if (hasSynergy('armor_breaker')) {
               chainExplosions.push({ x: e.x, y: e.y, range: 42, dmg: p.dmg * 0.4, delay: 0 });
             }
-            // blast_arrow 시너지(arrow 활성 + bomb 보유): 적중 시 소형 폭발
-            if (!p.noSyn && !p.noGemFx && ownsFamily('bomb')) {
-              chainExplosions.push({ x: e.x, y: e.y, range: 44 * (player.rangeBonus || 1), dmg: p.dmg * 0.4, delay: 0 });
-              rings.push({ x: e.x, y: e.y, r: 4, maxR: 38, life: 0.18, maxLife: 0.18, color: '#e67e22' });
-            }
             p.pierce--;
             if (p.pierce <= 0) { projectiles.splice(i, 1); break; }
           }
@@ -4330,11 +4378,6 @@
         for (const e of enemies) {
           if (distToSegment(e, p, { x: ex, y: ey }) < e.size + hitW) {
             dealDamage(e, p.dmg * dt * mult);
-            // photon_rang 시너지(laser 활성 + boomerang 보유): 명중 시 낮은 확률로 부메랑 파편 사출
-            if (!p.noSyn && ownsFamily('boomerang') && Math.random() < 0.02) {
-              const ba = p.angle + (Math.random() - 0.5);
-              projectiles.push({ type: 'boomerang', x: e.x, y: e.y, vx: Math.cos(ba) * 300, vy: Math.sin(ba) * 300, r: 6, dmg: p.dmg * 4, life: 1.0, halfLife: 0.5, flipped: false, pierceOut: 3, pierceIn: 3, hitOut: new Set(), hitIn: new Set(), noSyn: true });
-            }
           }
         }
       } else if (p.type === 'explosion') {
@@ -4356,11 +4399,6 @@
             // armor_breaker 시너지: 관통 적중 시 40% 범위 피해
             if (hasSynergy('armor_breaker')) {
               chainExplosions.push({ x: e.x, y: e.y, range: 42, dmg: p.dmg * 0.4, delay: 0 });
-            }
-            // photon_rang 시너지(boomerang 활성 + laser 보유): 적중 시 전방 레이저 섬광
-            if (!p.noSyn && ownsFamily('laser') && Math.random() < 0.4) {
-              const la = Math.atan2(p.vy, p.vx);
-              projectiles.push({ type: 'laser', x: p.x, y: p.y, angle: la, r: 6, dmg: p.dmg * 0.8, life: 0.18, length: 170 * (player.rangeBonus || 1), noSyn: true });
             }
             spawnParticle(p.x, p.y, '#27ae60', 5, 0.2);
           }
@@ -4387,13 +4425,6 @@
       c.delay -= dt;
       if (c.delay <= 0) {
         spawnExplosion(c.x, c.y, c.range, c.dmg, false);
-        // blast_arrow 시너지: 폭발 지점에서 6방향 화살 산탄 (시너지 재발동 방지: noSyn)
-        if (c.scatterArrows) {
-          for (let s = 0; s < 6; s++) {
-            const a = (s / 6) * Math.PI * 2 + Math.random() * 0.2;
-            projectiles.push({ type: 'arrow', x: c.x, y: c.y, vx: Math.cos(a) * 380, vy: Math.sin(a) * 380, r: 5, dmg: c.scatterDmg || c.dmg * 0.4, life: 0.5, pierce: 2 + (player.pierceBonus || 0), noGemFx: true, noSyn: true });
-          }
-        }
         chainExplosions.splice(i, 1);
       }
     }
@@ -4520,7 +4551,8 @@
 
       if (!e.goblin && player.invincible <= 0 && d < e.size + 12) {
         const contactDmg = e.isBoss ? 55 : [8, 18, 38][Math.min(e.tier, 2)];
-        player.hp -= contactDmg * dt * (hasSynergy('iron_fortress') ? 0.70 : 1.0);
+        const auxShieldMult = (player._auxShieldTime || 0) > 0 ? 0.70 : 1.0;
+        player.hp -= contactDmg * dt * (hasSynergy('iron_fortress') ? 0.70 : auxShieldMult);
         screenShake = Math.min(screenShake + 0.15, 0.35);
         hurtScreenFlash = 0.28;
         SFX.hurt();
@@ -5928,36 +5960,41 @@
       html += `<div style="margin-top:8px;padding:8px;background:#1a1230;border:1px solid #4a2d6e;border-radius:6px;font-size:11px;color:#d7bfff;">💠 특수 젬: ${lines.join(' · ')}</div>`;
     }
 
-    // ── 무기 활성화 관리 (공격 무기 최대 3개) ──
-    const atkActive = activeAttackCount();
+    // ── 메인+보조 무기 시스템 ──
+    const mainId = getMainWeapon();
     html += `<div style="margin-top:12px;padding:8px;background:#0d1628;border-radius:6px;">`;
-    html += `<div style="font-size:11px;color:#9fb4d8;margin-bottom:6px;">🗡 무기 활성화 — 공격 무기 <b style="color:${atkActive >= MAX_ACTIVE_WEAPONS ? '#f1c40f' : '#2ecc71'};">${atkActive}/${MAX_ACTIVE_WEAPONS}</b> · 비활성 무기도 시너지는 유지됨</div>`;
+    html += `<div style="font-size:11px;color:#9fb4d8;margin-bottom:6px;">⭐ 메인 무기 선택 — 클릭으로 지정 · 보조 무기는 메인 공격에 오버레이 효과 추가</div>`;
     html += `<div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center;">`;
     for (const id of player.weapons) {
       const d = WEAPON_DEFS[id];
-      const active = isWeaponActive(id);
+      const isMain = id === mainId;
       const defensive = !isAttackWeapon(id);
-      const bg = active ? (defensive ? '#1e3a5f' : '#1b5e3a') : '#2a2f3a';
-      const bd = active ? (defensive ? '#3b82f6' : '#2ecc71') : '#4b5563';
-      const label = defensive ? (active ? '🛡 활성' : '🛡 비활성') : (active ? '🟢 활성' : '⚪ 비활성');
-      html += `<button class="weapon-toggle" data-wid="${id}" style="background:${bg};border:1px solid ${bd};color:#fff;border-radius:7px;padding:5px 8px;font-size:11px;cursor:pointer;${active ? '' : 'opacity:0.6;'}">${d.icon} ${d.name}<br><span style="font-size:9px;">${label}</span></button>`;
+      const auxFam = defensive ? null : weaponFamily(id);
+      const auxDef = (auxFam && !isMain) ? AUX_EFFECT_DEFS[auxFam] : null;
+      const bg = isMain ? '#3b2a0a' : (defensive ? '#1e3a5f' : '#1e2638');
+      const bd = isMain ? '#f1c40f' : (defensive ? '#3b82f6' : '#4b5563');
+      const badge = isMain ? '⭐ 메인' : (defensive ? '🛡 방어' : '⚙ 보조');
+      const badgeColor = isMain ? '#f1c40f' : (defensive ? '#60a5fa' : '#94a3b8');
+      const auxHint = auxDef ? `<br><span style="font-size:8.5px;color:#7dd3fc;">${auxDef.icon} ${auxDef.name}</span>` : '';
+      html += `<button class="weapon-toggle" data-wid="${id}" style="background:${bg};border:1.5px solid ${bd};color:#fff;border-radius:7px;padding:5px 9px;font-size:11px;cursor:${defensive ? 'default' : 'pointer'};min-width:72px;text-align:center;">${d.icon} ${d.name}<br><span style="font-size:9px;color:${badgeColor};">${badge}</span>${auxHint}</button>`;
     }
     html += `</div></div>`;
 
-    // ── 무기 시너지 (보유 계열 기반) ──
-    const syns = activeWeaponSynergies();
-    if (syns.length) {
-      html += `<div style="margin-top:8px;padding:8px;background:#161d33;border:1px solid #2d3a5e;border-radius:6px;font-size:10.5px;line-height:1.6;">`;
-      html += `<div style="color:#74b9ff;margin-bottom:3px;">🔗 무기 시너지</div>`;
-      for (const s of syns) {
-        const aAct = familyActive(s.a), bAct = familyActive(s.b);
-        const dirs = [];
-        if (aAct) dirs.push(`<span style="color:#2ecc71;">▸ ${s.descA}</span>`);
-        if (bAct) dirs.push(`<span style="color:#2ecc71;">▸ ${s.descB}</span>`);
-        if (!aAct && !bAct) dirs.push(`<span style="color:#6b7280;">둘 중 하나를 활성화하면 발동</span>`);
-        html += `<div style="margin-bottom:2px;"><span style="color:#f1c40f;">${s.icon} ${s.name}</span> ${dirs.join(' ')}</div>`;
+    // ── 보조 무기 효과 목록 (현재 발동 중인 오버레이) ──
+    const auxFams = getAuxFamilies();
+    if (auxFams.length && mainId) {
+      const mainDef = WEAPON_DEFS[mainId];
+      html += `<div style="margin-top:8px;padding:8px;background:#161d33;border:1px solid #2d3a5e;border-radius:6px;font-size:10.5px;line-height:1.7;">`;
+      html += `<div style="color:#f1c40f;margin-bottom:3px;">🔗 보조 오버레이 효과 — <span style="color:#a3e635;">${mainDef.icon} ${mainDef.name}</span> 발사 시 함께 발동</div>`;
+      for (const fam of auxFams) {
+        const ef = AUX_EFFECT_DEFS[fam];
+        if (!ef) continue;
+        const procPct = ef.proc >= 1 ? '항상' : `${Math.round(ef.proc * 100)}%`;
+        html += `<div style="margin-bottom:1px;"><span style="color:#2ecc71;">${ef.icon} ${ef.name}</span> <span style="color:#cbd5e1;">${ef.desc}</span> <span style="color:#64748b;">(${procPct})</span></div>`;
       }
       html += `</div>`;
+    } else if (!mainId && player.weapons.some(w => isAttackWeapon(w))) {
+      html += `<div style="margin-top:8px;padding:8px;background:#161d33;border:1px solid #4b5563;border-radius:6px;font-size:10.5px;color:#9ca3af;">위에서 공격 무기를 클릭해 메인으로 지정하세요</div>`;
     }
 
     // ── 세트 진행도 (장착 조각 수) ──
@@ -5997,10 +6034,10 @@
       panel.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><strong>⚔ 장비 창 (E키)</strong><button id="equipClose" style="background:none;border:none;color:#fff;font-size:20px;cursor:pointer;">✕</button></div><div id="equipBody"></div>`;
       document.body.appendChild(panel);
       document.getElementById('equipClose').addEventListener('click', () => { equipUiVisible = true; toggleEquipUI(); });
-      // 무기 활성/비활성 토글 — equipBody 에 위임 핸들러 (innerHTML 교체돼도 유지)
+      // 메인 무기 지정 — equipBody 에 위임 핸들러 (innerHTML 교체돼도 유지)
       document.getElementById('equipBody').addEventListener('click', (ev) => {
         const btn = ev.target.closest('.weapon-toggle');
-        if (btn && btn.dataset.wid) toggleWeaponActive(btn.dataset.wid);
+        if (btn && btn.dataset.wid) setMainWeapon(btn.dataset.wid);
       });
     }
     panel.style.display = equipUiVisible ? 'block' : 'none';
