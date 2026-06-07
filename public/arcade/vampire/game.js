@@ -1019,6 +1019,8 @@
     if (pauseBtn) pauseBtn.style.display = '';
     const towerBtn = document.getElementById('towerBtn');
     if (towerBtn) towerBtn.style.display = '';
+    const equipBtn = document.getElementById('equipBtn');
+    if (equipBtn) equipBtn.style.display = '';
     renderStageSelect();
     renderWeaponSlots();
     updateHUD();
@@ -1344,6 +1346,19 @@
       towerBtn.addEventListener('click', () => placeHybridTower());
       const pauseBtn = document.getElementById('pauseBtn');
       headerStats.insertBefore(towerBtn, pauseBtn || document.getElementById('guideBtn') || null);
+    }
+
+    if (headerStats && !document.getElementById('equipBtn')) {
+      const equipBtn = document.createElement('button');
+      equipBtn.id = 'equipBtn';
+      equipBtn.className = 'guide-btn';
+      equipBtn.type = 'button';
+      equipBtn.title = '장비 창 (E키)';
+      equipBtn.textContent = '⚔';
+      equipBtn.style.display = 'none';
+      equipBtn.addEventListener('click', () => toggleEquipUI());
+      const guideBtn = document.getElementById('guideBtn');
+      headerStats.insertBefore(equipBtn, guideBtn || null);
     }
 
     if (!document.getElementById('metaPanel')) {
@@ -2409,11 +2424,12 @@
     player.tempDmgTimer  = Math.max(player.tempDmgTimer,  6);
     player.tempSpeedMult = Math.max(player.tempSpeedMult, 1.3);
     player.tempSpeedTimer= Math.max(player.tempSpeedTimer,6);
-    // 화면 청소 노바 폭발
-    spawnExplosion(player.x, player.y, 280, 80 * player.dmgMult, false);
+    // 화면 청소 노바 폭발 — rangeBonus (range_up 패시브 + 장비) 적용
+    const odRange = 280 * (player.rangeBonus || 1) * ((player.equipStats && player.equipStats.rangeBonus) || 1);
+    spawnExplosion(player.x, player.y, odRange, 80 * player.dmgMult, false);
     for (let _k = 0; _k < 28; _k++) spawnParticle(player.x, player.y, '#f1c40f', 7 + Math.random() * 9, 0.55);
-    rings.push({ x: player.x, y: player.y, r: 12, maxR: 300, life: 0.5, maxLife: 0.5, color: '#f1c40f' });
-    rings.push({ x: player.x, y: player.y, r: 12, maxR: 220, life: 0.38, maxLife: 0.38, color: '#fff' });
+    rings.push({ x: player.x, y: player.y, r: 12, maxR: odRange, life: 0.5, maxLife: 0.5, color: '#f1c40f' });
+    rings.push({ x: player.x, y: player.y, r: 12, maxR: odRange * 0.73, life: 0.38, maxLife: 0.38, color: '#fff' });
     screenShake = Math.min(screenShake + 0.45, 0.7);
     floatTexts.push({ text: '⚡ OVERDRIVE!', life: 2.2, maxLife: 2.2, screenSpace: true, color: '#f1c40f', size: 28 });
     SFX.boss();
@@ -4698,6 +4714,8 @@
     if (pauseBtn) pauseBtn.style.display = 'none';
     const towerBtn = document.getElementById('towerBtn');
     if (towerBtn) towerBtn.style.display = 'none';
+    const equipBtnEnd = document.getElementById('equipBtn');
+    if (equipBtnEnd) equipBtnEnd.style.display = 'none';
     ov.classList.add('visible');
 
     if (window.AdMobHelper) AdMobHelper.showAfterGame();
@@ -4855,6 +4873,8 @@
     if (pauseBtn) pauseBtn.style.display = '';
     const towerBtn = document.getElementById('towerBtn');
     if (towerBtn) towerBtn.style.display = '';
+    const equipBtnStart = document.getElementById('equipBtn');
+    if (equipBtnStart) equipBtnStart.style.display = '';
     document.getElementById('levelOverlay').style.display = 'none';
     initGame();
     state = 'playing';
@@ -4952,23 +4972,34 @@
       <div style="color:#aaa;font-size:12px;margin:6px 0;">${statLines.join(' · ')}</div>
       ${gemIcons ? `<div style="font-size:16px;">${gemIcons}</div>` : ''}
       <div style="display:flex;gap:10px;justify-content:center;margin-top:14px;">
-        <button id="gearEquip" style="background:#2563eb;border:none;color:#fff;padding:8px 20px;border-radius:8px;cursor:pointer;font-size:14px;">장착</button>
-        <button id="gearDrop" style="background:#374151;border:none;color:#fff;padding:8px 20px;border-radius:8px;cursor:pointer;font-size:14px;">버리기</button>
+        <button id="gearEquip" style="background:#2563eb;border:none;color:#fff;padding:8px 20px;border-radius:8px;cursor:pointer;font-size:14px;"><strong>[1]</strong> 장착</button>
+        <button id="gearDrop" style="background:#374151;border:none;color:#fff;padding:8px 20px;border-radius:8px;cursor:pointer;font-size:14px;"><strong>[2]</strong> 버리기</button>
       </div>
     `;
     modal.style.display = 'block';
     if (state === 'playing') setPaused(true);
 
-    document.getElementById('gearEquip').onclick = () => {
+    function doEquip() {
+      if (modal.style.display === 'none') return;
       modal.style.display = 'none';
+      document.removeEventListener('keydown', gearKeyHandler);
       equipItem(item);
       if (state === 'paused') setPaused(false);
-    };
-    document.getElementById('gearDrop').onclick = () => {
+    }
+    function doDrop() {
+      if (modal.style.display === 'none') return;
       modal.style.display = 'none';
+      document.removeEventListener('keydown', gearKeyHandler);
       floatTexts.push({ text: '🗑 버림', life: 1.0, maxLife: 1.0, screenSpace: true, color: '#888', size: 13 });
       if (state === 'paused') setPaused(false);
-    };
+    }
+    function gearKeyHandler(ev) {
+      if (ev.key === '1') { ev.preventDefault(); doEquip(); }
+      if (ev.key === '2') { ev.preventDefault(); doDrop(); }
+    }
+    document.addEventListener('keydown', gearKeyHandler);
+    document.getElementById('gearEquip').onclick = doEquip;
+    document.getElementById('gearDrop').onclick  = doDrop;
   }
 
   // 첫 프레임 시작
