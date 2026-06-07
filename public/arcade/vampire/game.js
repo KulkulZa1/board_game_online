@@ -128,6 +128,18 @@
       desc: '치명타 발동 시 2연쇄 번개 추가 (45% 피해)',
       requires: [{ id: 'crit', count: 3 }, { id: 'pierce_up', count: 2 }],
     },
+    {
+      id: 'pyromaniac',
+      name: '방화광', icon: '🔥',
+      desc: '화염 상태 적 사망 시 주변 광역 폭발',
+      requires: [{ id: 'ignite', count: 3 }, { id: 'dmg_up', count: 2 }],
+    },
+    {
+      id: 'bloodlust',
+      name: '피의 갈증', icon: '🩸',
+      desc: '치명타 발동 시 최대 체력 10% 회복',
+      requires: [{ id: 'lifesteal', count: 3 }, { id: 'crit', count: 2 }],
+    },
   ];
 
   // 신규 획득 가능한 기본 무기 목록
@@ -181,11 +193,26 @@
       xpRangeMult: 1.12,
       unlock: { achievement: 'evolve1', cost: 600, premiumProduct: 'reversi', label: 'Evolve a weapon, pay 600 coins, or unlock premium on mobile' },
     },
+    {
+      id: 'goblin',
+      name: 'Goblin Thief',
+      icon: '💰',
+      desc: 'Fast glass cannon. +30% coins, 2× gear drops. Low HP.',
+      startWeapons: ['boomerang', 'chain'],
+      speedMult: 1.18,
+      hpBonus: -20,
+      dmgMult: 1.05,
+      cdMult: 1,
+      xpRangeMult: 1,
+      coinMult: 1.3,
+      unlock: { achievement: 'goblinSlayer', cost: 500, label: 'Kill treasure goblin 3× or pay 500 coins' },
+    },
   ];
   const DIFFICULTY_DEFS = [
     { id: 'easy', name: 'Easy', desc: 'Practice run.', enemyHpMult: 0.78, enemySpeedMult: 0.92, enemyDmgMult: 0.75, spawnMult: 0.82, bossInterval: 150, coinMult: 0.75 },
     { id: 'normal', name: 'Normal', desc: 'Balanced 10 minute run.', enemyHpMult: 1, enemySpeedMult: 1, enemyDmgMult: 1, spawnMult: 1, bossInterval: 120, coinMult: 1 },
     { id: 'hard', name: 'Hard', desc: 'Higher pressure and rewards.', enemyHpMult: 1.28, enemySpeedMult: 1.1, enemyDmgMult: 1.22, spawnMult: 1.22, bossInterval: 105, coinMult: 1.45 },
+    { id: 'nightmare', name: 'Nightmare', desc: 'Elites gain shields. Max pressure. Huge payout.', enemyHpMult: 1.65, enemySpeedMult: 1.25, enemyDmgMult: 1.5, spawnMult: 1.38, bossInterval: 90, coinMult: 2.2 },
   ];
   const META_UPGRADE_DEFS = [
     { id: 'might', name: 'Might', desc: '+4% weapon damage per rank.', max: 5, baseCost: 120, apply: (stats, level) => { stats.dmgMult *= 1 + level * 0.04; } },
@@ -215,6 +242,7 @@
     nearMissClear: 220,
     towerBuilder: 180,
     noReviveClear: 180,
+    goblinSlayer: 200,
   };
 
   // 정예(엘리트) 처치 시 떨어지는 즉시 발동 파워업 — 모달 없이 줍는 즉시 적용(핵앤슬래시 흐름 유지)
@@ -871,6 +899,7 @@
       pendingStartBoost: false,
       adsRemoved: false,
       premiumCharacters: [],
+      goblinKills: 0,
     };
     try {
       const raw = localStorage.getItem(META_KEY);
@@ -1562,8 +1591,9 @@
         desc.textContent = def.desc;
         const metaText = document.createElement('div');
         metaText.className = 'start-card-meta';
+        const coinTag = def.coinMult && def.coinMult !== 1 ? ` / ${Math.round(def.coinMult * 100)}% coins` : '';
         metaText.textContent = unlocked
-          ? `Starts with ${def.startWeapons.join(', ')}${isPremiumCharacterOwned(def.id) ? ' / Premium owned' : ''}`
+          ? `Starts with ${def.startWeapons.join(', ')}${coinTag}${isPremiumCharacterOwned(def.id) ? ' / Premium owned' : ''}`
           : (def.unlock && def.unlock.label ? def.unlock.label : 'Locked');
         btn.append(title, desc, metaText);
         btn.addEventListener('click', async () => {
@@ -1878,7 +1908,9 @@
     const baseCoins = Math.max(1, Math.floor(kills / 12 + elapsed / 18 + player.level * 2));
     const winBonus = result === 'win' ? 120 : 0;
     const dailyBonus = result === 'win' && daily && !meta.dailyCompletions[daily.key] ? daily.coinBonus : 0;
-    let coins = Math.floor((baseCoins + winBonus + dailyBonus) * diff.coinMult * map.coinMult);
+    const charCoinMult = currentCharacter().coinMult || 1;
+    const goblinLoot = player && player.setEffects && player.setEffects.some(se => se.bonus && se.bonus.effect === 'goblin_loot') ? (player.setEffects.find(se => se.bonus && se.bonus.effect === 'goblin_loot').bonus.val || 1.3) : 1;
+    let coins = Math.floor((baseCoins + winBonus + dailyBonus) * diff.coinMult * map.coinMult * charCoinMult * goblinLoot);
     coins += Math.floor(comboBonusCoins || 0);   // 콤보 마일스톤 누적 보너스 정산
     const achievements = [];
     const grantAchievement = (id, label) => {
@@ -1952,6 +1984,29 @@
     const summary = document.createElement('div');
     summary.textContent = `Evolutions ${evolvedWeaponCount()} / ${EVOLUTION_DEFS.length} - Towers placed ${player.towersPlaced || 0} - Lowest HP ${Math.round((player.lowestHpPct || 0) * 100)}%`;
     runReport.appendChild(summary);
+    // 장비 착용 요약
+    if (window.VPS && window.VPS.equipment && player && player.equip) {
+      const eq = window.VPS.equipment;
+      const wornSlots = eq.SLOTS.filter(s => player.equip[s]);
+      if (wornSlots.length > 0) {
+        const equipLine = document.createElement('div');
+        equipLine.style.cssText = 'margin-top:4px;font-size:0.75rem;color:#a0aec0;';
+        equipLine.textContent = '장비: ' + wornSlots.map(s => {
+          const item = player.equip[s];
+          const base = eq.getItemBase ? eq.getItemBase(item) : null;
+          const grade = eq.getGradeData ? eq.getGradeData(item.grade) : null;
+          return (grade ? grade.label : item.grade) + ' ' + (base ? base.name : item.baseId);
+        }).join(', ');
+        runReport.appendChild(equipLine);
+        const bonuses = eq.getActiveBonusDescriptions ? eq.getActiveBonusDescriptions(player.equip) : [];
+        if (bonuses && bonuses.length) {
+          const bonusLine = document.createElement('div');
+          bonusLine.style.cssText = 'font-size:0.72rem;color:#81ecec;margin-top:2px;';
+          bonusLine.textContent = '세트 효과: ' + bonuses.join(' · ');
+          runReport.appendChild(bonusLine);
+        }
+      }
+    }
     const misses = missedEvolutionHints();
     if (misses.length) {
       const hintTitle = document.createElement('div');
@@ -2373,6 +2428,11 @@
         newEnemy.speed *= 1.1;
         newEnemy.xpVal = Math.round(newEnemy.xpVal * 3);
         newEnemy.attackDmg = Math.round(newEnemy.attackDmg * 1.25);
+        // 나이트메어: 정예에게 보호막 부여 (HP의 40%)
+        if (runDifficulty.id === 'nightmare') {
+          newEnemy.shield = Math.round(newEnemy.maxHp * 0.4);
+          newEnemy.maxShield = newEnemy.shield;
+        }
       }
       enemies.push(newEnemy);
     }
@@ -2788,6 +2848,24 @@
     if (!isDot && player && (player.critChance || 0) > 0 && Math.random() < player.critChance) {
       dmg *= hasSynergy('executioner') ? 3 : 2;
       isCritRoll = true;
+      // bloodlust 시너지: 치명타 발동 시 최대 체력 10% 회복
+      if (hasSynergy('bloodlust') && player) {
+        player.hp = Math.min(player.hp + player.maxHp * 0.10, player.maxHp);
+      }
+    }
+    // 보호막: 나이트메어 정예 — 보호막이 0이 될 때까지 HP 피해 없음
+    if ((enemy.shield || 0) > 0) {
+      if (dmg <= enemy.shield) {
+        enemy.shield -= dmg;
+        enemy.hurtFlash = 0.12;
+        damageNumbers.push({ x: enemy.x, y: enemy.y - enemy.size - 8, val: Math.ceil(dmg), life: 0.65, maxLife: 0.65, color: '#74b9ff', isCrit: false });
+        return;
+      }
+      // 초과 피해는 HP로 전달, 보호막 파괴 연출
+      dmg -= enemy.shield;
+      enemy.shield = 0;
+      rings.push({ x: enemy.x, y: enemy.y, r: enemy.size, maxR: enemy.size * 4, life: 0.25, maxLife: 0.25, color: '#74b9ff' });
+      floatTexts.push({ x: enemy.x, y: enemy.y - 28, text: '🛡 방어막 파괴!', life: 1.0, maxLife: 1.0, color: '#74b9ff', size: 12 });
     }
     enemy.hp -= dmg;
     enemy.hurtFlash = 0.12;
@@ -2893,6 +2971,12 @@
     if (hasSynergy('vital_surge') && player) {
       player.hp = Math.min(player.hp + 3, player.maxHp);
     }
+    // pyromaniac 시너지: 화염 상태 적 사망 시 광역 폭발
+    if (hasSynergy('pyromaniac') && (enemy.burnStacks || 0) > 0 && player) {
+      const pyroRange = 85 * (player.rangeBonus || 1) * ((player.equipStats && player.equipStats.rangeBonus) || 1);
+      chainExplosions.push({ x: enemy.x, y: enemy.y, range: pyroRange, dmg: 28 * player.dmgMult * (enemy.burnStacks || 1), delay: 0 });
+      rings.push({ x: enemy.x, y: enemy.y, r: 8, maxR: pyroRange, life: 0.3, maxLife: 0.3, color: '#e67e22' });
+    }
     awardComboMilestone(enemy);
 
     // 연속 처치 스트릭 텍스트 — AoE 동시 처치(같은 프레임)에는 표시 안 함
@@ -2916,6 +3000,14 @@
       overdriveCharge = Math.min(100, overdriveCharge + 10);
       screenShake = Math.min(screenShake + 0.3, 0.6);
       SFX.boss();
+      // 고블린 처치 누적 — 3회 처치 시 고블린 도둑 해금
+      meta.goblinKills = (meta.goblinKills || 0) + 1;
+      if (meta.goblinKills >= 3 && !meta.achievements.goblinSlayer) {
+        meta.achievements.goblinSlayer = true;
+        floatTexts.push({ text: '🏆 Goblin Slayer! Goblin Thief 해금!', life: 3.5, maxLife: 3.5, screenSpace: true, color: '#f1c40f', size: 17 });
+        ensureMetaAchievements();
+      }
+      saveMeta();
     }
 
     // 처치 충격파 링 + 강화 파티클
@@ -2946,9 +3038,11 @@
       player.rerolls++;
       floatTexts.push({ x: enemy.x, y: enemy.y - 20, text: '🎲 리롤권 획득!', life: 1.8, maxLife: 1.8, color: '#a29bfe', size: 13 });
     }
-    // 장비 드롭: 보스 35%, 일반 몬스터 4%
+    // 장비 드롭: 보스 35%, 일반 몬스터 4% (고블린 도둑은 2배)
     if (window.VPS && window.VPS.equipment) {
-      const dropChance = enemy.isBoss ? 0.35 : 0.04;
+      const baseDropChance = enemy.isBoss ? 0.35 : 0.04;
+      const gearMult = (player && player.characterId === 'goblin') ? 2 : 1;
+      const dropChance = baseDropChance * gearMult;
       if (Math.random() < dropChance) {
         const eq = window.VPS.equipment;
         const slot = eq.SLOTS[Math.floor(Math.random() * eq.SLOTS.length)];
@@ -4423,6 +4517,14 @@
       ctx.fillRect(-bw/2, -e.size - 7, bw, bh);
       ctx.fillStyle = rageActive ? '#ff4500' : e.color;
       ctx.fillRect(-bw/2, -e.size - 7, bw * (e.hp/e.maxHp), bh);
+      // 보호막 바 (나이트메어 정예 전용) — HP 바 위에 파란색으로 오버레이
+      if ((e.shield || 0) > 0 && e.maxShield) {
+        ctx.fillStyle = '#74b9ff';
+        ctx.fillRect(-bw/2, -e.size - 7, bw * Math.min(e.shield / e.maxShield, 1), bh);
+        ctx.strokeStyle = '#0984e3';
+        ctx.lineWidth = 0.8;
+        ctx.strokeRect(-bw/2, -e.size - 7, bw, bh);
+      }
       ctx.restore();
     }
 
