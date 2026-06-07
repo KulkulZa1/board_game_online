@@ -101,6 +101,21 @@
     bomb: 'bomb', inferno: 'bomb',
   };
 
+  // 투사체 type → 무기 계열 (데미지 출처 집계용 — src 미지정 시 fallback)
+  const PROJ_TYPE_FAMILY = {
+    orb: 'orb', blackhole: 'orb',
+    arrow: 'arrow', boomerang: 'boomerang',
+    laser: 'laser', deathray: 'laser',
+  };
+
+  // 데미지 출처 계열 → 표시 라벨 (전투 기여도 상태창)
+  const DMG_SOURCE_LABEL = {
+    orb: '🔵 에너지 구', arrow: '🏹 화살', nova: '💥 폭발', shield: '🛡 방패',
+    laser: '⚡ 레이저', boomerang: '🪃 부메랑', chain: '🔗 번개 사슬',
+    scythe: '🌾 낫', bomb: '💣 폭탄', dash: '💨 대쉬', dot: '🔥 지속 피해',
+    etc: '✦ 기타',
+  };
+
   // 보조 무기 계열별 오버레이 효과 — 메인 무기 발사마다 보유한 각 보조 계열 효과가 발동
   // proc: 발동 확률 (1.0 = 항상)
   const AUX_EFFECT_DEFS = {
@@ -325,10 +340,10 @@
     { id: 'hpmax',   icon: '❤',  name: '체력 강화',   apply: (p) => { p.maxHp += 30; p.hp = Math.min(p.hp + 30, p.maxHp); } },
     { id: 'dmgperm', icon: '✨', name: '공격력 강화', apply: (p) => { p.dmgMult *= 1.2; } },
     { id: 'nuke',    icon: '💥', name: '핵폭탄',      apply: ()  => {
-        spawnExplosion(player.x, player.y, 230, 120 * player.dmgMult, false);
+        spawnExplosion(player.x, player.y, 230, 120 * player.dmgMult, false, 'etc');
         for (let _i = 0; _i < 3; _i++) {
           const _a = Math.random() * Math.PI * 2;
-          chainExplosions.push({ x: player.x + Math.cos(_a)*90, y: player.y + Math.sin(_a)*90, range: 120, dmg: 60 * player.dmgMult, delay: 0.1 + _i * 0.08 });
+          chainExplosions.push({ x: player.x + Math.cos(_a)*90, y: player.y + Math.sin(_a)*90, range: 120, dmg: 60 * player.dmgMult, delay: 0.1 + _i * 0.08, src: 'etc' });
         }
       }
     },
@@ -455,6 +470,8 @@
   let bossWarning   = 0;         // 보스 경고 효과 잔여 시간
   let damageNumbers = [];        // 플로팅 데미지 숫자
   let floatTexts    = [];        // 플로팅 텍스트 (알림, 아이템 이름 등)
+  let damageByWeapon = {};       // 무기 계열별 누적 데미지 (전투 기여도 상태창용)
+  let dmgSource     = null;      // 현재 데미지 출처 계열 id (dealDamage가 집계에 사용)
   let comboCount    = 0;
   let comboTimer    = 0;
   let comboMilestoneIdx = 0;     // 현재 콤보 스트릭에서 지급한 마일스톤 인덱스
@@ -659,6 +676,8 @@
     bossWarning   = 0;
     damageNumbers = [];
     floatTexts    = [];
+    damageByWeapon = {};
+    dmgSource     = null;
     lowHpAlertCooldown = 0;
     lowHpPulse = 0;
     comboCount    = 0;
@@ -888,9 +907,10 @@
     for (const fam of auxFams) {
       const def = AUX_EFFECT_DEFS[fam];
       if (!def || Math.random() > def.proc) continue;
+      dmgSource = fam; // 보조 효과 데미지는 해당 보조 무기 계열에 집계
       switch (fam) {
         case 'bomb':
-          chainExplosions.push({ x: tx, y: ty, range: 65 * rng, dmg: baseDmg * 0.45, delay: 0 });
+          chainExplosions.push({ x: tx, y: ty, range: 65 * rng, dmg: baseDmg * 0.45, delay: 0, src: 'bomb' });
           rings.push({ x: tx, y: ty, r: 4, maxR: 60 * rng, life: 0.18, maxLife: 0.18, color: '#e67e22' });
           break;
         case 'chain': {
@@ -914,13 +934,13 @@
         }
         case 'laser': {
           const ang = Math.atan2(ty - player.y, tx - player.x);
-          projectiles.push({ type: 'laser', x: player.x, y: player.y, angle: ang, r: 5, dmg: baseDmg * 0.65, life: 0.16, length: 160 * rng, noSyn: true });
+          projectiles.push({ type: 'laser', x: player.x, y: player.y, angle: ang, r: 5, dmg: baseDmg * 0.65, life: 0.16, length: 160 * rng, noSyn: true, src: 'laser' });
           break;
         }
         case 'boomerang':
           for (let b = 0; b < 3; b++) {
             const ba = Math.atan2(ty - player.y, tx - player.x) + (b - 1) * 0.38;
-            projectiles.push({ type: 'boomerang', x: player.x, y: player.y, vx: Math.cos(ba) * 310, vy: Math.sin(ba) * 310, r: 5, dmg: baseDmg * 0.35, life: 0.9, halfLife: 0.45, flipped: false, pierceOut: 2, pierceIn: 2, hitOut: new Set(), hitIn: new Set(), noSyn: true });
+            projectiles.push({ type: 'boomerang', x: player.x, y: player.y, vx: Math.cos(ba) * 310, vy: Math.sin(ba) * 310, r: 5, dmg: baseDmg * 0.35, life: 0.9, halfLife: 0.45, flipped: false, pierceOut: 2, pierceIn: 2, hitOut: new Set(), hitIn: new Set(), noSyn: true, src: 'boomerang' });
           }
           break;
         case 'orb': {
@@ -932,7 +952,7 @@
           break;
         }
         case 'nova':
-          chainExplosions.push({ x: tx, y: ty, range: 85 * rng, dmg: baseDmg * 0.50, delay: 0 });
+          chainExplosions.push({ x: tx, y: ty, range: 85 * rng, dmg: baseDmg * 0.50, delay: 0, src: 'nova' });
           break;
         case 'scythe': {
           const sAng = Math.atan2(ty - player.y, tx - player.x);
@@ -950,7 +970,7 @@
         }
         case 'arrow': {
           const aA = Math.atan2(ty - player.y, tx - player.x);
-          projectiles.push({ type: 'arrow', x: player.x, y: player.y, vx: Math.cos(aA) * 420, vy: Math.sin(aA) * 420, r: 5, dmg: baseDmg * 0.50, life: 0.8, pierce: 3 + (player.pierceBonus || 0), noSyn: true });
+          projectiles.push({ type: 'arrow', x: player.x, y: player.y, vx: Math.cos(aA) * 420, vy: Math.sin(aA) * 420, r: 5, dmg: baseDmg * 0.50, life: 0.8, pierce: 3 + (player.pierceBonus || 0), noSyn: true, src: 'arrow' });
           break;
         }
         case 'shield':
@@ -2879,11 +2899,11 @@
         projectiles.push({ type: 'arrow', x: player.x, y: player.y, vx: Math.cos(ang) * 420, vy: Math.sin(ang) * 420, r: 5, dmg, life: range / 420, pierce: (evolved ? 6 : 3) + lvl + (player.pierceBonus || 0) });
       }
     } else if (id === 'nova' || id === 'supernova') {
-      spawnExplosion(player.x, player.y, range, dmg, id === 'supernova');
+      spawnExplosion(player.x, player.y, range, dmg, id === 'supernova', 'nova');
     } else if (id === 'shield' || id === 'aegis') {
       const dur = (id === 'aegis' ? 2.2 : 1.5) + 0.15 * (lvl - 1);
       player.invincible = Math.max(player.invincible, dur);
-      if (id === 'aegis') aegisReflect(dmg, range);
+      if (id === 'aegis') { dmgSource = 'shield'; aegisReflect(dmg, range); }
       spawnParticle(player.x, player.y, '#3498db', 24, 0.8);
     } else if (id === 'laser' || id === 'deathray') {
       const evolved = id === 'deathray';
@@ -2915,6 +2935,7 @@
       const evolved  = id === 'tempest';
       // 관통 강화 패시브: 연쇄 횟수도 증가 (관통 1스택 = 연쇄 +3) + 레벨업 시 2레벨당 +1 연쇄
       const bounces = (evolved ? 5 : 3) + (player.passives['pierce_up'] || 0) * 3 + Math.floor(lvlExtra / 2);
+      dmgSource = 'chain';
       let cx = player.x, cy = player.y;
       const hit = new Set();
       for (let b = 0; b < bounces; b++) {
@@ -2957,6 +2978,7 @@
         : Math.atan2(lastMoveDir.dy, lastMoveDir.dx);
       // 사신: 전방위 / 낫: 약 120° + 레벨업 시 부채꼴 확대 (최대 약 180°)
       const arc      = evolved ? Math.PI * 2 : Math.min(Math.PI, Math.PI * 0.66 + 0.07 * lvlExtra);
+      dmgSource = 'scythe';
       let reaperHits  = 0;
       for (let _i = enemies.length - 1; _i >= 0; _i--) {
         const e = enemies[_i];
@@ -2979,7 +3001,7 @@
       // 사신의 낫 — 5명 이상 동시 베기 시 영혼 수확: 스펙트럴 파동 폭발
       if (evolved && reaperHits >= 5 && player) {
         const soulRange = range * 1.6;
-        chainExplosions.push({ x: player.x, y: player.y, range: soulRange, dmg: dmg * 1.6, delay: 0.16 });
+        chainExplosions.push({ x: player.x, y: player.y, range: soulRange, dmg: dmg * 1.6, delay: 0.16, src: 'scythe' });
         rings.push({ x: player.x, y: player.y, r: 14, maxR: soulRange, life: 0.42, maxLife: 0.42, color: '#9b59b6' });
         rings.push({ x: player.x, y: player.y, r: 8, maxR: soulRange * 0.65, life: 0.28, maxLife: 0.28, color: '#b388ff' });
         for (let _si = 0; _si < 18; _si++) spawnParticle(player.x, player.y, '#b388ff', 5 + Math.random() * 5, 0.45);
@@ -3001,7 +3023,7 @@
       const ty = target ? target.y : player.y + lastMoveDir.dy * range;
       // 폭발 범위도 레벨업 시 확대 (lvlRangeMul 반영)
       const aoe = (evolved ? 95 : 80) * (player.rangeBonus || 1) * ((player.equipStats && player.equipStats.rangeBonus) || 1) * lvlRangeMul;
-      chainExplosions.push({ x: tx, y: ty, range: aoe, dmg, delay: 0.45 });
+      chainExplosions.push({ x: tx, y: ty, range: aoe, dmg, delay: 0.45, src: 'bomb' });
       // 투척 시각 효과 — 착탄 지점 텔레그래프 링
       rings.push({ x: tx, y: ty, r: aoe, maxR: 6, life: 0.45, maxLife: 0.45, color: '#e67e22' });
       for (let k = 0; k < 5; k++) spawnParticle(player.x, player.y, '#e67e22', 4, 0.3);
@@ -3009,7 +3031,7 @@
         const splits = 5 + Math.floor(lvlExtra / 2); // 레벨업 시 분열 폭발 수 증가
         for (let s = 0; s < splits; s++) {
           const a = (s / splits) * Math.PI * 2;
-          chainExplosions.push({ x: tx + Math.cos(a) * aoe * 0.8, y: ty + Math.sin(a) * aoe * 0.8, range: aoe * 0.6, dmg: dmg * 0.6, delay: 0.6 + s * 0.05 });
+          chainExplosions.push({ x: tx + Math.cos(a) * aoe * 0.8, y: ty + Math.sin(a) * aoe * 0.8, range: aoe * 0.6, dmg: dmg * 0.6, delay: 0.6 + s * 0.05, src: 'bomb' });
         }
       }
     }
@@ -3033,7 +3055,8 @@
     return best;
   }
 
-  function spawnExplosion(x, y, range, dmg, evolved) {
+  function spawnExplosion(x, y, range, dmg, evolved, src) {
+    if (src !== undefined) dmgSource = src; // 출처 명시 시 집계 출처 설정 (nova/bomb 등)
     const col = evolved ? '#f1c40f' : '#e74c3c';
     for (let i = 0; i < 12; i++) spawnParticle(x, y, col, 6 + Math.random() * 8, 0.5 + Math.random() * 0.4);
     for (let _i = enemies.length - 1; _i >= 0; _i--) {
@@ -3046,7 +3069,7 @@
       for (let i = 0; i < 5; i++) {
         const a = (i / 5) * Math.PI * 2;
         const d = range * 0.72;
-        chainExplosions.push({ x: x + Math.cos(a) * d, y: y + Math.sin(a) * d, range: range * 0.58, dmg: dmg * 0.65, delay: 0.09 + i * 0.055 });
+        chainExplosions.push({ x: x + Math.cos(a) * d, y: y + Math.sin(a) * d, range: range * 0.58, dmg: dmg * 0.65, delay: 0.09 + i * 0.055, src: 'nova' });
       }
       // 복사열: 범위 내 적에게 화상 DoT 부여 (ignite 패시브 없어도 발동)
       if (player) {
@@ -3069,6 +3092,7 @@
 
   function performDashSlash(start, end, angle, stats, source) {
     const dmg = DASH_DMG * (source && source.dmgMult ? source.dmgMult : player.dmgMult) * stats.damageMult;
+    dmgSource = 'dash';
     let hitCount = 0;
     for (const e of [...enemies]) {
       if (!enemies.includes(e) || e.dying) continue;
@@ -3198,6 +3222,9 @@
     }
     enemy.hp -= dmg;
     enemy.hurtFlash = 0.12;
+    // 무기 계열별 누적 데미지 집계 (전투 기여도 상태창)
+    const _ds = dmgSource || 'etc';
+    damageByWeapon[_ds] = (damageByWeapon[_ds] || 0) + dmg;
     // 직접 타격 시에만 상태이상·흡혈 적용 (도트 틱은 제외 — 무한 중첩 방지)
     if (!isDot && player) {
       // 흡혈: 입힌 피해의 일정 비율 회복
@@ -3982,6 +4009,61 @@
     lowHpAlertCooldown = LOW_HP_ALERT_COOLDOWN;
   }
 
+  // 무기별 데미지 기여도 상태창 — 가장 많은 데미지를 입힌 무기 순으로 표시 (좌상단)
+  function drawDamagePanel(W, H) {
+    const entries = Object.keys(damageByWeapon)
+      .map(k => [k, damageByWeapon[k]])
+      .filter(e => e[1] > 0)
+      .sort((a, b) => b[1] - a[1]);
+    if (!entries.length) return;
+    const total = entries.reduce((s, e) => s + e[1], 0);
+    const rows = entries.slice(0, 5); // 상위 5개만 표시
+    const padX = 8, padY = 6, rowH = 16, barW = 84;
+    const labelW = 86;
+    const panelW = padX * 2 + labelW + barW + 44;
+    const panelH = padY * 2 + 14 + rows.length * rowH;
+    const px = 8, py = 8;
+    // 배경
+    ctx.fillStyle = 'rgba(10,16,28,0.72)';
+    ctx.strokeStyle = 'rgba(116,185,255,0.35)';
+    ctx.lineWidth = 1;
+    if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(px, py, panelW, panelH, 7); ctx.fill(); ctx.stroke(); }
+    else { ctx.fillRect(px, py, panelW, panelH); ctx.strokeRect(px, py, panelW, panelH); }
+    // 제목
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = '#9fb4d8';
+    ctx.font = 'bold 10px sans-serif';
+    ctx.fillText('⚔ 데미지 기여도', px + padX, py + padY + 10);
+    // 행
+    const maxVal = rows[0][1] || 1;
+    let ry = py + padY + 14 + 4;
+    for (let i = 0; i < rows.length; i++) {
+      const [src, val] = rows[i];
+      const label = DMG_SOURCE_LABEL[src] || ('✦ ' + src);
+      const pct = total > 0 ? (val / total * 100) : 0;
+      const isTop = i === 0;
+      // 라벨
+      ctx.fillStyle = isTop ? '#ffd54a' : '#cbd5e1';
+      ctx.font = `${isTop ? 'bold ' : ''}10px sans-serif`;
+      ctx.fillText(label, px + padX, ry + 10);
+      // 막대
+      const bx = px + padX + labelW;
+      const by = ry + 2;
+      ctx.fillStyle = 'rgba(255,255,255,0.08)';
+      ctx.fillRect(bx, by, barW, 9);
+      ctx.fillStyle = isTop ? '#f1c40f' : '#5a9bd4';
+      ctx.fillRect(bx, by, barW * Math.max(0.02, val / maxVal), 9);
+      // 퍼센트
+      ctx.fillStyle = isTop ? '#ffd54a' : '#9aa6c7';
+      ctx.font = '9px sans-serif';
+      ctx.textAlign = 'right';
+      ctx.fillText(`${pct.toFixed(0)}%`, px + panelW - padX, ry + 10);
+      ctx.textAlign = 'left';
+      ry += rowH;
+    }
+  }
+
   function renderLowHpWarning(W, H) {
     if (!player || state !== 'playing') return;
     const hpRatio = getPlayerHpRatio();
@@ -4177,7 +4259,7 @@
       // 3연쇄 완성 → 충격파 폭발 + 속도 부스트
       if (isChain && dashChainCount >= 2) {
         const burstRange = 90 * (player.rangeBonus || 1);
-        chainExplosions.push({ x: end.x, y: end.y, range: burstRange, dmg: DASH_DMG * player.dmgMult * 1.8, delay: 0 });
+        chainExplosions.push({ x: end.x, y: end.y, range: burstRange, dmg: DASH_DMG * player.dmgMult * 1.8, delay: 0, src: 'dash' });
         rings.push({ x: end.x, y: end.y, r: 10, maxR: burstRange, life: 0.45, maxLife: 0.45, color: '#ffffff' });
         rings.push({ x: end.x, y: end.y, r: 4, maxR: burstRange * 0.5, life: 0.28, maxLife: 0.28, color: '#74b9ff' });
         floatTexts.push({ text: '🌟 TRIPLE DASH!', life: 1.8, maxLife: 1.8, screenSpace: true, color: '#ffffff', size: 22 });
@@ -4198,6 +4280,7 @@
       af.tickTimer += dt;
       if (af.tickTimer >= 0.1) {
         af.tickTimer = 0;
+        dmgSource = 'dash';
         for (const e of [...enemies]) {
           if (e.dying) continue;
           if (dist(af, e) < af.range + e.size) dealDamage(e, af.dmg, false, true);
@@ -4329,6 +4412,8 @@
       const p = projectiles[i];
       p.life -= dt;
       if (p.life <= 0) { projectiles.splice(i, 1); continue; }
+      // 데미지 출처: 투사체에 src가 있으면 사용, 없으면 type 기반 매핑
+      dmgSource = p.src || PROJ_TYPE_FAMILY[p.type] || null;
 
       if (p.type === 'orb' || p.type === 'blackhole') {
         const baseAngle = (elapsed * 1.8) + (p.orbIdx / p.orbTotal) * Math.PI * 2;
@@ -4358,7 +4443,7 @@
                     ge.y += Math.sin(ga) * Math.min(gd * 0.5, 75);
                   }
                 }
-                chainExplosions.push({ x: e.x, y: e.y, range: gRange * 0.5, dmg: p.dmg * 14, delay: 0.22 });
+                chainExplosions.push({ x: e.x, y: e.y, range: gRange * 0.5, dmg: p.dmg * 14, delay: 0.22, src: 'orb' });
                 rings.push({ x: e.x, y: e.y, r: 14, maxR: gRange * 0.5, life: 0.5, maxLife: 0.5, color: '#b388ff' });
                 rings.push({ x: e.x, y: e.y, r: 6, maxR: 28, life: 0.2, maxLife: 0.2, color: '#9b59b6' });
                 for (let _gi = 0; _gi < 18; _gi++) spawnParticle(e.x, e.y, '#b388ff', 5 + Math.random() * 6, 0.5);
@@ -4466,7 +4551,7 @@
       const c = chainExplosions[i];
       c.delay -= dt;
       if (c.delay <= 0) {
-        spawnExplosion(c.x, c.y, c.range, c.dmg, false);
+        spawnExplosion(c.x, c.y, c.range, c.dmg, false, c.src || 'etc');
         chainExplosions.splice(i, 1);
       }
     }
@@ -4479,12 +4564,14 @@
       // 상태이상 도트 — 화상(중첩 비례) + 중독. 죽으면 이후 처리 건너뜀
       if ((e.burnTimer || 0) > 0) {
         e.burnTimer -= dt;
+        dmgSource = 'dot';
         dealDamage(e, (e.burnDmg || 4) * (e.burnStacks || 1) * dt, true, true);
         if (e.burnTimer <= 0) { e.burnStacks = 0; }
         if (Math.random() < 0.25) spawnParticle(e.x, e.y - e.size * 0.5, '#e67e22', 3, 0.25);
       }
       if ((e.poisonTimer || 0) > 0 && (!e.dying)) {
         e.poisonTimer -= dt;
+        dmgSource = 'dot';
         dealDamage(e, (e.poisonDmg || 3) * dt, true, true);
         if (Math.random() < 0.2) spawnParticle(e.x, e.y - e.size * 0.5, '#27ae60', 3, 0.25);
       }
@@ -5480,6 +5567,9 @@
     }
 
     ctx.restore(); // camera
+
+    // 무기별 데미지 기여도 상태창 (좌상단)
+    if (state === 'playing') drawDamagePanel(W, H);
 
     // 피격 화면 플래시 — 맞은 순간 붉게 번쩍 (즉각적 피드백)
     if (hurtScreenFlash > 0) {
