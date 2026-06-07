@@ -550,6 +550,8 @@
       equipStats: {},       // 캐시: 장비 합산 스탯
       setEffects: [],       // 활성 세트 효과 목록
       crossEffects: [],     // 활성 교차 시너지 목록
+      gemEffects: {},       // 캐시: 특수 젬 효과 집계 { effect: {procChance,val,count} }
+      setFlags: {},         // 캐시: 활성 세트/교차 효과 플래그 { effectName: true }
     };
     enemies    = [];
     projectiles= [];
@@ -2607,6 +2609,17 @@
     player.equipStats   = combined;
     player.setEffects   = setEffects;
     player.crossEffects = eq.getActiveCrossEffects(player.equip);
+    // 특수 젬 효과 집계
+    player.gemEffects   = eq.aggregateGemEffects(player.equip);
+    // 세트 4세트 + 교차 시너지의 특수 hit-effect 플래그 집계
+    const flags = {};
+    for (const se of setEffects) {
+      if (se.bonus && se.bonus.effect) flags[se.bonus.effect] = true;
+    }
+    for (const c of player.crossEffects) {
+      if (c.effect) flags[c.effect] = true;
+    }
+    player.setFlags = flags;
   }
 
   function equipItem(item) {
@@ -2953,6 +2966,8 @@
   function dealDamage(enemy, dmg, skipChain, isDot) {
     // 0 이하 피해 무시 — 보스 사망 폭발(dmg=0)이 재귀 호출하는 버그 방지
     if (dmg <= 0) return;
+    // 감전(shock) 젬 디버프: 적이 받는 모든 피해 증가
+    if ((enemy.shockTimer || 0) > 0 && enemy.shockMult) dmg *= enemy.shockMult;
     // 치명타: critChance 퍼센트로 2배(집행자 시너지 시 3배) 피해 — 도트 피해는 치명타 없음
     let isCritRoll = false;
     if (!isDot && player && (player.critChance || 0) > 0 && Math.random() < player.critChance) {
@@ -2996,6 +3011,10 @@
         enemy.poisonTimer = 6.0;
         enemy.poisonDmg   = Math.max(3, dmg * 0.06);
       }
+    }
+    // 장비 특수 젬 + 세트/교차 적중 효과 (직접 타격 한정 — 2차 피해/도트는 제외)
+    if (!isDot && !skipChain && player) {
+      applyEquipHitEffects(enemy, dmg, isCritRoll);
     }
     // 넉백: 피격 충격으로 플레이어 방향 반대로 밀림 (보스는 10% 강도)
     if (player) {
@@ -3049,6 +3068,142 @@
       }
     }
     if (enemy.hp <= 0) killEnemy(enemy);
+  }
+
+  // ── 장비 특수 젬 + 세트/교차 적중 효과 ──────────────────────────
+  //   직접 타격(dealDamage, !isDot && !skipChain) 시에만 호출됨.
+  //   2차 피해는 dealDamage(.., skipChain=true)로 호출해 무한 재귀를 막는다.
+  function applyEquipHitEffects(enemy, dmg, isCritRoll) {
+    const gx = player.gemEffects || {};
+    const sf = player.setFlags || {};
+    const rb = (player.rangeBonus || 1) * ((player.equipStats && player.equipStats.rangeBonus) || 1);
+
+    // ── 특수 젬 ──
+    // 🔗 연쇄: 가까운 적에게 번개 연쇄
+    if (gx.chain && Math.random() < gx.chain.procChance) {
+      let cx = enemy.x, cy = enemy.y;
+      const hit = new Set([enemy]);
+      const links = gx.chain.val || 2;
+      for (let b = 0; b < links; b++) {
+        let best = null, bd = Infinity;
+        for (const e of enemies) {
+          if (hit.has(e) || e.dying) continue;
+          const d = dist({ x: cx, y: cy }, e);
+          if (d < 220 && d < bd) { bd = d; best = e; }
+        }
+        if (!best) break;
+        hit.add(best);
+        dealDamage(best, dmg * 0.6, true);
+        projectiles.push({ type: 'arc', x: cx, y: cy, tx: best.x, ty: best.y, life: 0.2, dmg: 0 });
+        cx = best.x; cy = best.y;
+      }
+    }
+    // 🪓 가르기: 주변 광역 분할 피해 (상시 발동)
+    if (gx.cleave) {
+      const r = 70 * rb;
+      const cd = dmg * gx.cleave.val;
+      for (const e of enemies) {
+        if (e === enemy || e.dying) continue;
+        if (dist(enemy, e) < r) dealDamage(e, cd, true);
+      }
+      rings.push({ x: enemy.x, y: enemy.y, r: 4, maxR: r, life: 0.16, maxLife: 0.16, color: '#ff9f43' });
+    }
+    // ❄ 빙결: 확률로 적 빙결
+    if (gx.freeze && enemy.hp > 0 && Math.random() < gx.freeze.procChance) {
+      enemy.frozen = Math.max(enemy.frozen || 0, gx.freeze.val || 1.3);
+      for (let k = 0; k < 4; k++) spawnParticle(enemy.x, enemy.y, '#74b9ff', 4, 0.3);
+      rings.push({ x: enemy.x, y: enemy.y, r: 2, maxR: enemy.size + 14, life: 0.2, maxLife: 0.2, color: '#74b9ff' });
+    }
+    // 🔱 부채꼴: 확률로 파편 발사
+    if (gx.fork && Math.random() < gx.fork.procChance) {
+      const n = Math.max(2, Math.round(gx.fork.val || 3));
+      const base = Math.random() * Math.PI * 2;
+      for (let s = 0; s < n; s++) {
+        const a = base + (s - (n - 1) / 2) * 0.42;
+        projectiles.push({ type: 'arrow', x: enemy.x, y: enemy.y, vx: Math.cos(a) * 380, vy: Math.sin(a) * 380, r: 4, dmg: dmg * 0.5, life: 0.55, pierce: 2, noGemFx: true });
+      }
+    }
+    // 🔥 점화: 확률로 화상 부착 (화염 패시브 불필요)
+    if (gx.combust && enemy.hp > 0 && Math.random() < gx.combust.procChance) {
+      enemy.burnStacks = Math.min((enemy.burnStacks || 0) + Math.round(gx.combust.val || 2), 5);
+      enemy.burnTimer  = Math.max(enemy.burnTimer || 0, 3.0);
+      enemy.burnDmg    = enemy.burnDmg || Math.max(4, dmg * 0.10);
+    }
+    // ⚡ 감전: 확률로 받피 증가 디버프
+    if (gx.shock && enemy.hp > 0 && Math.random() < gx.shock.procChance) {
+      enemy.shockTimer = 3.0;
+      enemy.shockMult  = gx.shock.val || 1.3;
+    }
+    // 🩸 흡수: 입힌 피해 비율만큼 회복 (상시)
+    if (gx.leech && player.hp < player.maxHp) {
+      player.hp = Math.min(player.hp + dmg * gx.leech.val, player.maxHp);
+    }
+    // ☠ 참수: 체력 비율 이하 적 즉시 처형 (상시, 보스 제외)
+    if (gx.culling && enemy.hp > 0 && !enemy.isBoss && enemy.hp <= enemy.maxHp * gx.culling.val) {
+      enemy.hp = 0;
+      floatTexts.push({ x: enemy.x, y: enemy.y - 30, text: '☠ 처형!', life: 1.0, maxLife: 1.0, color: '#e74c3c', size: 14 });
+    }
+
+    // ── 세트 4세트 / 교차 시너지 적중 효과 ──
+    // 치명타 시 번개 폭발 (제우스)
+    if (isCritRoll && (sf.zeus_nova || sf.zeus_crit_nova)) {
+      const r = 60 * rb;
+      chainExplosions.push({ x: enemy.x, y: enemy.y, range: r, dmg: dmg * 0.5, delay: 0 });
+      rings.push({ x: enemy.x, y: enemy.y, r: 6, maxR: r, life: 0.25, maxLife: 0.25, color: '#f1c40f' });
+      for (let k = 0; k < 6; k++) spawnParticle(enemy.x, enemy.y, '#f1c40f', 4, 0.25);
+    }
+    // 치명타 시 그림자 대쉬 (속도 버스트 + 잔상)
+    if (isCritRoll && (sf.shadow_dash || sf.shadow_crit_dash)) {
+      player.tempSpeedMult  = Math.max(player.tempSpeedMult || 1, 1.4);
+      player.tempSpeedTimer = Math.max(player.tempSpeedTimer || 0, 0.8);
+      for (let s = 0; s < 3; s++) playerTrail.push({ x: player.x, y: player.y, life: 0.3 });
+    }
+    // 화상 적 적중 시 화염 확산 (드래곤)
+    if ((sf.dragon_spread || sf.dragon_burn_spread) && (enemy.burnStacks || 0) > 0) {
+      const r = 90 * rb;
+      for (const e of enemies) {
+        if (e === enemy || e.dying) continue;
+        if (dist(enemy, e) < r && (e.burnStacks || 0) < (enemy.burnStacks || 1)) {
+          e.burnStacks = Math.min((e.burnStacks || 0) + 1, 5);
+          e.burnTimer  = Math.max(e.burnTimer || 0, 2.5);
+          e.burnDmg    = e.burnDmg || Math.max(4, dmg * 0.08);
+        }
+      }
+    }
+    // 적중 시 주변 빙결 (서리)
+    if ((sf.frost_freeze || sf.frost_orb_freeze) && Math.random() < 0.18) {
+      const r = 75 * rb;
+      for (const e of enemies) {
+        if (e.dying) continue;
+        if (dist(enemy, e) < r) { e.frozen = Math.max(e.frozen || 0, 1.0); spawnParticle(e.x, e.y, '#74b9ff', 3, 0.25); }
+      }
+    }
+    // 화살/구슬 번개 연쇄 (제우스 교차)
+    if (sf.zeus_arrow_chain && Math.random() < 0.25) {
+      let cx = enemy.x, cy = enemy.y;
+      const hit = new Set([enemy]);
+      for (let b = 0; b < 2; b++) {
+        let best = null, bd = Infinity;
+        for (const e of enemies) { if (hit.has(e) || e.dying) continue; const d = dist({ x: cx, y: cy }, e); if (d < 200 && d < bd) { bd = d; best = e; } }
+        if (!best) break;
+        hit.add(best); dealDamage(best, dmg * 0.5, true);
+        projectiles.push({ type: 'arc', x: cx, y: cy, tx: best.x, ty: best.y, life: 0.2, dmg: 0 });
+        cx = best.x; cy = best.y;
+      }
+    }
+  }
+
+  // 거인 세트 가시 반격 (titan_thorns) — 피격 시 주변 적에게 폭발 반격
+  function triggerThorns() {
+    if (!player || !player.setFlags || !player.setFlags.titan_thorns) return;
+    const r = 75 * (player.rangeBonus || 1) * ((player.equipStats && player.equipStats.rangeBonus) || 1);
+    const tdmg = (player.maxHp || BASE_HP) * 0.5 * player.dmgMult;
+    for (const e of enemies) {
+      if (e.dying) continue;
+      if (dist(player, e) < r) dealDamage(e, tdmg, true);
+    }
+    rings.push({ x: player.x, y: player.y, r: 8, maxR: r, life: 0.3, maxLife: 0.3, color: '#b2bec3' });
+    for (let k = 0; k < 10; k++) spawnParticle(player.x, player.y, '#dfe6e9', 5, 0.35);
   }
 
   // 콤보 마일스톤 보상 — 데미지/처치 경로를 다시 타지 않는 안전한 보상(XP·코인)만 지급
@@ -3934,7 +4089,8 @@
         for (let j = enemies.length - 1; j >= 0; j--) {
           const e = enemies[j];
           if (dist(p, e) < p.r + e.size) {
-            dealDamage(e, p.dmg);
+            // 부채꼴(fork) 젬이 생성한 파편은 젬 효과를 재발동하지 않음 (연쇄 폭주 방지)
+            dealDamage(e, p.dmg, p.noGemFx);
             // armor_breaker 시너지: 관통 적중 시 40% 범위 피해
             if (hasSynergy('armor_breaker')) {
               chainExplosions.push({ x: e.x, y: e.y, range: 42, dmg: p.dmg * 0.4, delay: 0 });
@@ -4019,6 +4175,11 @@
         e.poisonTimer -= dt;
         dealDamage(e, (e.poisonDmg || 3) * dt, true, true);
         if (Math.random() < 0.2) spawnParticle(e.x, e.y - e.size * 0.5, '#27ae60', 3, 0.25);
+      }
+      // 감전(shock) 디버프 지속 시간 감소
+      if ((e.shockTimer || 0) > 0) {
+        e.shockTimer -= dt;
+        if (Math.random() < 0.15) spawnParticle(e.x, e.y - e.size * 0.5, '#f1c40f', 3, 0.2);
       }
       if (e.dying || e.hp <= 0) continue;
       const targetActor = allyPlayer && dist(e, allyPlayer) < dist(e, player) ? allyPlayer : player;
@@ -4125,6 +4286,7 @@
         hurtScreenFlash = 0.28;
         SFX.hurt();
         player.invincible = 0.15;
+        triggerThorns();
         if (player.hp <= 0) { endGame('dead'); return; }
       }
     }
@@ -4144,6 +4306,7 @@
         SFX.hurt();
         player.invincible = 0.1;
         enemyProjectiles.splice(i, 1);
+        triggerThorns();
         if (player.hp <= 0) { endGame('dead'); return; }
       }
     }
@@ -5354,7 +5517,13 @@
         if (stats.xpRange && stats.xpRange !== 1) statLines.push(`🧲 XP범위 ×${stats.xpRange.toFixed(2)}`);
         if (stats.critChance) statLines.push(`⚡ 치명 +${(stats.critChance*100).toFixed(0)}%`);
         const gemIcons = (item.gems || []).map(g => g.icon || '').join('');
-        content = `<div style="font-size:11px;color:#ccc;">${slotNames[slot]}<br><span style="font-size:20px;">${base.icon}</span><br><span style="color:${grade.color};font-weight:bold;">[${grade.name}]</span> ${base.name}<br><span style="color:#aaa;font-size:10px;">${statLines.join(' · ')}</span>${gemIcons ? `<br><span style="font-size:13px;">${gemIcons}</span>` : ''}</div>`;
+        // 특수 젬 이름 태그 (effect 보유 젬만)
+        const specialGemTags = (item.gems || [])
+          .map(g => (typeof g === 'object' ? g : eq.GEM_DEFS.find(d => d.id === g)))
+          .filter(g => g && g.effect)
+          .map(g => `<span style="color:#d7bfff;">${g.icon}${g.name}</span>`)
+          .join(' ');
+        content = `<div style="font-size:11px;color:#ccc;">${slotNames[slot]}<br><span style="font-size:20px;">${base.icon}</span><br><span style="color:${grade.color};font-weight:bold;">[${grade.name}]</span> ${base.name}<br><span style="color:#aaa;font-size:10px;">${statLines.join(' · ')}</span>${gemIcons ? `<br><span style="font-size:13px;">${gemIcons}</span>` : ''}${specialGemTags ? `<br><span style="font-size:9.5px;">${specialGemTags}</span>` : ''}</div>`;
       }
       html += `<div style="background:#1a2035;border:1px solid #2a3050;border-radius:8px;padding:10px;min-width:90px;text-align:center;">${content}</div>`;
     }
@@ -5362,6 +5531,21 @@
     const bonuses = eq.getActiveBonusDescriptions(player.equip);
     if (bonuses.length) {
       html += `<div style="margin-top:10px;padding:8px;background:#0d1628;border-radius:6px;font-size:11px;color:#f1c40f;">${bonuses.map(b => `✦ ${b}`).join('<br>')}</div>`;
+    }
+    // 활성 특수 젬 효과 요약
+    const gfx = eq.aggregateGemEffects(player.equip);
+    const gfxKeys = Object.keys(gfx);
+    if (gfxKeys.length) {
+      const GFX_LABEL = {
+        chain: '🔗 연쇄', cleave: '🪓 가르기', freeze: '❄ 빙결', fork: '🔱 부채꼴',
+        combust: '🔥 점화', shock: '⚡ 감전', leech: '🩸 흡수', culling: '☠ 참수',
+      };
+      const lines = gfxKeys.map(k => {
+        const e = gfx[k];
+        const pc = e.procChance >= 1 ? '상시' : `${Math.round(e.procChance * 100)}%`;
+        return `${GFX_LABEL[k] || k} <span style="color:#9a86c4;">(${pc}${e.count > 1 ? ` ×${e.count}` : ''})</span>`;
+      });
+      html += `<div style="margin-top:8px;padding:8px;background:#1a1230;border:1px solid #4a2d6e;border-radius:6px;font-size:11px;color:#d7bfff;">💠 특수 젬: ${lines.join(' · ')}</div>`;
     }
     return html;
   }
@@ -5414,6 +5598,13 @@
 
     const slotKor = { helm: '투구', armor: '갑옷', boots: '장화', ring: '반지' }[item.slot] || item.slot;
     const gemIcons = (item.gems || []).map(g => g.icon || '').join(' ');
+    // 특수 젬 효과 설명 (있을 때만)
+    const gemEffectLines = (item.gems || [])
+      .map(g => {
+        const gd = typeof g === 'object' ? g : eq.GEM_DEFS.find(d => d.id === g);
+        return gd && gd.effect && gd.desc ? `${gd.icon} ${gd.desc}` : '';
+      })
+      .filter(Boolean);
 
     // 스탯 비교 정의
     const STAT_DEFS = [
@@ -5494,6 +5685,7 @@
         </div>
       </div>
       <div style="background:#0d1117;border-radius:6px;padding:8px;margin-bottom:12px;font-size:11px;">${deltaRows}</div>
+      ${gemEffectLines.length ? `<div style="background:#1a1230;border:1px solid #4a2d6e;border-radius:6px;padding:7px 9px;margin-bottom:12px;font-size:10.5px;line-height:1.5;color:#d7bfff;">${gemEffectLines.map(l => `<div>${l}</div>`).join('')}</div>` : ''}
       <div style="display:flex;gap:10px;justify-content:center;">
         <button id="gearEquip" style="background:#2563eb;border:none;color:#fff;padding:8px 20px;border-radius:8px;cursor:pointer;font-size:14px;"><strong>[1]</strong> 장착</button>
         <button id="gearDrop" style="background:#374151;border:none;color:#fff;padding:8px 20px;border-radius:8px;cursor:pointer;font-size:14px;"><strong>[2]</strong> 버리기</button>
