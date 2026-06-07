@@ -868,3 +868,92 @@ html, body {
     font-size: 0.7rem;
   }
 }
+
+/* ── 무한 웨이브 다이얼로그 ─────────────────────── */
+#infiniteDialog {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.88);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 25;
+  animation: fadeIn 0.3s ease;
+}
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+#infiniteDialogBox {
+  background: rgba(10,10,20,0.96);
+  border: 2px solid #9b59b6;
+  border-radius: 18px;
+  padding: 28px 30px;
+  text-align: center;
+  max-width: 320px;
+  width: 90%;
+  box-shadow: 0 0 40px rgba(155,89,182,0.45), 0 0 80px rgba(155,89,182,0.2);
+  animation: infinitePulse 2s ease-in-out infinite;
+}
+@keyframes infinitePulse {
+  0%,100% { box-shadow: 0 0 30px rgba(155,89,182,0.35), 0 0 60px rgba(155,89,182,0.15); }
+  50%      { box-shadow: 0 0 50px rgba(155,89,182,0.6), 0 0 100px rgba(155,89,182,0.3); }
+}
+
+.infinite-icon {
+  font-size: 3rem;
+  margin-bottom: 8px;
+  animation: spin 3s linear infinite;
+}
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+.infinite-title {
+  font-size: 1.3rem;
+  font-weight: 900;
+  color: #f1c40f;
+  margin-bottom: 10px;
+  text-shadow: 0 0 12px rgba(241,196,15,0.6);
+}
+
+.infinite-sub {
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.6;
+  margin-bottom: 20px;
+}
+
+.infinite-warn {
+  color: #e74c3c;
+  font-weight: 700;
+}
+
+.infinite-btns {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.infinite-btn-yes {
+  background: linear-gradient(135deg, #c0392b, #8e44ad);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  padding: 12px 24px;
+  font-size: 1rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: transform 0.1s, opacity 0.15s;
+  letter-spacing: 0.03em;
+}
+.infinite-btn-yes:hover { transform: scale(1.04); }
+.infinite-btn-yes:active { transform: scale(0.97); opacity: 0.85; }
+
+.infinite-btn-no {
+  background: rgba(255,255,255,0.06);
+  color: #aaa;
+  border: 1px solid rgba(255,255,255,0.18);
+  border-radius: 10px;
+  padding: 10px 24px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.infinite-btn-no:hover { background: rgba(255,255,255,0.12); color: var(--text); }

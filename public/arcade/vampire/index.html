@@ -43,6 +43,19 @@
         </div>
       </div>
 
+      <!-- 무한 웨이브 다이얼로그 -->
+      <div id="infiniteDialog" style="display:none;">
+        <div id="infiniteDialogBox">
+          <div class="infinite-icon">🌀</div>
+          <div class="infinite-title">10분 생존 완료!</div>
+          <div class="infinite-sub">무한 웨이브를 계속하시겠습니까?<br><span class="infinite-warn">경고: 극도로 어려워집니다</span></div>
+          <div class="infinite-btns">
+            <button id="infiniteYesBtn" class="infinite-btn-yes">⚔ 계속 싸운다</button>
+            <button id="infiniteNoBtn" class="infinite-btn-no">🏆 승리로 마무리</button>
+          </div>
+        </div>
+      </div>
+
       <!-- 시작/게임오버 오버레이 -->
       <div id="overlay" class="visible">
         <div id="overlayBox">
@@ -87,12 +100,13 @@
   <script src="/js/admob.js?v=1.0"></script>
   <script src="/js/sandbox-config.js?v=1.1"></script>
   <script>
-    if (window.SandboxConfigBridge) {
+    // 샌드박스 설정은 ?sandbox 파라미터가 있을 때만 적용 (일반 플레이 시 localStorage 오염 방지)
+    if (window.SandboxConfigBridge && new URLSearchParams(window.location.search).has('sandbox')) {
       window.VS_CONFIG = window.SandboxConfigBridge.read('sandbox_vs_config');
     }
   </script>
   <script src="vps-equipment.js?v=1.1"></script>
-  <script src="game.js?v=3.0"></script>
-  <script src="/js/sw-update.js?v=20260520b"></script>
+  <script src="game.js?v=3.1"></script>
+  <script src="/js/sw-update.js?v=20260607"></script>
 </body>
 </html>
