@@ -13,9 +13,9 @@ These notes capture the current launch-readiness checks for the Node/Express sta
 
 ## Security findings
 
-- `/api/status` may include the local shutdown key only for loopback requests.
+- `/api/status` returns aggregate health publicly; detailed `roomList`, `tunnelUrl`, and the local shutdown key are loopback-only.
 - Admin routes are available to loopback requests by default. Set `ENABLE_ADMIN_ROUTES=true` only if a controlled deployment intentionally needs remote admin shutdown endpoints.
-- Set `ALLOWED_ORIGINS=https://board-game-online.onrender.com` for production Socket.io CORS tightening.
+- Socket.io defaults to the Render production origin plus local/LAN development origins. Set `ALLOWED_ORIGINS` to a comma-separated list when adding a tunnel or alternate production domain.
 - Do not commit `.env`, `.shutdown-key`, server logs, or pid files.
 
 ## Current audit snapshot
@@ -45,6 +45,8 @@ This launch-readiness pass found and fixed:
 - Service worker caching no longer serves old JS/CSS before checking the network; this prevents deployed game logic from appearing stale after Render deploys.
 - All HTML pages now load `/js/sw-update.js`, which registers the service worker consistently and reloads controlled pages once after an updated worker takes control.
 - Server responses for HTML, `sw.js`, JS, CSS, and `manifest.json` now send `Cache-Control: no-cache, no-store, must-revalidate`.
+- Public `/api/status` no longer exposes room ids, room detail snapshots, or tunnel URLs to proxied/non-local traffic.
+- Chat spam now emits a clear rate-limit message after 8 messages in 10 seconds instead of silently dropping messages.
 
 Current production observations before this branch is merged and Render redeploys:
 

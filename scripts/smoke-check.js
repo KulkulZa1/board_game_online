@@ -95,6 +95,11 @@ function checkSecurityHelpers() {
   if (isLocalRequest(proxiedLoopback)) {
     throw new Error('Proxied loopback request should not be treated as local admin traffic');
   }
+
+  const serverIndex = fs.readFileSync(path.join(root, 'server/index.js'), 'utf8');
+  if (!serverIndex.includes('isAllowedSocketOrigin') || serverIndex.includes(": '*'")) {
+    throw new Error('Socket.io CORS should use an origin allow-list instead of defaulting to wildcard access');
+  }
 }
 
 function runSyntaxCheck() {
@@ -212,7 +217,9 @@ function loadChatModuleForTest() {
 
 function checkChatBubbleUi() {
   const chatScript = fs.readFileSync(path.join(root, 'public/js/chat.js'), 'utf8');
-  if (!chatScript.includes('chat-bubble')) return;
+  if (!chatScript.includes('chat-bubble')) {
+    throw new Error('Chat speech bubble implementation is missing from public/js/chat.js');
+  }
 
   const { Chat, elements, timers } = loadChatModuleForTest();
   const emitted = [];
@@ -923,6 +930,9 @@ async function main() {
     const forwardedParsed = JSON.parse(forwardedStatus.body);
     if (forwardedParsed.shutdownKey) {
       throw new Error('/api/status exposed shutdownKey to forwarded/proxied traffic');
+    }
+    if (forwardedParsed.roomList || forwardedParsed.tunnelUrl) {
+      throw new Error('/api/status exposed room details or tunnel URL to forwarded/proxied traffic');
     }
 
     checkHandlers();

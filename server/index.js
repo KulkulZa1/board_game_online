@@ -18,12 +18,37 @@ const server = http.createServer(app);
 
 // ========== CORS ==========
 // ALLOWED_ORIGINS 환경변수로 허용 도메인 제한 가능 (쉼표 구분)
-// 미설정 시 전체 허용 (Cloudflare Tunnel / Render.com 자동 URL 대응)
+// 미설정 시 Render production + local/LAN dev origins 허용
 const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
-  ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
-  : '*';
+  ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim()).filter(Boolean)
+  : ['https://board-game-online.onrender.com'];
+
+function isLocalDevOrigin(origin) {
+  try {
+    const url = new URL(origin);
+    return (
+      url.protocol === 'http:' &&
+      (
+        url.hostname === 'localhost' ||
+        url.hostname === '127.0.0.1' ||
+        /^192\.168\.\d{1,3}\.\d{1,3}$/.test(url.hostname)
+      )
+    );
+  } catch (_) {
+    return false;
+  }
+}
+
+function isAllowedSocketOrigin(origin, callback) {
+  if (!origin) return callback(null, true);
+  if (ALLOWED_ORIGINS.includes('*') || ALLOWED_ORIGINS.includes(origin) || isLocalDevOrigin(origin)) {
+    return callback(null, true);
+  }
+  return callback(new Error('Socket origin not allowed'), false);
+}
+
 const io = new Server(server, {
-  cors: { origin: ALLOWED_ORIGINS, methods: ['GET', 'POST'] }
+  cors: { origin: isAllowedSocketOrigin, methods: ['GET', 'POST'] }
 });
 
 // state.io 에 Socket.io 인스턴스 주입

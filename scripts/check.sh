@@ -52,7 +52,15 @@ echo "=== 3. Static assets ==="
 check_url() {
   local url="$BASE/$1"
   local code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 "$url")
-  if [ "$code" = "200" ]; then ok "$1"; else err "$1 → HTTP $code"; fi
+  if [ "$code" = "200" ]; then ok "$1"; else err "$1 -> HTTP $code"; fi
+}
+
+check_url_expect() {
+  local path="$1"
+  local expected="$2"
+  local url="$BASE/$path"
+  local code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 "$url")
+  if [ "$code" = "$expected" ]; then ok "$path -> $expected"; else err "$path -> HTTP $code, expected $expected"; fi
 }
 
 check_url ""
@@ -76,17 +84,13 @@ check_url "arcade/vampire/"
 check_url "arcade/vampire/game.js"
 check_url "arcade/plant/"
 check_url "arcade/plant/game.js"
+check_url "arcade/tower-defense/"
+check_url "arcade/tower-defense/runtime/game.js"
 
 # 3D
 check_url "games3d/chess3d/"
 check_url "games3d/chess3d/scene.js"
-check_url "sandbox/"
-check_url "sandbox/vampire-survivors/"
-check_url "sandbox/vampire-survivors/game.js"
-check_url "sandbox/plant-growing/"
-check_url "sandbox/plant-growing/game.js"
-check_url "sandbox/tower-defense/"
-check_url "sandbox/tower-defense/game.js"
+check_url_expect "sandbox/" "404"
 
 # ── 4. JS syntax ─────────────────────────────────────────────────
 echo ""
