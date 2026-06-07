@@ -1019,8 +1019,6 @@
     if (pauseBtn) pauseBtn.style.display = '';
     const towerBtn = document.getElementById('towerBtn');
     if (towerBtn) towerBtn.style.display = '';
-    const equipBtn = document.getElementById('equipBtn');
-    if (equipBtn) equipBtn.style.display = '';
     renderStageSelect();
     renderWeaponSlots();
     updateHUD();
@@ -1355,7 +1353,6 @@
       equipBtn.type = 'button';
       equipBtn.title = '장비 창 (E키)';
       equipBtn.textContent = '⚔';
-      equipBtn.style.display = 'none';
       equipBtn.addEventListener('click', () => toggleEquipUI());
       const guideBtn = document.getElementById('guideBtn');
       headerStats.insertBefore(equipBtn, guideBtn || null);
@@ -4714,8 +4711,6 @@
     if (pauseBtn) pauseBtn.style.display = 'none';
     const towerBtn = document.getElementById('towerBtn');
     if (towerBtn) towerBtn.style.display = 'none';
-    const equipBtnEnd = document.getElementById('equipBtn');
-    if (equipBtnEnd) equipBtnEnd.style.display = 'none';
     ov.classList.add('visible');
 
     if (window.AdMobHelper) AdMobHelper.showAfterGame();
@@ -4873,8 +4868,6 @@
     if (pauseBtn) pauseBtn.style.display = '';
     const towerBtn = document.getElementById('towerBtn');
     if (towerBtn) towerBtn.style.display = '';
-    const equipBtnStart = document.getElementById('equipBtn');
-    if (equipBtnStart) equipBtnStart.style.display = '';
     document.getElementById('levelOverlay').style.display = 'none';
     initGame();
     state = 'playing';
@@ -4918,12 +4911,12 @@
   }
 
   function renderEquipUI() {
-    const panel = document.getElementById('equipPanel');
-    if (panel) panel.innerHTML = buildEquipUIHTML();
+    const body = document.getElementById('equipBody');
+    if (body) body.innerHTML = buildEquipUIHTML();
   }
 
   function toggleEquipUI() {
-    if (!player) return;
+    if (state === 'levelup' || state === 'itembox' || state === 'dead') return;
     equipUiVisible = !equipUiVisible;
     let panel = document.getElementById('equipPanel');
     if (!panel) {
@@ -4932,12 +4925,18 @@
       panel.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#111827;border:2px solid #39445a;border-radius:12px;padding:18px;z-index:900;max-width:420px;width:94%;color:#fff;font-family:sans-serif;';
       panel.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><strong>⚔ 장비 창 (E키)</strong><button id="equipClose" style="background:none;border:none;color:#fff;font-size:20px;cursor:pointer;">✕</button></div><div id="equipBody"></div>`;
       document.body.appendChild(panel);
-      document.getElementById('equipClose').addEventListener('click', () => toggleEquipUI());
+      document.getElementById('equipClose').addEventListener('click', () => { equipUiVisible = true; toggleEquipUI(); });
     }
     panel.style.display = equipUiVisible ? 'block' : 'none';
     if (equipUiVisible) {
       const body = document.getElementById('equipBody');
-      if (body) body.innerHTML = buildEquipUIHTML();
+      if (body) {
+        if (!player) {
+          body.innerHTML = '<p style="color:#888;text-align:center;padding:20px;">게임을 시작하면 장비를 볼 수 있어요!</p>';
+        } else {
+          body.innerHTML = buildEquipUIHTML();
+        }
+      }
       if (state === 'playing') setPaused(true);
     } else {
       if (state === 'paused') setPaused(false);
