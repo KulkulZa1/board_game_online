@@ -49,8 +49,13 @@
       { id: 'emerald_ring', name: '에메랄드 반지', icon: '🟢', stats: { xpRange: 1.20 } },
       { id: 'obsidian_ring',name: '흑요석 반지', icon: '⚫',  stats: { dmgMult: 1.06, maxHp: 15 } },
       { id: 'void_ring',    name: '공허 반지',  icon: '🌑',  stats: { dmgMult: 1.20, cdMult: 0.88 } },
+      { id: 'goblin_lucky_ring', name: '고블린 행운 반지', icon: '🍀', stats: { xpRange: 1.18, cdMult: 0.92 } },
     ],
   };
+  // 고블린 세트 전용 아이템 — 기존 슬롯 배열에 추가
+  SLOT_ITEMS.helm.push({ id: 'goblin_mask',  name: '고블린 마스크', icon: '🎭', stats: { xpRange: 1.15, cdMult: 0.94 } });
+  SLOT_ITEMS.armor.push({ id: 'goblin_vest', name: '고블린 조끼',   icon: '🧤', stats: { speedMult: 1.10, dmgMult: 1.06 } });
+  SLOT_ITEMS.boots.push({ id: 'goblin_boots',name: '고블린 단검화', icon: '👡', stats: { speedMult: 1.14, xpRange: 1.08 } });
 
   const GEM_DEFS = [
     { id: 'ruby',      icon: '🔴', name: '루비',       rarity: 'common',    stat: 'dmgMult',   val: 1.08 },
@@ -96,6 +101,12 @@
       pieces: ['war_helm', 'titan_plate', 'titan_sabatons', 'topaz_ring'],
       bonus2: { desc: '최대 체력 +60', effect: 'maxHp', val: 60 },
       bonus4: { desc: '피격 시 주변에 가시 반격', effect: 'titan_thorns' },
+    },
+    {
+      id: 'goblin', name: '💰 고블린', color: '#f1c40f',
+      pieces: ['goblin_mask', 'goblin_vest', 'goblin_boots', 'goblin_lucky_ring'],
+      bonus2: { desc: '이동 속도 +20%', effect: 'speedMult', val: 1.20 },
+      bonus4: { desc: '획득 코인 +30%', effect: 'goblin_loot', val: 1.30 },
     },
   ];
 
