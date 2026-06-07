@@ -2376,11 +2376,10 @@
     waveCount++;
     const isHorde = (waveCount % HORDE_WAVE_EVERY === 0);
     if (isHorde) floatTexts.push({ text: '🔥 HORDE WAVE!', life: 2.0, maxLife: 2.0, screenSpace: true, color: '#e74c3c', size: 20 });
-    // 난이도 곡선: "쉽게 시작, 어렵게 클리어" — 초반은 완만, 후반은 이차항으로 급가속
-    //   1분=1.58, 3분=3.18, 5분=5.38, 7분=8.18, 10분=13.5, 15분=25.4
-    //   (기존 대비 초반↓ 후반↑ — 초반 성장 여유 + 후반 압박 강화)
+    // 난이도 곡선: 초반 2분은 여유, 5분부터 구버전 대비 압박 강화, 10분+ 급속 가중
+    //   1분=1.81, 3분=3.79, 5분=6.25, 7분=9.19, 10분=14.5, 15분=25.75
     const m = elapsed / 60;
-    const difficulty = 1 + 0.5 * m + 0.075 * m * m;
+    const difficulty = 1 + 0.75 * m + 0.06 * m * m;
     // 스폰 밀도: 초반 가볍게(10) 시작, 후반 핵앤슬래시 스웜으로 급증(캡 상향)
     const baseCount = Math.ceil((isHorde ? Math.min(28 + Math.floor(elapsed / 6), 150) : Math.min(10 + Math.floor(elapsed / 7), 85)) * spawnMult);
     for (let i = 0; i < baseCount; i++) {
@@ -5142,31 +5141,99 @@
   function showGearPickupModal(item) {
     if (!item || !window.VPS || !window.VPS.equipment) return;
     const eq = window.VPS.equipment;
-    const grade = eq.getGradeData(item.grade);
-    const base  = eq.getItemBase(item);
-    const stats = eq.getEquipStats(item);
-    const statLines = [];
-    if (stats.maxHp)      statLines.push(`❤ HP +${Math.round(stats.maxHp)}`);
-    if (stats.dmgMult && stats.dmgMult !== 1) statLines.push(`⚔ 데미지 ×${stats.dmgMult.toFixed(2)}`);
-    if (stats.cdMult  && stats.cdMult  !== 1) statLines.push(`⏩ CD ×${stats.cdMult.toFixed(2)}`);
-    if (stats.speedMult && stats.speedMult !== 1) statLines.push(`👟 속도 ×${stats.speedMult.toFixed(2)}`);
-    if (stats.rangeBonus && stats.rangeBonus !== 1) statLines.push(`🎯 사거리 ×${stats.rangeBonus.toFixed(2)}`);
-    if (stats.critChance) statLines.push(`⚡ 치명 +${(stats.critChance*100).toFixed(0)}%`);
+    const grade    = eq.getGradeData(item.grade);
+    const base     = eq.getItemBase(item);
+    const newStats = eq.getEquipStats(item);
+
+    // 현재 장착 아이템 (같은 슬롯)
+    const curItem  = player && player.equip && player.equip[item.slot] || null;
+    const curBase  = curItem ? eq.getItemBase(curItem)  : null;
+    const curGrade = curItem ? eq.getGradeData(curItem.grade) : null;
+    const curStats = curItem ? eq.getEquipStats(curItem) : {};
+
+    const slotKor = { helm: '투구', armor: '갑옷', boots: '장화', ring: '반지' }[item.slot] || item.slot;
     const gemIcons = (item.gems || []).map(g => g.icon || '').join(' ');
+
+    // 스탯 비교 정의
+    const STAT_DEFS = [
+      { key: 'maxHp',      label: '❤ HP',      fmt: v => v ? `+${Math.round(v)}` : '0', def: 0,   higherBetter: true  },
+      { key: 'dmgMult',    label: '⚔ 데미지',  fmt: v => `×${v.toFixed(2)}`,             def: 1,   higherBetter: true  },
+      { key: 'cdMult',     label: '⏩ CD',      fmt: v => `×${v.toFixed(2)}`,             def: 1,   higherBetter: false },
+      { key: 'speedMult',  label: '👟 속도',    fmt: v => `×${v.toFixed(2)}`,             def: 1,   higherBetter: true  },
+      { key: 'rangeBonus', label: '🎯 사거리',  fmt: v => `×${v.toFixed(2)}`,             def: 1,   higherBetter: true  },
+      { key: 'xpRange',    label: '🧲 XP',      fmt: v => `×${v.toFixed(2)}`,             def: 1,   higherBetter: true  },
+      { key: 'critChance', label: '⚡ 치명',    fmt: v => `+${(v*100).toFixed(0)}%`,      def: 0,   higherBetter: true  },
+    ];
+
+    // 한쪽이라도 의미있는 값이면 표시
+    const relevant = STAT_DEFS.filter(sd => {
+      const nv = newStats[sd.key] !== undefined ? newStats[sd.key] : sd.def;
+      const cv = curStats[sd.key] !== undefined ? curStats[sd.key] : sd.def;
+      const eps = sd.key === 'maxHp' ? 0.5 : 0.001;
+      return Math.abs(nv - sd.def) > eps || Math.abs(cv - sd.def) > eps;
+    });
+
+    const deltaRows = relevant.map(sd => {
+      const nv = newStats[sd.key] !== undefined ? newStats[sd.key] : sd.def;
+      const cv = curStats[sd.key] !== undefined ? curStats[sd.key] : sd.def;
+      const same = Math.abs(nv - cv) < (sd.key === 'maxHp' ? 0.5 : 0.0005);
+      let deltaStr = '', deltaColor = '#6b7280';
+      if (!same) {
+        const newBetter = sd.higherBetter ? nv > cv : nv < cv;
+        deltaColor = newBetter ? '#2ecc71' : '#e74c3c';
+        if (sd.key === 'maxHp') {
+          const d = Math.round(nv - cv);
+          deltaStr = `${d > 0 ? '▲ +' : '▼ '}${d}`;
+        } else if (sd.key === 'critChance') {
+          const d = ((nv - cv) * 100).toFixed(0);
+          deltaStr = `${Number(d) > 0 ? '▲ +' : '▼ '}${d}%`;
+        } else {
+          const pct = Math.round((nv / cv - 1) * 100);
+          deltaStr = `${pct > 0 ? '▲ +' : '▼ '}${pct}%`;
+        }
+      }
+      const curStr = curItem ? sd.fmt(cv) : '—';
+      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;border-bottom:1px solid #1f2937;">
+        <span style="color:#9ca3af;width:64px;">${sd.label}</span>
+        <span style="color:#6b7280;width:52px;text-align:right;">${curStr}</span>
+        <span style="color:#374151;margin:0 4px;">→</span>
+        <span style="color:#e5e7eb;width:52px;">${sd.fmt(nv)}</span>
+        <span style="color:${deltaColor};font-weight:bold;width:52px;text-align:right;">${deltaStr}</span>
+      </div>`;
+    }).join('') || `<div style="color:#6b7280;text-align:center;padding:4px;">스탯 없음</div>`;
 
     let modal = document.getElementById('gearModal');
     if (!modal) {
       modal = document.createElement('div');
       modal.id = 'gearModal';
-      modal.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#111827;border:2px solid #39445a;border-radius:12px;padding:20px;z-index:950;max-width:340px;width:92%;color:#fff;font-family:sans-serif;text-align:center;';
+      modal.style.cssText = 'display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#111827;border:2px solid #39445a;border-radius:12px;padding:14px;z-index:950;max-width:420px;width:96%;color:#fff;font-family:sans-serif;max-height:90vh;overflow-y:auto;';
       document.body.appendChild(modal);
     }
     modal.innerHTML = `
-      <div style="font-size:32px;">${base.icon}</div>
-      <div style="color:${grade.color};font-weight:bold;font-size:1.1em;">[${grade.name}] ${base.name}</div>
-      <div style="color:#aaa;font-size:12px;margin:6px 0;">${statLines.join(' · ')}</div>
-      ${gemIcons ? `<div style="font-size:16px;">${gemIcons}</div>` : ''}
-      <div style="display:flex;gap:10px;justify-content:center;margin-top:14px;">
+      <div style="font-size:10px;color:#9ca3af;letter-spacing:1px;text-transform:uppercase;text-align:center;margin-bottom:10px;">⚔ ${slotKor} 비교</div>
+      <div style="display:grid;grid-template-columns:1fr 22px 1fr;gap:5px;align-items:center;margin-bottom:10px;">
+        <div style="background:#1a2035;border:1px solid #2a3050;border-radius:8px;padding:8px;text-align:center;">
+          <div style="font-size:9px;color:#6b7280;letter-spacing:1px;margin-bottom:3px;">현재 장착</div>
+          ${curItem ? `
+            <div style="font-size:20px;">${curBase.icon}</div>
+            <div style="color:${curGrade.color};font-size:0.75em;font-weight:bold;">[${curGrade.name}]</div>
+            <div style="font-size:0.72em;color:#ccc;">${curBase.name}</div>
+          ` : `
+            <div style="font-size:20px;opacity:0.25;">—</div>
+            <div style="font-size:0.72em;color:#4b5563;margin-top:2px;">비어있음</div>
+          `}
+        </div>
+        <div style="text-align:center;color:#4b5563;font-size:14px;">→</div>
+        <div style="background:#0d1117;border:2px solid ${grade.color};border-radius:8px;padding:8px;text-align:center;">
+          <div style="font-size:9px;color:#9ca3af;letter-spacing:1px;margin-bottom:3px;">새 아이템</div>
+          <div style="font-size:20px;">${base.icon}</div>
+          <div style="color:${grade.color};font-size:0.75em;font-weight:bold;">[${grade.name}]</div>
+          <div style="font-size:0.72em;color:#ccc;">${base.name}</div>
+          ${gemIcons ? `<div style="font-size:11px;margin-top:2px;">${gemIcons}</div>` : ''}
+        </div>
+      </div>
+      <div style="background:#0d1117;border-radius:6px;padding:8px;margin-bottom:12px;font-size:11px;">${deltaRows}</div>
+      <div style="display:flex;gap:10px;justify-content:center;">
         <button id="gearEquip" style="background:#2563eb;border:none;color:#fff;padding:8px 20px;border-radius:8px;cursor:pointer;font-size:14px;"><strong>[1]</strong> 장착</button>
         <button id="gearDrop" style="background:#374151;border:none;color:#fff;padding:8px 20px;border-radius:8px;cursor:pointer;font-size:14px;"><strong>[2]</strong> 버리기</button>
       </div>
