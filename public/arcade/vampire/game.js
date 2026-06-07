@@ -2376,12 +2376,12 @@
     waveCount++;
     const isHorde = (waveCount % HORDE_WAVE_EVERY === 0);
     if (isHorde) floatTexts.push({ text: '🔥 HORDE WAVE!', life: 2.0, maxLife: 2.0, screenSpace: true, color: '#e74c3c', size: 20 });
-    // 난이도 곡선: 초반 2분은 여유, 5분부터 구버전 대비 압박 강화, 10분+ 급속 가중
-    //   1분=1.81, 3분=3.79, 5분=6.25, 7분=9.19, 10분=14.5, 15분=25.75
+    // 난이도 곡선: PR#23 기준 — 분(m) 기준 가속 성장 (이차항 완화)
+    //   1분=1.87, 3분=3.97, 5분=6.25, 10분=13.0, 15분=21.75
     const m = elapsed / 60;
-    const difficulty = 1 + 0.75 * m + 0.06 * m * m;
-    // 스폰 밀도: 초반 가볍게(10) 시작, 후반 핵앤슬래시 스웜으로 급증(캡 상향)
-    const baseCount = Math.ceil((isHorde ? Math.min(28 + Math.floor(elapsed / 6), 150) : Math.min(10 + Math.floor(elapsed / 7), 85)) * spawnMult);
+    const difficulty = 1 + 0.9 * m + 0.03 * m * m;
+    // 스폰 밀도: PR#23 기준 — 일반 14→70, 호드 35→120
+    const baseCount = Math.ceil((isHorde ? Math.min(35 + Math.floor(elapsed / 8), 120) : Math.min(14 + Math.floor(elapsed / 9), 70)) * spawnMult);
     for (let i = 0; i < baseCount; i++) {
       if (enemies.length >= MAX_ENEMIES) break;
       const angle = Math.random() * Math.PI * 2;
@@ -2416,10 +2416,8 @@
         attackRange: behavior === 'archer' ? (tier === 2 ? 280 : 220) : 0,
         attackDmg: Math.round([10, 20, 38][tier] * (1 + elapsed / 500) * runDifficulty.enemyDmgMult),  // 적 공격력 완만 상승 (후반 위협 유지)
       };
-      // 정예 승격 — tier1/2가 정예로 등장. 확률이 시간에 따라 4%→16%로 상승(후반 스웜).
-      // HP·보상·위협 강화, 처치 시 파워업 드롭
-      const eliteChance = 0.04 + Math.min(elapsed / 1200, 0.12);
-      if (tier >= 1 && Math.random() < eliteChance) {
+      // 정예 승격 — PR#23 기준: tier1/2 중 6%가 정예로 등장. HP·보상·위협 강화, 처치 시 파워업 드롭
+      if (tier >= 1 && Math.random() < 0.06) {
         newEnemy.elite = true;
         newEnemy.eliteHue = Math.random() < 0.5 ? '#f1c40f' : '#ff7675';
         newEnemy.hp *= 2.6; newEnemy.maxHp *= 2.6;
