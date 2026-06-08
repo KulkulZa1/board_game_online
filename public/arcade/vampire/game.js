@@ -46,6 +46,9 @@
     chain:     { name: '번개 사슬',  icon: '🔗', desc: '최대 3연쇄 즉시 타격 번개',        dmg: 68, cd: 1.3,  range: 240 },
     scythe:    { name: '낫',         icon: '🌾', desc: '전방 부채꼴 광역 베기',            dmg: 44, cd: 0.7,  range: 115 },
     bomb:      { name: '폭탄',       icon: '💣', desc: '튕기는 폭탄, 접촉/시한 폭발',      dmg: 80, cd: 1.5,  range: 150 },
+    missile:   { name: '유도탄',     icon: '🚀', desc: '적을 추적하는 유도 미사일',        dmg: 40, cd: 0.85, range: 340 },
+    meteor:    { name: '운석',       icon: '☄', desc: '하늘에서 운석 낙하, 광역 폭발',     dmg: 72, cd: 1.6,  range: 270 },
+    toxic:     { name: '독성 포자',  icon: '☣', desc: '독성 장판 생성, 지속 피해+중독',    dmg: 22, cd: 2.2,  range: 240 },
     // ── 진화 무기 (evolved) — 기본 무기 최대레벨 + 필요 패시브로 진화 ──
     blackhole: { name: '블랙홀',    icon: '🌀', desc: '적·투사체를 빨아들여 가두는 사건의 지평선', dmg: 48, cd: 0.55, range: 130, evolved: true },
     stormbow:  { name: '폭풍의 활', icon: '🌩', desc: '5연발 강화 관통 화살',        dmg: 42, cd: 0.38, range: 380, evolved: true },
@@ -56,6 +59,9 @@
     tempest:   { name: '폭풍 사슬', icon: '⛈',  desc: '5연쇄 번개, 적 빙결',         dmg: 98, cd: 1.1,  range: 280, evolved: true },
     reaper:    { name: '사신의 낫', icon: '☠',  desc: '360° 회전 베기, 적 흡입',     dmg: 62, cd: 0.5,  range: 150, evolved: true },
     inferno:   { name: '인페르노', icon: '🔥',  desc: '5발 분열 화염 폭탄',          dmg: 70, cd: 1.2,  range: 175, evolved: true },
+    swarm:     { name: '군집 미사일', icon: '🛰', desc: '5연발 유도 미사일, 강화 폭발', dmg: 36, cd: 0.55, range: 380, evolved: true },
+    meteorshower:{ name: '유성우', icon: '🌠',  desc: '3연속 운석 낙하, 초광역 폭발', dmg: 96, cd: 1.7,  range: 320, evolved: true },
+    plague:    { name: '역병 지대', icon: '🦠', desc: '확산되는 맹독 지대, 강력한 중독', dmg: 30, cd: 2.0,  range: 270, evolved: true },
   };
 
   // 무기 레벨업 시 강화되는 부가 효과 설명 (계열 기준) — 레벨업 선택지 표시용
@@ -69,6 +75,9 @@
     chain:     '연쇄 +1(2레벨)·사거리 증가',
     scythe:    '베기 범위·부채꼴 각도 확대',
     bomb:      '폭발 범위 확대·분열 수 증가',
+    missile:   '발사 수 +1(2레벨)·유도 성능 향상',
+    meteor:    '운석 수 +1·폭발 범위 확대',
+    toxic:     '장판 범위·지속시간 증가',
   };
 
   // 진화 규칙: base 무기가 최대 레벨 + req 패시브 보유 시 evolved(id) 무기로 진화
@@ -82,6 +91,9 @@
     { id: 'tempest',   base: 'chain',     req: 'pierce_up', reqName: '🔱 관통 강화' },
     { id: 'reaper',    base: 'scythe',    req: 'lifesteal', reqName: '🩸 흡혈' },
     { id: 'inferno',   base: 'bomb',      req: 'ignite',    reqName: '🔥 화염 부착' },
+    { id: 'swarm',     base: 'missile',   req: 'crit',      reqName: '⚡ 치명타' },
+    { id: 'meteorshower', base: 'meteor', req: 'range_up',  reqName: '🎯 사거리 확장' },
+    { id: 'plague',    base: 'toxic',     req: 'venom',     reqName: '☠ 맹독' },
   ];
 
   // 메인+보조 무기 시스템 — 메인 무기 1개만 독립 발사, 나머지 공격 무기는 보조
@@ -99,6 +111,9 @@
     chain: 'chain', tempest: 'chain',
     scythe: 'scythe', reaper: 'scythe',
     bomb: 'bomb', inferno: 'bomb',
+    missile: 'missile', swarm: 'missile',
+    meteor: 'meteor', meteorshower: 'meteor',
+    toxic: 'toxic', plague: 'toxic',
   };
 
   // 투사체 type → 무기 계열 (데미지 출처 집계용 — src 미지정 시 fallback)
@@ -106,6 +121,7 @@
     orb: 'orb', blackhole: 'orb',
     arrow: 'arrow', boomerang: 'boomerang',
     laser: 'laser', deathray: 'laser',
+    missile: 'missile', meteor: 'meteor',
   };
 
   // 데미지 출처 계열 → 표시 라벨 (전투 기여도 상태창)
@@ -113,6 +129,7 @@
     orb: '🔵 에너지 구', arrow: '🏹 화살', nova: '💥 폭발', shield: '🛡 방패',
     laser: '⚡ 레이저', boomerang: '🪃 부메랑', chain: '🔗 번개 사슬',
     scythe: '🌾 낫', bomb: '💣 폭탄', dash: '💨 대쉬', dot: '🔥 지속 피해',
+    missile: '🚀 유도탄', meteor: '☄ 운석', toxic: '☣ 독성',
     etc: '✦ 기타',
   };
 
@@ -128,6 +145,9 @@
     scythe:    { icon: '🌾', name: '검기 방출',   desc: '주 공격 80% 확률 부채꼴 베기 (50% 피해)',    proc: 0.8 },
     arrow:     { icon: '🏹', name: '추격 화살',   desc: '주 공격 70% 확률 추가 관통 화살 (50%)',      proc: 0.7 },
     shield:    { icon: '🛡', name: '방어 증폭',   desc: '주 공격마다 0.5초 피해 30% 감소',           proc: 1.0 },
+    missile:   { icon: '🚀', name: '유도 탄두',   desc: '주 공격 60% 확률 유도 미사일 1발 (55% 피해)', proc: 0.6 },
+    meteor:    { icon: '☄', name: '운석 강타',   desc: '주 공격 45% 확률 소형 운석 낙하 (60% 피해)',  proc: 0.45 },
+    toxic:     { icon: '☣', name: '독성 분출',   desc: '주 공격마다 독성 장판 생성',                 proc: 1.0 },
   };
 
   // 패시브(능력치) 업그레이드 — 진화 재료로도 사용됨
@@ -217,6 +237,18 @@
       desc: '낫 계열 적중 위치에 0.8초 잔향 검기 생성 (데미지 60%)',
       requires: [{ id: 'lifesteal', count: 2 }, { id: 'range_up', count: 3 }],
     },
+    {
+      id: 'seeker_swarm',
+      name: '추적 본능', icon: '🛰',
+      desc: '치명타 발동 시 25% 확률로 유도 미사일 추가 발사',
+      requires: [{ id: 'crit', count: 3 }, { id: 'cd_up', count: 2 }],
+    },
+    {
+      id: 'meteor_call',
+      name: '천체 강림', icon: '☄',
+      desc: '7초마다 주변 무작위 위치에 운석 2발 자동 낙하',
+      requires: [{ id: 'dmg_up', count: 4 }, { id: 'range_up', count: 2 }],
+    },
   ];
 
   // 신규 획득 가능한 기본 무기 목록
@@ -225,7 +257,7 @@
     { id: 'rupture', name: 'Rupture Mark', desc: 'Dash-hit enemies bleed, then burst when killed.', max: 3 },
     { id: 'echo',    name: 'Echo Step',    desc: 'Dash leaves delayed after-slashes along your path.', max: 3 },
   ];
-  const WEAPON_POOL = ['orb', 'arrow', 'nova', 'shield', 'laser', 'boomerang', 'chain', 'scythe', 'bomb'];
+  const WEAPON_POOL = ['orb', 'arrow', 'nova', 'shield', 'laser', 'boomerang', 'chain', 'scythe', 'bomb', 'missile', 'meteor', 'toxic'];
   const META_KEY = 'vps_meta_v2';
   const RUN_SNAPSHOT_KEY = 'vps_run_snapshot_v1';
   const RUN_SNAPSHOT_MAX_AGE_MS = 36 * 60 * 60 * 1000;
@@ -339,6 +371,16 @@
     { id: 'power',   icon: '🎯', name: '정밀 조준',   apply: (p) => { p.tempDmgMult  = 1.5; p.tempDmgTimer  = 20; } },
     { id: 'hpmax',   icon: '❤',  name: '체력 강화',   apply: (p) => { p.maxHp += 30; p.hp = Math.min(p.hp + 30, p.maxHp); } },
     { id: 'dmgperm', icon: '✨', name: '공격력 강화', apply: (p) => { p.dmgMult *= 1.2; } },
+    { id: 'meteorrain', icon: '🌠', name: '운석 세례', apply: (p) => {
+        // 플레이어 주변에 운석 14발을 시차를 두고 낙하 (화면 정리 + 연출)
+        const dmg = WEAPON_DEFS.meteor.dmg * p.dmgMult * 1.5;
+        const aoe = 120 * (p.rangeBonus || 1) * ((p.equipStats && p.equipStats.rangeBonus) || 1);
+        for (let _i = 0; _i < 14; _i++) {
+          const _a = Math.random() * Math.PI * 2, _r = Math.random() * 320;
+          spawnMeteorStrike(player.x + Math.cos(_a) * _r, player.y + Math.sin(_a) * _r, dmg, aoe, true, 'meteor', _i * 0.07);
+        }
+      }
+    },
     { id: 'nuke',    icon: '💥', name: '핵폭탄',      apply: ()  => {
         spawnExplosion(player.x, player.y, 230, 120 * player.dmgMult, false, 'etc');
         for (let _i = 0; _i < 3; _i++) {
@@ -459,6 +501,8 @@
   let infiniteDialogShown = false; // 무한 모드 다이얼로그 표시 여부
   let infiniteElapsed = 0;       // 무한 모드 경과 시간(초)
   let spectralFields = [];       // spectral_blade 잔향 검기 필드
+  let toxicFields = [];          // 독성 포자/역병 지대 — 지속 피해 장판
+  let meteorCallTimer = 7;       // meteor_call 시너지 자동 운석 낙하 타이머
   let killStreakTimestamps = [];  // cascade_collapse: 5초 내 처치 타임스탬프
   let dashChainWindow = 0;       // 연쇄 대쉬 가능 잔여 시간 (첫 대쉬 적중 후 1초)
   let dashChainCount = 0;        // 현재 연쇄 대쉬 횟수 (최대 2)
@@ -670,6 +714,8 @@
     infiniteDialogShown = false;
     infiniteElapsed = 0;
     spectralFields = [];
+    toxicFields = [];
+    meteorCallTimer = 7;
     killStreakTimestamps = [];
     dashChainWindow = 0;
     dashChainCount = 0;
@@ -982,6 +1028,21 @@
         case 'shield':
           player._auxShieldTime = (player._auxShieldTime || 0) + 0.5;
           break;
+        case 'missile': {
+          // 보조: 유도 미사일 1발 발사
+          const a0 = Math.random() * Math.PI * 2;
+          projectiles.push({ type: 'missile', x: player.x, y: player.y, vx: Math.cos(a0) * 300, vy: Math.sin(a0) * 300,
+            spd: 300, turn: 5.5, r: 6, dmg: baseDmg * 0.55, aoe: 50 * rng, life: 2.4, evolved: false, src: 'missile' });
+          break;
+        }
+        case 'meteor':
+          // 보조: 대상 위치에 소형 운석 낙하
+          spawnMeteorStrike(tx, ty, baseDmg * 0.60, 80 * rng, false, 'meteor', 0);
+          break;
+        case 'toxic':
+          // 보조: 대상 위치에 소형 독성 장판 생성
+          toxicFields.push({ x: tx, y: ty, range: 55 * rng, dmg: baseDmg * 0.25, life: 2.2, maxLife: 2.2, tickTimer: 0, evolved: false });
+          break;
       }
     }
   }
@@ -1265,6 +1326,9 @@
     xpGems = Array.isArray(snapshot.xpGems) ? snapshot.xpGems : [];
     particles = [];
     chainExplosions = [];
+    toxicFields = [];
+    spectralFields = [];
+    meteorCallTimer = 7;
     itemBoxes = Array.isArray(snapshot.itemBoxes) ? snapshot.itemBoxes : [];
     hybridTowers = Array.isArray(snapshot.hybridTowers) ? snapshot.hybridTowers : [];
     slashEchoes = Array.isArray(snapshot.slashEchoes) ? snapshot.slashEchoes : [];
@@ -2841,10 +2905,12 @@
     // Apply set bonuses
     const setEffects = eq.getActiveSetEffects(player.equip);
     for (const se of setEffects) {
-      if (se.bonus.effect === 'dmgMult')   combined.dmgMult  *= se.bonus.val;
-      if (se.bonus.effect === 'cdMult')    combined.cdMult   *= se.bonus.val;
-      if (se.bonus.effect === 'speedMult') combined.speedMult *= se.bonus.val;
-      if (se.bonus.effect === 'maxHp')     combined.maxHp    += se.bonus.val;
+      if (se.bonus.effect === 'dmgMult')    combined.dmgMult  *= se.bonus.val;
+      if (se.bonus.effect === 'cdMult')     combined.cdMult   *= se.bonus.val;
+      if (se.bonus.effect === 'speedMult')  combined.speedMult *= se.bonus.val;
+      if (se.bonus.effect === 'maxHp')      combined.maxHp    += se.bonus.val;
+      if (se.bonus.effect === 'rangeBonus') combined.rangeBonus *= se.bonus.val;
+      if (se.bonus.effect === 'xpRange')    combined.xpRange  *= se.bonus.val;
     }
     player.equipStats   = combined;
     player.setEffects   = setEffects;
@@ -3061,6 +3127,42 @@
           chainExplosions.push({ x: tx + Math.cos(a) * aoe * 0.8, y: ty + Math.sin(a) * aoe * 0.8, range: aoe * 0.6, dmg: dmg * 0.6, delay: 0.6 + s * 0.05, src: 'bomb' });
         }
       }
+    } else if (id === 'missile' || id === 'swarm') {
+      // 유도탄: 적을 추적하는 미사일 발사 (접촉 시 소형 폭발)
+      const evolved = id === 'swarm';
+      const shots   = evolved ? 5 : 1 + Math.floor(lvlExtra / 2);   // 레벨업 시 2레벨당 +1발
+      const mAoe    = (evolved ? 70 : 50) * (player.rangeBonus || 1) * ((player.equipStats && player.equipStats.rangeBonus) || 1) * lvlRangeMul;
+      const turn    = evolved ? 7.5 : 5.0 + lvlExtra * 0.4;          // 레벨업 시 유도(선회) 성능 향상
+      for (let s = 0; s < shots; s++) {
+        const a0 = Math.random() * Math.PI * 2;                      // 사방으로 흩어진 뒤 추적
+        const spd = evolved ? 360 : 300;
+        projectiles.push({ type: 'missile', x: player.x, y: player.y, vx: Math.cos(a0) * spd, vy: Math.sin(a0) * spd,
+          spd, turn, r: 6, dmg, aoe: mAoe, life: 2.6, evolved, src: 'missile' });
+      }
+      for (let k = 0; k < 4; k++) spawnParticle(player.x, player.y, '#e056fd', 4, 0.25);
+    } else if (id === 'meteor' || id === 'meteorshower') {
+      // 운석: 가장 가까운 적 위치로 하늘에서 운석 낙하 (착탄 시 광역 폭발)
+      const evolved = id === 'meteorshower';
+      const count   = (evolved ? 3 : 1) + Math.floor(lvlExtra / 2);  // 레벨업 시 운석 수 증가
+      const mAoe    = (evolved ? 150 : 110) * (player.rangeBonus || 1) * ((player.equipStats && player.equipStats.rangeBonus) || 1) * lvlRangeMul;
+      for (let s = 0; s < count; s++) {
+        const target = nearestEnemy();
+        const jitter = s === 0 ? 0 : 60 + Math.random() * 80;
+        const ja = Math.random() * Math.PI * 2;
+        const tx = (target ? target.x : player.x + lastMoveDir.dx * range) + Math.cos(ja) * jitter;
+        const ty = (target ? target.y : player.y + lastMoveDir.dy * range) + Math.sin(ja) * jitter;
+        spawnMeteorStrike(tx, ty, dmg, mAoe, evolved, 'meteor', s * 0.12);
+      }
+    } else if (id === 'toxic' || id === 'plague') {
+      // 독성 포자: 가장 가까운 적 위치에 지속 피해 장판 생성
+      const evolved = id === 'plague';
+      const target  = nearestEnemy();
+      const tx = target ? target.x : player.x;
+      const ty = target ? target.y : player.y;
+      const tRange = (evolved ? 95 : 70) * (player.rangeBonus || 1) * ((player.equipStats && player.equipStats.rangeBonus) || 1) * lvlRangeMul;
+      const tLife  = (evolved ? 5.0 : 3.5) + lvlExtra * 0.4;          // 레벨업 시 지속시간 증가
+      toxicFields.push({ x: tx, y: ty, range: tRange, dmg, life: tLife, maxLife: tLife, tickTimer: 0, evolved, spreadCd: 1.2 });
+      rings.push({ x: tx, y: ty, r: 6, maxR: tRange, life: 0.4, maxLife: 0.4, color: evolved ? '#6ab04c' : '#badc58' });
     }
     // 보조 무기 오버레이 효과 — 메인 무기 발사 시마다 각 보조 계열 효과 함께 발동
     if (id === getMainWeapon()) {
@@ -3109,6 +3211,20 @@
         }
       }
     }
+  }
+
+  // 운석 낙하 — 하늘(상단)에서 떨어지는 'meteor' 투사체 생성. 착탄 지점에 텔레그래프 링.
+  //   delay 초 후 낙하 시작 → 연속 운석 연출용
+  function spawnMeteorStrike(tx, ty, dmg, aoe, evolved, src, delay) {
+    delay = delay || 0;
+    projectiles.push({
+      type: 'meteor', x: tx, y: ty - 480, tx, ty,
+      vy: evolved ? 1300 : 1150, r: evolved ? 16 : 12,
+      dmg, aoe, evolved, src: src || 'meteor',
+      delay, life: delay + 1.6,
+    });
+    // 착탄 지점 텔레그래프 링 (낙하 예고)
+    rings.push({ x: tx, y: ty, r: aoe, maxR: 6, life: delay + 0.5, maxLife: delay + 0.5, color: evolved ? '#ff7675' : '#fab1a0' });
   }
 
   function spawnParticle(x, y, color, size, life) {
@@ -3202,6 +3318,46 @@
         const e = enemies[j];
         if (!e || e.dying) continue;
         if (dist(sf, e) < sf.range) dealDamage(e, sf.dmg * dt);
+      }
+    }
+  }
+
+  // 독성 포자/역병 지대 업데이트 — 범위 내 지속 피해 + 중독 부착, 역병은 주기적 확산
+  function updateToxicFields(dt) {
+    for (let i = toxicFields.length - 1; i >= 0; i--) {
+      const tf = toxicFields[i];
+      tf.life -= dt;
+      if (tf.life <= 0) { toxicFields.splice(i, 1); continue; }
+      tf.tickTimer = (tf.tickTimer || 0) + dt;
+      dmgSource = 'toxic';
+      // 초당 dmg 만큼 지속 피해 (도트로 처리 — 무한 중첩 방지)
+      for (let j = enemies.length - 1; j >= 0; j--) {
+        const e = enemies[j];
+        if (!e || e.dying) continue;
+        if (dist(tf, e) < tf.range + e.size) {
+          dealDamage(e, tf.dmg * dt, true, true);
+          // 0.5초마다 중독 부착 (역병은 더 강하게)
+          if (tf.tickTimer >= 0.5 && e.hp > 0) {
+            e.poisonTimer = Math.max(e.poisonTimer || 0, tf.evolved ? 4 : 2.5);
+            e.poisonDmg   = Math.max(e.poisonDmg || 0, tf.dmg * (tf.evolved ? 0.5 : 0.32));
+          }
+        }
+      }
+      if (tf.tickTimer >= 0.5) tf.tickTimer = 0;
+      // 시각 입자
+      if (Math.random() < 0.5) {
+        const pa = Math.random() * Math.PI * 2, pr = Math.random() * tf.range;
+        spawnParticle(tf.x + Math.cos(pa) * pr, tf.y + Math.sin(pa) * pr, tf.evolved ? '#6ab04c' : '#badc58', 3 + Math.random() * 3, 0.4);
+      }
+      // 역병 확산: 주기적으로 인접 위치에 작은 자식 장판 생성 (1회만, 필드 수 제한)
+      if (tf.evolved && tf.life < tf.maxLife - 0.6) {
+        tf.spreadCd -= dt;
+        if (tf.spreadCd <= 0 && toxicFields.length < 24 && !tf._spawned) {
+          tf._spawned = true;
+          const sa = Math.random() * Math.PI * 2;
+          toxicFields.push({ x: tf.x + Math.cos(sa) * tf.range * 0.9, y: tf.y + Math.sin(sa) * tf.range * 0.9,
+            range: tf.range * 0.7, dmg: tf.dmg * 0.7, life: tf.life * 0.7, maxLife: tf.life * 0.7, tickTimer: 0, evolved: false });
+        }
       }
     }
   }
@@ -3323,6 +3479,14 @@
             for (let k = 0; k < 2; k++) spawnParticle(best.x, best.y, '#9b59b6', 4, 0.2);
             cx = best.x; cy = best.y;
           }
+        }
+        // seeker_swarm 시너지: 치명타 시 25% 확률로 유도 미사일 발사
+        //   미사일 자체 피해(dmgSource==='missile')에서는 재발동 금지 — 무한 연쇄 방지
+        if (isCritRoll && !skipChain && dmgSource !== 'missile' && hasSynergy('seeker_swarm') && Math.random() < 0.25) {
+          const a0 = Math.random() * Math.PI * 2;
+          const mAoe = 55 * (player.rangeBonus || 1) * ((player.equipStats && player.equipStats.rangeBonus) || 1);
+          projectiles.push({ type: 'missile', x: player.x, y: player.y, vx: Math.cos(a0) * 320, vy: Math.sin(a0) * 320,
+            spd: 320, turn: 7, r: 6, dmg: dmg * 0.6, aoe: mAoe, life: 2.6, evolved: false, src: 'missile' });
         }
       }
     }
@@ -3449,6 +3613,18 @@
         projectiles.push({ type: 'arc', x: cx, y: cy, tx: best.x, ty: best.y, life: 0.2, dmg: 0 });
         cx = best.x; cy = best.y;
       }
+    }
+    // 천공 세트 4세트: 주 공격마다 일정 확률로 소형 운석 낙하 (celestial_rain)
+    //   운석 피해(dmgSource==='meteor')에서는 재발동 금지 — 무한 연쇄 방지
+    if (sf.celestial_rain && dmgSource !== 'meteor' && Math.random() < 0.10) {
+      spawnMeteorStrike(enemy.x, enemy.y, dmg * 0.7, 80 * rb, false, 'meteor', 0);
+    }
+    // 천공+드래곤 교차: 별똥별 — 운석 낙하 + 화상 (celestial_inferno)
+    if (sf.celestial_inferno && dmgSource !== 'meteor' && Math.random() < 0.14) {
+      spawnMeteorStrike(enemy.x, enemy.y, dmg * 0.9, 100 * rb, true, 'meteor', 0);
+      enemy.burnStacks = Math.min((enemy.burnStacks || 0) + 1, 5);
+      enemy.burnTimer  = Math.max(enemy.burnTimer || 0, 3.0);
+      enemy.burnDmg    = enemy.burnDmg || Math.max(4, dmg * 0.10);
     }
   }
 
@@ -4362,6 +4538,20 @@
     updateSlashEchoes(dt);
     updateRuptures(dt);
     updateSpectralFields(dt);
+    updateToxicFields(dt);
+    // meteor_call 시너지: 7초마다 주변 무작위 위치에 운석 2발 자동 낙하
+    if (hasSynergy('meteor_call')) {
+      meteorCallTimer -= dt;
+      if (meteorCallTimer <= 0) {
+        meteorCallTimer = 7;
+        const mDmg = WEAPON_DEFS.meteor.dmg * player.dmgMult * 1.2;
+        const mAoe = 130 * (player.rangeBonus || 1) * ((player.equipStats && player.equipStats.rangeBonus) || 1);
+        for (let s = 0; s < 2; s++) {
+          const a = Math.random() * Math.PI * 2, r = 60 + Math.random() * 180;
+          spawnMeteorStrike(player.x + Math.cos(a) * r, player.y + Math.sin(a) * r, mDmg, mAoe, true, 'meteor', s * 0.18);
+        }
+      }
+    }
     // 대쉬 잔상 폭발 필드 업데이트 (0.1초마다 DoT 틱)
     for (let i = dashAfterimages.length - 1; i >= 0; i--) {
       const af = dashAfterimages[i];
@@ -4656,6 +4846,49 @@
             if (p.slow && e.hp > 0) e.frozen = Math.max(e.frozen || 0, p.slow);
             projectiles.splice(i, 1);
             break;
+          }
+        }
+      } else if (p.type === 'missile') {
+        // 유도탄: 가장 가까운 적 방향으로 점진적 선회 후 추적, 접촉 시 소형 폭발
+        let tgt = null, td = Infinity;
+        for (const e of enemies) {
+          if (e.dying) continue;
+          const d = dist(p, e);
+          if (d < td) { td = d; tgt = e; }
+        }
+        if (tgt) {
+          const desired = Math.atan2(tgt.y - p.y, tgt.x - p.x);
+          const cur = Math.atan2(p.vy, p.vx);
+          let diff = ((desired - cur + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+          const step = Math.max(-p.turn * dt, Math.min(p.turn * dt, diff));
+          const na = cur + step;
+          p.vx = Math.cos(na) * p.spd;
+          p.vy = Math.sin(na) * p.spd;
+        }
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        if ((p._trail = (p._trail || 0) + dt) > 0.03) { p._trail = 0; spawnParticle(p.x, p.y, p.evolved ? '#ff9ff3' : '#e056fd', 3, 0.22); }
+        for (let j = enemies.length - 1; j >= 0; j--) {
+          const e = enemies[j];
+          if (!e.dying && dist(p, e) < p.r + e.size) {
+            chainExplosions.push({ x: p.x, y: p.y, range: p.aoe, dmg: p.dmg, delay: 0, src: 'missile' });
+            rings.push({ x: p.x, y: p.y, r: 4, maxR: p.aoe, life: 0.2, maxLife: 0.2, color: p.evolved ? '#ff9ff3' : '#e056fd' });
+            projectiles.splice(i, 1);
+            break;
+          }
+        }
+      } else if (p.type === 'meteor') {
+        // 운석: delay 후 낙하 시작 → 착탄 시 광역 폭발
+        if (p.delay > 0) { p.delay -= dt; }
+        else {
+          p.y += p.vy * dt;
+          if (Math.random() < 0.6) spawnParticle(p.x + (Math.random() - 0.5) * 10, p.y - 14, p.evolved ? '#ff7675' : '#fab1a0', 4 + Math.random() * 3, 0.3);
+          if (p.y >= p.ty) {
+            spawnExplosion(p.tx, p.ty, p.aoe, p.dmg, false, p.src || 'meteor');
+            rings.push({ x: p.tx, y: p.ty, r: 8, maxR: p.aoe, life: 0.4, maxLife: 0.4, color: p.evolved ? '#ff7675' : '#e17055' });
+            for (let k = 0; k < (p.evolved ? 16 : 10); k++) spawnParticle(p.tx, p.ty, p.evolved ? '#ff7675' : '#e17055', 5 + Math.random() * 6, 0.5);
+            screenShake = Math.min(screenShake + (p.evolved ? 0.3 : 0.18), 0.6);
+            projectiles.splice(i, 1);
           }
         }
       }
@@ -5246,6 +5479,51 @@
         ctx.quadraticCurveTo(mx, my, p.tx, p.ty);
         ctx.stroke();
         ctx.shadowBlur = 0; ctx.globalAlpha = 1;
+      } else if (p.type === 'missile') {
+        // 유도탄 — 진행 방향으로 향한 로켓 + 발광
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(Math.atan2(p.vy, p.vx));
+        ctx.fillStyle = p.evolved ? '#ff9ff3' : '#e056fd';
+        ctx.shadowBlur = 12; ctx.shadowColor = p.evolved ? '#ff9ff3' : '#be2edd';
+        ctx.beginPath();
+        ctx.moveTo(9, 0); ctx.lineTo(-6, -4); ctx.lineTo(-6, 4);
+        ctx.closePath();
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.restore();
+      } else if (p.type === 'meteor') {
+        if (p.delay > 0) {
+          // 낙하 대기 중 — 착탄 지점에 회전 경고 표식
+          ctx.save();
+          ctx.globalAlpha = 0.6;
+          ctx.strokeStyle = p.evolved ? '#ff7675' : '#fab1a0';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(p.tx, p.ty, 14 + Math.sin(elapsed * 12) * 4, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.globalAlpha = 1;
+          ctx.restore();
+        } else {
+          // 낙하 중 운석 — 불타는 구체 + 꼬리
+          ctx.save();
+          ctx.fillStyle = p.evolved ? '#ff7675' : '#e17055';
+          ctx.shadowBlur = 22; ctx.shadowColor = '#ff7675';
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+          ctx.fill();
+          // 위로 뻗는 화염 꼬리
+          ctx.globalAlpha = 0.4;
+          ctx.beginPath();
+          ctx.moveTo(p.x - p.r, p.y);
+          ctx.lineTo(p.x, p.y - p.r * 3.2);
+          ctx.lineTo(p.x + p.r, p.y);
+          ctx.closePath();
+          ctx.fill();
+          ctx.globalAlpha = 1;
+          ctx.shadowBlur = 0;
+          ctx.restore();
+        }
       }
     }
 
@@ -5512,6 +5790,28 @@
       }
       ctx.restore();
     }
+
+    // 독성 포자/역병 지대 렌더링 — 초록 맥동 장판
+    for (let i = 0; i < toxicFields.length; i++) {
+      const tf = toxicFields[i];
+      const t = Math.min(1, tf.life / Math.max(0.001, tf.maxLife));
+      const baseCol = tf.evolved ? '#6ab04c' : '#badc58';
+      ctx.globalAlpha = Math.min(0.32, t * 0.32 + 0.08);
+      ctx.fillStyle = baseCol;
+      ctx.shadowBlur = 16;
+      ctx.shadowColor = baseCol;
+      ctx.beginPath();
+      ctx.arc(tf.x, tf.y, tf.range * (0.92 + Math.sin(elapsed * 4 + i) * 0.06), 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = Math.min(0.55, t * 0.55);
+      ctx.strokeStyle = tf.evolved ? '#badc58' : '#dff9b0';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(tf.x, tf.y, tf.range, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
+    ctx.globalAlpha = 1;
 
     // spectral_blade 잔향 검기 필드 렌더링 — 보라색 맥동 원
     for (let i = 0; i < spectralFields.length; i++) {
@@ -6087,6 +6387,26 @@
       `<tr><td class="item-icon">${it.icon}</td><td>${it.name}</td></tr>`
     ).join('');
 
+    // 장비 세트 섹션 (장비 시스템 로드 시)
+    let setRows = '';
+    if (window.VPS && window.VPS.equipment && window.VPS.equipment.SET_DEFS) {
+      const eq = window.VPS.equipment;
+      setRows = eq.SET_DEFS.map(set => {
+        const icons = set.pieces.map(pid => {
+          for (const sl of eq.SLOTS) {
+            const it = (eq.SLOT_ITEMS[sl] || []).find(b => b.id === pid);
+            if (it) return it.icon;
+          }
+          return '?';
+        }).join('');
+        return `<tr>
+          <td style="color:${set.color};font-weight:bold;">${set.name}</td>
+          <td style="font-size:1.1em;">${icons}</td>
+          <td class="combo-desc" style="font-size:0.75em;">2: ${set.bonus2.desc}<br>4: ${set.bonus4.desc}</td>
+        </tr>`;
+      }).join('');
+    }
+
     // 시너지 섹션
     let synRows = SYNERGY_DEFS.map(s => {
       const active = hasSynergy(s.id);
@@ -6132,6 +6452,13 @@
           <tbody>${synRows}</tbody>
         </table>
       </div>
+      ${setRows ? `<div class="combo-section">
+        <div class="combo-section-title">🎽 장비 세트 효과</div>
+        <table class="combo-table">
+          <thead><tr><th>세트</th><th>조각</th><th>2·4세트 보너스</th></tr></thead>
+          <tbody>${setRows}</tbody>
+        </table>
+      </div>` : ''}
     `;
   }
 
