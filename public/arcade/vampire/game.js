@@ -472,6 +472,8 @@
   let floatTexts    = [];        // 플로팅 텍스트 (알림, 아이템 이름 등)
   let damageByWeapon = {};       // 무기 계열별 누적 데미지 (전투 기여도 상태창용)
   let dmgSource     = null;      // 현재 데미지 출처 계열 id (dealDamage가 집계에 사용)
+  let bloodMoonTimer  = 150;     // 혈월 이벤트까지 남은 시간(초) — 2.5분 후 첫 발동
+  let bloodMoonActive = 0;       // 혈월 지속 시간 잔여(초, 0이면 비활성)
   let comboCount    = 0;
   let comboTimer    = 0;
   let comboMilestoneIdx = 0;     // 현재 콤보 스트릭에서 지급한 마일스톤 인덱스
@@ -678,6 +680,8 @@
     floatTexts    = [];
     damageByWeapon = {};
     dmgSource     = null;
+    bloodMoonTimer  = 150;
+    bloodMoonActive = 0;
     lowHpAlertCooldown = 0;
     lowHpPulse = 0;
     comboCount    = 0;
@@ -1206,6 +1210,8 @@
       comboBonusCoins,
       milestones: Array.from(milestones),
       waveCount,
+      bloodMoonTimer,
+      bloodMoonActive,
     };
     try {
       localStorage.setItem(RUN_SNAPSHOT_KEY, JSON.stringify(snapshot));
@@ -1284,6 +1290,8 @@
     comboBonusCoins = Number(snapshot.comboBonusCoins) || 0;
     milestones = new Set(Array.isArray(snapshot.milestones) ? snapshot.milestones : []);
     waveCount = Number(snapshot.waveCount) || 0;
+    bloodMoonTimer  = Number(snapshot.bloodMoonTimer)  || 150;
+    bloodMoonActive = Number(snapshot.bloodMoonActive) || 0;
     runRewardsGranted = false;
     currentChoiceBuilder = null;
     freeRerollUsed = false;
@@ -2517,6 +2525,11 @@
     }
   });
   document.addEventListener('keyup', e => { keys[e.key] = false; });
+  // 무기 슬롯 클릭 → 메인 무기 즉시 변경 (E키 없이도 가능)
+  document.getElementById('weaponSlots').addEventListener('click', (ev) => {
+    const slot = ev.target.closest('[data-wid]');
+    if (slot && slot.dataset.wid && state === 'playing') setMainWeapon(slot.dataset.wid);
+  });
   document.addEventListener('visibilitychange', () => {
     if (document.hidden && state === 'playing') setPaused(true);
   });
@@ -2616,10 +2629,15 @@
     waveCount++;
     const isHorde = (waveCount % HORDE_WAVE_EVERY === 0);
     if (isHorde) floatTexts.push({ text: '🔥 HORDE WAVE!', life: 2.0, maxLife: 2.0, screenSpace: true, color: '#e74c3c', size: 20 });
-    // 난이도 곡선: PR#23 기준 — 분(m) 기준 가속 성장 (이차항 완화)
-    //   1분=1.87, 3분=3.97, 5분=6.25, 10분=13.0, 15분=21.75
+    // 난이도 곡선 — 7분 이후 압박 배율 적용으로 급격히 가속
+    //   기본: 1 + 0.9m + 0.06m²  (이차항 2배 강화)
+    //   7분 이후 압박 배율: +10%/스택, 스택 = floor((m-7)×0.65)
+    //   예: 10분 → ×1.1, 15분 → ×1.5, 20분 → ×1.8
+    //   → 7분 미만 플레이어는 거의 영향 없음, 완전 빌드 한계 ~18분 설계
     const m = elapsed / 60;
-    const difficulty = 1 + 0.9 * m + 0.03 * m * m;
+    const pressureStacks = m > 7 ? Math.floor((m - 7) * 0.65) : 0;
+    const pressureMult   = 1 + pressureStacks * 0.10;
+    const difficulty = (1 + 0.9 * m + 0.06 * m * m) * pressureMult;
     // 무한 모드 스케일링 — 체력은 초지수(super-exponential)로 폭증
     //   지수에 2차항을 더해 가속 → 25분(무한 15분)쯤이면 어떤 빌드도 뚫을 수 없는 체력의 벽
     //   플레이어 성장은 로그(감쇠)인데 몬스터 체력은 가속하므로 극후반 생존 한계가 명확
@@ -2692,6 +2710,13 @@
           newEnemy.shield = Math.round(newEnemy.maxHp * (infiniteMode ? 0.55 : 0.4));
           newEnemy.maxShield = newEnemy.shield;
         }
+      }
+      // 혈월 이벤트 중 스폰된 적: 속도·공격력 강화 + XP 2배
+      if (bloodMoonActive > 0) {
+        newEnemy.speed     *= 1.35;
+        newEnemy.attackDmg  = Math.round(newEnemy.attackDmg * 1.30);
+        newEnemy.xpVal      = Math.round(newEnemy.xpVal * 2);
+        newEnemy.bloodMoon  = true;  // 렌더링용 플래그 (붉은 후광)
       }
       enemies.push(newEnemy);
     }
@@ -3085,6 +3110,7 @@
   }
 
   function spawnParticle(x, y, color, size, life) {
+    if (particles.length >= 320) return;  // 렉 방지 파티클 예산
     const angle = Math.random() * Math.PI * 2;
     const spd   = 40 + Math.random() * 80;
     particles.push({ x, y, vx: Math.cos(angle)*spd, vy: Math.sin(angle)*spd, color, size, maxLife: life, life });
@@ -4095,9 +4121,13 @@
       const star = d.evolved ? '✨' : '';
       const maxed = !d.evolved && lvl >= MAX_WEAPON_LEVEL ? ' weapon-maxed' : '';
       const isMain = isWeaponActive(id) && isAttackWeapon(id);
-      const dim = (!isAttackWeapon(id) || isMain) ? '' : 'opacity:0.55;';
+      // 보조 공격 무기는 클릭 가능 (data-wid + 커서 변경)
+      const isAuxAttack = isAttackWeapon(id) && !isMain;
+      const dim = isAuxAttack ? 'opacity:0.55;cursor:pointer;' : '';
       const badge = isMain ? '⭐' : (isAttackWeapon(id) ? '⚙' : '');
-      return `<span class="weapon-slot${d.evolved ? ' weapon-evolved' : ''}${maxed}" style="${dim}">${badge}${star}${d.icon} ${d.name} <b>Lv.${lvl}</b></span>`;
+      const dataWid = isAuxAttack ? ` data-wid="${id}"` : '';
+      const title = isAuxAttack ? ` title="클릭하여 메인 무기로 지정"` : '';
+      return `<span class="weapon-slot${d.evolved ? ' weapon-evolved' : ''}${maxed}"${dataWid}${title} style="${dim}">${badge}${star}${d.icon} ${d.name} <b>Lv.${lvl}</b></span>`;
     }).join('');
     const supportHtml = SLASH_SUPPORT_DEFS
       .filter(def => slashModLevel(def.id) > 0)
@@ -4106,11 +4136,19 @@
     if (supportHtml) el.innerHTML += supportHtml;
   }
 
-  // 메인 무기 지정 (장비창에서 호출) — 공격 무기만 메인으로 지정 가능
+  // 메인 무기 지정 (무기 슬롯 클릭 또는 장비창에서 호출) — 공격 무기만 메인으로 지정 가능
   function setMainWeapon(id) {
     if (!player || !WEAPON_DEFS[id] || !isAttackWeapon(id)) return;
     if (!player.weapons.includes(id)) return;
+    if (player.mainWeapon === id) return;
+    const oldMain = player.mainWeapon;
     player.mainWeapon = id;
+    // 이전 메인이 궤도형(orb/blackhole)이면 잔류 투사체 즉시 제거 — 변경이 즉각 체감되도록
+    if (oldMain === 'orb' || oldMain === 'blackhole') {
+      for (let i = projectiles.length - 1; i >= 0; i--) {
+        if (projectiles[i].type === 'orb' || projectiles[i].type === 'blackhole') projectiles.splice(i, 1);
+      }
+    }
     floatTexts.push({ text: `⭐ ${WEAPON_DEFS[id].name} 메인 지정`, life: 1.8, maxLife: 1.8, screenSpace: true, color: '#f1c40f', size: 16 });
     renderWeaponSlots();
     renderEquipUI();
@@ -4300,9 +4338,28 @@
     // 무적 감소
     if (player.invincible > 0) player.invincible -= dt;
 
-    // 웨이브 생성
+    // 혈월 이벤트 — 2.5분 후 첫 발동, 이후 3분 간격, 15초 지속
+    // 무한 모드는 이미 자체 스케일링이 있으므로 일반 시간에만 발동
+    if (!infiniteMode && elapsed > 60) {
+      if (bloodMoonActive > 0) {
+        bloodMoonActive = Math.max(0, bloodMoonActive - dt);
+      } else {
+        bloodMoonTimer -= dt;
+        if (bloodMoonTimer <= 0) {
+          bloodMoonTimer = 180;
+          bloodMoonActive = 15;
+          floatTexts.push({ text: '🌑 혈월 강림! XP 2배 — 적이 강화됩니다!', life: 3.5, maxLife: 3.5, screenSpace: true, color: '#c0392b', size: 22 });
+          screenShake = Math.min(screenShake + 0.4, 0.8);
+          SFX.boss();
+        }
+      }
+    }
+
+    // 웨이브 생성 — 후반부 파동 간격 단축 (8분 이후 더 빠르게)
+    const _m = elapsed / 60;
+    const _dynWaveInterval = _m > 8 ? Math.max(1.8, WAVE_INTERVAL - (_m - 8) * 0.12) : WAVE_INTERVAL;
     waveTimer += dt;
-    if (waveTimer >= WAVE_INTERVAL) { waveTimer = 0; spawnWave(); }
+    if (waveTimer >= _dynWaveInterval) { waveTimer = 0; spawnWave(); }
 
     // 보스 등장 체크
     if (!bossActive && elapsed >= nextBossTime) {
@@ -5206,8 +5263,8 @@
       const flash = e.hurtFlash > 0;
       const rageActive = e.hp < e.maxHp * 0.3;
       ctx.fillStyle = flash ? '#ffffff' : e.color;
-      ctx.shadowBlur = flash ? 20 : (rageActive ? 14 : 8);
-      ctx.shadowColor = rageActive ? '#ff4500' : e.color;
+      ctx.shadowBlur = flash ? 20 : (rageActive ? 14 : (e.bloodMoon ? 16 : 8));
+      ctx.shadowColor = rageActive ? '#ff4500' : (e.bloodMoon ? '#cc0000' : e.color);
 
       // 적 모양: boss=특수 별형, tier2=육각형, tier1 archer=마름모, tier1=사각형, tier0=원
       if (e.goblin) {
@@ -5664,6 +5721,25 @@
         ctx.fillStyle = `rgba(155,89,182,${splashA})`;
         ctx.fillRect(0, 0, W, H);
       }
+    }
+
+    // 혈월 비네트 — 이벤트 진행 중 화면 가장자리가 붉게 타오름
+    if (bloodMoonActive > 0) {
+      const bmFade = Math.min(1, bloodMoonActive / 2.5);
+      const bmPulse = 0.14 + 0.06 * Math.sin(elapsed * 5);
+      const bmGrad = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.25, W / 2, H / 2, Math.max(W, H) * 0.75);
+      bmGrad.addColorStop(0, 'rgba(0,0,0,0)');
+      bmGrad.addColorStop(1, `rgba(160,0,0,${(bmPulse * bmFade).toFixed(3)})`);
+      ctx.fillStyle = bmGrad;
+      ctx.fillRect(0, 0, W, H);
+      // 혈월 카운트다운 (우하단)
+      ctx.save();
+      ctx.font = 'bold 13px sans-serif';
+      ctx.fillStyle = `rgba(220,80,60,${0.7 + 0.3 * Math.sin(elapsed * 4)})`;
+      ctx.textAlign = 'right';
+      ctx.shadowBlur = 8; ctx.shadowColor = '#c0392b';
+      ctx.fillText(`🌑 혈월 ${Math.ceil(bloodMoonActive)}s`, W - 10, H - 58);
+      ctx.shadowBlur = 0; ctx.restore();
     }
 
     // 콤보 표시 — 단계별 색상·크기·타이틀 변화
