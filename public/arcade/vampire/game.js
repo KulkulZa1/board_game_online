@@ -19,7 +19,7 @@
   const BASE_HP        = 100;
   // 레벨업 필요 XP는 xpNeeded() 의 다항식 곡선으로 계산 (무한 레벨 지원)
   const WAVE_INTERVAL  = 3.5;  // 초마다 적 추가 웨이브 (핵앤슬래시 밀도)
-  const MAX_ENEMIES    = 400;
+  const MAX_ENEMIES    = 650;  // 동시 최대 적 수 (핵앤슬래시 밀도 — 화면을 가득 채움)
   const DASH_COOLDOWN  = 1.8;  // 대쉬 공격 쿨다운(초)
   const DASH_DMG       = 50;   // 대쉬 공격 데미지
   const DASH_RANGE     = 75;   // 대쉬 공격 범위(px)
@@ -435,6 +435,7 @@
   let waveTimer = 0;
   let frameId;
   let camera = { x: 0, y: 0 };
+  let viewScale = 1;           // 시야 배율 (사거리·AoE 증가 시 자동으로 < 1 로 줌아웃)
   let selectedStageIdx = 0;
   let dashCd = 0;              // 대쉬 잔여 쿨다운
   let dashEffect = null;       // 대쉬 슬래시 시각 효과
@@ -645,6 +646,7 @@
     lastKillTime = -1;
     waveTimer  = 0;
     camera     = { x: 0, y: 0 };
+    viewScale  = 1;
     dashCd      = 0;
     dashEffect  = null;
     screenShake = 0;
@@ -2649,9 +2651,9 @@
     // 무한 모드 메가 호드: 35 웨이브마다 (~2분) 대규모 침공
     const megaHorde = infiniteMode && (waveCount % 35 === 0);
     if (megaHorde) floatTexts.push({ text: '🌀 무한 메가 호드!!', life: 3.0, maxLife: 3.0, screenSpace: true, color: '#9b59b6', size: 28 });
-    // 스폰 밀도: PR#23 기준 — 일반 14→70, 호드 35→120 / 무한 모드는 밀도 추가 증가
-    const normalMax = infiniteMode ? Math.min(14 + Math.floor(elapsed / 9), 100) : Math.min(14 + Math.floor(elapsed / 9), 70);
-    const hordeMax  = (isHorde || megaHorde) ? (infiniteMode ? Math.min(50 + Math.floor(elapsed / 7), 220) : Math.min(35 + Math.floor(elapsed / 8), 120)) : normalMax;
+    // 스폰 밀도 — 핵앤슬래시 강화: 일반 20→120, 호드 50→200 / 무한 모드는 밀도 추가 증가
+    const normalMax = infiniteMode ? Math.min(20 + Math.floor(elapsed / 7), 160) : Math.min(20 + Math.floor(elapsed / 7), 120);
+    const hordeMax  = (isHorde || megaHorde) ? (infiniteMode ? Math.min(70 + Math.floor(elapsed / 6), 320) : Math.min(50 + Math.floor(elapsed / 6), 200)) : normalMax;
     const baseCount = Math.ceil(hordeMax * spawnMult);
     for (let i = 0; i < baseCount; i++) {
       if (enemies.length >= MAX_ENEMIES) break;
@@ -2746,7 +2748,7 @@
       spawnT: 0.35,
       behavior: 'goblin',
       goblin: true,
-      goblinLife: 13,      // 13초 내에 처치 못하면 도주
+      goblinLife: 17,      // 17초 내에 처치 못하면 도주 (방향 화살표로 추격 가능)
       attackCd: 0, attackBase: 0, attackRange: 0, attackDmg: 0,
     });
     floatTexts.push({ text: '💰 보물 고블린 출현! 잡아라!', life: 2.4, maxLife: 2.4, screenSpace: true, color: '#f1c40f', size: 20 });
@@ -4090,6 +4092,56 @@
     }
   }
 
+  // 보물 고블린 방향 화살표 — 화면 밖에 있을 때 가장자리에 방향·거리·남은 시간 표시
+  function drawGoblinArrow(W, H) {
+    if (!player) return;
+    const goblin = enemies.find(e => e.goblin || e.behavior === 'goblin');
+    if (!goblin) return;
+    const dx = goblin.x - player.x, dy = goblin.y - player.y;
+    const distToGoblin = Math.hypot(dx, dy);
+    const ang = Math.atan2(dy, dx);
+    const cx = W / 2, cy = H / 2;
+    const margin = 56;
+    // 고블린이 이미 화면 안(여백 안쪽)에 보이면 화살표 생략
+    const gsx = dx * viewScale + cx;
+    const gsy = dy * viewScale + cy;
+    if (gsx > margin && gsx < W - margin && gsy > margin && gsy < H - margin) return;
+    // 화면 가장자리 타원 위에 화살표 배치
+    const rx = (W / 2) - margin, ry = (H / 2) - margin;
+    const ax = cx + Math.cos(ang) * rx;
+    const ay = cy + Math.sin(ang) * ry;
+    const pulse = 0.85 + Math.sin(elapsed * 8) * 0.15;
+    ctx.save();
+    ctx.translate(ax, ay);
+    ctx.rotate(ang);
+    ctx.scale(pulse, pulse);
+    ctx.fillStyle = '#f1c40f';
+    ctx.shadowBlur = 14; ctx.shadowColor = '#f39c12';
+    ctx.beginPath();
+    ctx.moveTo(20, 0);
+    ctx.lineTo(-11, -13);
+    ctx.lineTo(-11, 13);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+    // 라벨: 💰 + 거리 + (도주까지 남은 시간)
+    ctx.save();
+    ctx.fillStyle = '#f1c40f';
+    ctx.font = 'bold 12px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.shadowBlur = 6; ctx.shadowColor = '#000';
+    const tleft = goblin.goblinLife != null ? `  ⏱${Math.ceil(goblin.goblinLife)}s` : '';
+    // 라벨은 화살표보다 약간 안쪽(중심 방향)에 배치해 화면 밖으로 안 나가게
+    const lx = cx + Math.cos(ang) * (rx - 26);
+    const ly = cy + Math.sin(ang) * (ry - 26);
+    ctx.fillText(`💰 ${Math.round(distToGoblin)}${tleft}`, lx, ly);
+    ctx.shadowBlur = 0;
+    ctx.restore();
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
+  }
+
   function renderLowHpWarning(W, H) {
     if (!player || state !== 'playing') return;
     const hpRatio = getPlayerHpRatio();
@@ -4331,9 +4383,16 @@
     // 화면 흔들림 감쇠
     if (screenShake > 0) screenShake = Math.max(0, screenShake - dt * 2.5);
 
-    // 카메라
-    camera.x = player.x - canvas.width  / 2;
-    camera.y = player.y - canvas.height / 2;
+    // 시야 자동 확장 — 사거리·AoE(rangeBonus)가 늘어나면 줌아웃해 더 넓게 보이도록
+    //   effRange 1.0 → scale 1.0, effRange 2.0 → ~0.78, 하한 0.7 (과도한 축소로 적이 안 보이는 것 방지)
+    const _effRange = (player.rangeBonus || 1) * ((player.equipStats && player.equipStats.rangeBonus) || 1);
+    const _targetScale = Math.max(0.7, Math.min(1, 1 / (1 + (_effRange - 1) * 0.32)));
+    // 부드러운 전환 (스냅 방지)
+    viewScale += (_targetScale - viewScale) * Math.min(1, dt * 2.5);
+
+    // 카메라 — 줌아웃 시 더 넓은 월드 영역이 화면에 들어오므로 절반 폭을 viewScale로 보정
+    camera.x = player.x - (canvas.width  / viewScale) / 2;
+    camera.y = player.y - (canvas.height / viewScale) / 2;
 
     // 무적 감소
     if (player.invincible > 0) player.invincible -= dt;
@@ -4407,14 +4466,14 @@
       if (dist(gd, player) < 28) {
         for (let k = 0; k < 8; k++) spawnParticle(gd.x, gd.y, '#f39c12', 4 + Math.random() * 4, 0.4);
         gearDrops.splice(i, 1);
-        // 자동 분해: 현재 장착보다 약한 아이템을 경험치로 즉시 변환
+        // 자동 분해: 빌드 점수가 오르지 않는 아이템(세트 효과 포함 평가)을 경험치로 즉시 변환
         if (autoDismantleEnabled && window.VPS && window.VPS.equipment) {
           const _eq = window.VPS.equipment;
-          const _newPwr = _eq.calcItemPower(gd.item);
           const _curItm = player.equip && player.equip[gd.item.slot];
-          const _curPwr = _curItm ? _eq.calcItemPower(_curItm) : 0;
-          if (_curItm && _newPwr < _curPwr) {
-            const _xpGain = Math.max(1, Math.round(_newPwr / 5));
+          // 빈 슬롯이면 무조건 보관(모달). 장착 중이면 세트 포함 빌드 점수 증가량으로 판정
+          const _delta = _curItm ? _eq.equipPowerDelta(player.equip, gd.item) : 1;
+          if (_curItm && _delta <= 0) {
+            const _xpGain = Math.max(1, Math.round(_eq.calcItemPower(gd.item) / 5));
             gainXP(_xpGain);
             floatTexts.push({ text: `⚗ 자동 분해 +${_xpGain} XP`, life: 1.4, maxLife: 1.4, screenSpace: true, color: '#a78bfa', size: 14 });
             break;
@@ -4870,7 +4929,10 @@
     ctx.restore();
 
     ctx.save();
+    ctx.scale(viewScale, viewScale);
     ctx.translate(-camera.x, -camera.y);
+    // 줌아웃 보정 배율 — 드랍 아이템(XP젬·장비·박스·파워업)에 곱해 화면상 크기를 유지(가시성 보존)
+    const invScale = 1 / viewScale;
 
     // XP 젬 — 가치별 크기·색상·광채 구분
     for (const g of xpGems) {
@@ -4879,7 +4941,7 @@
       const isLarge  = g.val >= 31;
       const isMedium = g.val >= 15;
       const isSmall  = g.val >= 5;
-      const r    = isHuge ? 9 : isLarge ? 7 : isMedium ? 6 : isSmall ? 5 : 3.5;
+      const r    = (isHuge ? 9 : isLarge ? 7 : isMedium ? 6 : isSmall ? 5 : 3.5) * invScale;
       const col  = isHuge ? '#ffd700' : isLarge ? '#f39c12' : isMedium ? '#e67e22' : isSmall ? '#f1c40f' : '#ffe082';
       const glow = isHuge ? '#ffd700' : isLarge ? '#f39c12' : isMedium ? '#e67e22' : '#f1c40f';
       ctx.save();
@@ -4914,6 +4976,7 @@
       const fadeAlpha = Math.min(box.life * 0.4, 1);
       ctx.save();
       ctx.translate(box.x, box.y);
+      ctx.scale(invScale, invScale);   // 줌아웃 보정 — 화면상 크기 유지
       ctx.rotate((box.pulseT || 0) * 0.6);
       ctx.globalAlpha = fadeAlpha * pulse;
       ctx.shadowBlur = 18;
@@ -4943,6 +5006,7 @@
         const gi = _gradeIdx[gd.item.grade] || 0;
         ctx.save();
         ctx.translate(gd.x, gd.y);
+        ctx.scale(invScale, invScale);   // 줌아웃 보정 — 화면상 크기 유지
         ctx.globalAlpha = fade;
         // 등급별 아우라 반경
         const auraR = 12 + gi * 4;
@@ -5014,6 +5078,7 @@
       const fade = Math.min(pu.life * 0.5, 1);
       ctx.save();
       ctx.translate(pu.x, pu.y);
+      ctx.scale(invScale, invScale);   // 줌아웃 보정 — 화면상 크기 유지
       ctx.globalAlpha = fade;
       ctx.shadowBlur = 16;
       ctx.shadowColor = pu.def.color;
@@ -5627,6 +5692,8 @@
 
     // 무기별 데미지 기여도 상태창 (좌상단)
     if (state === 'playing') drawDamagePanel(W, H);
+    // 보물 고블린 방향 화살표 (화면 밖일 때)
+    if (state === 'playing') drawGoblinArrow(W, H);
 
     // 피격 화면 플래시 — 맞은 순간 붉게 번쩍 (즉각적 피드백)
     if (hurtScreenFlash > 0) {
@@ -6211,23 +6278,47 @@
       html += `<div style="margin-top:8px;padding:8px;background:#161d33;border:1px solid #4b5563;border-radius:6px;font-size:10.5px;color:#9ca3af;">위에서 공격 무기를 클릭해 메인으로 지정하세요</div>`;
     }
 
-    // ── 세트 진행도 (장착 조각 수) ──
+    // ── 세트 진행도 — 각 세트의 조각 아이콘을 표시해 무엇을 모아야 하는지 시각화 ──
     if (eq.SET_DEFS) {
+      // 슬롯 전체에서 baseId → {icon, name} 조회용 맵 구성
+      const baseInfo = {};
+      for (const sl of eq.SLOTS) for (const it of (eq.SLOT_ITEMS[sl] || [])) baseInfo[it.id] = it;
       const equippedIds = eq.SLOTS.map(sl => player.equip[sl]).filter(Boolean).map(it => it.baseId);
-      const setRows = [];
-      for (const set of eq.SET_DEFS) {
-        const cnt = set.pieces.filter(p => equippedIds.includes(p)).length;
-        if (cnt === 0) continue;
-        const c2 = cnt >= 2, c4 = cnt >= 4;
-        const bar = `<b style="color:${c4 ? set.color : c2 ? '#2ecc71' : '#9ca3af'};">${cnt}/4</b>`;
-        const b2 = `<span style="color:${c2 ? '#2ecc71' : '#6b7280'};">2:${set.bonus2.desc}</span>`;
-        const b4 = `<span style="color:${c4 ? set.color : '#6b7280'};">4:${set.bonus4.desc}</span>`;
-        setRows.push(`<div style="margin-bottom:2px;">${set.name} ${bar} · ${b2} · ${b4}</div>`);
-      }
-      if (setRows.length) {
-        html += `<div style="margin-top:8px;padding:8px;background:#13182a;border:1px solid #2a3050;border-radius:6px;font-size:10px;line-height:1.6;color:#cbd5e1;"><div style="color:#f1c40f;margin-bottom:3px;">🎽 세트 진행도</div>${setRows.join('')}</div>`;
-      }
+      // 조각을 하나라도 장착한 세트를 먼저, 진행도 높은 순으로 정렬
+      const setRows = eq.SET_DEFS
+        .map(set => ({ set, cnt: set.pieces.filter(p => equippedIds.includes(p)).length }))
+        .sort((a, b) => b.cnt - a.cnt)
+        .map(({ set, cnt }) => {
+          const c2 = cnt >= 2, c4 = cnt >= 4;
+          // 각 조각: 장착=강조, 미장착=흐리게(슬롯명 표시)
+          const slotKor2 = { helm: '투구', armor: '갑옷', boots: '장화', ring: '반지' };
+          const pieceIcons = set.pieces.map(pid => {
+            const info = baseInfo[pid] || { icon: '?', name: pid };
+            const owned = equippedIds.includes(pid);
+            const slotOf = eq.SLOTS.find(sl => (eq.SLOT_ITEMS[sl] || []).some(it => it.id === pid));
+            return `<span title="${info.name} (${slotKor2[slotOf] || ''})" style="display:inline-block;font-size:15px;width:24px;height:24px;line-height:24px;text-align:center;border-radius:5px;margin:0 1px;${owned ? `background:${set.color}33;border:1px solid ${set.color};` : 'opacity:0.32;border:1px dashed #444;filter:grayscale(1);'}">${info.icon}</span>`;
+          }).join('');
+          const headColor = c4 ? set.color : c2 ? '#2ecc71' : (cnt > 0 ? '#cbd5e1' : '#6b7280');
+          const b2 = `<span style="color:${c2 ? '#2ecc71' : '#6b7280'};">${c2 ? '✓' : '○'} 2세트: ${set.bonus2.desc}</span>`;
+          const b4 = `<span style="color:${c4 ? set.color : '#6b7280'};">${c4 ? '✓' : '○'} 4세트: ${set.bonus4.desc}</span>`;
+          // 다음 보너스까지 필요한 조각 수 힌트
+          let hint = '';
+          if (cnt > 0 && cnt < 2) hint = ` <span style="color:#f39c12;">(2세트까지 ${2 - cnt}개)</span>`;
+          else if (cnt >= 2 && cnt < 4) hint = ` <span style="color:#f39c12;">(4세트까지 ${4 - cnt}개)</span>`;
+          return `<div style="margin-bottom:6px;padding-bottom:5px;border-bottom:1px solid #1c2236;">
+            <div style="margin-bottom:3px;"><b style="color:${headColor};">${set.name} ${cnt}/4</b>${hint}</div>
+            <div style="margin-bottom:3px;">${pieceIcons}</div>
+            <div style="font-size:9.5px;line-height:1.5;">${b2}<br>${b4}</div>
+          </div>`;
+        });
+      html += `<div style="margin-top:8px;padding:9px;background:#13182a;border:1px solid #2a3050;border-radius:6px;font-size:10px;color:#cbd5e1;"><div style="color:#f1c40f;margin-bottom:5px;font-size:11px;">🎽 세트 도감 — 같은 세트 조각을 모아 보너스 활성화</div>${setRows.join('')}</div>`;
     }
+
+    // ── 자동 분해 토글 (E키 창에서 켜고 끌 수 있도록) ──
+    html += `<div style="margin-top:8px;padding:8px;background:#1a1230;border:1px solid #4a2d6e;border-radius:6px;font-size:11px;color:#d7bfff;display:flex;align-items:center;justify-content:space-between;">
+      <span>⚗ 자동 분해 <span style="color:#9a86c4;font-size:9.5px;">(빌드 점수가 안 오르는 장비를 자동으로 XP 변환)</span></span>
+      <button id="equipAutoDismantleToggle" style="background:${autoDismantleEnabled ? '#7c3aed' : '#374151'};border:none;color:#fff;padding:5px 12px;border-radius:6px;cursor:pointer;font-size:11px;font-weight:bold;">${autoDismantleEnabled ? 'ON' : 'OFF'}</button>
+    </div>`;
 
     return html;
   }
@@ -6248,10 +6339,15 @@
       panel.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><strong>⚔ 장비 창 (E키)</strong><button id="equipClose" style="background:none;border:none;color:#fff;font-size:20px;cursor:pointer;">✕</button></div><div id="equipBody"></div>`;
       document.body.appendChild(panel);
       document.getElementById('equipClose').addEventListener('click', () => { equipUiVisible = true; toggleEquipUI(); });
-      // 메인 무기 지정 — equipBody 에 위임 핸들러 (innerHTML 교체돼도 유지)
+      // equipBody 위임 핸들러 (innerHTML 교체돼도 유지) — 메인 무기 지정 + 자동 분해 토글
       document.getElementById('equipBody').addEventListener('click', (ev) => {
         const btn = ev.target.closest('.weapon-toggle');
-        if (btn && btn.dataset.wid) setMainWeapon(btn.dataset.wid);
+        if (btn && btn.dataset.wid) { setMainWeapon(btn.dataset.wid); return; }
+        if (ev.target.closest('#equipAutoDismantleToggle')) {
+          autoDismantleEnabled = !autoDismantleEnabled;
+          floatTexts.push({ text: autoDismantleEnabled ? '⚗ 자동 분해 ON' : '⚗ 자동 분해 OFF', life: 1.6, maxLife: 1.6, screenSpace: true, color: '#d7bfff', size: 15 });
+          renderEquipUI();
+        }
       });
     }
     panel.style.display = equipUiVisible ? 'block' : 'none';
@@ -6283,10 +6379,18 @@
     const curGrade = curItem ? eq.getGradeData(curItem.grade) : null;
     const curStats = curItem ? eq.getEquipStats(curItem) : {};
 
-    // 전투력 비교
+    // 전투력 비교 (단일 아이템 점수 + 세트 효과 포함 빌드 점수 증감)
     const newPower = eq.calcItemPower(item);
     const curPower = curItem ? eq.calcItemPower(curItem) : 0;
-    const isWeaker = curItem && newPower < curPower;
+    // 빌드 점수 증가량 — 세트 완성/해제까지 반영. 빈 슬롯이면 항상 업그레이드로 취급
+    const buildDelta = curItem ? eq.equipPowerDelta(player.equip, item) : (newPower || 1);
+    const isWeaker = curItem && buildDelta <= 0;
+    // 세트 변화 미리보기 — 이 아이템을 끼웠을 때 활성화되는 세트 보너스 안내
+    const _testMap = Object.assign({}, player.equip); _testMap[item.slot] = item;
+    const curSetDescs = new Set(eq.getActiveBonusDescriptions(player.equip));
+    const newSetLines = eq.getActiveBonusDescriptions(_testMap);
+    const gainedSetLines = newSetLines.filter(l => !curSetDescs.has(l));
+    const lostSetLines = Array.from(curSetDescs).filter(l => !newSetLines.includes(l));
 
     const slotKor = { helm: '투구', armor: '갑옷', boots: '장화', ring: '반지' }[item.slot] || item.slot;
     const gemIcons = (item.gems || []).map(g => g.icon || '').join(' ');
@@ -6353,10 +6457,17 @@
       modal.style.cssText = 'display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#111827;border:2px solid #39445a;border-radius:12px;padding:14px;z-index:950;max-width:420px;width:96%;color:#fff;font-family:sans-serif;max-height:90vh;overflow-y:auto;';
       document.body.appendChild(modal);
     }
-    // 전투력 델타 표시
-    const pwrDiff = newPower - curPower;
+    // 전투력 델타 표시 — 세트 효과를 포함한 빌드 점수 증감 기준
+    const pwrDiff = curItem ? buildDelta : newPower;
     const pwrColor = pwrDiff > 0 ? '#2ecc71' : pwrDiff < 0 ? '#e74c3c' : '#9ca3af';
     const pwrDiffStr = pwrDiff > 0 ? `▲ +${pwrDiff}` : pwrDiff < 0 ? `▼ ${pwrDiff}` : '=';
+    // 세트 변화 안내 박스 (획득/해제 세트 보너스가 있을 때만)
+    let setChangeHtml = '';
+    if (gainedSetLines.length || lostSetLines.length) {
+      const gain = gainedSetLines.map(l => `<div style="color:#2ecc71;">▲ 세트 활성: ${l}</div>`).join('');
+      const lose = lostSetLines.map(l => `<div style="color:#e74c3c;">▼ 세트 해제: ${l}</div>`).join('');
+      setChangeHtml = `<div style="background:#0d1628;border:1px solid #2a3050;border-radius:6px;padding:7px 9px;margin-bottom:12px;font-size:10.5px;line-height:1.6;">${gain}${lose}</div>`;
+    }
     modal.innerHTML = `
       <div style="font-size:10px;color:#9ca3af;letter-spacing:1px;text-transform:uppercase;text-align:center;margin-bottom:10px;">⚔ ${slotKor} 비교</div>
       <div style="display:grid;grid-template-columns:1fr 22px 1fr;gap:5px;align-items:center;margin-bottom:10px;">
@@ -6379,10 +6490,12 @@
           <div style="color:${grade.color};font-size:0.75em;font-weight:bold;">[${grade.name}]</div>
           <div style="font-size:0.72em;color:#ccc;">${base.name}</div>
           ${gemIcons ? `<div style="font-size:11px;margin-top:2px;">${gemIcons}</div>` : ''}
-          <div style="font-size:0.7em;color:${pwrColor};margin-top:2px;font-weight:bold;">전투력 ${newPower} <span style="font-size:0.85em;">${pwrDiffStr}</span></div>
+          <div style="font-size:0.7em;color:#9ca3af;margin-top:2px;">전투력 ${newPower}</div>
+          <div style="font-size:0.72em;color:${pwrColor};font-weight:bold;">빌드 ${pwrDiffStr}</div>
         </div>
       </div>
       <div style="background:#0d1117;border-radius:6px;padding:8px;margin-bottom:12px;font-size:11px;">${deltaRows}</div>
+      ${setChangeHtml}
       ${gemEffectLines.length ? `<div style="background:#1a1230;border:1px solid #4a2d6e;border-radius:6px;padding:7px 9px;margin-bottom:12px;font-size:10.5px;line-height:1.5;color:#d7bfff;">${gemEffectLines.map(l => `<div>${l}</div>`).join('')}</div>` : ''}
       <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
         <button id="gearEquip" style="background:#2563eb;border:none;color:#fff;padding:8px 18px;border-radius:8px;cursor:pointer;font-size:13px;"><strong>[1]</strong> 장착</button>

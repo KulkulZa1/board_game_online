@@ -233,6 +233,44 @@
     return Math.round(power);
   }
 
+  // 세트/교차 보너스를 전투력 점수로 환산 (calcItemPower 와 동일 척도)
+  //   단일 아이템 점수에는 세트 효과가 안 잡히므로, 빌드 전체 점수 계산에 합산한다.
+  function calcSetBonusPower(equipMap) {
+    let power = 0;
+    for (const e of getActiveSetEffects(equipMap)) {
+      const b = e.bonus;
+      if (b.effect === 'dmgMult')        power += (b.val - 1) * 1000;
+      else if (b.effect === 'cdMult')    power += (1 - b.val) * 800;
+      else if (b.effect === 'speedMult') power += (b.val - 1) * 250;
+      else if (b.effect === 'maxHp')     power += b.val * 1.5;
+      else                               power += (e.level === 4 ? 360 : 220); // 특수 효과(번개 폭발 등)
+    }
+    // 교차 시너지: 각 250점
+    power += getActiveCrossEffects(equipMap).length * 250;
+    return Math.round(power);
+  }
+
+  // 빌드 전체 전투력 — 각 장비 점수 합 + 세트/교차 보너스 점수
+  //   업그레이드/자동분해 판정은 "이 아이템을 끼웠을 때 빌드 점수가 오르는가"로 평가해야
+  //   세트 완성 직전의 약한 조각이 자동분해되는 버그를 막을 수 있다.
+  function calcBuildPower(equipMap) {
+    let power = 0;
+    for (const slot of SLOTS) {
+      if (equipMap[slot]) power += calcItemPower(equipMap[slot]);
+    }
+    return power + calcSetBonusPower(equipMap);
+  }
+
+  // 특정 아이템을 해당 슬롯에 장착했을 때 빌드 점수 증가량 (세트 효과 포함)
+  //   양수면 업그레이드, 0 이하면 분해 후보
+  function equipPowerDelta(equipMap, item) {
+    if (!item) return 0;
+    const cur = calcBuildPower(equipMap);
+    const testMap = Object.assign({}, equipMap);
+    testMap[item.slot] = item;
+    return calcBuildPower(testMap) - cur;
+  }
+
   // Returns which set bonuses are active given current equip map {helm,armor,boots,ring}
   function getActiveSetEffects(equipMap) {
     const active = [];
@@ -336,5 +374,8 @@
     gemEffectDesc,
     itemDisplayName,
     calcItemPower,
+    calcSetBonusPower,
+    calcBuildPower,
+    equipPowerDelta,
   };
 })();
