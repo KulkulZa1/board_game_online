@@ -19,7 +19,7 @@
   const BASE_HP        = 100;
   // 레벨업 필요 XP는 xpNeeded() 의 다항식 곡선으로 계산 (무한 레벨 지원)
   const WAVE_INTERVAL  = 3.5;  // 초마다 적 추가 웨이브 (핵앤슬래시 밀도)
-  const MAX_ENEMIES    = 400;
+  const MAX_ENEMIES    = 650;  // 동시 최대 적 수 (핵앤슬래시 밀도 — 화면을 가득 채움)
   const DASH_COOLDOWN  = 1.8;  // 대쉬 공격 쿨다운(초)
   const DASH_DMG       = 50;   // 대쉬 공격 데미지
   const DASH_RANGE     = 75;   // 대쉬 공격 범위(px)
@@ -46,6 +46,9 @@
     chain:     { name: '번개 사슬',  icon: '🔗', desc: '최대 3연쇄 즉시 타격 번개',        dmg: 68, cd: 1.3,  range: 240 },
     scythe:    { name: '낫',         icon: '🌾', desc: '전방 부채꼴 광역 베기',            dmg: 44, cd: 0.7,  range: 115 },
     bomb:      { name: '폭탄',       icon: '💣', desc: '튕기는 폭탄, 접촉/시한 폭발',      dmg: 80, cd: 1.5,  range: 150 },
+    missile:   { name: '유도탄',     icon: '🚀', desc: '적을 추적하는 유도 미사일',        dmg: 40, cd: 0.85, range: 340 },
+    meteor:    { name: '운석',       icon: '☄', desc: '하늘에서 운석 낙하, 광역 폭발',     dmg: 72, cd: 1.6,  range: 270 },
+    toxic:     { name: '독성 포자',  icon: '☣', desc: '독성 장판 생성, 지속 피해+중독',    dmg: 22, cd: 2.2,  range: 240 },
     // ── 진화 무기 (evolved) — 기본 무기 최대레벨 + 필요 패시브로 진화 ──
     blackhole: { name: '블랙홀',    icon: '🌀', desc: '적·투사체를 빨아들여 가두는 사건의 지평선', dmg: 48, cd: 0.55, range: 130, evolved: true },
     stormbow:  { name: '폭풍의 활', icon: '🌩', desc: '5연발 강화 관통 화살',        dmg: 42, cd: 0.38, range: 380, evolved: true },
@@ -56,6 +59,9 @@
     tempest:   { name: '폭풍 사슬', icon: '⛈',  desc: '5연쇄 번개, 적 빙결',         dmg: 98, cd: 1.1,  range: 280, evolved: true },
     reaper:    { name: '사신의 낫', icon: '☠',  desc: '360° 회전 베기, 적 흡입',     dmg: 62, cd: 0.5,  range: 150, evolved: true },
     inferno:   { name: '인페르노', icon: '🔥',  desc: '5발 분열 화염 폭탄',          dmg: 70, cd: 1.2,  range: 175, evolved: true },
+    swarm:     { name: '군집 미사일', icon: '🛰', desc: '5연발 유도 미사일, 강화 폭발', dmg: 36, cd: 0.55, range: 380, evolved: true },
+    meteorshower:{ name: '유성우', icon: '🌠',  desc: '3연속 운석 낙하, 초광역 폭발', dmg: 96, cd: 1.7,  range: 320, evolved: true },
+    plague:    { name: '역병 지대', icon: '🦠', desc: '확산되는 맹독 지대, 강력한 중독', dmg: 30, cd: 2.0,  range: 270, evolved: true },
   };
 
   // 무기 레벨업 시 강화되는 부가 효과 설명 (계열 기준) — 레벨업 선택지 표시용
@@ -69,6 +75,9 @@
     chain:     '연쇄 +1(2레벨)·사거리 증가',
     scythe:    '베기 범위·부채꼴 각도 확대',
     bomb:      '폭발 범위 확대·분열 수 증가',
+    missile:   '발사 수 +1(2레벨)·유도 성능 향상',
+    meteor:    '운석 수 +1·폭발 범위 확대',
+    toxic:     '장판 범위·지속시간 증가',
   };
 
   // 진화 규칙: base 무기가 최대 레벨 + req 패시브 보유 시 evolved(id) 무기로 진화
@@ -82,6 +91,9 @@
     { id: 'tempest',   base: 'chain',     req: 'pierce_up', reqName: '🔱 관통 강화' },
     { id: 'reaper',    base: 'scythe',    req: 'lifesteal', reqName: '🩸 흡혈' },
     { id: 'inferno',   base: 'bomb',      req: 'ignite',    reqName: '🔥 화염 부착' },
+    { id: 'swarm',     base: 'missile',   req: 'crit',      reqName: '⚡ 치명타' },
+    { id: 'meteorshower', base: 'meteor', req: 'range_up',  reqName: '🎯 사거리 확장' },
+    { id: 'plague',    base: 'toxic',     req: 'venom',     reqName: '☠ 맹독' },
   ];
 
   // 메인+보조 무기 시스템 — 메인 무기 1개만 독립 발사, 나머지 공격 무기는 보조
@@ -99,6 +111,9 @@
     chain: 'chain', tempest: 'chain',
     scythe: 'scythe', reaper: 'scythe',
     bomb: 'bomb', inferno: 'bomb',
+    missile: 'missile', swarm: 'missile',
+    meteor: 'meteor', meteorshower: 'meteor',
+    toxic: 'toxic', plague: 'toxic',
   };
 
   // 투사체 type → 무기 계열 (데미지 출처 집계용 — src 미지정 시 fallback)
@@ -106,6 +121,7 @@
     orb: 'orb', blackhole: 'orb',
     arrow: 'arrow', boomerang: 'boomerang',
     laser: 'laser', deathray: 'laser',
+    missile: 'missile', meteor: 'meteor',
   };
 
   // 데미지 출처 계열 → 표시 라벨 (전투 기여도 상태창)
@@ -113,6 +129,7 @@
     orb: '🔵 에너지 구', arrow: '🏹 화살', nova: '💥 폭발', shield: '🛡 방패',
     laser: '⚡ 레이저', boomerang: '🪃 부메랑', chain: '🔗 번개 사슬',
     scythe: '🌾 낫', bomb: '💣 폭탄', dash: '💨 대쉬', dot: '🔥 지속 피해',
+    missile: '🚀 유도탄', meteor: '☄ 운석', toxic: '☣ 독성',
     etc: '✦ 기타',
   };
 
@@ -128,6 +145,9 @@
     scythe:    { icon: '🌾', name: '검기 방출',   desc: '주 공격 80% 확률 부채꼴 베기 (50% 피해)',    proc: 0.8 },
     arrow:     { icon: '🏹', name: '추격 화살',   desc: '주 공격 70% 확률 추가 관통 화살 (50%)',      proc: 0.7 },
     shield:    { icon: '🛡', name: '방어 증폭',   desc: '주 공격마다 0.5초 피해 30% 감소',           proc: 1.0 },
+    missile:   { icon: '🚀', name: '유도 탄두',   desc: '주 공격 60% 확률 유도 미사일 1발 (55% 피해)', proc: 0.6 },
+    meteor:    { icon: '☄', name: '운석 강타',   desc: '주 공격 45% 확률 소형 운석 낙하 (60% 피해)',  proc: 0.45 },
+    toxic:     { icon: '☣', name: '독성 분출',   desc: '주 공격마다 독성 장판 생성',                 proc: 1.0 },
   };
 
   // 패시브(능력치) 업그레이드 — 진화 재료로도 사용됨
@@ -217,6 +237,18 @@
       desc: '낫 계열 적중 위치에 0.8초 잔향 검기 생성 (데미지 60%)',
       requires: [{ id: 'lifesteal', count: 2 }, { id: 'range_up', count: 3 }],
     },
+    {
+      id: 'seeker_swarm',
+      name: '추적 본능', icon: '🛰',
+      desc: '치명타 발동 시 25% 확률로 유도 미사일 추가 발사',
+      requires: [{ id: 'crit', count: 3 }, { id: 'cd_up', count: 2 }],
+    },
+    {
+      id: 'meteor_call',
+      name: '천체 강림', icon: '☄',
+      desc: '7초마다 주변 무작위 위치에 운석 2발 자동 낙하',
+      requires: [{ id: 'dmg_up', count: 4 }, { id: 'range_up', count: 2 }],
+    },
   ];
 
   // 신규 획득 가능한 기본 무기 목록
@@ -225,7 +257,7 @@
     { id: 'rupture', name: 'Rupture Mark', desc: 'Dash-hit enemies bleed, then burst when killed.', max: 3 },
     { id: 'echo',    name: 'Echo Step',    desc: 'Dash leaves delayed after-slashes along your path.', max: 3 },
   ];
-  const WEAPON_POOL = ['orb', 'arrow', 'nova', 'shield', 'laser', 'boomerang', 'chain', 'scythe', 'bomb'];
+  const WEAPON_POOL = ['orb', 'arrow', 'nova', 'shield', 'laser', 'boomerang', 'chain', 'scythe', 'bomb', 'missile', 'meteor', 'toxic'];
   const META_KEY = 'vps_meta_v2';
   const RUN_SNAPSHOT_KEY = 'vps_run_snapshot_v1';
   const RUN_SNAPSHOT_MAX_AGE_MS = 36 * 60 * 60 * 1000;
@@ -339,6 +371,16 @@
     { id: 'power',   icon: '🎯', name: '정밀 조준',   apply: (p) => { p.tempDmgMult  = 1.5; p.tempDmgTimer  = 20; } },
     { id: 'hpmax',   icon: '❤',  name: '체력 강화',   apply: (p) => { p.maxHp += 30; p.hp = Math.min(p.hp + 30, p.maxHp); } },
     { id: 'dmgperm', icon: '✨', name: '공격력 강화', apply: (p) => { p.dmgMult *= 1.2; } },
+    { id: 'meteorrain', icon: '🌠', name: '운석 세례', apply: (p) => {
+        // 플레이어 주변에 운석 14발을 시차를 두고 낙하 (화면 정리 + 연출)
+        const dmg = WEAPON_DEFS.meteor.dmg * p.dmgMult * 1.5;
+        const aoe = 120 * (p.rangeBonus || 1) * ((p.equipStats && p.equipStats.rangeBonus) || 1);
+        for (let _i = 0; _i < 14; _i++) {
+          const _a = Math.random() * Math.PI * 2, _r = Math.random() * 320;
+          spawnMeteorStrike(player.x + Math.cos(_a) * _r, player.y + Math.sin(_a) * _r, dmg, aoe, true, 'meteor', _i * 0.07);
+        }
+      }
+    },
     { id: 'nuke',    icon: '💥', name: '핵폭탄',      apply: ()  => {
         spawnExplosion(player.x, player.y, 230, 120 * player.dmgMult, false, 'etc');
         for (let _i = 0; _i < 3; _i++) {
@@ -435,6 +477,7 @@
   let waveTimer = 0;
   let frameId;
   let camera = { x: 0, y: 0 };
+  let viewScale = 1;           // 시야 배율 (사거리·AoE 증가 시 자동으로 < 1 로 줌아웃)
   let selectedStageIdx = 0;
   let dashCd = 0;              // 대쉬 잔여 쿨다운
   let dashEffect = null;       // 대쉬 슬래시 시각 효과
@@ -458,6 +501,8 @@
   let infiniteDialogShown = false; // 무한 모드 다이얼로그 표시 여부
   let infiniteElapsed = 0;       // 무한 모드 경과 시간(초)
   let spectralFields = [];       // spectral_blade 잔향 검기 필드
+  let toxicFields = [];          // 독성 포자/역병 지대 — 지속 피해 장판
+  let meteorCallTimer = 7;       // meteor_call 시너지 자동 운석 낙하 타이머
   let killStreakTimestamps = [];  // cascade_collapse: 5초 내 처치 타임스탬프
   let dashChainWindow = 0;       // 연쇄 대쉬 가능 잔여 시간 (첫 대쉬 적중 후 1초)
   let dashChainCount = 0;        // 현재 연쇄 대쉬 횟수 (최대 2)
@@ -472,6 +517,8 @@
   let floatTexts    = [];        // 플로팅 텍스트 (알림, 아이템 이름 등)
   let damageByWeapon = {};       // 무기 계열별 누적 데미지 (전투 기여도 상태창용)
   let dmgSource     = null;      // 현재 데미지 출처 계열 id (dealDamage가 집계에 사용)
+  let bloodMoonTimer  = 150;     // 혈월 이벤트까지 남은 시간(초) — 2.5분 후 첫 발동
+  let bloodMoonActive = 0;       // 혈월 지속 시간 잔여(초, 0이면 비활성)
   let comboCount    = 0;
   let comboTimer    = 0;
   let comboMilestoneIdx = 0;     // 현재 콤보 스트릭에서 지급한 마일스톤 인덱스
@@ -643,6 +690,7 @@
     lastKillTime = -1;
     waveTimer  = 0;
     camera     = { x: 0, y: 0 };
+    viewScale  = 1;
     dashCd      = 0;
     dashEffect  = null;
     screenShake = 0;
@@ -666,6 +714,8 @@
     infiniteDialogShown = false;
     infiniteElapsed = 0;
     spectralFields = [];
+    toxicFields = [];
+    meteorCallTimer = 7;
     killStreakTimestamps = [];
     dashChainWindow = 0;
     dashChainCount = 0;
@@ -678,6 +728,8 @@
     floatTexts    = [];
     damageByWeapon = {};
     dmgSource     = null;
+    bloodMoonTimer  = 150;
+    bloodMoonActive = 0;
     lowHpAlertCooldown = 0;
     lowHpPulse = 0;
     comboCount    = 0;
@@ -976,6 +1028,21 @@
         case 'shield':
           player._auxShieldTime = (player._auxShieldTime || 0) + 0.5;
           break;
+        case 'missile': {
+          // 보조: 유도 미사일 1발 발사
+          const a0 = Math.random() * Math.PI * 2;
+          projectiles.push({ type: 'missile', x: player.x, y: player.y, vx: Math.cos(a0) * 300, vy: Math.sin(a0) * 300,
+            spd: 300, turn: 5.5, r: 6, dmg: baseDmg * 0.55, aoe: 50 * rng, life: 2.4, evolved: false, src: 'missile' });
+          break;
+        }
+        case 'meteor':
+          // 보조: 대상 위치에 소형 운석 낙하
+          spawnMeteorStrike(tx, ty, baseDmg * 0.60, 80 * rng, false, 'meteor', 0);
+          break;
+        case 'toxic':
+          // 보조: 대상 위치에 소형 독성 장판 생성
+          toxicFields.push({ x: tx, y: ty, range: 55 * rng, dmg: baseDmg * 0.25, life: 2.2, maxLife: 2.2, tickTimer: 0, evolved: false });
+          break;
       }
     }
   }
@@ -1206,6 +1273,8 @@
       comboBonusCoins,
       milestones: Array.from(milestones),
       waveCount,
+      bloodMoonTimer,
+      bloodMoonActive,
     };
     try {
       localStorage.setItem(RUN_SNAPSHOT_KEY, JSON.stringify(snapshot));
@@ -1257,6 +1326,9 @@
     xpGems = Array.isArray(snapshot.xpGems) ? snapshot.xpGems : [];
     particles = [];
     chainExplosions = [];
+    toxicFields = [];
+    spectralFields = [];
+    meteorCallTimer = 7;
     itemBoxes = Array.isArray(snapshot.itemBoxes) ? snapshot.itemBoxes : [];
     hybridTowers = Array.isArray(snapshot.hybridTowers) ? snapshot.hybridTowers : [];
     slashEchoes = Array.isArray(snapshot.slashEchoes) ? snapshot.slashEchoes : [];
@@ -1284,6 +1356,8 @@
     comboBonusCoins = Number(snapshot.comboBonusCoins) || 0;
     milestones = new Set(Array.isArray(snapshot.milestones) ? snapshot.milestones : []);
     waveCount = Number(snapshot.waveCount) || 0;
+    bloodMoonTimer  = Number(snapshot.bloodMoonTimer)  || 150;
+    bloodMoonActive = Number(snapshot.bloodMoonActive) || 0;
     runRewardsGranted = false;
     currentChoiceBuilder = null;
     freeRerollUsed = false;
@@ -2517,6 +2591,11 @@
     }
   });
   document.addEventListener('keyup', e => { keys[e.key] = false; });
+  // 무기 슬롯 클릭 → 메인 무기 즉시 변경 (E키 없이도 가능)
+  document.getElementById('weaponSlots').addEventListener('click', (ev) => {
+    const slot = ev.target.closest('[data-wid]');
+    if (slot && slot.dataset.wid && state === 'playing') setMainWeapon(slot.dataset.wid);
+  });
   document.addEventListener('visibilitychange', () => {
     if (document.hidden && state === 'playing') setPaused(true);
   });
@@ -2616,10 +2695,15 @@
     waveCount++;
     const isHorde = (waveCount % HORDE_WAVE_EVERY === 0);
     if (isHorde) floatTexts.push({ text: '🔥 HORDE WAVE!', life: 2.0, maxLife: 2.0, screenSpace: true, color: '#e74c3c', size: 20 });
-    // 난이도 곡선: PR#23 기준 — 분(m) 기준 가속 성장 (이차항 완화)
-    //   1분=1.87, 3분=3.97, 5분=6.25, 10분=13.0, 15분=21.75
+    // 난이도 곡선 — 7분 이후 압박 배율 적용으로 급격히 가속
+    //   기본: 1 + 0.9m + 0.06m²  (이차항 2배 강화)
+    //   7분 이후 압박 배율: +10%/스택, 스택 = floor((m-7)×0.65)
+    //   예: 10분 → ×1.1, 15분 → ×1.5, 20분 → ×1.8
+    //   → 7분 미만 플레이어는 거의 영향 없음, 완전 빌드 한계 ~18분 설계
     const m = elapsed / 60;
-    const difficulty = 1 + 0.9 * m + 0.03 * m * m;
+    const pressureStacks = m > 7 ? Math.floor((m - 7) * 0.65) : 0;
+    const pressureMult   = 1 + pressureStacks * 0.10;
+    const difficulty = (1 + 0.9 * m + 0.06 * m * m) * pressureMult;
     // 무한 모드 스케일링 — 체력은 초지수(super-exponential)로 폭증
     //   지수에 2차항을 더해 가속 → 25분(무한 15분)쯤이면 어떤 빌드도 뚫을 수 없는 체력의 벽
     //   플레이어 성장은 로그(감쇠)인데 몬스터 체력은 가속하므로 극후반 생존 한계가 명확
@@ -2631,9 +2715,9 @@
     // 무한 모드 메가 호드: 35 웨이브마다 (~2분) 대규모 침공
     const megaHorde = infiniteMode && (waveCount % 35 === 0);
     if (megaHorde) floatTexts.push({ text: '🌀 무한 메가 호드!!', life: 3.0, maxLife: 3.0, screenSpace: true, color: '#9b59b6', size: 28 });
-    // 스폰 밀도: PR#23 기준 — 일반 14→70, 호드 35→120 / 무한 모드는 밀도 추가 증가
-    const normalMax = infiniteMode ? Math.min(14 + Math.floor(elapsed / 9), 100) : Math.min(14 + Math.floor(elapsed / 9), 70);
-    const hordeMax  = (isHorde || megaHorde) ? (infiniteMode ? Math.min(50 + Math.floor(elapsed / 7), 220) : Math.min(35 + Math.floor(elapsed / 8), 120)) : normalMax;
+    // 스폰 밀도 — 핵앤슬래시 강화: 일반 20→120, 호드 50→200 / 무한 모드는 밀도 추가 증가
+    const normalMax = infiniteMode ? Math.min(20 + Math.floor(elapsed / 7), 160) : Math.min(20 + Math.floor(elapsed / 7), 120);
+    const hordeMax  = (isHorde || megaHorde) ? (infiniteMode ? Math.min(70 + Math.floor(elapsed / 6), 320) : Math.min(50 + Math.floor(elapsed / 6), 200)) : normalMax;
     const baseCount = Math.ceil(hordeMax * spawnMult);
     for (let i = 0; i < baseCount; i++) {
       if (enemies.length >= MAX_ENEMIES) break;
@@ -2693,6 +2777,13 @@
           newEnemy.maxShield = newEnemy.shield;
         }
       }
+      // 혈월 이벤트 중 스폰된 적: 속도·공격력 강화 + XP 2배
+      if (bloodMoonActive > 0) {
+        newEnemy.speed     *= 1.35;
+        newEnemy.attackDmg  = Math.round(newEnemy.attackDmg * 1.30);
+        newEnemy.xpVal      = Math.round(newEnemy.xpVal * 2);
+        newEnemy.bloodMoon  = true;  // 렌더링용 플래그 (붉은 후광)
+      }
       enemies.push(newEnemy);
     }
   }
@@ -2721,7 +2812,7 @@
       spawnT: 0.35,
       behavior: 'goblin',
       goblin: true,
-      goblinLife: 13,      // 13초 내에 처치 못하면 도주
+      goblinLife: 17,      // 17초 내에 처치 못하면 도주 (방향 화살표로 추격 가능)
       attackCd: 0, attackBase: 0, attackRange: 0, attackDmg: 0,
     });
     floatTexts.push({ text: '💰 보물 고블린 출현! 잡아라!', life: 2.4, maxLife: 2.4, screenSpace: true, color: '#f1c40f', size: 20 });
@@ -2814,10 +2905,12 @@
     // Apply set bonuses
     const setEffects = eq.getActiveSetEffects(player.equip);
     for (const se of setEffects) {
-      if (se.bonus.effect === 'dmgMult')   combined.dmgMult  *= se.bonus.val;
-      if (se.bonus.effect === 'cdMult')    combined.cdMult   *= se.bonus.val;
-      if (se.bonus.effect === 'speedMult') combined.speedMult *= se.bonus.val;
-      if (se.bonus.effect === 'maxHp')     combined.maxHp    += se.bonus.val;
+      if (se.bonus.effect === 'dmgMult')    combined.dmgMult  *= se.bonus.val;
+      if (se.bonus.effect === 'cdMult')     combined.cdMult   *= se.bonus.val;
+      if (se.bonus.effect === 'speedMult')  combined.speedMult *= se.bonus.val;
+      if (se.bonus.effect === 'maxHp')      combined.maxHp    += se.bonus.val;
+      if (se.bonus.effect === 'rangeBonus') combined.rangeBonus *= se.bonus.val;
+      if (se.bonus.effect === 'xpRange')    combined.xpRange  *= se.bonus.val;
     }
     player.equipStats   = combined;
     player.setEffects   = setEffects;
@@ -3034,6 +3127,42 @@
           chainExplosions.push({ x: tx + Math.cos(a) * aoe * 0.8, y: ty + Math.sin(a) * aoe * 0.8, range: aoe * 0.6, dmg: dmg * 0.6, delay: 0.6 + s * 0.05, src: 'bomb' });
         }
       }
+    } else if (id === 'missile' || id === 'swarm') {
+      // 유도탄: 적을 추적하는 미사일 발사 (접촉 시 소형 폭발)
+      const evolved = id === 'swarm';
+      const shots   = evolved ? 5 : 1 + Math.floor(lvlExtra / 2);   // 레벨업 시 2레벨당 +1발
+      const mAoe    = (evolved ? 70 : 50) * (player.rangeBonus || 1) * ((player.equipStats && player.equipStats.rangeBonus) || 1) * lvlRangeMul;
+      const turn    = evolved ? 7.5 : 5.0 + lvlExtra * 0.4;          // 레벨업 시 유도(선회) 성능 향상
+      for (let s = 0; s < shots; s++) {
+        const a0 = Math.random() * Math.PI * 2;                      // 사방으로 흩어진 뒤 추적
+        const spd = evolved ? 360 : 300;
+        projectiles.push({ type: 'missile', x: player.x, y: player.y, vx: Math.cos(a0) * spd, vy: Math.sin(a0) * spd,
+          spd, turn, r: 6, dmg, aoe: mAoe, life: 2.6, evolved, src: 'missile' });
+      }
+      for (let k = 0; k < 4; k++) spawnParticle(player.x, player.y, '#e056fd', 4, 0.25);
+    } else if (id === 'meteor' || id === 'meteorshower') {
+      // 운석: 가장 가까운 적 위치로 하늘에서 운석 낙하 (착탄 시 광역 폭발)
+      const evolved = id === 'meteorshower';
+      const count   = (evolved ? 3 : 1) + Math.floor(lvlExtra / 2);  // 레벨업 시 운석 수 증가
+      const mAoe    = (evolved ? 150 : 110) * (player.rangeBonus || 1) * ((player.equipStats && player.equipStats.rangeBonus) || 1) * lvlRangeMul;
+      for (let s = 0; s < count; s++) {
+        const target = nearestEnemy();
+        const jitter = s === 0 ? 0 : 60 + Math.random() * 80;
+        const ja = Math.random() * Math.PI * 2;
+        const tx = (target ? target.x : player.x + lastMoveDir.dx * range) + Math.cos(ja) * jitter;
+        const ty = (target ? target.y : player.y + lastMoveDir.dy * range) + Math.sin(ja) * jitter;
+        spawnMeteorStrike(tx, ty, dmg, mAoe, evolved, 'meteor', s * 0.12);
+      }
+    } else if (id === 'toxic' || id === 'plague') {
+      // 독성 포자: 가장 가까운 적 위치에 지속 피해 장판 생성
+      const evolved = id === 'plague';
+      const target  = nearestEnemy();
+      const tx = target ? target.x : player.x;
+      const ty = target ? target.y : player.y;
+      const tRange = (evolved ? 95 : 70) * (player.rangeBonus || 1) * ((player.equipStats && player.equipStats.rangeBonus) || 1) * lvlRangeMul;
+      const tLife  = (evolved ? 5.0 : 3.5) + lvlExtra * 0.4;          // 레벨업 시 지속시간 증가
+      toxicFields.push({ x: tx, y: ty, range: tRange, dmg, life: tLife, maxLife: tLife, tickTimer: 0, evolved, spreadCd: 1.2 });
+      rings.push({ x: tx, y: ty, r: 6, maxR: tRange, life: 0.4, maxLife: 0.4, color: evolved ? '#6ab04c' : '#badc58' });
     }
     // 보조 무기 오버레이 효과 — 메인 무기 발사 시마다 각 보조 계열 효과 함께 발동
     if (id === getMainWeapon()) {
@@ -3084,7 +3213,22 @@
     }
   }
 
+  // 운석 낙하 — 하늘(상단)에서 떨어지는 'meteor' 투사체 생성. 착탄 지점에 텔레그래프 링.
+  //   delay 초 후 낙하 시작 → 연속 운석 연출용
+  function spawnMeteorStrike(tx, ty, dmg, aoe, evolved, src, delay) {
+    delay = delay || 0;
+    projectiles.push({
+      type: 'meteor', x: tx, y: ty - 480, tx, ty,
+      vy: evolved ? 1300 : 1150, r: evolved ? 16 : 12,
+      dmg, aoe, evolved, src: src || 'meteor',
+      delay, life: delay + 1.6,
+    });
+    // 착탄 지점 텔레그래프 링 (낙하 예고)
+    rings.push({ x: tx, y: ty, r: aoe, maxR: 6, life: delay + 0.5, maxLife: delay + 0.5, color: evolved ? '#ff7675' : '#fab1a0' });
+  }
+
   function spawnParticle(x, y, color, size, life) {
+    if (particles.length >= 320) return;  // 렉 방지 파티클 예산
     const angle = Math.random() * Math.PI * 2;
     const spd   = 40 + Math.random() * 80;
     particles.push({ x, y, vx: Math.cos(angle)*spd, vy: Math.sin(angle)*spd, color, size, maxLife: life, life });
@@ -3174,6 +3318,46 @@
         const e = enemies[j];
         if (!e || e.dying) continue;
         if (dist(sf, e) < sf.range) dealDamage(e, sf.dmg * dt);
+      }
+    }
+  }
+
+  // 독성 포자/역병 지대 업데이트 — 범위 내 지속 피해 + 중독 부착, 역병은 주기적 확산
+  function updateToxicFields(dt) {
+    for (let i = toxicFields.length - 1; i >= 0; i--) {
+      const tf = toxicFields[i];
+      tf.life -= dt;
+      if (tf.life <= 0) { toxicFields.splice(i, 1); continue; }
+      tf.tickTimer = (tf.tickTimer || 0) + dt;
+      dmgSource = 'toxic';
+      // 초당 dmg 만큼 지속 피해 (도트로 처리 — 무한 중첩 방지)
+      for (let j = enemies.length - 1; j >= 0; j--) {
+        const e = enemies[j];
+        if (!e || e.dying) continue;
+        if (dist(tf, e) < tf.range + e.size) {
+          dealDamage(e, tf.dmg * dt, true, true);
+          // 0.5초마다 중독 부착 (역병은 더 강하게)
+          if (tf.tickTimer >= 0.5 && e.hp > 0) {
+            e.poisonTimer = Math.max(e.poisonTimer || 0, tf.evolved ? 4 : 2.5);
+            e.poisonDmg   = Math.max(e.poisonDmg || 0, tf.dmg * (tf.evolved ? 0.5 : 0.32));
+          }
+        }
+      }
+      if (tf.tickTimer >= 0.5) tf.tickTimer = 0;
+      // 시각 입자
+      if (Math.random() < 0.5) {
+        const pa = Math.random() * Math.PI * 2, pr = Math.random() * tf.range;
+        spawnParticle(tf.x + Math.cos(pa) * pr, tf.y + Math.sin(pa) * pr, tf.evolved ? '#6ab04c' : '#badc58', 3 + Math.random() * 3, 0.4);
+      }
+      // 역병 확산: 주기적으로 인접 위치에 작은 자식 장판 생성 (1회만, 필드 수 제한)
+      if (tf.evolved && tf.life < tf.maxLife - 0.6) {
+        tf.spreadCd -= dt;
+        if (tf.spreadCd <= 0 && toxicFields.length < 24 && !tf._spawned) {
+          tf._spawned = true;
+          const sa = Math.random() * Math.PI * 2;
+          toxicFields.push({ x: tf.x + Math.cos(sa) * tf.range * 0.9, y: tf.y + Math.sin(sa) * tf.range * 0.9,
+            range: tf.range * 0.7, dmg: tf.dmg * 0.7, life: tf.life * 0.7, maxLife: tf.life * 0.7, tickTimer: 0, evolved: false });
+        }
       }
     }
   }
@@ -3295,6 +3479,14 @@
             for (let k = 0; k < 2; k++) spawnParticle(best.x, best.y, '#9b59b6', 4, 0.2);
             cx = best.x; cy = best.y;
           }
+        }
+        // seeker_swarm 시너지: 치명타 시 25% 확률로 유도 미사일 발사
+        //   미사일 자체 피해(dmgSource==='missile')에서는 재발동 금지 — 무한 연쇄 방지
+        if (isCritRoll && !skipChain && dmgSource !== 'missile' && hasSynergy('seeker_swarm') && Math.random() < 0.25) {
+          const a0 = Math.random() * Math.PI * 2;
+          const mAoe = 55 * (player.rangeBonus || 1) * ((player.equipStats && player.equipStats.rangeBonus) || 1);
+          projectiles.push({ type: 'missile', x: player.x, y: player.y, vx: Math.cos(a0) * 320, vy: Math.sin(a0) * 320,
+            spd: 320, turn: 7, r: 6, dmg: dmg * 0.6, aoe: mAoe, life: 2.6, evolved: false, src: 'missile' });
         }
       }
     }
@@ -3421,6 +3613,18 @@
         projectiles.push({ type: 'arc', x: cx, y: cy, tx: best.x, ty: best.y, life: 0.2, dmg: 0 });
         cx = best.x; cy = best.y;
       }
+    }
+    // 천공 세트 4세트: 주 공격마다 일정 확률로 소형 운석 낙하 (celestial_rain)
+    //   운석 피해(dmgSource==='meteor')에서는 재발동 금지 — 무한 연쇄 방지
+    if (sf.celestial_rain && dmgSource !== 'meteor' && Math.random() < 0.10) {
+      spawnMeteorStrike(enemy.x, enemy.y, dmg * 0.7, 80 * rb, false, 'meteor', 0);
+    }
+    // 천공+드래곤 교차: 별똥별 — 운석 낙하 + 화상 (celestial_inferno)
+    if (sf.celestial_inferno && dmgSource !== 'meteor' && Math.random() < 0.14) {
+      spawnMeteorStrike(enemy.x, enemy.y, dmg * 0.9, 100 * rb, true, 'meteor', 0);
+      enemy.burnStacks = Math.min((enemy.burnStacks || 0) + 1, 5);
+      enemy.burnTimer  = Math.max(enemy.burnTimer || 0, 3.0);
+      enemy.burnDmg    = enemy.burnDmg || Math.max(4, dmg * 0.10);
     }
   }
 
@@ -4064,6 +4268,56 @@
     }
   }
 
+  // 보물 고블린 방향 화살표 — 화면 밖에 있을 때 가장자리에 방향·거리·남은 시간 표시
+  function drawGoblinArrow(W, H) {
+    if (!player) return;
+    const goblin = enemies.find(e => e.goblin || e.behavior === 'goblin');
+    if (!goblin) return;
+    const dx = goblin.x - player.x, dy = goblin.y - player.y;
+    const distToGoblin = Math.hypot(dx, dy);
+    const ang = Math.atan2(dy, dx);
+    const cx = W / 2, cy = H / 2;
+    const margin = 56;
+    // 고블린이 이미 화면 안(여백 안쪽)에 보이면 화살표 생략
+    const gsx = dx * viewScale + cx;
+    const gsy = dy * viewScale + cy;
+    if (gsx > margin && gsx < W - margin && gsy > margin && gsy < H - margin) return;
+    // 화면 가장자리 타원 위에 화살표 배치
+    const rx = (W / 2) - margin, ry = (H / 2) - margin;
+    const ax = cx + Math.cos(ang) * rx;
+    const ay = cy + Math.sin(ang) * ry;
+    const pulse = 0.85 + Math.sin(elapsed * 8) * 0.15;
+    ctx.save();
+    ctx.translate(ax, ay);
+    ctx.rotate(ang);
+    ctx.scale(pulse, pulse);
+    ctx.fillStyle = '#f1c40f';
+    ctx.shadowBlur = 14; ctx.shadowColor = '#f39c12';
+    ctx.beginPath();
+    ctx.moveTo(20, 0);
+    ctx.lineTo(-11, -13);
+    ctx.lineTo(-11, 13);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+    // 라벨: 💰 + 거리 + (도주까지 남은 시간)
+    ctx.save();
+    ctx.fillStyle = '#f1c40f';
+    ctx.font = 'bold 12px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.shadowBlur = 6; ctx.shadowColor = '#000';
+    const tleft = goblin.goblinLife != null ? `  ⏱${Math.ceil(goblin.goblinLife)}s` : '';
+    // 라벨은 화살표보다 약간 안쪽(중심 방향)에 배치해 화면 밖으로 안 나가게
+    const lx = cx + Math.cos(ang) * (rx - 26);
+    const ly = cy + Math.sin(ang) * (ry - 26);
+    ctx.fillText(`💰 ${Math.round(distToGoblin)}${tleft}`, lx, ly);
+    ctx.shadowBlur = 0;
+    ctx.restore();
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
+  }
+
   function renderLowHpWarning(W, H) {
     if (!player || state !== 'playing') return;
     const hpRatio = getPlayerHpRatio();
@@ -4095,9 +4349,13 @@
       const star = d.evolved ? '✨' : '';
       const maxed = !d.evolved && lvl >= MAX_WEAPON_LEVEL ? ' weapon-maxed' : '';
       const isMain = isWeaponActive(id) && isAttackWeapon(id);
-      const dim = (!isAttackWeapon(id) || isMain) ? '' : 'opacity:0.55;';
+      // 보조 공격 무기는 클릭 가능 (data-wid + 커서 변경)
+      const isAuxAttack = isAttackWeapon(id) && !isMain;
+      const dim = isAuxAttack ? 'opacity:0.55;cursor:pointer;' : '';
       const badge = isMain ? '⭐' : (isAttackWeapon(id) ? '⚙' : '');
-      return `<span class="weapon-slot${d.evolved ? ' weapon-evolved' : ''}${maxed}" style="${dim}">${badge}${star}${d.icon} ${d.name} <b>Lv.${lvl}</b></span>`;
+      const dataWid = isAuxAttack ? ` data-wid="${id}"` : '';
+      const title = isAuxAttack ? ` title="클릭하여 메인 무기로 지정"` : '';
+      return `<span class="weapon-slot${d.evolved ? ' weapon-evolved' : ''}${maxed}"${dataWid}${title} style="${dim}">${badge}${star}${d.icon} ${d.name} <b>Lv.${lvl}</b></span>`;
     }).join('');
     const supportHtml = SLASH_SUPPORT_DEFS
       .filter(def => slashModLevel(def.id) > 0)
@@ -4106,11 +4364,19 @@
     if (supportHtml) el.innerHTML += supportHtml;
   }
 
-  // 메인 무기 지정 (장비창에서 호출) — 공격 무기만 메인으로 지정 가능
+  // 메인 무기 지정 (무기 슬롯 클릭 또는 장비창에서 호출) — 공격 무기만 메인으로 지정 가능
   function setMainWeapon(id) {
     if (!player || !WEAPON_DEFS[id] || !isAttackWeapon(id)) return;
     if (!player.weapons.includes(id)) return;
+    if (player.mainWeapon === id) return;
+    const oldMain = player.mainWeapon;
     player.mainWeapon = id;
+    // 이전 메인이 궤도형(orb/blackhole)이면 잔류 투사체 즉시 제거 — 변경이 즉각 체감되도록
+    if (oldMain === 'orb' || oldMain === 'blackhole') {
+      for (let i = projectiles.length - 1; i >= 0; i--) {
+        if (projectiles[i].type === 'orb' || projectiles[i].type === 'blackhole') projectiles.splice(i, 1);
+      }
+    }
     floatTexts.push({ text: `⭐ ${WEAPON_DEFS[id].name} 메인 지정`, life: 1.8, maxLife: 1.8, screenSpace: true, color: '#f1c40f', size: 16 });
     renderWeaponSlots();
     renderEquipUI();
@@ -4272,6 +4538,20 @@
     updateSlashEchoes(dt);
     updateRuptures(dt);
     updateSpectralFields(dt);
+    updateToxicFields(dt);
+    // meteor_call 시너지: 7초마다 주변 무작위 위치에 운석 2발 자동 낙하
+    if (hasSynergy('meteor_call')) {
+      meteorCallTimer -= dt;
+      if (meteorCallTimer <= 0) {
+        meteorCallTimer = 7;
+        const mDmg = WEAPON_DEFS.meteor.dmg * player.dmgMult * 1.2;
+        const mAoe = 130 * (player.rangeBonus || 1) * ((player.equipStats && player.equipStats.rangeBonus) || 1);
+        for (let s = 0; s < 2; s++) {
+          const a = Math.random() * Math.PI * 2, r = 60 + Math.random() * 180;
+          spawnMeteorStrike(player.x + Math.cos(a) * r, player.y + Math.sin(a) * r, mDmg, mAoe, true, 'meteor', s * 0.18);
+        }
+      }
+    }
     // 대쉬 잔상 폭발 필드 업데이트 (0.1초마다 DoT 틱)
     for (let i = dashAfterimages.length - 1; i >= 0; i--) {
       const af = dashAfterimages[i];
@@ -4293,16 +4573,42 @@
     // 화면 흔들림 감쇠
     if (screenShake > 0) screenShake = Math.max(0, screenShake - dt * 2.5);
 
-    // 카메라
-    camera.x = player.x - canvas.width  / 2;
-    camera.y = player.y - canvas.height / 2;
+    // 시야 자동 확장 — 사거리·AoE(rangeBonus)가 늘어나면 줌아웃해 더 넓게 보이도록
+    //   effRange 1.0 → scale 1.0, effRange 2.0 → ~0.78, 하한 0.7 (과도한 축소로 적이 안 보이는 것 방지)
+    const _effRange = (player.rangeBonus || 1) * ((player.equipStats && player.equipStats.rangeBonus) || 1);
+    const _targetScale = Math.max(0.7, Math.min(1, 1 / (1 + (_effRange - 1) * 0.32)));
+    // 부드러운 전환 (스냅 방지)
+    viewScale += (_targetScale - viewScale) * Math.min(1, dt * 2.5);
+
+    // 카메라 — 줌아웃 시 더 넓은 월드 영역이 화면에 들어오므로 절반 폭을 viewScale로 보정
+    camera.x = player.x - (canvas.width  / viewScale) / 2;
+    camera.y = player.y - (canvas.height / viewScale) / 2;
 
     // 무적 감소
     if (player.invincible > 0) player.invincible -= dt;
 
-    // 웨이브 생성
+    // 혈월 이벤트 — 2.5분 후 첫 발동, 이후 3분 간격, 15초 지속
+    // 무한 모드는 이미 자체 스케일링이 있으므로 일반 시간에만 발동
+    if (!infiniteMode && elapsed > 60) {
+      if (bloodMoonActive > 0) {
+        bloodMoonActive = Math.max(0, bloodMoonActive - dt);
+      } else {
+        bloodMoonTimer -= dt;
+        if (bloodMoonTimer <= 0) {
+          bloodMoonTimer = 180;
+          bloodMoonActive = 15;
+          floatTexts.push({ text: '🌑 혈월 강림! XP 2배 — 적이 강화됩니다!', life: 3.5, maxLife: 3.5, screenSpace: true, color: '#c0392b', size: 22 });
+          screenShake = Math.min(screenShake + 0.4, 0.8);
+          SFX.boss();
+        }
+      }
+    }
+
+    // 웨이브 생성 — 후반부 파동 간격 단축 (8분 이후 더 빠르게)
+    const _m = elapsed / 60;
+    const _dynWaveInterval = _m > 8 ? Math.max(1.8, WAVE_INTERVAL - (_m - 8) * 0.12) : WAVE_INTERVAL;
     waveTimer += dt;
-    if (waveTimer >= WAVE_INTERVAL) { waveTimer = 0; spawnWave(); }
+    if (waveTimer >= _dynWaveInterval) { waveTimer = 0; spawnWave(); }
 
     // 보스 등장 체크
     if (!bossActive && elapsed >= nextBossTime) {
@@ -4350,14 +4656,14 @@
       if (dist(gd, player) < 28) {
         for (let k = 0; k < 8; k++) spawnParticle(gd.x, gd.y, '#f39c12', 4 + Math.random() * 4, 0.4);
         gearDrops.splice(i, 1);
-        // 자동 분해: 현재 장착보다 약한 아이템을 경험치로 즉시 변환
+        // 자동 분해: 빌드 점수가 오르지 않는 아이템(세트 효과 포함 평가)을 경험치로 즉시 변환
         if (autoDismantleEnabled && window.VPS && window.VPS.equipment) {
           const _eq = window.VPS.equipment;
-          const _newPwr = _eq.calcItemPower(gd.item);
           const _curItm = player.equip && player.equip[gd.item.slot];
-          const _curPwr = _curItm ? _eq.calcItemPower(_curItm) : 0;
-          if (_curItm && _newPwr < _curPwr) {
-            const _xpGain = Math.max(1, Math.round(_newPwr / 5));
+          // 빈 슬롯이면 무조건 보관(모달). 장착 중이면 세트 포함 빌드 점수 증가량으로 판정
+          const _delta = _curItm ? _eq.equipPowerDelta(player.equip, gd.item) : 1;
+          if (_curItm && _delta <= 0) {
+            const _xpGain = Math.max(1, Math.round(_eq.calcItemPower(gd.item) / 5));
             gainXP(_xpGain);
             floatTexts.push({ text: `⚗ 자동 분해 +${_xpGain} XP`, life: 1.4, maxLife: 1.4, screenSpace: true, color: '#a78bfa', size: 14 });
             break;
@@ -4540,6 +4846,49 @@
             if (p.slow && e.hp > 0) e.frozen = Math.max(e.frozen || 0, p.slow);
             projectiles.splice(i, 1);
             break;
+          }
+        }
+      } else if (p.type === 'missile') {
+        // 유도탄: 가장 가까운 적 방향으로 점진적 선회 후 추적, 접촉 시 소형 폭발
+        let tgt = null, td = Infinity;
+        for (const e of enemies) {
+          if (e.dying) continue;
+          const d = dist(p, e);
+          if (d < td) { td = d; tgt = e; }
+        }
+        if (tgt) {
+          const desired = Math.atan2(tgt.y - p.y, tgt.x - p.x);
+          const cur = Math.atan2(p.vy, p.vx);
+          let diff = ((desired - cur + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+          const step = Math.max(-p.turn * dt, Math.min(p.turn * dt, diff));
+          const na = cur + step;
+          p.vx = Math.cos(na) * p.spd;
+          p.vy = Math.sin(na) * p.spd;
+        }
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        if ((p._trail = (p._trail || 0) + dt) > 0.03) { p._trail = 0; spawnParticle(p.x, p.y, p.evolved ? '#ff9ff3' : '#e056fd', 3, 0.22); }
+        for (let j = enemies.length - 1; j >= 0; j--) {
+          const e = enemies[j];
+          if (!e.dying && dist(p, e) < p.r + e.size) {
+            chainExplosions.push({ x: p.x, y: p.y, range: p.aoe, dmg: p.dmg, delay: 0, src: 'missile' });
+            rings.push({ x: p.x, y: p.y, r: 4, maxR: p.aoe, life: 0.2, maxLife: 0.2, color: p.evolved ? '#ff9ff3' : '#e056fd' });
+            projectiles.splice(i, 1);
+            break;
+          }
+        }
+      } else if (p.type === 'meteor') {
+        // 운석: delay 후 낙하 시작 → 착탄 시 광역 폭발
+        if (p.delay > 0) { p.delay -= dt; }
+        else {
+          p.y += p.vy * dt;
+          if (Math.random() < 0.6) spawnParticle(p.x + (Math.random() - 0.5) * 10, p.y - 14, p.evolved ? '#ff7675' : '#fab1a0', 4 + Math.random() * 3, 0.3);
+          if (p.y >= p.ty) {
+            spawnExplosion(p.tx, p.ty, p.aoe, p.dmg, false, p.src || 'meteor');
+            rings.push({ x: p.tx, y: p.ty, r: 8, maxR: p.aoe, life: 0.4, maxLife: 0.4, color: p.evolved ? '#ff7675' : '#e17055' });
+            for (let k = 0; k < (p.evolved ? 16 : 10); k++) spawnParticle(p.tx, p.ty, p.evolved ? '#ff7675' : '#e17055', 5 + Math.random() * 6, 0.5);
+            screenShake = Math.min(screenShake + (p.evolved ? 0.3 : 0.18), 0.6);
+            projectiles.splice(i, 1);
           }
         }
       }
@@ -4813,7 +5162,10 @@
     ctx.restore();
 
     ctx.save();
+    ctx.scale(viewScale, viewScale);
     ctx.translate(-camera.x, -camera.y);
+    // 줌아웃 보정 배율 — 드랍 아이템(XP젬·장비·박스·파워업)에 곱해 화면상 크기를 유지(가시성 보존)
+    const invScale = 1 / viewScale;
 
     // XP 젬 — 가치별 크기·색상·광채 구분
     for (const g of xpGems) {
@@ -4822,7 +5174,7 @@
       const isLarge  = g.val >= 31;
       const isMedium = g.val >= 15;
       const isSmall  = g.val >= 5;
-      const r    = isHuge ? 9 : isLarge ? 7 : isMedium ? 6 : isSmall ? 5 : 3.5;
+      const r    = (isHuge ? 9 : isLarge ? 7 : isMedium ? 6 : isSmall ? 5 : 3.5) * invScale;
       const col  = isHuge ? '#ffd700' : isLarge ? '#f39c12' : isMedium ? '#e67e22' : isSmall ? '#f1c40f' : '#ffe082';
       const glow = isHuge ? '#ffd700' : isLarge ? '#f39c12' : isMedium ? '#e67e22' : '#f1c40f';
       ctx.save();
@@ -4857,6 +5209,7 @@
       const fadeAlpha = Math.min(box.life * 0.4, 1);
       ctx.save();
       ctx.translate(box.x, box.y);
+      ctx.scale(invScale, invScale);   // 줌아웃 보정 — 화면상 크기 유지
       ctx.rotate((box.pulseT || 0) * 0.6);
       ctx.globalAlpha = fadeAlpha * pulse;
       ctx.shadowBlur = 18;
@@ -4886,6 +5239,7 @@
         const gi = _gradeIdx[gd.item.grade] || 0;
         ctx.save();
         ctx.translate(gd.x, gd.y);
+        ctx.scale(invScale, invScale);   // 줌아웃 보정 — 화면상 크기 유지
         ctx.globalAlpha = fade;
         // 등급별 아우라 반경
         const auraR = 12 + gi * 4;
@@ -4957,6 +5311,7 @@
       const fade = Math.min(pu.life * 0.5, 1);
       ctx.save();
       ctx.translate(pu.x, pu.y);
+      ctx.scale(invScale, invScale);   // 줌아웃 보정 — 화면상 크기 유지
       ctx.globalAlpha = fade;
       ctx.shadowBlur = 16;
       ctx.shadowColor = pu.def.color;
@@ -5124,6 +5479,51 @@
         ctx.quadraticCurveTo(mx, my, p.tx, p.ty);
         ctx.stroke();
         ctx.shadowBlur = 0; ctx.globalAlpha = 1;
+      } else if (p.type === 'missile') {
+        // 유도탄 — 진행 방향으로 향한 로켓 + 발광
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(Math.atan2(p.vy, p.vx));
+        ctx.fillStyle = p.evolved ? '#ff9ff3' : '#e056fd';
+        ctx.shadowBlur = 12; ctx.shadowColor = p.evolved ? '#ff9ff3' : '#be2edd';
+        ctx.beginPath();
+        ctx.moveTo(9, 0); ctx.lineTo(-6, -4); ctx.lineTo(-6, 4);
+        ctx.closePath();
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.restore();
+      } else if (p.type === 'meteor') {
+        if (p.delay > 0) {
+          // 낙하 대기 중 — 착탄 지점에 회전 경고 표식
+          ctx.save();
+          ctx.globalAlpha = 0.6;
+          ctx.strokeStyle = p.evolved ? '#ff7675' : '#fab1a0';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(p.tx, p.ty, 14 + Math.sin(elapsed * 12) * 4, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.globalAlpha = 1;
+          ctx.restore();
+        } else {
+          // 낙하 중 운석 — 불타는 구체 + 꼬리
+          ctx.save();
+          ctx.fillStyle = p.evolved ? '#ff7675' : '#e17055';
+          ctx.shadowBlur = 22; ctx.shadowColor = '#ff7675';
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+          ctx.fill();
+          // 위로 뻗는 화염 꼬리
+          ctx.globalAlpha = 0.4;
+          ctx.beginPath();
+          ctx.moveTo(p.x - p.r, p.y);
+          ctx.lineTo(p.x, p.y - p.r * 3.2);
+          ctx.lineTo(p.x + p.r, p.y);
+          ctx.closePath();
+          ctx.fill();
+          ctx.globalAlpha = 1;
+          ctx.shadowBlur = 0;
+          ctx.restore();
+        }
       }
     }
 
@@ -5206,8 +5606,8 @@
       const flash = e.hurtFlash > 0;
       const rageActive = e.hp < e.maxHp * 0.3;
       ctx.fillStyle = flash ? '#ffffff' : e.color;
-      ctx.shadowBlur = flash ? 20 : (rageActive ? 14 : 8);
-      ctx.shadowColor = rageActive ? '#ff4500' : e.color;
+      ctx.shadowBlur = flash ? 20 : (rageActive ? 14 : (e.bloodMoon ? 16 : 8));
+      ctx.shadowColor = rageActive ? '#ff4500' : (e.bloodMoon ? '#cc0000' : e.color);
 
       // 적 모양: boss=특수 별형, tier2=육각형, tier1 archer=마름모, tier1=사각형, tier0=원
       if (e.goblin) {
@@ -5391,6 +5791,28 @@
       ctx.restore();
     }
 
+    // 독성 포자/역병 지대 렌더링 — 초록 맥동 장판
+    for (let i = 0; i < toxicFields.length; i++) {
+      const tf = toxicFields[i];
+      const t = Math.min(1, tf.life / Math.max(0.001, tf.maxLife));
+      const baseCol = tf.evolved ? '#6ab04c' : '#badc58';
+      ctx.globalAlpha = Math.min(0.32, t * 0.32 + 0.08);
+      ctx.fillStyle = baseCol;
+      ctx.shadowBlur = 16;
+      ctx.shadowColor = baseCol;
+      ctx.beginPath();
+      ctx.arc(tf.x, tf.y, tf.range * (0.92 + Math.sin(elapsed * 4 + i) * 0.06), 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = Math.min(0.55, t * 0.55);
+      ctx.strokeStyle = tf.evolved ? '#badc58' : '#dff9b0';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(tf.x, tf.y, tf.range, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
+    ctx.globalAlpha = 1;
+
     // spectral_blade 잔향 검기 필드 렌더링 — 보라색 맥동 원
     for (let i = 0; i < spectralFields.length; i++) {
       const sf = spectralFields[i];
@@ -5570,6 +5992,8 @@
 
     // 무기별 데미지 기여도 상태창 (좌상단)
     if (state === 'playing') drawDamagePanel(W, H);
+    // 보물 고블린 방향 화살표 (화면 밖일 때)
+    if (state === 'playing') drawGoblinArrow(W, H);
 
     // 피격 화면 플래시 — 맞은 순간 붉게 번쩍 (즉각적 피드백)
     if (hurtScreenFlash > 0) {
@@ -5664,6 +6088,25 @@
         ctx.fillStyle = `rgba(155,89,182,${splashA})`;
         ctx.fillRect(0, 0, W, H);
       }
+    }
+
+    // 혈월 비네트 — 이벤트 진행 중 화면 가장자리가 붉게 타오름
+    if (bloodMoonActive > 0) {
+      const bmFade = Math.min(1, bloodMoonActive / 2.5);
+      const bmPulse = 0.14 + 0.06 * Math.sin(elapsed * 5);
+      const bmGrad = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.25, W / 2, H / 2, Math.max(W, H) * 0.75);
+      bmGrad.addColorStop(0, 'rgba(0,0,0,0)');
+      bmGrad.addColorStop(1, `rgba(160,0,0,${(bmPulse * bmFade).toFixed(3)})`);
+      ctx.fillStyle = bmGrad;
+      ctx.fillRect(0, 0, W, H);
+      // 혈월 카운트다운 (우하단)
+      ctx.save();
+      ctx.font = 'bold 13px sans-serif';
+      ctx.fillStyle = `rgba(220,80,60,${0.7 + 0.3 * Math.sin(elapsed * 4)})`;
+      ctx.textAlign = 'right';
+      ctx.shadowBlur = 8; ctx.shadowColor = '#c0392b';
+      ctx.fillText(`🌑 혈월 ${Math.ceil(bloodMoonActive)}s`, W - 10, H - 58);
+      ctx.shadowBlur = 0; ctx.restore();
     }
 
     // 콤보 표시 — 단계별 색상·크기·타이틀 변화
@@ -5944,6 +6387,26 @@
       `<tr><td class="item-icon">${it.icon}</td><td>${it.name}</td></tr>`
     ).join('');
 
+    // 장비 세트 섹션 (장비 시스템 로드 시)
+    let setRows = '';
+    if (window.VPS && window.VPS.equipment && window.VPS.equipment.SET_DEFS) {
+      const eq = window.VPS.equipment;
+      setRows = eq.SET_DEFS.map(set => {
+        const icons = set.pieces.map(pid => {
+          for (const sl of eq.SLOTS) {
+            const it = (eq.SLOT_ITEMS[sl] || []).find(b => b.id === pid);
+            if (it) return it.icon;
+          }
+          return '?';
+        }).join('');
+        return `<tr>
+          <td style="color:${set.color};font-weight:bold;">${set.name}</td>
+          <td style="font-size:1.1em;">${icons}</td>
+          <td class="combo-desc" style="font-size:0.75em;">2: ${set.bonus2.desc}<br>4: ${set.bonus4.desc}</td>
+        </tr>`;
+      }).join('');
+    }
+
     // 시너지 섹션
     let synRows = SYNERGY_DEFS.map(s => {
       const active = hasSynergy(s.id);
@@ -5989,6 +6452,13 @@
           <tbody>${synRows}</tbody>
         </table>
       </div>
+      ${setRows ? `<div class="combo-section">
+        <div class="combo-section-title">🎽 장비 세트 효과</div>
+        <table class="combo-table">
+          <thead><tr><th>세트</th><th>조각</th><th>2·4세트 보너스</th></tr></thead>
+          <tbody>${setRows}</tbody>
+        </table>
+      </div>` : ''}
     `;
   }
 
@@ -6135,23 +6605,47 @@
       html += `<div style="margin-top:8px;padding:8px;background:#161d33;border:1px solid #4b5563;border-radius:6px;font-size:10.5px;color:#9ca3af;">위에서 공격 무기를 클릭해 메인으로 지정하세요</div>`;
     }
 
-    // ── 세트 진행도 (장착 조각 수) ──
+    // ── 세트 진행도 — 각 세트의 조각 아이콘을 표시해 무엇을 모아야 하는지 시각화 ──
     if (eq.SET_DEFS) {
+      // 슬롯 전체에서 baseId → {icon, name} 조회용 맵 구성
+      const baseInfo = {};
+      for (const sl of eq.SLOTS) for (const it of (eq.SLOT_ITEMS[sl] || [])) baseInfo[it.id] = it;
       const equippedIds = eq.SLOTS.map(sl => player.equip[sl]).filter(Boolean).map(it => it.baseId);
-      const setRows = [];
-      for (const set of eq.SET_DEFS) {
-        const cnt = set.pieces.filter(p => equippedIds.includes(p)).length;
-        if (cnt === 0) continue;
-        const c2 = cnt >= 2, c4 = cnt >= 4;
-        const bar = `<b style="color:${c4 ? set.color : c2 ? '#2ecc71' : '#9ca3af'};">${cnt}/4</b>`;
-        const b2 = `<span style="color:${c2 ? '#2ecc71' : '#6b7280'};">2:${set.bonus2.desc}</span>`;
-        const b4 = `<span style="color:${c4 ? set.color : '#6b7280'};">4:${set.bonus4.desc}</span>`;
-        setRows.push(`<div style="margin-bottom:2px;">${set.name} ${bar} · ${b2} · ${b4}</div>`);
-      }
-      if (setRows.length) {
-        html += `<div style="margin-top:8px;padding:8px;background:#13182a;border:1px solid #2a3050;border-radius:6px;font-size:10px;line-height:1.6;color:#cbd5e1;"><div style="color:#f1c40f;margin-bottom:3px;">🎽 세트 진행도</div>${setRows.join('')}</div>`;
-      }
+      // 조각을 하나라도 장착한 세트를 먼저, 진행도 높은 순으로 정렬
+      const setRows = eq.SET_DEFS
+        .map(set => ({ set, cnt: set.pieces.filter(p => equippedIds.includes(p)).length }))
+        .sort((a, b) => b.cnt - a.cnt)
+        .map(({ set, cnt }) => {
+          const c2 = cnt >= 2, c4 = cnt >= 4;
+          // 각 조각: 장착=강조, 미장착=흐리게(슬롯명 표시)
+          const slotKor2 = { helm: '투구', armor: '갑옷', boots: '장화', ring: '반지' };
+          const pieceIcons = set.pieces.map(pid => {
+            const info = baseInfo[pid] || { icon: '?', name: pid };
+            const owned = equippedIds.includes(pid);
+            const slotOf = eq.SLOTS.find(sl => (eq.SLOT_ITEMS[sl] || []).some(it => it.id === pid));
+            return `<span title="${info.name} (${slotKor2[slotOf] || ''})" style="display:inline-block;font-size:15px;width:24px;height:24px;line-height:24px;text-align:center;border-radius:5px;margin:0 1px;${owned ? `background:${set.color}33;border:1px solid ${set.color};` : 'opacity:0.32;border:1px dashed #444;filter:grayscale(1);'}">${info.icon}</span>`;
+          }).join('');
+          const headColor = c4 ? set.color : c2 ? '#2ecc71' : (cnt > 0 ? '#cbd5e1' : '#6b7280');
+          const b2 = `<span style="color:${c2 ? '#2ecc71' : '#6b7280'};">${c2 ? '✓' : '○'} 2세트: ${set.bonus2.desc}</span>`;
+          const b4 = `<span style="color:${c4 ? set.color : '#6b7280'};">${c4 ? '✓' : '○'} 4세트: ${set.bonus4.desc}</span>`;
+          // 다음 보너스까지 필요한 조각 수 힌트
+          let hint = '';
+          if (cnt > 0 && cnt < 2) hint = ` <span style="color:#f39c12;">(2세트까지 ${2 - cnt}개)</span>`;
+          else if (cnt >= 2 && cnt < 4) hint = ` <span style="color:#f39c12;">(4세트까지 ${4 - cnt}개)</span>`;
+          return `<div style="margin-bottom:6px;padding-bottom:5px;border-bottom:1px solid #1c2236;">
+            <div style="margin-bottom:3px;"><b style="color:${headColor};">${set.name} ${cnt}/4</b>${hint}</div>
+            <div style="margin-bottom:3px;">${pieceIcons}</div>
+            <div style="font-size:9.5px;line-height:1.5;">${b2}<br>${b4}</div>
+          </div>`;
+        });
+      html += `<div style="margin-top:8px;padding:9px;background:#13182a;border:1px solid #2a3050;border-radius:6px;font-size:10px;color:#cbd5e1;"><div style="color:#f1c40f;margin-bottom:5px;font-size:11px;">🎽 세트 도감 — 같은 세트 조각을 모아 보너스 활성화</div>${setRows.join('')}</div>`;
     }
+
+    // ── 자동 분해 토글 (E키 창에서 켜고 끌 수 있도록) ──
+    html += `<div style="margin-top:8px;padding:8px;background:#1a1230;border:1px solid #4a2d6e;border-radius:6px;font-size:11px;color:#d7bfff;display:flex;align-items:center;justify-content:space-between;">
+      <span>⚗ 자동 분해 <span style="color:#9a86c4;font-size:9.5px;">(빌드 점수가 안 오르는 장비를 자동으로 XP 변환)</span></span>
+      <button id="equipAutoDismantleToggle" style="background:${autoDismantleEnabled ? '#7c3aed' : '#374151'};border:none;color:#fff;padding:5px 12px;border-radius:6px;cursor:pointer;font-size:11px;font-weight:bold;">${autoDismantleEnabled ? 'ON' : 'OFF'}</button>
+    </div>`;
 
     return html;
   }
@@ -6172,10 +6666,15 @@
       panel.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><strong>⚔ 장비 창 (E키)</strong><button id="equipClose" style="background:none;border:none;color:#fff;font-size:20px;cursor:pointer;">✕</button></div><div id="equipBody"></div>`;
       document.body.appendChild(panel);
       document.getElementById('equipClose').addEventListener('click', () => { equipUiVisible = true; toggleEquipUI(); });
-      // 메인 무기 지정 — equipBody 에 위임 핸들러 (innerHTML 교체돼도 유지)
+      // equipBody 위임 핸들러 (innerHTML 교체돼도 유지) — 메인 무기 지정 + 자동 분해 토글
       document.getElementById('equipBody').addEventListener('click', (ev) => {
         const btn = ev.target.closest('.weapon-toggle');
-        if (btn && btn.dataset.wid) setMainWeapon(btn.dataset.wid);
+        if (btn && btn.dataset.wid) { setMainWeapon(btn.dataset.wid); return; }
+        if (ev.target.closest('#equipAutoDismantleToggle')) {
+          autoDismantleEnabled = !autoDismantleEnabled;
+          floatTexts.push({ text: autoDismantleEnabled ? '⚗ 자동 분해 ON' : '⚗ 자동 분해 OFF', life: 1.6, maxLife: 1.6, screenSpace: true, color: '#d7bfff', size: 15 });
+          renderEquipUI();
+        }
       });
     }
     panel.style.display = equipUiVisible ? 'block' : 'none';
@@ -6207,10 +6706,18 @@
     const curGrade = curItem ? eq.getGradeData(curItem.grade) : null;
     const curStats = curItem ? eq.getEquipStats(curItem) : {};
 
-    // 전투력 비교
+    // 전투력 비교 (단일 아이템 점수 + 세트 효과 포함 빌드 점수 증감)
     const newPower = eq.calcItemPower(item);
     const curPower = curItem ? eq.calcItemPower(curItem) : 0;
-    const isWeaker = curItem && newPower < curPower;
+    // 빌드 점수 증가량 — 세트 완성/해제까지 반영. 빈 슬롯이면 항상 업그레이드로 취급
+    const buildDelta = curItem ? eq.equipPowerDelta(player.equip, item) : (newPower || 1);
+    const isWeaker = curItem && buildDelta <= 0;
+    // 세트 변화 미리보기 — 이 아이템을 끼웠을 때 활성화되는 세트 보너스 안내
+    const _testMap = Object.assign({}, player.equip); _testMap[item.slot] = item;
+    const curSetDescs = new Set(eq.getActiveBonusDescriptions(player.equip));
+    const newSetLines = eq.getActiveBonusDescriptions(_testMap);
+    const gainedSetLines = newSetLines.filter(l => !curSetDescs.has(l));
+    const lostSetLines = Array.from(curSetDescs).filter(l => !newSetLines.includes(l));
 
     const slotKor = { helm: '투구', armor: '갑옷', boots: '장화', ring: '반지' }[item.slot] || item.slot;
     const gemIcons = (item.gems || []).map(g => g.icon || '').join(' ');
@@ -6277,10 +6784,17 @@
       modal.style.cssText = 'display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#111827;border:2px solid #39445a;border-radius:12px;padding:14px;z-index:950;max-width:420px;width:96%;color:#fff;font-family:sans-serif;max-height:90vh;overflow-y:auto;';
       document.body.appendChild(modal);
     }
-    // 전투력 델타 표시
-    const pwrDiff = newPower - curPower;
+    // 전투력 델타 표시 — 세트 효과를 포함한 빌드 점수 증감 기준
+    const pwrDiff = curItem ? buildDelta : newPower;
     const pwrColor = pwrDiff > 0 ? '#2ecc71' : pwrDiff < 0 ? '#e74c3c' : '#9ca3af';
     const pwrDiffStr = pwrDiff > 0 ? `▲ +${pwrDiff}` : pwrDiff < 0 ? `▼ ${pwrDiff}` : '=';
+    // 세트 변화 안내 박스 (획득/해제 세트 보너스가 있을 때만)
+    let setChangeHtml = '';
+    if (gainedSetLines.length || lostSetLines.length) {
+      const gain = gainedSetLines.map(l => `<div style="color:#2ecc71;">▲ 세트 활성: ${l}</div>`).join('');
+      const lose = lostSetLines.map(l => `<div style="color:#e74c3c;">▼ 세트 해제: ${l}</div>`).join('');
+      setChangeHtml = `<div style="background:#0d1628;border:1px solid #2a3050;border-radius:6px;padding:7px 9px;margin-bottom:12px;font-size:10.5px;line-height:1.6;">${gain}${lose}</div>`;
+    }
     modal.innerHTML = `
       <div style="font-size:10px;color:#9ca3af;letter-spacing:1px;text-transform:uppercase;text-align:center;margin-bottom:10px;">⚔ ${slotKor} 비교</div>
       <div style="display:grid;grid-template-columns:1fr 22px 1fr;gap:5px;align-items:center;margin-bottom:10px;">
@@ -6303,10 +6817,12 @@
           <div style="color:${grade.color};font-size:0.75em;font-weight:bold;">[${grade.name}]</div>
           <div style="font-size:0.72em;color:#ccc;">${base.name}</div>
           ${gemIcons ? `<div style="font-size:11px;margin-top:2px;">${gemIcons}</div>` : ''}
-          <div style="font-size:0.7em;color:${pwrColor};margin-top:2px;font-weight:bold;">전투력 ${newPower} <span style="font-size:0.85em;">${pwrDiffStr}</span></div>
+          <div style="font-size:0.7em;color:#9ca3af;margin-top:2px;">전투력 ${newPower}</div>
+          <div style="font-size:0.72em;color:${pwrColor};font-weight:bold;">빌드 ${pwrDiffStr}</div>
         </div>
       </div>
       <div style="background:#0d1117;border-radius:6px;padding:8px;margin-bottom:12px;font-size:11px;">${deltaRows}</div>
+      ${setChangeHtml}
       ${gemEffectLines.length ? `<div style="background:#1a1230;border:1px solid #4a2d6e;border-radius:6px;padding:7px 9px;margin-bottom:12px;font-size:10.5px;line-height:1.5;color:#d7bfff;">${gemEffectLines.map(l => `<div>${l}</div>`).join('')}</div>` : ''}
       <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
         <button id="gearEquip" style="background:#2563eb;border:none;color:#fff;padding:8px 18px;border-radius:8px;cursor:pointer;font-size:13px;"><strong>[1]</strong> 장착</button>

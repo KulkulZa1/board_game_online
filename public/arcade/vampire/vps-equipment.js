@@ -56,6 +56,11 @@
   SLOT_ITEMS.helm.push({ id: 'goblin_mask',  name: '고블린 마스크', icon: '🎭', stats: { xpRange: 1.15, cdMult: 0.94 } });
   SLOT_ITEMS.armor.push({ id: 'goblin_vest', name: '고블린 조끼',   icon: '🧤', stats: { speedMult: 1.10, dmgMult: 1.06 } });
   SLOT_ITEMS.boots.push({ id: 'goblin_boots',name: '고블린 단검화', icon: '👡', stats: { speedMult: 1.14, xpRange: 1.08 } });
+  // 천공 세트 전용 아이템 — 사거리·공격력 중심
+  SLOT_ITEMS.helm.push({ id: 'star_circlet',  name: '별빛 서클릿', icon: '⭐', stats: { rangeBonus: 1.10, dmgMult: 1.06 } });
+  SLOT_ITEMS.armor.push({ id: 'comet_cloak',  name: '혜성 망토',   icon: '☄', stats: { dmgMult: 1.12, maxHp: 15 } });
+  SLOT_ITEMS.boots.push({ id: 'astral_treads',name: '천체 보행화', icon: '🌠', stats: { speedMult: 1.10, rangeBonus: 1.08 } });
+  SLOT_ITEMS.ring.push({ id: 'nebula_ring',   name: '성운 반지',   icon: '🌌', stats: { rangeBonus: 1.14, cdMult: 0.93 } });
 
   const GEM_DEFS = [
     { id: 'ruby',      icon: '🔴', name: '루비',       rarity: 'common',    stat: 'dmgMult',   val: 1.08 },
@@ -118,6 +123,12 @@
       bonus2: { desc: '이동 속도 +20%', effect: 'speedMult', val: 1.20 },
       bonus4: { desc: '획득 코인 +30%', effect: 'goblin_loot', val: 1.30 },
     },
+    {
+      id: 'celestial', name: '☄ 천공', color: '#00cec9',
+      pieces: ['star_circlet', 'comet_cloak', 'astral_treads', 'nebula_ring'],
+      bonus2: { desc: '사거리·AoE +12%', effect: 'rangeBonus', val: 1.12 },
+      bonus4: { desc: '주 공격마다 10% 확률로 운석 낙하', effect: 'celestial_rain' },
+    },
   ];
 
   // Cross-synergies: combining 2 different set pieces triggers special hit effects
@@ -128,6 +139,7 @@
     { id: 'shadow_crit_dash',  sets: ['shadow', 'frost'], desc: '치명타마다 짧은 텔레포트 대쉬', effect: 'shadow_crit_dash' },
     { id: 'frost_orb_freeze',  sets: ['frost', 'zeus'],   desc: '구슬 회전 중 적 자동 빙결', effect: 'frost_orb_freeze' },
     { id: 'titan_thorns',      sets: ['titan', 'dragon'], desc: '피격 시 주변 60px 폭발 반격', effect: 'titan_thorns' },
+    { id: 'celestial_inferno', sets: ['celestial', 'dragon'], desc: '적중 시 운석 낙하 + 화상 부착', effect: 'celestial_inferno' },
   ];
 
   const GRADE_DROP_WEIGHTS = [55, 25, 11, 5, 3, 1]; // normal→antique
@@ -233,6 +245,46 @@
     return Math.round(power);
   }
 
+  // 세트/교차 보너스를 전투력 점수로 환산 (calcItemPower 와 동일 척도)
+  //   단일 아이템 점수에는 세트 효과가 안 잡히므로, 빌드 전체 점수 계산에 합산한다.
+  function calcSetBonusPower(equipMap) {
+    let power = 0;
+    for (const e of getActiveSetEffects(equipMap)) {
+      const b = e.bonus;
+      if (b.effect === 'dmgMult')         power += (b.val - 1) * 1000;
+      else if (b.effect === 'cdMult')     power += (1 - b.val) * 800;
+      else if (b.effect === 'speedMult')  power += (b.val - 1) * 250;
+      else if (b.effect === 'rangeBonus') power += (b.val - 1) * 400;
+      else if (b.effect === 'xpRange')    power += (b.val - 1) * 150;
+      else if (b.effect === 'maxHp')      power += b.val * 1.5;
+      else                                power += (e.level === 4 ? 360 : 220); // 특수 효과(번개 폭발 등)
+    }
+    // 교차 시너지: 각 250점
+    power += getActiveCrossEffects(equipMap).length * 250;
+    return Math.round(power);
+  }
+
+  // 빌드 전체 전투력 — 각 장비 점수 합 + 세트/교차 보너스 점수
+  //   업그레이드/자동분해 판정은 "이 아이템을 끼웠을 때 빌드 점수가 오르는가"로 평가해야
+  //   세트 완성 직전의 약한 조각이 자동분해되는 버그를 막을 수 있다.
+  function calcBuildPower(equipMap) {
+    let power = 0;
+    for (const slot of SLOTS) {
+      if (equipMap[slot]) power += calcItemPower(equipMap[slot]);
+    }
+    return power + calcSetBonusPower(equipMap);
+  }
+
+  // 특정 아이템을 해당 슬롯에 장착했을 때 빌드 점수 증가량 (세트 효과 포함)
+  //   양수면 업그레이드, 0 이하면 분해 후보
+  function equipPowerDelta(equipMap, item) {
+    if (!item) return 0;
+    const cur = calcBuildPower(equipMap);
+    const testMap = Object.assign({}, equipMap);
+    testMap[item.slot] = item;
+    return calcBuildPower(testMap) - cur;
+  }
+
   // Returns which set bonuses are active given current equip map {helm,armor,boots,ring}
   function getActiveSetEffects(equipMap) {
     const active = [];
@@ -336,5 +388,8 @@
     gemEffectDesc,
     itemDisplayName,
     calcItemPower,
+    calcSetBonusPower,
+    calcBuildPower,
+    equipPowerDelta,
   };
 })();
