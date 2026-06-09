@@ -32,7 +32,7 @@
 
   // 무기 강화 한계
   const MAX_WEAPON_LEVEL = 5;   // 같은 무기를 다시 고르면 레벨업 (최대 5)
-  const MAX_WEAPONS      = 8;   // 보유 가능한 무기 슬롯 수 (핵앤슬래시: 더 많이)
+  const MAX_WEAPONS      = 12;  // 보유 가능한 무기 슬롯 수 (핵앤슬래시: 더 많이)
   const COMBO_MILESTONES = [10, 25, 50, 100, 200];  // 콤보 보너스 지급 구간
 
   // 무기 정의 (기본 무기 + 진화 무기)
@@ -528,6 +528,7 @@
   let freeRerollUsed     = false; // 현재 선택창 무료 리롤 사용 여부 (창마다 초기화)
   let gearDrops          = [];    // 월드에 존재하는 장비 드롭
   let equipUiVisible     = false; // 장비 UI 표시 여부
+  let equipActiveTab     = 'gear'; // 장비 창 활성 탭: 'gear' | 'weapon' | 'sets'
   let currentChoiceBuilder = null; // 현재 선택지 생성 함수 (리롤 시 재호출)
   let audioCtx = null;
   let evolutionBannerTimer = null;
@@ -6516,143 +6517,182 @@
   });
 
   // ── 장비 UI ─────────────────────────────────────────────────────
-  function buildEquipUIHTML() {
+  // ── 탭별 장비 UI 빌더 ──────────────────────────────────────────────
+  function buildEquipUIHTML(tab) {
+    tab = tab || equipActiveTab || 'gear';
     if (!player || !window.VPS || !window.VPS.equipment) return '';
     const eq = window.VPS.equipment;
-    const slotNames = { helm: '투구', armor: '갑옷', boots: '장화', ring: '반지' };
-    let html = '<div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center;">';
-    for (const slot of eq.SLOTS) {
-      const item = player.equip[slot];
-      let content = `<div style="font-size:11px;color:#888;">${slotNames[slot]}<br><span style="font-size:20px;">❌</span><br><span style="color:#555;">비어있음</span></div>`;
-      if (item) {
-        const grade = eq.getGradeData(item.grade);
-        const base  = eq.getItemBase(item);
-        const stats = eq.getEquipStats(item);
-        const statLines = [];
-        if (stats.maxHp)      statLines.push(`❤ HP +${Math.round(stats.maxHp)}`);
-        if (stats.dmgMult && stats.dmgMult !== 1) statLines.push(`⚔ 데미지 ×${stats.dmgMult.toFixed(2)}`);
-        if (stats.cdMult  && stats.cdMult  !== 1) statLines.push(`⏩ CD ×${stats.cdMult.toFixed(2)}`);
-        if (stats.speedMult && stats.speedMult !== 1) statLines.push(`👟 속도 ×${stats.speedMult.toFixed(2)}`);
-        if (stats.rangeBonus && stats.rangeBonus !== 1) statLines.push(`🎯 사거리 ×${stats.rangeBonus.toFixed(2)}`);
-        if (stats.xpRange && stats.xpRange !== 1) statLines.push(`🧲 XP범위 ×${stats.xpRange.toFixed(2)}`);
-        if (stats.critChance) statLines.push(`⚡ 치명 +${(stats.critChance*100).toFixed(0)}%`);
-        const gemIcons = (item.gems || []).map(g => g.icon || '').join('');
-        // 특수 젬 이름 태그 (effect 보유 젬만)
-        const specialGemTags = (item.gems || [])
-          .map(g => (typeof g === 'object' ? g : eq.GEM_DEFS.find(d => d.id === g)))
-          .filter(g => g && g.effect)
-          .map(g => `<span style="color:#d7bfff;">${g.icon}${g.name}</span>`)
-          .join(' ');
-        content = `<div style="font-size:11px;color:#ccc;">${slotNames[slot]}<br><span style="font-size:20px;">${base.icon}</span><br><span style="color:${grade.color};font-weight:bold;">[${grade.name}]</span> ${base.name}<br><span style="color:#aaa;font-size:10px;">${statLines.join(' · ')}</span>${gemIcons ? `<br><span style="font-size:13px;">${gemIcons}</span>` : ''}${specialGemTags ? `<br><span style="font-size:9.5px;">${specialGemTags}</span>` : ''}</div>`;
+
+    if (tab === 'gear') {
+      // ── 탭1: 장비 슬롯 + 젬 효과 + 자동 분해 ──
+      const slotNames = { helm: '투구', armor: '갑옷', boots: '장화', ring: '반지' };
+      let html = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">';
+      for (const slot of eq.SLOTS) {
+        const item = player.equip[slot];
+        let content;
+        if (!item) {
+          content = `<div style="text-align:center;padding:6px 0;">
+            <div style="font-size:10px;color:#6b7280;margin-bottom:3px;">${slotNames[slot]}</div>
+            <div style="font-size:22px;line-height:1;">➕</div>
+            <div style="font-size:10px;color:#4b5563;margin-top:3px;">비어있음</div>
+          </div>`;
+        } else {
+          const grade = eq.getGradeData(item.grade);
+          const base  = eq.getItemBase(item);
+          const stats = eq.getEquipStats(item);
+          const statLines = [];
+          if (stats.maxHp)                             statLines.push(`❤ HP +${Math.round(stats.maxHp)}`);
+          if (stats.dmgMult  && stats.dmgMult  !== 1)  statLines.push(`⚔ 데미지 ×${stats.dmgMult.toFixed(2)}`);
+          if (stats.cdMult   && stats.cdMult   !== 1)  statLines.push(`⏩ CD ×${stats.cdMult.toFixed(2)}`);
+          if (stats.speedMult && stats.speedMult !== 1) statLines.push(`👟 속도 ×${stats.speedMult.toFixed(2)}`);
+          if (stats.rangeBonus && stats.rangeBonus !== 1) statLines.push(`🎯 사거리 ×${stats.rangeBonus.toFixed(2)}`);
+          if (stats.xpRange  && stats.xpRange   !== 1) statLines.push(`🧲 XP ×${stats.xpRange.toFixed(2)}`);
+          if (stats.critChance) statLines.push(`⚡ 치명 +${(stats.critChance*100).toFixed(0)}%`);
+          const gemIcons = (item.gems || []).map(g => g.icon || '').join('');
+          const specialGems = (item.gems || [])
+            .map(g => (typeof g === 'object' ? g : eq.GEM_DEFS.find(d => d.id === g)))
+            .filter(g => g && g.effect)
+            .map(g => `<span style="color:#c4b5fd;">${g.icon}${g.name}</span>`)
+            .join(' ');
+          content = `<div>
+            <div style="font-size:9.5px;color:#6b7280;margin-bottom:2px;">${slotNames[slot]}</div>
+            <div style="font-size:20px;line-height:1;">${base.icon}</div>
+            <div style="font-size:10px;margin:2px 0;"><span style="color:${grade.color};font-weight:bold;">[${grade.name}]</span></div>
+            <div style="font-size:10.5px;color:#e2e8f0;word-break:keep-all;overflow-wrap:break-word;">${base.name}</div>
+            <div style="font-size:9px;color:#94a3b8;margin-top:3px;line-height:1.55;">${statLines.join('<br>')}</div>
+            ${gemIcons ? `<div style="font-size:12px;margin-top:3px;">${gemIcons}</div>` : ''}
+            ${specialGems ? `<div style="font-size:9px;margin-top:2px;line-height:1.5;">${specialGems}</div>` : ''}
+          </div>`;
+        }
+        html += `<div style="background:#1a2035;border:1px solid #2a3050;border-radius:8px;padding:9px;min-height:80px;">${content}</div>`;
       }
-      html += `<div style="background:#1a2035;border:1px solid #2a3050;border-radius:8px;padding:10px;min-width:90px;text-align:center;">${content}</div>`;
-    }
-    html += '</div>';
-    const bonuses = eq.getActiveBonusDescriptions(player.equip);
-    if (bonuses.length) {
-      html += `<div style="margin-top:10px;padding:8px;background:#0d1628;border-radius:6px;font-size:11px;color:#f1c40f;">${bonuses.map(b => `✦ ${b}`).join('<br>')}</div>`;
-    }
-    // 활성 특수 젬 효과 요약
-    const gfx = eq.aggregateGemEffects(player.equip);
-    const gfxKeys = Object.keys(gfx);
-    if (gfxKeys.length) {
-      const GFX_LABEL = {
-        chain: '🔗 연쇄', cleave: '🪓 가르기', freeze: '❄ 빙결', fork: '🔱 부채꼴',
-        combust: '🔥 점화', shock: '⚡ 감전', leech: '🩸 흡수', culling: '☠ 참수',
-      };
-      const lines = gfxKeys.map(k => {
-        const e = gfx[k];
-        const pc = e.procChance >= 1 ? '상시' : `${Math.round(e.procChance * 100)}%`;
-        return `${GFX_LABEL[k] || k} <span style="color:#9a86c4;">(${pc}${e.count > 1 ? ` ×${e.count}` : ''})</span>`;
-      });
-      html += `<div style="margin-top:8px;padding:8px;background:#1a1230;border:1px solid #4a2d6e;border-radius:6px;font-size:11px;color:#d7bfff;">💠 특수 젬: ${lines.join(' · ')}</div>`;
+      html += '</div>';
+
+      // 활성 세트 보너스
+      const bonuses = eq.getActiveBonusDescriptions(player.equip);
+      if (bonuses.length) {
+        html += `<div style="margin-top:10px;padding:8px 10px;background:#0d1628;border-radius:6px;font-size:11px;color:#f1c40f;line-height:1.6;">${bonuses.map(b => `✦ ${b}`).join('<br>')}</div>`;
+      }
+
+      // 활성 특수 젬 효과
+      const gfx = eq.aggregateGemEffects(player.equip);
+      const gfxKeys = Object.keys(gfx);
+      if (gfxKeys.length) {
+        const GFX_LABEL = {
+          chain: '🔗 연쇄', cleave: '🪓 가르기', freeze: '❄ 빙결', fork: '🔱 부채꼴',
+          combust: '🔥 점화', shock: '⚡ 감전', leech: '🩸 흡수', culling: '☠ 참수',
+        };
+        const lines = gfxKeys.map(k => {
+          const e = gfx[k];
+          const pc = e.procChance >= 1 ? '상시' : `${Math.round(e.procChance * 100)}%`;
+          return `${GFX_LABEL[k] || k} <span style="color:#9a86c4;">(${pc}${e.count > 1 ? ` ×${e.count}` : ''})</span>`;
+        });
+        html += `<div style="margin-top:8px;padding:8px 10px;background:#1a1230;border:1px solid #4a2d6e;border-radius:6px;font-size:11px;color:#d7bfff;line-height:1.7;">💠 특수 젬: ${lines.join(' · ')}</div>`;
+      }
+
+      // 자동 분해 토글
+      html += `<div style="margin-top:10px;padding:9px 10px;background:#1a1230;border:1px solid #4a2d6e;border-radius:6px;font-size:11px;color:#d7bfff;display:flex;align-items:center;justify-content:space-between;gap:8px;">
+        <span style="line-height:1.4;">⚗ 자동 분해<br><span style="color:#9a86c4;font-size:9.5px;">빌드 점수가 안 오르는 장비를 XP 변환</span></span>
+        <button id="equipAutoDismantleToggle" style="flex-shrink:0;background:${autoDismantleEnabled ? '#7c3aed' : '#374151'};border:none;color:#fff;padding:5px 14px;border-radius:6px;cursor:pointer;font-size:11px;font-weight:bold;">${autoDismantleEnabled ? 'ON' : 'OFF'}</button>
+      </div>`;
+      return html;
     }
 
-    // ── 메인+보조 무기 시스템 ──
-    const mainId = getMainWeapon();
-    html += `<div style="margin-top:12px;padding:8px;background:#0d1628;border-radius:6px;">`;
-    html += `<div style="font-size:11px;color:#9fb4d8;margin-bottom:6px;">⭐ 메인 무기 선택 — 클릭으로 지정 · 보조 무기는 메인 공격에 오버레이 효과 추가</div>`;
-    html += `<div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center;">`;
-    for (const id of player.weapons) {
-      const d = WEAPON_DEFS[id];
-      const isMain = id === mainId;
-      const defensive = !isAttackWeapon(id);
-      const auxFam = defensive ? null : weaponFamily(id);
-      const auxDef = (auxFam && !isMain) ? AUX_EFFECT_DEFS[auxFam] : null;
-      const bg = isMain ? '#3b2a0a' : (defensive ? '#1e3a5f' : '#1e2638');
-      const bd = isMain ? '#f1c40f' : (defensive ? '#3b82f6' : '#4b5563');
-      const badge = isMain ? '⭐ 메인' : (defensive ? '🛡 방어' : '⚙ 보조');
-      const badgeColor = isMain ? '#f1c40f' : (defensive ? '#60a5fa' : '#94a3b8');
-      const auxHint = auxDef ? `<br><span style="font-size:8.5px;color:#7dd3fc;">${auxDef.icon} ${auxDef.name}</span>` : '';
-      html += `<button class="weapon-toggle" data-wid="${id}" style="background:${bg};border:1.5px solid ${bd};color:#fff;border-radius:7px;padding:5px 9px;font-size:11px;cursor:${defensive ? 'default' : 'pointer'};min-width:72px;text-align:center;">${d.icon} ${d.name}<br><span style="font-size:9px;color:${badgeColor};">${badge}</span>${auxHint}</button>`;
-    }
-    html += `</div></div>`;
-
-    // ── 보조 무기 효과 목록 (현재 발동 중인 오버레이) ──
-    const auxFams = getAuxFamilies();
-    if (auxFams.length && mainId) {
-      const mainDef = WEAPON_DEFS[mainId];
-      html += `<div style="margin-top:8px;padding:8px;background:#161d33;border:1px solid #2d3a5e;border-radius:6px;font-size:10.5px;line-height:1.7;">`;
-      html += `<div style="color:#f1c40f;margin-bottom:3px;">🔗 보조 오버레이 효과 — <span style="color:#a3e635;">${mainDef.icon} ${mainDef.name}</span> 발사 시 함께 발동</div>`;
-      for (const fam of auxFams) {
-        const ef = AUX_EFFECT_DEFS[fam];
-        if (!ef) continue;
-        const procPct = ef.proc >= 1 ? '항상' : `${Math.round(ef.proc * 100)}%`;
-        html += `<div style="margin-bottom:1px;"><span style="color:#2ecc71;">${ef.icon} ${ef.name}</span> <span style="color:#cbd5e1;">${ef.desc}</span> <span style="color:#64748b;">(${procPct})</span></div>`;
+    if (tab === 'weapon') {
+      // ── 탭2: 메인+보조 무기 선택 ──
+      const mainId = getMainWeapon();
+      let html = `<div style="font-size:10.5px;color:#9fb4d8;margin-bottom:10px;line-height:1.55;">⭐ 공격 무기를 클릭해 메인 지정 · 보조 무기는 메인 발사 시 오버레이 효과 추가</div>`;
+      html += `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:6px;">`;
+      for (const id of player.weapons) {
+        const d = WEAPON_DEFS[id];
+        const isMain = id === mainId;
+        const defensive = !isAttackWeapon(id);
+        const auxFam = defensive ? null : weaponFamily(id);
+        const auxDef = (auxFam && !isMain) ? AUX_EFFECT_DEFS[auxFam] : null;
+        const bg = isMain ? '#3b2a0a' : (defensive ? '#1e3a5f' : '#1e2638');
+        const bd = isMain ? '#f1c40f' : (defensive ? '#3b82f6' : '#4b5563');
+        const badge = isMain ? '⭐ 메인' : (defensive ? '🛡 방어' : '⚙ 보조');
+        const badgeColor = isMain ? '#f1c40f' : (defensive ? '#60a5fa' : '#94a3b8');
+        const auxHint = auxDef ? `<div style="font-size:8.5px;color:#7dd3fc;margin-top:2px;">${auxDef.icon} ${auxDef.name}</div>` : '';
+        html += `<button class="weapon-toggle" data-wid="${id}" style="background:${bg};border:1.5px solid ${bd};color:#fff;border-radius:7px;padding:6px 6px;font-size:11px;cursor:${defensive ? 'default' : 'pointer'};text-align:center;width:100%;">${d.icon} ${d.name}<div style="font-size:9px;color:${badgeColor};margin-top:2px;">${badge}</div>${auxHint}</button>`;
       }
       html += `</div>`;
-    } else if (!mainId && player.weapons.some(w => isAttackWeapon(w))) {
-      html += `<div style="margin-top:8px;padding:8px;background:#161d33;border:1px solid #4b5563;border-radius:6px;font-size:10.5px;color:#9ca3af;">위에서 공격 무기를 클릭해 메인으로 지정하세요</div>`;
+
+      // 보조 오버레이 효과 목록
+      const auxFams = getAuxFamilies();
+      if (auxFams.length && mainId) {
+        const mainDef = WEAPON_DEFS[mainId];
+        html += `<div style="margin-top:10px;padding:9px 10px;background:#161d33;border:1px solid #2d3a5e;border-radius:6px;font-size:10.5px;line-height:1.7;">`;
+        html += `<div style="color:#f1c40f;margin-bottom:5px;">🔗 보조 오버레이 — <span style="color:#a3e635;">${mainDef.icon} ${mainDef.name}</span> 발사 시 함께 발동</div>`;
+        for (const fam of auxFams) {
+          const ef = AUX_EFFECT_DEFS[fam];
+          if (!ef) continue;
+          const procPct = ef.proc >= 1 ? '항상' : `${Math.round(ef.proc * 100)}%`;
+          html += `<div style="padding:2px 0;border-bottom:1px solid #1e2a45;"><span style="color:#2ecc71;">${ef.icon} ${ef.name}</span> <span style="color:#94a3b8;">${ef.desc}</span> <span style="color:#64748b;">(${procPct})</span></div>`;
+        }
+        html += `</div>`;
+      } else if (!mainId && player.weapons.some(w => isAttackWeapon(w))) {
+        html += `<div style="margin-top:10px;padding:10px;background:#161d33;border:1px solid #4b5563;border-radius:6px;font-size:11px;color:#9ca3af;text-align:center;">위에서 공격 무기를 클릭해 메인으로 지정하세요</div>`;
+      }
+      return html;
     }
 
-    // ── 세트 진행도 — 각 세트의 조각 아이콘을 표시해 무엇을 모아야 하는지 시각화 ──
-    if (eq.SET_DEFS) {
-      // 슬롯 전체에서 baseId → {icon, name} 조회용 맵 구성
+    if (tab === 'sets') {
+      // ── 탭3: 세트 도감 ──
+      if (!eq.SET_DEFS) return '<p style="color:#888;text-align:center;padding:20px;">세트 데이터 없음</p>';
       const baseInfo = {};
       for (const sl of eq.SLOTS) for (const it of (eq.SLOT_ITEMS[sl] || [])) baseInfo[it.id] = it;
       const equippedIds = eq.SLOTS.map(sl => player.equip[sl]).filter(Boolean).map(it => it.baseId);
-      // 조각을 하나라도 장착한 세트를 먼저, 진행도 높은 순으로 정렬
+      const slotKor = { helm: '투구', armor: '갑옷', boots: '장화', ring: '반지' };
       const setRows = eq.SET_DEFS
         .map(set => ({ set, cnt: set.pieces.filter(p => equippedIds.includes(p)).length }))
         .sort((a, b) => b.cnt - a.cnt)
         .map(({ set, cnt }) => {
           const c2 = cnt >= 2, c4 = cnt >= 4;
-          // 각 조각: 장착=강조, 미장착=흐리게(슬롯명 표시)
-          const slotKor2 = { helm: '투구', armor: '갑옷', boots: '장화', ring: '반지' };
           const pieceIcons = set.pieces.map(pid => {
             const info = baseInfo[pid] || { icon: '?', name: pid };
             const owned = equippedIds.includes(pid);
             const slotOf = eq.SLOTS.find(sl => (eq.SLOT_ITEMS[sl] || []).some(it => it.id === pid));
-            return `<span title="${info.name} (${slotKor2[slotOf] || ''})" style="display:inline-block;font-size:15px;width:24px;height:24px;line-height:24px;text-align:center;border-radius:5px;margin:0 1px;${owned ? `background:${set.color}33;border:1px solid ${set.color};` : 'opacity:0.32;border:1px dashed #444;filter:grayscale(1);'}">${info.icon}</span>`;
+            return `<span title="${info.name} (${slotKor[slotOf] || ''})" style="display:inline-block;font-size:16px;width:26px;height:26px;line-height:26px;text-align:center;border-radius:5px;margin:1px;${owned ? `background:${set.color}33;border:1px solid ${set.color};` : 'opacity:0.3;border:1px dashed #444;filter:grayscale(1);'}">${info.icon}</span>`;
           }).join('');
           const headColor = c4 ? set.color : c2 ? '#2ecc71' : (cnt > 0 ? '#cbd5e1' : '#6b7280');
-          const b2 = `<span style="color:${c2 ? '#2ecc71' : '#6b7280'};">${c2 ? '✓' : '○'} 2세트: ${set.bonus2.desc}</span>`;
-          const b4 = `<span style="color:${c4 ? set.color : '#6b7280'};">${c4 ? '✓' : '○'} 4세트: ${set.bonus4.desc}</span>`;
-          // 다음 보너스까지 필요한 조각 수 힌트
           let hint = '';
-          if (cnt > 0 && cnt < 2) hint = ` <span style="color:#f39c12;">(2세트까지 ${2 - cnt}개)</span>`;
-          else if (cnt >= 2 && cnt < 4) hint = ` <span style="color:#f39c12;">(4세트까지 ${4 - cnt}개)</span>`;
-          return `<div style="margin-bottom:6px;padding-bottom:5px;border-bottom:1px solid #1c2236;">
-            <div style="margin-bottom:3px;"><b style="color:${headColor};">${set.name} ${cnt}/4</b>${hint}</div>
-            <div style="margin-bottom:3px;">${pieceIcons}</div>
-            <div style="font-size:9.5px;line-height:1.5;">${b2}<br>${b4}</div>
+          if (cnt > 0 && cnt < 2) hint = ` <span style="color:#f39c12;font-size:9px;">(+${2 - cnt} → 2세트)</span>`;
+          else if (cnt >= 2 && cnt < 4) hint = ` <span style="color:#f39c12;font-size:9px;">(+${4 - cnt} → 4세트)</span>`;
+          const b2color = c2 ? '#2ecc71' : '#6b7280';
+          const b4color = c4 ? set.color : '#6b7280';
+          return `<div style="margin-bottom:10px;padding:8px 10px;background:#13182a;border:1px solid ${cnt > 0 ? set.color + '55' : '#1c2236'};border-radius:7px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+              <b style="color:${headColor};font-size:11.5px;">${set.name}</b>
+              <span style="font-size:10px;color:${headColor};">${cnt}/4${hint}</span>
+            </div>
+            <div style="margin-bottom:6px;">${pieceIcons}</div>
+            <div style="font-size:9.5px;line-height:1.65;">
+              <div><span style="color:${b2color};">${c2 ? '✓' : '○'}</span> <span style="color:#9ca3af;">2세트:</span> <span style="color:${b2color};">${set.bonus2.desc}</span></div>
+              <div><span style="color:${b4color};">${c4 ? '✓' : '○'}</span> <span style="color:#9ca3af;">4세트:</span> <span style="color:${b4color};">${set.bonus4.desc}</span></div>
+            </div>
           </div>`;
         });
-      html += `<div style="margin-top:8px;padding:9px;background:#13182a;border:1px solid #2a3050;border-radius:6px;font-size:10px;color:#cbd5e1;"><div style="color:#f1c40f;margin-bottom:5px;font-size:11px;">🎽 세트 도감 — 같은 세트 조각을 모아 보너스 활성화</div>${setRows.join('')}</div>`;
+      return `<div style="font-size:10px;color:#9ca3af;margin-bottom:8px;">같은 세트 조각을 2개·4개 모으면 보너스가 활성화됩니다</div>${setRows.join('')}`;
     }
 
-    // ── 자동 분해 토글 (E키 창에서 켜고 끌 수 있도록) ──
-    html += `<div style="margin-top:8px;padding:8px;background:#1a1230;border:1px solid #4a2d6e;border-radius:6px;font-size:11px;color:#d7bfff;display:flex;align-items:center;justify-content:space-between;">
-      <span>⚗ 자동 분해 <span style="color:#9a86c4;font-size:9.5px;">(빌드 점수가 안 오르는 장비를 자동으로 XP 변환)</span></span>
-      <button id="equipAutoDismantleToggle" style="background:${autoDismantleEnabled ? '#7c3aed' : '#374151'};border:none;color:#fff;padding:5px 12px;border-radius:6px;cursor:pointer;font-size:11px;font-weight:bold;">${autoDismantleEnabled ? 'ON' : 'OFF'}</button>
-    </div>`;
-
-    return html;
+    return '';
   }
 
   function renderEquipUI() {
     const body = document.getElementById('equipBody');
-    if (body) body.innerHTML = buildEquipUIHTML();
+    if (body) body.innerHTML = buildEquipUIHTML(equipActiveTab);
+    // 탭 버튼 활성 상태 갱신
+    const tabs = document.getElementById('equipTabs');
+    if (tabs) {
+      tabs.querySelectorAll('button[data-tab]').forEach(btn => {
+        const active = btn.dataset.tab === equipActiveTab;
+        btn.style.background    = active ? '#1d4ed8' : '#1f2937';
+        btn.style.borderColor   = active ? '#3b82f6' : '#374151';
+        btn.style.color         = active ? '#fff'    : '#9ca3af';
+        btn.style.fontWeight    = active ? 'bold'    : 'normal';
+      });
+    }
   }
 
   function toggleEquipUI() {
@@ -6660,14 +6700,40 @@
     equipUiVisible = !equipUiVisible;
     let panel = document.getElementById('equipPanel');
     if (!panel) {
+      equipActiveTab = 'gear'; // 창 열 때 항상 장비 탭부터
       panel = document.createElement('div');
       panel.id = 'equipPanel';
-      panel.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#111827;border:2px solid #39445a;border-radius:12px;padding:18px;z-index:900;max-width:420px;width:94%;color:#fff;font-family:sans-serif;';
-      panel.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><strong>⚔ 장비 창 (E키)</strong><button id="equipClose" style="background:none;border:none;color:#fff;font-size:20px;cursor:pointer;">✕</button></div><div id="equipBody"></div>`;
+      panel.style.cssText = [
+        'position:fixed', 'top:50%', 'left:50%', 'transform:translate(-50%,-50%)',
+        'background:#111827', 'border:2px solid #39445a', 'border-radius:12px',
+        'z-index:900', 'max-width:440px', 'width:94%', 'color:#fff',
+        'font-family:sans-serif', 'max-height:88vh', 'display:flex', 'flex-direction:column',
+        'overflow:hidden',
+      ].join(';');
+      panel.innerHTML = `
+        <div style="padding:13px 16px 10px;flex-shrink:0;border-bottom:1px solid #1e2a45;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+            <strong style="font-size:13px;">⚔ 장비 창 <span style="color:#6b7280;font-size:11px;font-weight:normal;">(E키)</span></strong>
+            <button id="equipClose" style="background:none;border:none;color:#9ca3af;font-size:18px;cursor:pointer;line-height:1;padding:2px 6px;border-radius:4px;">✕</button>
+          </div>
+          <div id="equipTabs" style="display:flex;gap:4px;">
+            <button data-tab="gear"   style="flex:1;padding:6px 4px;border-radius:6px;border:1px solid;cursor:pointer;font-size:11.5px;transition:background 0.15s;">⚔ 장비</button>
+            <button data-tab="weapon" style="flex:1;padding:6px 4px;border-radius:6px;border:1px solid;cursor:pointer;font-size:11.5px;transition:background 0.15s;">🗡 무기</button>
+            <button data-tab="sets"   style="flex:1;padding:6px 4px;border-radius:6px;border:1px solid;cursor:pointer;font-size:11.5px;transition:background 0.15s;">🎽 세트</button>
+          </div>
+        </div>
+        <div id="equipBody" style="overflow-y:auto;padding:12px 16px 16px;flex:1;min-height:0;"></div>
+      `;
       document.body.appendChild(panel);
       document.getElementById('equipClose').addEventListener('click', () => { equipUiVisible = true; toggleEquipUI(); });
-      // equipBody 위임 핸들러 (innerHTML 교체돼도 유지) — 메인 무기 지정 + 자동 분해 토글
-      document.getElementById('equipBody').addEventListener('click', (ev) => {
+      document.getElementById('equipTabs').addEventListener('click', ev => {
+        const btn = ev.target.closest('button[data-tab]');
+        if (!btn) return;
+        equipActiveTab = btn.dataset.tab;
+        renderEquipUI();
+      });
+      // equipBody 위임 핸들러 — 메인 무기 지정 + 자동 분해 토글
+      document.getElementById('equipBody').addEventListener('click', ev => {
         const btn = ev.target.closest('.weapon-toggle');
         if (btn && btn.dataset.wid) { setMainWeapon(btn.dataset.wid); return; }
         if (ev.target.closest('#equipAutoDismantleToggle')) {
@@ -6677,15 +6743,17 @@
         }
       });
     }
-    panel.style.display = equipUiVisible ? 'block' : 'none';
+    panel.style.display = equipUiVisible ? 'flex' : 'none';
     if (equipUiVisible) {
-      const body = document.getElementById('equipBody');
-      if (body) {
-        if (!player) {
-          body.innerHTML = '<p style="color:#888;text-align:center;padding:20px;">게임을 시작하면 장비를 볼 수 있어요!</p>';
-        } else {
-          body.innerHTML = buildEquipUIHTML();
-        }
+      if (!player) {
+        const body = document.getElementById('equipBody');
+        if (body) body.innerHTML = '<p style="color:#888;text-align:center;padding:20px;">게임을 시작하면 장비를 볼 수 있어요!</p>';
+        const tabs = document.getElementById('equipTabs');
+        if (tabs) tabs.style.display = 'none';
+      } else {
+        const tabs = document.getElementById('equipTabs');
+        if (tabs) tabs.style.display = 'flex';
+        renderEquipUI();
       }
       if (state === 'playing') setPaused(true);
     } else {
