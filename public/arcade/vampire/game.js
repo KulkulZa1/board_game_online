@@ -464,6 +464,11 @@
   let state = 'idle'; // idle | playing | paused | levelup | itembox | dead | win
   let player = null;
   let enemies = [];
+  // ── 적 공간 분할 그리드 (성능) — 매 프레임 1회 재구성, 충돌/탐색을 근접 셀로 한정 ──
+  //   buildEnemyGrid()로 갱신하고 forEnemiesNear()로 질의. 셀에는 적 '참조'가 담기므로
+  //   질의 중 dealDamage가 적을 splice해도 콜백에서 e.dying을 건너뛰면 안전(killEnemy는 멱등).
+  const GRID_CELL = 80;
+  let enemyGrid = new Map();
   let projectiles = [];
   let xpGems = [];
   let particles = [];
@@ -947,9 +952,6 @@
       .map(w => weaponFamily(w))
       .filter(f => { if (f === mainFam || seen.has(f)) return false; seen.add(f); return true; });
   }
-  function ownsFamily(fam) {
-    return !!(player && player.weapons.some(w => weaponFamily(w) === fam));
-  }
   // 보조 효과 발동 — 메인 무기 발사 시 각 보조 계열의 오버레이 효과를 적용
   function triggerAuxEffects(target, baseDmg) {
     if (!player || !target) return;
@@ -998,7 +1000,9 @@
           break;
         case 'orb': {
           const aoeR = 70 * rng;
-          for (const e of enemies) {
+          // 역방향 순회: dealDamage가 사망 적을 splice해도 다음 적을 건너뛰지 않도록
+          for (let ei = enemies.length - 1; ei >= 0; ei--) {
+            const e = enemies[ei];
             if (!e.dying && Math.hypot(e.x - tx, e.y - ty) < aoeR) dealDamage(e, baseDmg * 0.40);
           }
           rings.push({ x: tx, y: ty, r: 4, maxR: aoeR, life: 0.25, maxLife: 0.25, color: '#3498db' });
@@ -1010,7 +1014,8 @@
         case 'scythe': {
           const sAng = Math.atan2(ty - player.y, tx - player.x);
           const sR = 100 * rng;
-          for (const e of enemies) {
+          for (let ei = enemies.length - 1; ei >= 0; ei--) {
+            const e = enemies[ei];
             if (e.dying) continue;
             const eDist = Math.hypot(e.x - player.x, e.y - player.y);
             if (eDist > sR) continue;
@@ -2456,13 +2461,12 @@
   function nearestEnemyFromPoint(point, range) {
     let best = null;
     let bestD = Infinity;
-    for (const enemy of enemies) {
-      const d = dist(point, enemy);
-      if (d < range && d < bestD) {
-        best = enemy;
-        bestD = d;
-      }
-    }
+    forEnemiesNear(point.x, point.y, range, (enemy) => {
+      if (enemy.dying) return false;
+      const dx = enemy.x - point.x, dy = enemy.y - point.y, d2 = dx * dx + dy * dy;
+      if (d2 < range * range && d2 < bestD) { bestD = d2; best = enemy; }
+      return false;
+    });
     return best;
   }
 
@@ -2696,14 +2700,14 @@
     waveCount++;
     const isHorde = (waveCount % HORDE_WAVE_EVERY === 0);
     if (isHorde) floatTexts.push({ text: '🔥 HORDE WAVE!', life: 2.0, maxLife: 2.0, screenSpace: true, color: '#e74c3c', size: 20 });
-    // 난이도 곡선 — 7분 이후 압박 배율 적용으로 급격히 가속
+    // 난이도 곡선 — 5분 이후 압박 배율 적용으로 급격히 가속
     //   기본: 1 + 0.9m + 0.06m²  (이차항 2배 강화)
-    //   7분 이후 압박 배율: +10%/스택, 스택 = floor((m-7)×0.65)
-    //   예: 10분 → ×1.1, 15분 → ×1.5, 20분 → ×1.8
-    //   → 7분 미만 플레이어는 거의 영향 없음, 완전 빌드 한계 ~18분 설계
+    //   5분 이후 압박 배율: +12%/스택, 스택 = floor((m-5)×0.8)
+    //   예: 8분 → ×1.24, 10분 → ×1.48  (10분 승리 직전이 확실히 빡세짐)
+    //   → 5분 미만 플레이어는 거의 영향 없음, 후반 빌드 한계가 체감되도록 강화
     const m = elapsed / 60;
-    const pressureStacks = m > 7 ? Math.floor((m - 7) * 0.65) : 0;
-    const pressureMult   = 1 + pressureStacks * 0.10;
+    const pressureStacks = m > 5 ? Math.floor((m - 5) * 0.8) : 0;
+    const pressureMult   = 1 + pressureStacks * 0.12;
     const difficulty = (1 + 0.9 * m + 0.06 * m * m) * pressureMult;
     // 무한 모드 스케일링 — 체력은 초지수(super-exponential)로 폭증
     //   지수에 2차항을 더해 가속 → 25분(무한 15분)쯤이면 어떤 빌드도 뚫을 수 없는 체력의 벽
@@ -2746,7 +2750,7 @@
         speed: ([75, 55, 35][tier] + Math.random() * 20) * runDifficulty.enemySpeedMult * infSpdMult,
         size:  [10, 15, 22][tier],
         color: ['#e74c3c', behavior === 'archer' ? '#1abc9c' : '#9b59b6', '#c0392b'][tier],
-        xpVal: Math.round([5, 13, 30][tier] * (1 + elapsed / 300)),  // XP 보상 증가 → 무기 레벨 빠른 성장으로 난이도 완화
+        xpVal: Math.round([5, 13, 30][tier] * (1 + elapsed / 500)),  // XP 보상 완만 증가 — 과거 /300은 후반 무적화 유발해 완화
         tier,
         hurtFlash: 0,
         frozen: 0,
@@ -2778,11 +2782,14 @@
           newEnemy.maxShield = newEnemy.shield;
         }
       }
-      // 혈월 이벤트 중 스폰된 적: 속도·공격력 강화 + XP 2배
+      // 혈월 이벤트 중 스폰된 적: 강화된 위협 (속도·공격력·체력 상승) + XP 보상
+      //   과거엔 XP 2배에 위협이 미미해 "공짜 XP 이벤트"였음 → 실질 위험을 부여하고 XP 보상은 1.6배로 조정
       if (bloodMoonActive > 0) {
-        newEnemy.speed     *= 1.35;
-        newEnemy.attackDmg  = Math.round(newEnemy.attackDmg * 1.30);
-        newEnemy.xpVal      = Math.round(newEnemy.xpVal * 2);
+        newEnemy.speed     *= 1.4;
+        newEnemy.attackDmg  = Math.round(newEnemy.attackDmg * 1.5);
+        newEnemy.hp        *= 1.3;
+        newEnemy.maxHp     *= 1.3;
+        newEnemy.xpVal      = Math.round(newEnemy.xpVal * 1.6);
         newEnemy.bloodMoon  = true;  // 렌더링용 플래그 (붉은 후광)
       }
       enemies.push(newEnemy);
@@ -2921,7 +2928,11 @@
     // 세트 4세트 + 교차 시너지의 특수 hit-effect 플래그 집계
     const flags = {};
     for (const se of setEffects) {
-      if (se.bonus && se.bonus.effect) flags[se.bonus.effect] = true;
+      if (se.bonus && se.bonus.effect) {
+        flags[se.bonus.effect] = true;
+        // val을 가진 효과는 <effect>_val 로 보관 (예: zeus_chain → zeus_chain_val)
+        if (se.bonus.val != null) flags[se.bonus.effect + '_val'] = se.bonus.val;
+      }
     }
     for (const c of player.crossEffects) {
       if (c.effect) flags[c.effect] = true;
@@ -3177,22 +3188,20 @@
   }
 
   function nearestEnemy() {
-    let best = null, bd = Infinity;
-    for (const e of enemies) {
-      const d = dist(player, e);
-      if (d < bd) { bd = d; best = e; }
-    }
-    return best;
+    return nearestEnemyNear(player.x, player.y);
   }
 
   function spawnExplosion(x, y, range, dmg, evolved, src) {
     if (src !== undefined) dmgSource = src; // 출처 명시 시 집계 출처 설정 (nova/bomb 등)
     const col = evolved ? '#f1c40f' : '#e74c3c';
     for (let i = 0; i < 12; i++) spawnParticle(x, y, col, 6 + Math.random() * 8, 0.5 + Math.random() * 0.4);
-    for (let _i = enemies.length - 1; _i >= 0; _i--) {
-      const e = enemies[_i];
-      if (e && dist({ x, y }, e) < range) dealDamage(e, dmg);
-    }
+    const r2 = range * range;
+    forEnemiesNear(x, y, range, (e) => {
+      if (e.dying) return false;
+      const dx = e.x - x, dy = e.y - y;
+      if (dx * dx + dy * dy < r2) dealDamage(e, dmg);
+      return false;
+    });
     projectiles.push({ type: 'explosion', x, y, r: 0, maxR: range, life: 0.4, dmg: 0, evolved });
     // 슈퍼노바: 5방향 연쇄 폭발 + 복사열 화상 DoT
     if (evolved) {
@@ -3203,13 +3212,17 @@
       }
       // 복사열: 범위 내 적에게 화상 DoT 부여 (ignite 패시브 없어도 발동)
       if (player) {
-        for (const se of enemies) {
-          if (dist({ x, y }, se) < range * 1.2) {
+        const br2 = (range * 1.2) * (range * 1.2);
+        forEnemiesNear(x, y, range * 1.2, (se) => {
+          if (se.dying) return false;
+          const dx = se.x - x, dy = se.y - y;
+          if (dx * dx + dy * dy < br2) {
             se.burnStacks = Math.min((se.burnStacks || 0) + 2, 5);
             se.burnTimer  = Math.max(se.burnTimer  || 0, 3.5);
             se.burnDmg    = se.burnDmg || (player.dmgMult * 8);
           }
-        }
+          return false;
+        });
       }
     }
   }
@@ -3239,14 +3252,15 @@
     const dmg = DASH_DMG * (source && source.dmgMult ? source.dmgMult : player.dmgMult) * stats.damageMult;
     dmgSource = 'dash';
     let hitCount = 0;
+    // 스냅샷 순회(splice 안전) + e.dying 플래그로 존재 확인 — 과거 enemies.includes()의 O(N²) 제거
     for (const e of [...enemies]) {
-      if (!enemies.includes(e) || e.dying) continue;
+      if (e.dying) continue;
       const pathHit = distToSegment(e, start, end) < e.size + stats.width;
       const endHit = dist(e, end) < e.size + stats.range;
       if (!pathHit && !endHit) continue;
       hitCount++;
       dealDamage(e, dmg);
-      if (stats.rupture && enemies.includes(e) && e.hp > 0 && !e.dying) {
+      if (stats.rupture && e.hp > 0 && !e.dying) {
         e.rupture = {
           time: stats.ruptureTime,
           maxTime: stats.ruptureTime,
@@ -3304,7 +3318,7 @@
       if (!e.rupture || e.rupture.time <= 0 || e.dying) continue;
       e.rupture.time -= dt;
       dealDamage(e, e.rupture.dps * dt);
-      if (!enemies.includes(e) || e.dying) continue;
+      if (e.dying) continue;
       if (e.rupture.time <= 0) delete e.rupture;
     }
   }
@@ -3315,11 +3329,13 @@
       const sf = spectralFields[i];
       sf.life -= dt;
       if (sf.life <= 0) { spectralFields.splice(i, 1); continue; }
-      for (let j = enemies.length - 1; j >= 0; j--) {
-        const e = enemies[j];
-        if (!e || e.dying) continue;
-        if (dist(sf, e) < sf.range) dealDamage(e, sf.dmg * dt);
-      }
+      const sr2 = sf.range * sf.range;
+      forEnemiesNear(sf.x, sf.y, sf.range, (e) => {
+        if (e.dying) return false;
+        const dx = e.x - sf.x, dy = e.y - sf.y;
+        if (dx * dx + dy * dy < sr2) dealDamage(e, sf.dmg * dt);
+        return false;
+      });
     }
   }
 
@@ -3332,18 +3348,19 @@
       tf.tickTimer = (tf.tickTimer || 0) + dt;
       dmgSource = 'toxic';
       // 초당 dmg 만큼 지속 피해 (도트로 처리 — 무한 중첩 방지)
-      for (let j = enemies.length - 1; j >= 0; j--) {
-        const e = enemies[j];
-        if (!e || e.dying) continue;
+      const applyPoison = tf.tickTimer >= 0.5;
+      forEnemiesNear(tf.x, tf.y, tf.range, (e) => {
+        if (e.dying) return false;
         if (dist(tf, e) < tf.range + e.size) {
           dealDamage(e, tf.dmg * dt, true, true);
           // 0.5초마다 중독 부착 (역병은 더 강하게)
-          if (tf.tickTimer >= 0.5 && e.hp > 0) {
+          if (applyPoison && e.hp > 0) {
             e.poisonTimer = Math.max(e.poisonTimer || 0, tf.evolved ? 4 : 2.5);
             e.poisonDmg   = Math.max(e.poisonDmg || 0, tf.dmg * (tf.evolved ? 0.5 : 0.32));
           }
         }
-      }
+        return false;
+      });
       if (tf.tickTimer >= 0.5) tf.tickTimer = 0;
       // 시각 입자
       if (Math.random() < 0.5) {
@@ -3526,7 +3543,8 @@
     if (gx.cleave) {
       const r = 70 * rb;
       const cd = dmg * gx.cleave.val;
-      for (const e of enemies) {
+      for (let ci = enemies.length - 1; ci >= 0; ci--) {
+        const e = enemies[ci];
         if (e === enemy || e.dying) continue;
         if (dist(enemy, e) < r) dealDamage(e, cd, true);
       }
@@ -3615,6 +3633,25 @@
         cx = best.x; cy = best.y;
       }
     }
+    // 제우스 2세트: 적중 시 확률로 번개 연쇄 (zeus_chain, val=연쇄 수)
+    if (sf.zeus_chain && Math.random() < 0.22) {
+      let cx = enemy.x, cy = enemy.y;
+      const hit = new Set([enemy]);
+      const links = Math.max(1, Math.round(sf.zeus_chain_val || 2));
+      for (let b = 0; b < links; b++) {
+        let best = null, bd = Infinity;
+        for (const e of enemies) {
+          if (hit.has(e) || e.dying) continue;
+          const d = dist({ x: cx, y: cy }, e);
+          if (d < 210 && d < bd) { bd = d; best = e; }
+        }
+        if (!best) break;
+        hit.add(best);
+        dealDamage(best, dmg * 0.5, true);
+        projectiles.push({ type: 'arc', x: cx, y: cy, tx: best.x, ty: best.y, life: 0.2, dmg: 0 });
+        cx = best.x; cy = best.y;
+      }
+    }
     // 천공 세트 4세트: 주 공격마다 일정 확률로 소형 운석 낙하 (celestial_rain)
     //   운석 피해(dmgSource==='meteor')에서는 재발동 금지 — 무한 연쇄 방지
     if (sf.celestial_rain && dmgSource !== 'meteor' && Math.random() < 0.10) {
@@ -3634,7 +3671,8 @@
     if (!player || !player.setFlags || !player.setFlags.titan_thorns) return;
     const r = 75 * (player.rangeBonus || 1) * ((player.equipStats && player.equipStats.rangeBonus) || 1);
     const tdmg = (player.maxHp || BASE_HP) * 0.5 * player.dmgMult;
-    for (const e of enemies) {
+    for (let ti = enemies.length - 1; ti >= 0; ti--) {
+      const e = enemies[ti];
       if (e.dying) continue;
       if (dist(player, e) < r) dealDamage(e, tdmg, true);
     }
@@ -4536,6 +4574,8 @@
       }
     }
     if (dashEffect) { dashEffect.life -= dt; if (dashEffect.life <= 0) dashEffect = null; }
+    // 적 공간 그리드 재구성 — 이후 DoT 필드/무기 타겟팅/투사체 충돌이 근접 셀만 검사 (이동 전 위치 기준)
+    buildEnemyGrid();
     updateSlashEchoes(dt);
     updateRuptures(dt);
     updateSpectralFields(dt);
@@ -4598,7 +4638,7 @@
         if (bloodMoonTimer <= 0) {
           bloodMoonTimer = 180;
           bloodMoonActive = 15;
-          floatTexts.push({ text: '🌑 혈월 강림! XP 2배 — 적이 강화됩니다!', life: 3.5, maxLife: 3.5, screenSpace: true, color: '#c0392b', size: 22 });
+          floatTexts.push({ text: '🌑 혈월 강림! 적 대폭 강화 — 버텨라!', life: 3.5, maxLife: 3.5, screenSpace: true, color: '#c0392b', size: 22 });
           screenShake = Math.min(screenShake + 0.4, 0.8);
           SFX.boss();
         }
@@ -4709,7 +4749,7 @@
       player.hp = Math.min(player.hp + player.maxHp * player.regenRate * dt, player.maxHp);
     }
 
-    // 무기 발사
+    // 무기 발사 (그리드는 위에서 이미 재구성됨)
     for (const id of player.weapons) fireWeapon(id, dt);
     updateAllyPlayer(dt);
     updateHybridTowers(dt);
@@ -4730,7 +4770,8 @@
         const evolved = p.type === 'blackhole';
         // 블랙홀: 사건의 지평선(흡입 반경) — 적을 블랙홀 중심으로 빨아들여 유저와 격리
         const captureR = evolved ? p.r + 78 : p.r;
-        for (const e of enemies) {
+        forEnemiesNear(p.x, p.y, captureR, (e) => {
+          if (e.dying) return false;
           const de = dist(p, e);
           if (de < p.r + e.size) {
             dealDamage(e, p.dmg * dt * 3);
@@ -4741,15 +4782,16 @@
               if (e._gravStacks >= 3) {
                 e._gravStacks = 0;
                 const gRange = 220 * (player.rangeBonus || 1);
-                for (const ge of enemies) {
-                  if (ge === e || ge.isBoss) continue;
+                forEnemiesNear(e.x, e.y, gRange, (ge) => {
+                  if (ge === e || ge.isBoss || ge.dying) return false;
                   const gd = dist(e, ge);
                   if (gd < gRange) {
                     const ga = Math.atan2(e.y - ge.y, e.x - ge.x);
                     ge.x += Math.cos(ga) * Math.min(gd * 0.5, 75);
                     ge.y += Math.sin(ga) * Math.min(gd * 0.5, 75);
                   }
-                }
+                  return false;
+                });
                 chainExplosions.push({ x: e.x, y: e.y, range: gRange * 0.5, dmg: p.dmg * 14, delay: 0.22, src: 'orb' });
                 rings.push({ x: e.x, y: e.y, r: 14, maxR: gRange * 0.5, life: 0.5, maxLife: 0.5, color: '#b388ff' });
                 rings.push({ x: e.x, y: e.y, r: 6, maxR: 28, life: 0.2, maxLife: 0.2, color: '#9b59b6' });
@@ -4771,7 +4813,8 @@
               if (Math.random() < 0.25) spawnParticle(e.x, e.y, '#b388ff', 3, 0.2);
             }
           }
-        }
+          return false;
+        });
         // 레벨2+ 오브 / 블랙홀: 적 투사체 흡수 (블랙홀은 사건의 지평선 전체에서 흡수)
         const orbLevel = p.type === 'blackhole'
           ? 5
@@ -4790,8 +4833,8 @@
       } else if (p.type === 'arrow') {
         p.x += p.vx * dt;
         p.y += p.vy * dt;
-        for (let j = enemies.length - 1; j >= 0; j--) {
-          const e = enemies[j];
+        forEnemiesNear(p.x, p.y, p.r, (e) => {
+          if (e.dying) return false;
           if (dist(p, e) < p.r + e.size) {
             // 부채꼴(fork) 젬이 생성한 파편은 젬 효과를 재발동하지 않음 (연쇄 폭주 방지)
             dealDamage(e, p.dmg, p.noGemFx);
@@ -4800,20 +4843,26 @@
               chainExplosions.push({ x: e.x, y: e.y, range: 42, dmg: p.dmg * 0.4, delay: 0 });
             }
             p.pierce--;
-            if (p.pierce <= 0) { projectiles.splice(i, 1); break; }
+            if (p.pierce <= 0) return true;  // 관통 소진 → 조기 종료
           }
-        }
+          return false;
+        });
+        if (p.pierce <= 0) { projectiles.splice(i, 1); continue; }
       } else if (p.type === 'laser' || p.type === 'deathray') {
         const evolved = p.type === 'deathray';
         const ex = p.x + Math.cos(p.angle) * p.length;
         const ey = p.y + Math.sin(p.angle) * p.length;
         const mult = evolved ? 9 : 5;          // 데스레이는 훨씬 강한 지속 피해
         const hitW = evolved ? 8 : 6;
-        for (const e of enemies) {
-          if (distToSegment(e, p, { x: ex, y: ey }) < e.size + hitW) {
+        // 빔 중점 기준으로 길이 절반 + 폭 반경의 적만 후보로 검사 (세그먼트 충돌)
+        const segEnd = { x: ex, y: ey };
+        forEnemiesNear((p.x + ex) / 2, (p.y + ey) / 2, p.length / 2 + hitW, (e) => {
+          if (e.dying) return false;
+          if (distToSegment(e, p, segEnd) < e.size + hitW) {
             dealDamage(e, p.dmg * dt * mult);
           }
-        }
+          return false;
+        });
       } else if (p.type === 'explosion') {
         p.r = p.maxR * (1 - p.life / 0.4);
       } else if (p.type === 'boomerang') {
@@ -4825,8 +4874,8 @@
         p.x += p.vx * dt;
         p.y += p.vy * dt;
         const hitSet = p.flipped ? p.hitIn : p.hitOut;
-        for (let j = enemies.length - 1; j >= 0; j--) {
-          const e = enemies[j];
+        forEnemiesNear(p.x, p.y, p.r, (e) => {
+          if (e.dying) return false;
           if (!hitSet.has(e) && dist(p, e) < p.r + e.size) {
             hitSet.add(e);
             dealDamage(e, p.dmg);
@@ -4836,27 +4885,26 @@
             }
             spawnParticle(p.x, p.y, '#27ae60', 5, 0.2);
           }
-        }
+          return false;
+        });
       } else if (p.type === 'tower') {
         p.x += p.vx * dt;
         p.y += p.vy * dt;
-        for (let j = enemies.length - 1; j >= 0; j--) {
-          const e = enemies[j];
+        let towerHit = false;
+        forEnemiesNear(p.x, p.y, p.r, (e) => {
+          if (e.dying) return false;
           if (dist(p, e) < p.r + e.size) {
             dealDamage(e, p.dmg);
             if (p.slow && e.hp > 0) e.frozen = Math.max(e.frozen || 0, p.slow);
-            projectiles.splice(i, 1);
-            break;
+            towerHit = true;
+            return true;  // 첫 적중 후 소멸
           }
-        }
+          return false;
+        });
+        if (towerHit) { projectiles.splice(i, 1); continue; }
       } else if (p.type === 'missile') {
         // 유도탄: 가장 가까운 적 방향으로 점진적 선회 후 추적, 접촉 시 소형 폭발
-        let tgt = null, td = Infinity;
-        for (const e of enemies) {
-          if (e.dying) continue;
-          const d = dist(p, e);
-          if (d < td) { td = d; tgt = e; }
-        }
+        const tgt = nearestEnemyNear(p.x, p.y, 600);
         if (tgt) {
           const desired = Math.atan2(tgt.y - p.y, tgt.x - p.x);
           const cur = Math.atan2(p.vy, p.vx);
@@ -4869,15 +4917,18 @@
         p.x += p.vx * dt;
         p.y += p.vy * dt;
         if ((p._trail = (p._trail || 0) + dt) > 0.03) { p._trail = 0; spawnParticle(p.x, p.y, p.evolved ? '#ff9ff3' : '#e056fd', 3, 0.22); }
-        for (let j = enemies.length - 1; j >= 0; j--) {
-          const e = enemies[j];
-          if (!e.dying && dist(p, e) < p.r + e.size) {
+        let missileHit = false;
+        forEnemiesNear(p.x, p.y, p.r, (e) => {
+          if (e.dying) return false;
+          if (dist(p, e) < p.r + e.size) {
             chainExplosions.push({ x: p.x, y: p.y, range: p.aoe, dmg: p.dmg, delay: 0, src: 'missile' });
             rings.push({ x: p.x, y: p.y, r: 4, maxR: p.aoe, life: 0.2, maxLife: 0.2, color: p.evolved ? '#ff9ff3' : '#e056fd' });
-            projectiles.splice(i, 1);
-            break;
+            missileHit = true;
+            return true;
           }
-        }
+          return false;
+        });
+        if (missileHit) { projectiles.splice(i, 1); continue; }
       } else if (p.type === 'meteor') {
         // 운석: delay 후 낙하 시작 → 착탄 시 광역 폭발
         if (p.delay > 0) { p.delay -= dt; }
@@ -5029,9 +5080,13 @@
       }
 
       if (!e.goblin && player.invincible <= 0 && d < e.size + 12) {
-        const contactDmg = e.isBoss ? 55 : [8, 18, 38][Math.min(e.tier, 2)];
+        // 접촉 데미지: 0.15초 무적과 결합되는 이산 타격(*dt 아님 — 과거엔 실질 ~4 DPS로 무의미)
+        //   시간 스케일(1+elapsed/480, 최대 3배)로 후반 몬스터 밀도가 실제 위협이 되도록 강화
+        const contactBase = e.isBoss ? 55 : [8, 18, 38][Math.min(e.tier, 2)];
+        const timeScale   = Math.min(1 + elapsed / 480, 3.0);
+        const contactDmg  = contactBase * 0.10 * timeScale;
         const auxShieldMult = (player._auxShieldTime || 0) > 0 ? 0.70 : 1.0;
-        player.hp -= contactDmg * dt * (hasSynergy('iron_fortress') ? 0.70 : auxShieldMult);
+        player.hp -= contactDmg * (hasSynergy('iron_fortress') ? 0.70 : auxShieldMult);
         screenShake = Math.min(screenShake + 0.15, 0.35);
         hurtScreenFlash = 0.28;
         SFX.hurt();
@@ -5069,6 +5124,11 @@
 
     if (hurtScreenFlash > 0) hurtScreenFlash = Math.max(0, hurtScreenFlash - dt);
     if (evolveFlash > 0) evolveFlash = Math.max(0, evolveFlash - dt);
+
+    // 시각 전용 배열 상한 — 대량 동시 처치 프레임에 무한 증가하던 것 방지 (가장 오래된 것부터 폐기)
+    if (damageNumbers.length > 200) damageNumbers.splice(0, damageNumbers.length - 200);
+    if (rings.length > 140)         rings.splice(0, rings.length - 140);
+    if (floatTexts.length > 90)     floatTexts.splice(0, floatTexts.length - 90);
 
     // 부유 텍스트 업데이트
     for (let i = floatTexts.length - 1; i >= 0; i--) {
@@ -5169,7 +5229,11 @@
     const invScale = 1 / viewScale;
 
     // XP 젬 — 가치별 크기·색상·광채 구분
+    const _gVW = canvas.width / viewScale, _gVH = canvas.height / viewScale;
     for (const g of xpGems) {
+      // 화면 밖 XP 젬 컬링 (후반 다량 누적)
+      if (g.x < camera.x - 24 || g.x > camera.x + _gVW + 24 ||
+          g.y < camera.y - 24 || g.y > camera.y + _gVH + 24) continue;
       // 가치 단계: tiny(<5), small(5-14), medium(15-30), large(31-80), huge(81+)
       const isHuge   = g.val >= 81;
       const isLarge  = g.val >= 31;
@@ -5592,8 +5656,12 @@
       ctx.globalAlpha = 1;
     }
 
-    // 적
+    // 적 — 화면 밖 컬링: 카메라 가시 영역(+여유) 밖은 그리지 않음 (650마리 중 화면 안만 렌더)
+    const _viewW = canvas.width / viewScale, _viewH = canvas.height / viewScale;
+    const _cull = 48;
     for (const e of enemies) {
+      if (e.x < camera.x - _cull || e.x > camera.x + _viewW + _cull ||
+          e.y < camera.y - _cull || e.y > camera.y + _viewH + _cull) continue;
       ctx.save();
       ctx.translate(e.x, e.y);
       // 등장 연출: 작게 확대되며 페이드인 (적이 갑자기 튀어나오지 않음)
@@ -5607,7 +5675,8 @@
       const flash = e.hurtFlash > 0;
       const rageActive = e.hp < e.maxHp * 0.3;
       ctx.fillStyle = flash ? '#ffffff' : e.color;
-      ctx.shadowBlur = flash ? 20 : (rageActive ? 14 : (e.bloodMoon ? 16 : 8));
+      // shadowBlur는 캔버스에서 가장 비싼 연산 — 다수인 하위 티어는 글로우 축소/생략
+      ctx.shadowBlur = flash ? 20 : (rageActive ? 14 : (e.bloodMoon ? 16 : (e.tier === 0 ? 0 : 6)));
       ctx.shadowColor = rageActive ? '#ff4500' : (e.bloodMoon ? '#cc0000' : e.color);
 
       // 적 모양: boss=특수 별형, tier2=육각형, tier1 archer=마름모, tier1=사각형, tier0=원
@@ -6331,6 +6400,54 @@
 
   // ── 유틸 ────────────────────────────────────────────────────────
   function dist(a, b) { return Math.sqrt((a.x-b.x)**2 + (a.y-b.y)**2); }
+
+  // 적 그리드 재구성 — 매 프레임 충돌/탐색 직전 1회 호출
+  function buildEnemyGrid() {
+    enemyGrid.clear();
+    for (let i = 0; i < enemies.length; i++) {
+      const e = enemies[i];
+      const key = Math.floor(e.x / GRID_CELL) + ',' + Math.floor(e.y / GRID_CELL);
+      let cell = enemyGrid.get(key);
+      if (!cell) { cell = []; enemyGrid.set(key, cell); }
+      cell.push(e);
+    }
+  }
+
+  // (x,y) 주변 reach 픽셀 내 셀의 적에 대해 cb(e) 호출. cb가 truthy 반환 시 조기 종료.
+  //   reach에는 최대 적 반경(≈24px) 여유를 더해 경계 적도 포함.
+  function forEnemiesNear(x, y, reach, cb) {
+    const pad = reach + 24;
+    const minCx = Math.floor((x - pad) / GRID_CELL), maxCx = Math.floor((x + pad) / GRID_CELL);
+    const minCy = Math.floor((y - pad) / GRID_CELL), maxCy = Math.floor((y + pad) / GRID_CELL);
+    for (let cx = minCx; cx <= maxCx; cx++) {
+      for (let cy = minCy; cy <= maxCy; cy++) {
+        const cell = enemyGrid.get(cx + ',' + cy);
+        if (!cell) continue;
+        for (let k = 0; k < cell.length; k++) {
+          if (cb(cell[k])) return;
+        }
+      }
+    }
+  }
+
+  // 그리드 기반 최근접 적 — 공통적으로 적이 플레이어를 둘러싸므로 넓은 반경(700)이면 거의 항상 적중.
+  //   드물게 반경 밖에만 적이 있으면 전체 스캔으로 폴백(정확성 보장).
+  function nearestEnemyNear(x, y, maxReach) {
+    let best = null, bd = Infinity;
+    forEnemiesNear(x, y, maxReach || 700, (e) => {
+      if (e.dying) return false;
+      const dx = e.x - x, dy = e.y - y, d2 = dx * dx + dy * dy;
+      if (d2 < bd) { bd = d2; best = e; }
+      return false;
+    });
+    if (best || maxReach) return best;
+    for (const e of enemies) {
+      if (e.dying) continue;
+      const dx = e.x - x, dy = e.y - y, d2 = dx * dx + dy * dy;
+      if (d2 < bd) { bd = d2; best = e; }
+    }
+    return best;
+  }
 
   function distToSegment(p, a, b) {
     const dx = b.x - a.x, dy = b.y - a.y;
