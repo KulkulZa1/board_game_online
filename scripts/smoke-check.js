@@ -376,6 +376,9 @@ function checkFactoryArcadeCoverage() {
   if (!game.includes('drawPlacementHints') || !game.includes('selectionHint')) {
     throw new Error('Factory palette selections should show placement hints and resource visibility cues');
   }
+  if (!game.includes('tutGuaranteeOre();') || !game.includes("selected = 'miner';") || !game.includes("selectionHint('miner')")) {
+    throw new Error('Factory new runs should start with visible starter ore and miner placement guidance');
+  }
   if (!page.includes('saveSummary') || !page.includes('newRunBtn') || !page.includes('discardSaveBtn')) {
     throw new Error('Factory page should expose continue/new/discard save controls');
   }

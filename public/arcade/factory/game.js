@@ -1320,11 +1320,16 @@
   function startNew() {
     clearSavedRun();
     resetWorld();
+    tutGuaranteeOre();
+    selected = 'miner';
+    tool = 'build';
+    rot = 0;
     state = 'playing'; paused = false; speed = 1;
     document.querySelectorAll('.speed-btn').forEach((b) => b.classList.toggle('active', b.dataset.speed === '1'));
     document.getElementById('pauseBtn').classList.remove('paused');
     document.getElementById('overlay').classList.remove('visible');
     renderPalette(); updateTopbar(); refreshTools(); showInfo();
+    selectionHint('miner');
     saveRun();
   }
 
