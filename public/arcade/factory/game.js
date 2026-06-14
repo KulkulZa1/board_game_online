@@ -79,6 +79,128 @@
   ];
   const DELIVER_SCORE = { gear: 1, motor: 6, robot: 25, ai_core: 120 };
 
+  // ── 튜토리얼 단계 정의 ──────────────────────────────────────────
+  const TUT_STEPS = [
+    { text: '<b>채굴기⛏</b>를 철광석(갈색 테두리 타일) 위에 클릭해 놓으세요', hint: '채굴기가 이미 선택됐어요 · R키로 출력 방향 회전', tool: 'miner', event: 'miner', hl: 'ore' },
+    { text: '<b>컨베이어➤</b>를 드래그해 채굴기에서 뻗어나가는 선을 그으세요', hint: '마우스를 누른 채 드래그하면 여러 칸을 한 번에 연결해요', tool: 'belt', event: 'belt', hl: null },
+    { text: '<b>화로🔥</b>를 컨베이어 끝에 놓으세요 — 철광석을 철판으로 제련', hint: '화로 출력 방향도 맞춰주세요 (R키 회전)', tool: 'furnace', event: 'furnace', hl: null },
+    { text: '<b>작업대🔧</b>를 화로 출력 쪽에 연결 — 철판 ×2 → 톱니바퀴', hint: '바로 옆에 붙이거나 컨베이어로 이어도 돼요', tool: 'workshop', event: 'workshop', hl: null },
+    { text: '<b>연구소🔬</b>를 배치 — 톱니바퀴가 들어오면 자동 납품!', hint: '작업대 출력 방향에 연구소를 바로 붙이세요', tool: 'lab', event: 'lab', hl: null },
+    { text: '공장 가동 중! 🏭 첫 납품을 기다려보세요', hint: '잘 안된다면 각 건물의 방향 점(·)과 연결을 확인하세요', tool: null, event: 'delivery', hl: null },
+    { text: '🎉 첫 납품 성공! 이제 공장을 더 키워 <b>톱니바퀴 30개</b>를 달성하세요!', hint: '기계와 채굴기를 늘리면 생산량이 올라가요', tool: null, event: null, hl: null },
+  ];
+
+  // ── 시대별 가이드 콘텐츠 ────────────────────────────────────────
+  const ERA_GUIDES = {
+    1: {
+      title: '🔥 1차 산업혁명 — 증기 시대',
+      body: `
+        <div class="era-badge">🔥 목표: 톱니바퀴 <b>30개</b> 납품</div>
+        <h4>생산 체인</h4>
+        <div class="chain">
+          <span class="item">⛏ 채굴기</span><span class="arrow">→</span>
+          <span class="item">철광석</span><span class="arrow">→</span>
+          <span class="item">🔥 화로</span><span class="arrow">→</span>
+          <span class="item">철판</span><span class="arrow">→</span>
+          <span class="item">🔧 작업대</span><span class="arrow">→</span>
+          <span class="item" style="color:#f5a623">⚙ 톱니바퀴</span><span class="arrow">→</span>
+          <span class="item">🔬 연구소</span>
+        </div>
+        <h4>핵심 규칙</h4>
+        <div class="tip">채굴기는 반드시 <b>광맥 타일</b> 위에 놓아야 자원을 캡니다.</div>
+        <div class="tip">건물끼리 <b>바로 붙이면</b> 컨베이어 없이 아이템이 전달됩니다. 단, 방향이 맞아야 해요.</div>
+        <div class="tip">작업대는 철판이 <b>2개</b> 모여야 톱니바퀴 1개를 만들어요.</div>
+        <h4>팁</h4>
+        <div class="tip">채굴기·화로·작업대·연구소를 일렬로 세우고 컨베이어로 연결하면 간단한 생산라인이 완성됩니다.</div>
+        <div class="tip">같은 라인을 여러 개 만들면 납품 속도가 올라갑니다!</div>
+      `,
+    },
+    2: {
+      title: '⚡ 2차 산업혁명 — 전기 시대',
+      body: `
+        <div class="era-badge">⚡ 목표: 모터 <b>40개</b> 납품</div>
+        <h4>전력 시스템 (신규!)</h4>
+        <div class="tip"><b>발전기⚡</b>에 석탄을 공급하면 전력을 생산합니다. 전기 기계가 이 전력을 사용해요.</div>
+        <div class="tip">전력이 부족하면 전기 기계가 <b>느려집니다</b>. 전력 바가 빨간색이면 발전기를 더 추가하세요.</div>
+        <h4>모터 생산 체인</h4>
+        <div class="chain">
+          <span class="item">⛏ 철광석 채굴기</span><span class="arrow">→</span>
+          <span class="item">🔥 화로</span><span class="arrow">→</span>
+          <span class="item">철판</span><span class="arrow">→</span>
+          <span class="item">🔧 작업대</span><span class="arrow">→</span>
+          <span class="item">⚙ 톱니바퀴</span>
+        </div>
+        <div class="chain">
+          <span class="item">⛏ 구리광석 채굴기</span><span class="arrow">→</span>
+          <span class="item">🔥 화로</span><span class="arrow">→</span>
+          <span class="item">구리판</span><span class="arrow">→</span>
+          <span class="item">🧵 선재기</span><span class="arrow">→</span>
+          <span class="item">구리선 ×2</span>
+        </div>
+        <div class="chain">
+          <span class="item">⚙ 톱니바퀴 ×1 + 구리선 ×2</span><span class="arrow">→</span>
+          <span class="item">🏭 조립기</span><span class="arrow">→</span>
+          <span class="item" style="color:#4aa3ff">🛠 모터</span><span class="arrow">→</span>
+          <span class="item">🔬 연구소</span>
+        </div>
+        <h4>팁</h4>
+        <div class="tip">조립기·선재기는 <b>전력 소비</b> 기계입니다. 발전기를 먼저 세워 석탄을 공급하세요.</div>
+        <div class="tip">1차 라인(철판·톱니바퀴)을 그대로 활용하고, 구리 라인을 추가하면 됩니다.</div>
+      `,
+    },
+    3: {
+      title: '💾 3차 산업혁명 — 디지털 시대',
+      body: `
+        <div class="era-badge">💾 목표: 로봇 <b>30개</b> 납품</div>
+        <h4>로봇 생산 체인</h4>
+        <div class="chain">
+          <span class="item">⛏ 규사 채굴기</span><span class="arrow">→</span>
+          <span class="item">🔥 화로</span><span class="arrow">→</span>
+          <span class="item">실리콘</span>
+        </div>
+        <div class="chain">
+          <span class="item">실리콘 ×1 + 구리선 ×1</span><span class="arrow">→</span>
+          <span class="item">💾 회로공장</span><span class="arrow">→</span>
+          <span class="item">회로 ×1</span>
+        </div>
+        <div class="chain">
+          <span class="item">모터 ×1 + 회로 ×2</span><span class="arrow">→</span>
+          <span class="item">🤖 로봇조립</span><span class="arrow">→</span>
+          <span class="item" style="color:#2ecc71">🤖 로봇</span><span class="arrow">→</span>
+          <span class="item">🔬 연구소</span>
+        </div>
+        <h4>팁</h4>
+        <div class="tip">회로공장·로봇조립은 고전력 소비 기계입니다. 발전기를 충분히 늘리세요.</div>
+        <div class="tip">규사는 지도 어딘가에 있어요 — 화면을 이동해 찾아보세요!</div>
+        <div class="tip">2차 라인(모터)을 계속 생산해야 로봇 생산이 가능합니다.</div>
+      `,
+    },
+    4: {
+      title: '🧠 4차 산업혁명 — 인공지능 시대',
+      body: `
+        <div class="era-badge">🧠 목표: AI 코어 <b>20개</b> 납품</div>
+        <h4>AI 코어 생산 체인</h4>
+        <div class="chain">
+          <span class="item">회로 ×2</span><span class="arrow">→</span>
+          <span class="item">🛰 데이터센터</span><span class="arrow">→</span>
+          <span class="item">데이터 ×1</span>
+        </div>
+        <div class="chain">
+          <span class="item">로봇 ×1 + 회로 ×2 + 데이터 ×3</span><span class="arrow">→</span>
+          <span class="item">🧠 AI 연구소</span><span class="arrow">→</span>
+          <span class="item" style="color:#b388ff">🧠 AI 코어</span><span class="arrow">→</span>
+          <span class="item">🔬 연구소</span>
+        </div>
+        <h4>팁</h4>
+        <div class="tip">AI 연구소는 <b>매우 높은 전력(10)</b>을 소비합니다. 발전기를 대량 추가하세요.</div>
+        <div class="tip">데이터 3개가 필요해 데이터센터를 여러 개 세워야 병목을 피할 수 있어요.</div>
+        <div class="tip">20개 달성 후에는 무한 가동으로 <b>산업 점수 최고기록</b>에 도전!</div>
+      `,
+    },
+  };
+
+  let tut = { active: false, step: 0 };
+
   // ── 상태 ────────────────────────────────────────────────────────
   let grid = [];              // GRID_W*GRID_H 셀: { deposit, b }
   let buildings = [];         // 모든 건물 인스턴스 (시뮬레이션 순회용)
@@ -125,6 +247,8 @@
     simTime = 0; deliveries = []; floaties = [];
     powerProd = powerDemand = 0; powerRatio = 1;
     selected = 'belt'; rot = 0; tool = 'build';
+    tut.active = false;
+    const _tp = document.getElementById('tutPanel'); if (_tp) _tp.classList.add('hidden');
   }
 
   // 자원 군집 생성 — 무작위 위치에 랜덤워크 블롭
@@ -173,6 +297,7 @@
     }
     cell.b = makeBuilding(id, tx, ty, rot);
     buildings.push(cell.b);
+    if (tut.active) checkTutBuild(id, tx, ty);
   }
 
   function erase(tx, ty) {
@@ -224,6 +349,7 @@
     floaties.push({ x: lab.x * TILE + TILE / 2, y: lab.y * TILE, vy: -28, text: '+1', life: 1.0, color: ERAS[era].accent });
     if (score > highScore) highScore = score;
     checkEra();
+    if (tut.active && TUT_STEPS[tut.step] && TUT_STEPS[tut.step].event === 'delivery') advanceTut();
   }
 
   function checkEra() {
@@ -240,6 +366,7 @@
     saveHigh();
     renderPalette();
     updateTopbar();
+    setTimeout(() => showEraGuide(era), 1200);
   }
 
   function onSingularity() {
@@ -400,6 +527,9 @@
       const cy = b.y * TILE + TILE / 2 + d[1] * (b.prog - 0.5) * TILE;
       drawItem(cx, cy, b.item);
     }
+
+    // 튜토리얼 하이라이트
+    drawTutHighlight();
 
     // 배치 고스트
     if (state === 'playing' && tool === 'build' && hover.x >= 0 && B[selected] && B[selected].era <= era) {
@@ -598,7 +728,8 @@
       const def = B[id];
       const btn = document.createElement('button');
       const locked = def.era > era;
-      btn.className = 'pal-btn' + (id === selected ? ' selected' : '') + (locked ? ' locked' : '');
+      const tutFocus = tut.active && TUT_STEPS[tut.step] && TUT_STEPS[tut.step].tool === id;
+      btn.className = 'pal-btn' + (id === selected ? ' selected' : '') + (locked ? ' locked' : '') + (tutFocus ? ' tut-focus' : '');
       btn.innerHTML = `<span class="pal-ico">${def.ico}</span><span class="pal-name">${def.name}</span>` +
         (locked ? `<span class="pal-lock">${ERAS[def.era].icon}</span>` : '');
       if (!locked) btn.addEventListener('click', () => { selected = id; tool = 'build'; refreshTools(); renderPalette(); showInfo(); });
@@ -637,6 +768,97 @@
     const t = document.getElementById('toast');
     t.innerHTML = `<div class="toast-msg">${msg}</div><div class="toast-sub">${sub || ''}</div>`;
     toastTimer = 2.4;
+  }
+
+  // ── 시대 가이드 ─────────────────────────────────────────────────
+  function showEraGuide(eraNum) {
+    const g = ERA_GUIDES[Math.min(eraNum, 4)];
+    if (!g) return;
+    document.getElementById('eraGuideTitle').innerHTML = g.title;
+    document.getElementById('eraGuideBody').innerHTML = g.body;
+    document.getElementById('eraGuideModal').classList.remove('hidden');
+  }
+  function closeEraGuide() { document.getElementById('eraGuideModal').classList.add('hidden'); }
+
+  // ── 튜토리얼 ────────────────────────────────────────────────────
+  function tutGuaranteeOre() {
+    const cx = Math.floor(GRID_W / 2) - 2, cy = Math.floor(GRID_H / 2) - 1;
+    const spots = [[cx, cy], [cx + 1, cy], [cx, cy + 1], [cx + 1, cy + 1], [cx, cy + 2], [cx + 1, cy + 2]];
+    for (const [x, y] of spots) if (inBounds(x, y) && !cellAt(x, y).deposit) cellAt(x, y).deposit = { resource: 'iron_ore' };
+  }
+
+  function startTutorial() {
+    resetWorld();
+    tutGuaranteeOre();
+    tut.active = true; tut.step = 0;
+    state = 'playing'; paused = false; speed = 1;
+    document.querySelectorAll('.speed-btn').forEach((b) => b.classList.toggle('active', b.dataset.speed === '1'));
+    document.getElementById('pauseBtn').classList.remove('paused');
+    document.getElementById('overlay').classList.remove('visible');
+    updateTopbar();
+    applyTutStep();
+  }
+
+  function applyTutStep() {
+    if (tut.step >= TUT_STEPS.length) { endTutorial(); return; }
+    const step = TUT_STEPS[tut.step];
+    if (step.tool) { selected = step.tool; tool = 'build'; refreshTools(); showInfo(); }
+    renderPalette();
+    updateTutPanel();
+    if (!step.event) setTimeout(() => { if (tut.active) endTutorial(); }, 4000);
+  }
+
+  function updateTutPanel() {
+    const panel = document.getElementById('tutPanel');
+    if (!tut.active || tut.step >= TUT_STEPS.length) { panel.classList.add('hidden'); return; }
+    const step = TUT_STEPS[tut.step];
+    const totalSteps = TUT_STEPS.filter((s) => s.event).length;
+    const num = Math.min(tut.step + 1, totalSteps);
+    document.getElementById('tutStep').textContent = `🎓 튜토리얼 ${num} / ${totalSteps}`;
+    document.getElementById('tutText').innerHTML = step.text;
+    document.getElementById('tutHint').textContent = step.hint;
+    panel.classList.remove('hidden');
+  }
+
+  function advanceTut() {
+    if (!tut.active) return;
+    tut.step++;
+    applyTutStep();
+  }
+
+  function checkTutBuild(id, tx, ty) {
+    if (!tut.active) return;
+    const step = TUT_STEPS[tut.step];
+    if (!step || step.event !== id) return;
+    if (id === 'miner') {
+      const dep = cellAt(tx, ty).deposit;
+      if (!dep || dep.resource !== 'iron_ore') return;
+    }
+    advanceTut();
+  }
+
+  function endTutorial() {
+    tut.active = false;
+    document.getElementById('tutPanel').classList.add('hidden');
+    renderPalette();
+    showInfo();
+  }
+
+  function drawTutHighlight() {
+    if (!tut.active) return;
+    const step = TUT_STEPS[tut.step];
+    if (!step || step.hl !== 'ore') return;
+    const pulse = 0.35 + 0.5 * Math.sin(simTime * 3.5);
+    ctx.lineWidth = 2.5;
+    ctx.strokeStyle = `rgba(245,166,35,${pulse.toFixed(2)})`;
+    for (let y = 0; y < GRID_H; y++) {
+      for (let x = 0; x < GRID_W; x++) {
+        const cell = cellAt(x, y);
+        if (cell.deposit && cell.deposit.resource === 'iron_ore' && !cell.b) {
+          ctx.strokeRect(x * TILE + 3, y * TILE + 3, TILE - 6, TILE - 6);
+        }
+      }
+    }
   }
 
   // ── 좌표 변환 / 입력 ────────────────────────────────────────────
@@ -709,6 +931,7 @@
     if (state !== 'playing') return;
     if (e.key === 'r' || e.key === 'R') { rot = (rot + 1) % 4; showInfo(); }
     else if (e.key === 'e' || e.key === 'E') { tool = (tool === 'erase') ? 'build' : 'erase'; refreshTools(); }
+    else if (e.key === 'g' || e.key === 'G') showEraGuide(era);
     else if (e.key === 'h' || e.key === 'H') toggleHelp();
     else if (e.key === 'p' || e.key === 'P') togglePause();
     else if (e.key >= '1' && e.key <= '9') {
@@ -724,6 +947,8 @@
   document.getElementById('panBtn').addEventListener('click', () => { tool = (tool === 'pan') ? 'build' : 'pan'; refreshTools(); });
   document.getElementById('helpBtn').addEventListener('click', toggleHelp);
   document.getElementById('helpClose').addEventListener('click', toggleHelp);
+  document.getElementById('guideBtn').addEventListener('click', () => showEraGuide(era));
+  document.getElementById('eraGuideClose').addEventListener('click', closeEraGuide);
 
   // 속도/일시정지
   document.querySelectorAll('.speed-btn').forEach((btn) => {
@@ -773,6 +998,7 @@
       ③ <b>작업대🔧</b>로 톱니바퀴 →  ④ <b>연구소🔬</b>에 납품!<br>
       <span style="color:#8595ad">건물은 <b>컨베이어➤</b>로 연결하거나 서로 맞붙여 직접 전달돼요.</span>`;
     document.getElementById('startBtn').textContent = state === 'win' ? '새 공장 시작' : '건설 시작';
+    document.getElementById('tutBtn').classList.toggle('hidden', state === 'win');
   }
 
   // ── 메인 루프 ───────────────────────────────────────────────────
@@ -803,7 +1029,7 @@
       <li>우클릭/드래그 또는 <span class="k">E</span>: 철거</li>
       <li><span class="k">R</span>: 배치 방향 회전</li>
       <li><span class="k">스페이스</span>+드래그 또는 ✋ 버튼: 화면 이동 · 휠: 확대/축소</li>
-      <li><span class="k">1</span>~<span class="k">9</span>: 건물 빠른 선택 · <span class="k">P</span>: 일시정지</li>
+      <li><span class="k">1</span>~<span class="k">9</span>: 건물 빠른 선택 · <span class="k">P</span>: 일시정지 · <span class="k">G</span>: 현재 시대 가이드</li>
     </ul>
     <h4>전력 (2차~)</h4>
     발전기⚡가 석탄을 태워 전력을 만듭니다. 전기 기계(조립기·회로공장 등)는 전력을 소비하며, <b>수요 > 생산</b>이면 모든 전기 기계가 느려집니다. 발전기를 늘려 균형을 맞추세요. (채굴기·화로·작업대는 전력이 필요 없습니다.)
@@ -822,5 +1048,7 @@
   loadHigh();
   fillOverlay();
   document.getElementById('startBtn').addEventListener('click', start);
+  document.getElementById('tutBtn').addEventListener('click', startTutorial);
+  document.getElementById('tutSkip').addEventListener('click', endTutorial);
   requestAnimationFrame(loop);
 })();

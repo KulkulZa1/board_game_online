@@ -62,6 +62,7 @@
         <button id="rotateBtn" title="회전 (R)">↻</button>
         <button id="eraseBtn" title="철거 (우클릭 / E)">🗑</button>
         <button id="panBtn" title="이동 (스페이스 드래그)">✋</button>
+        <button id="guideBtn" title="시대 가이드 (G)">📖</button>
         <button id="helpBtn" title="도움말 (H)">?</button>
       </div>
 
@@ -76,6 +77,26 @@
           <p id="overlayMsg"></p>
           <div id="overlayHow"></div>
           <button id="startBtn">건설 시작</button>
+          <button id="tutBtn">🎓 튜토리얼로 배우기</button>
+        </div>
+      </div>
+
+      <!-- 튜토리얼 패널 -->
+      <div id="tutPanel" class="hidden">
+        <div id="tutStep"></div>
+        <div id="tutText"></div>
+        <div id="tutHint"></div>
+        <button id="tutSkip">건너뛰기</button>
+      </div>
+
+      <!-- 시대 가이드 모달 -->
+      <div id="eraGuideModal" class="hidden">
+        <div id="eraGuideBox">
+          <div class="help-head">
+            <span id="eraGuideTitle">📖 시대 가이드</span>
+            <button id="eraGuideClose">✕</button>
+          </div>
+          <div id="eraGuideBody"></div>
         </div>
       </div>
 
@@ -90,7 +111,7 @@
   </div>
 
   <script src="/js/admob.js?v=1.0"></script>
-  <script src="game.js?v=1.0"></script>
+  <script src="game.js?v=1.1"></script>
   <script src="/js/sw-update.js?v=20260520b"></script>
 </body>
 </html>
