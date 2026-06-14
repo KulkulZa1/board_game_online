@@ -1,0 +1,7 @@
+{
+  "food":  { "name": "Food",     "category": "food",       "perishable": true,  "spoilRate": 0.015 },
+  "wood":  { "name": "Wood",      "category": "natural",    "perishable": false },
+  "ore":   { "name": "Iron Ore",  "category": "mineral",    "perishable": false },
+  "steel": { "name": "Steel",     "category": "industrial", "perishable": false },
+  "tools": { "name": "Tools",     "category": "capital",    "perishable": false }
+}

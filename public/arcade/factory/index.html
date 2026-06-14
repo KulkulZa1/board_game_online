@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>산업의 시대 — 보드게임 온라인</title>
+  <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="container">
+    <header id="hdr">
+      <a href="/" class="back-btn">← 로비</a>
+      <span class="game-title">🏭 산업의 시대</span>
+      <div id="scores">
+        <span>점수 <strong id="scoreDisplay">0</strong></span>
+        <span>최고 <strong id="highDisplay">0</strong></span>
+      </div>
+    </header>
+
+    <div id="gameWrapper">
+      <canvas id="c" tabindex="0"></canvas>
+
+      <!-- 상단 정보 바: 시대 / 연구 진행 / 전력 -->
+      <div id="topbar">
+        <div id="eraBadge">
+          <span id="eraIcon">🔥</span>
+          <div class="era-text">
+            <div id="eraName">1차 산업혁명</div>
+            <div id="eraSub">증기 시대</div>
+          </div>
+        </div>
+        <div id="researchWrap">
+          <div class="bar-label"><span id="researchLabel">⚙ 톱니바퀴 연구</span><span id="researchCount">0 / 30</span></div>
+          <div class="bar-track"><div id="researchFill"></div></div>
+        </div>
+        <div id="powerWrap" class="hidden">
+          <div class="bar-label"><span>⚡ 전력</span><span id="powerCount">0 / 0</span></div>
+          <div class="bar-track"><div id="powerFill"></div></div>
+        </div>
+      </div>
+
+      <!-- 우상단 속도/처리량 -->
+      <div id="statBox">
+        <div id="throughput">0.0/분</div>
+        <div id="speedCtl">
+          <button data-speed="1" class="speed-btn active">1×</button>
+          <button data-speed="2" class="speed-btn">2×</button>
+          <button data-speed="3" class="speed-btn">3×</button>
+          <button id="pauseBtn">⏸</button>
+        </div>
+      </div>
+
+      <!-- 선택 건물 / 레시피 툴팁 -->
+      <div id="infoPanel" class="hidden"></div>
+
+      <!-- 하단 빌드 팔레트 -->
+      <div id="palette"></div>
+
+      <!-- 보조 툴 -->
+      <div id="toolbar">
+        <button id="rotateBtn" title="회전 (R)">↻</button>
+        <button id="eraseBtn" title="철거 (우클릭 / E)">🗑</button>
+        <button id="panBtn" title="이동 (스페이스 드래그)">✋</button>
+        <button id="helpBtn" title="도움말 (H)">?</button>
+      </div>
+
+      <!-- 토스트 알림 -->
+      <div id="toast"></div>
+
+      <!-- 시작 / 종료 오버레이 -->
+      <div id="overlay" class="visible">
+        <div id="overlayBox">
+          <div id="overlayIcon">🏭</div>
+          <h2 id="overlayTitle">산업의 시대</h2>
+          <p id="overlayMsg"></p>
+          <div id="overlayHow"></div>
+          <button id="startBtn">건설 시작</button>
+        </div>
+      </div>
+
+      <!-- 도움말 모달 -->
+      <div id="helpModal" class="hidden">
+        <div id="helpBox">
+          <div class="help-head"><span>📖 조작 & 가이드</span><button id="helpClose">✕</button></div>
+          <div id="helpBody"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/admob.js?v=1.0"></script>
+  <script src="game.js?v=1.0"></script>
+  <script src="/js/sw-update.js?v=20260520b"></script>
+</body>
+</html>

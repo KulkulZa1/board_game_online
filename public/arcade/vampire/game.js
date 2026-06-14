@@ -524,6 +524,7 @@
   let dmgSource     = null;      // 현재 데미지 출처 계열 id (dealDamage가 집계에 사용)
   let bloodMoonTimer  = 150;     // 혈월 이벤트까지 남은 시간(초) — 2.5분 후 첫 발동
   let bloodMoonActive = 0;       // 혈월 지속 시간 잔여(초, 0이면 비활성)
+  let goldRushDone    = false;   // 골드 러시 이벤트(미니 고블린 무리) 발동 여부 — 런당 1회
   let comboCount    = 0;
   let comboTimer    = 0;
   let comboMilestoneIdx = 0;     // 현재 콤보 스트릭에서 지급한 마일스톤 인덱스
@@ -736,6 +737,7 @@
     dmgSource     = null;
     bloodMoonTimer  = 150;
     bloodMoonActive = 0;
+    goldRushDone    = false;
     lowHpAlertCooldown = 0;
     lowHpPulse = 0;
     comboCount    = 0;
@@ -1281,6 +1283,7 @@
       waveCount,
       bloodMoonTimer,
       bloodMoonActive,
+      goldRushDone,
     };
     try {
       localStorage.setItem(RUN_SNAPSHOT_KEY, JSON.stringify(snapshot));
@@ -1364,6 +1367,7 @@
     waveCount = Number(snapshot.waveCount) || 0;
     bloodMoonTimer  = Number(snapshot.bloodMoonTimer)  || 150;
     bloodMoonActive = Number(snapshot.bloodMoonActive) || 0;
+    goldRushDone    = !!snapshot.goldRushDone;
     runRewardsGranted = false;
     currentChoiceBuilder = null;
     freeRerollUsed = false;
@@ -2327,6 +2331,35 @@
         }
       }
     }
+    // 무기별 데미지 기여도 — 이번 런의 주력 무기 Top 5 바 차트
+    const dmgEntries = Object.keys(damageByWeapon)
+      .map(k => [k, damageByWeapon[k]])
+      .filter(([, v]) => v > 0)
+      .sort((a, b) => b[1] - a[1]);
+    if (dmgEntries.length) {
+      const dmgTotal = dmgEntries.reduce((s, [, v]) => s + v, 0);
+      const top = dmgEntries.slice(0, 5);
+      const maxV = top[0][1] || 1;
+      const chartTitle = document.createElement('div');
+      chartTitle.className = 'run-report-title';
+      chartTitle.textContent = '⚔ 데미지 기여도';
+      runReport.appendChild(chartTitle);
+      const chart = document.createElement('div');
+      chart.style.cssText = 'margin-top:2px;';
+      chart.innerHTML = top.map(([src, val], i) => {
+        const label = DMG_SOURCE_LABEL[src] || ('✦ ' + src);
+        const pct = (val / dmgTotal * 100).toFixed(0);
+        const w = Math.max(3, val / maxV * 100).toFixed(1);
+        const col = i === 0 ? '#f1c40f' : '#5a9bd4';
+        const txtCol = i === 0 ? '#ffd54a' : '#cbd5e1';
+        return `<div style="display:flex;align-items:center;gap:6px;font-size:0.72rem;margin-top:2px;">
+          <span style="flex:0 0 92px;text-align:left;color:${txtCol};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${label}</span>
+          <span style="flex:1;height:8px;background:rgba(255,255,255,0.08);border-radius:4px;overflow:hidden;"><span style="display:block;height:100%;width:${w}%;background:${col};border-radius:4px;"></span></span>
+          <span style="flex:0 0 34px;text-align:right;color:${txtCol};">${pct}%</span>
+        </div>`;
+      }).join('');
+      runReport.appendChild(chart);
+    }
     const misses = missedEvolutionHints();
     if (misses.length) {
       const hintTitle = document.createElement('div');
@@ -2821,6 +2854,7 @@
       behavior: 'goblin',
       goblin: true,
       goblinLife: 17,      // 17초 내에 처치 못하면 도주 (방향 화살표로 추격 가능)
+      goblinLifeMax: 17,
       attackCd: 0, attackBase: 0, attackRange: 0, attackDmg: 0,
     });
     floatTexts.push({ text: '💰 보물 고블린 출현! 잡아라!', life: 2.4, maxLife: 2.4, screenSpace: true, color: '#f1c40f', size: 20 });
@@ -2842,6 +2876,50 @@
     rings.push({ x, y, r: 12, maxR: 160, life: 0.5, maxLife: 0.5, color: '#f1c40f' });
     for (let k = 0; k < 30; k++) spawnParticle(x, y, '#f1c40f', 5 + Math.random() * 7, 0.6);
     floatTexts.push({ text: '💰 JACKPOT!', life: 2.2, maxLife: 2.2, screenSpace: true, color: '#f1c40f', size: 26 });
+  }
+
+  // 골드 러시 이벤트 — 미니 고블린 4마리 동시 출현 (런당 1회, 4:30경)
+  //   혈월(위협)과 대비되는 보상-추격 이벤트. 미니 고블린은 약하지만 수명이 짧아 빠른 판단 필요.
+  function spawnGoldRush() {
+    const count = 4;
+    for (let k = 0; k < count; k++) {
+      const ang = (k / count) * Math.PI * 2 + Math.random() * 0.8;
+      const d = 240 + Math.random() * 100;
+      const hp = (180 + elapsed * 0.8) * currentDifficulty().enemyHpMult;
+      enemies.push({
+        x: player.x + Math.cos(ang) * d,
+        y: player.y + Math.sin(ang) * d,
+        hp, maxHp: hp,
+        speed: 145 * currentDifficulty().enemySpeedMult,
+        size: 12,
+        color: '#ffd700',
+        xpVal: 25,
+        tier: 1,
+        hurtFlash: 0,
+        frozen: 0,
+        spawnT: 0.35,
+        behavior: 'goblin',
+        goblin: true,
+        mini: true,          // 미니 잭팟 드랍 (일반 잭팟보다 소량)
+        goblinLife: 11,      // 11초 내 처치 못하면 도주
+        goblinLifeMax: 11,
+        attackCd: 0, attackBase: 0, attackRange: 0, attackDmg: 0,
+      });
+    }
+    floatTexts.push({ text: '💰 골드 러시! 황금 무리를 쫓아라!', life: 2.8, maxLife: 2.8, screenSpace: true, color: '#ffd700', size: 22 });
+    screenShake = Math.min(screenShake + 0.2, 0.5);
+    SFX.combo();
+  }
+
+  // 미니 잭팟 — 골드 러시 고블린용 소형 보상 (XP 다발 + 50% 확률 파워업)
+  function dropMiniJackpot(x, y) {
+    for (let i = 0; i < 6; i++) {
+      const a = Math.random() * Math.PI * 2, d = 8 + Math.random() * 40;
+      xpGems.push({ x: x + Math.cos(a) * d, y: y + Math.sin(a) * d, val: 14 });
+    }
+    if (Math.random() < 0.5) dropPowerup(x, y);
+    rings.push({ x, y, r: 8, maxR: 90, life: 0.4, maxLife: 0.4, color: '#ffd700' });
+    for (let k = 0; k < 14; k++) spawnParticle(x, y, '#ffd700', 4 + Math.random() * 5, 0.45);
   }
 
   // 오버드라이브 발동 — Q키 또는 HUD 바 탭으로 활성화 (충전 100% 도달 시)
@@ -3775,14 +3853,15 @@
       }
     }
 
-    // 보물 고블린 처치 — 잭팟!
+    // 보물 고블린 처치 — 잭팟! (골드 러시 미니 고블린은 소형 잭팟)
     if (enemy.goblin) {
-      dropGoblinJackpot(enemy.x, enemy.y);
-      overdriveCharge = Math.min(100, overdriveCharge + 10);
+      if (enemy.mini) dropMiniJackpot(enemy.x, enemy.y);
+      else dropGoblinJackpot(enemy.x, enemy.y);
+      overdriveCharge = Math.min(100, overdriveCharge + (enemy.mini ? 5 : 10));
       screenShake = Math.min(screenShake + 0.3, 0.6);
       SFX.boss();
-      // 고블린 처치 누적 — 3회 처치 시 고블린 도둑 해금
-      meta.goblinKills = (meta.goblinKills || 0) + 1;
+      // 고블린 처치 누적 — 3회 처치 시 고블린 도둑 해금 (골드 러시 미니는 제외)
+      if (!enemy.mini) meta.goblinKills = (meta.goblinKills || 0) + 1;
       if (meta.goblinKills >= 3 && !meta.achievements.goblinSlayer) {
         meta.achievements.goblinSlayer = true;
         floatTexts.push({ text: '🏆 Goblin Slayer! Goblin Thief 해금!', life: 3.5, maxLife: 3.5, screenSpace: true, color: '#f1c40f', size: 17 });
@@ -4628,11 +4707,23 @@
     // 무적 감소
     if (player.invincible > 0) player.invincible -= dt;
 
+    // 골드 러시 이벤트 — 4:30에 1회, 미니 고블린 무리 출현 (혈월과 대비되는 보상 이벤트)
+    if (!infiniteMode && !goldRushDone && elapsed >= 270) {
+      goldRushDone = true;
+      spawnGoldRush();
+    }
+
     // 혈월 이벤트 — 2.5분 후 첫 발동, 이후 3분 간격, 15초 지속
     // 무한 모드는 이미 자체 스케일링이 있으므로 일반 시간에만 발동
     if (!infiniteMode && elapsed > 60) {
       if (bloodMoonActive > 0) {
         bloodMoonActive = Math.max(0, bloodMoonActive - dt);
+        // 혈월 생존 보상 — 끝까지 버티면 파워업 드랍 (위험→보상 사이클 완성)
+        if (bloodMoonActive <= 0) {
+          dropPowerup(player.x + (Math.random() - 0.5) * 80, player.y + (Math.random() - 0.5) * 80);
+          floatTexts.push({ text: '🌅 혈월 생존! 보상 획득', life: 2.4, maxLife: 2.4, screenSpace: true, color: '#f39c12', size: 18 });
+          SFX.combo();
+        }
       } else {
         bloodMoonTimer -= dt;
         if (bloodMoonTimer <= 0) {
@@ -4758,7 +4849,14 @@
     for (let i = projectiles.length - 1; i >= 0; i--) {
       const p = projectiles[i];
       p.life -= dt;
-      if (p.life <= 0) { projectiles.splice(i, 1); continue; }
+      if (p.life <= 0) {
+        // 운석은 수명 만료 시 사라지는 대신 목표 지점에서 강제 폭발 (피해 누락 방지)
+        if (p.type === 'meteor' && p.delay <= 0) {
+          spawnExplosion(p.tx, p.ty, p.aoe, p.dmg, false, p.src || 'meteor');
+          rings.push({ x: p.tx, y: p.ty, r: 8, maxR: p.aoe, life: 0.4, maxLife: 0.4, color: p.evolved ? '#ff7675' : '#e17055' });
+        }
+        projectiles.splice(i, 1); continue;
+      }
       // 데미지 출처: 투사체에 src가 있으면 사용, 없으면 type 기반 매핑
       dmgSource = p.src || PROJ_TYPE_FAMILY[p.type] || null;
 
@@ -5803,7 +5901,7 @@
         ctx.textAlign = 'center';
         ctx.fillText('💰', 0, 5);
         // 남은 시간 게이지 (도주까지)
-        const gPct = Math.max(0, e.goblinLife / 13);
+        const gPct = Math.min(1, Math.max(0, e.goblinLife / (e.goblinLifeMax || 17)));
         ctx.fillStyle = 'rgba(0,0,0,0.5)';
         ctx.fillRect(-e.size, -e.size - 12, e.size * 2, 4);
         ctx.fillStyle = gPct > 0.35 ? '#2ecc71' : '#e74c3c';

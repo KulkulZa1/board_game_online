@@ -1,0 +1,58 @@
+{
+  "name": "MVP — Soil to Steel",
+  "config": {
+    "dt": 1,
+    "foodPerCapita": 0.11,
+    "growthRate": 0.012,
+    "starveRate": 0.06,
+    "toolBonus": 1.0,
+    "toolsPerUser": 2.0,
+    "toolWear": 0.012,
+    "fertilityRegen": 0.0006,
+    "spoilFloorFactor": 0.25
+  },
+  "initial": {
+    "population": { "unskilled": 26, "skilled": 4 },
+    "fertility": 0.92,
+    "oreDeposit": 6000,
+    "stocks": { "food": 140, "wood": 30, "ore": 20, "steel": 8, "tools": 16 },
+    "buildings": {
+      "forager_camp": 1,
+      "farm": 3,
+      "compost_yard": 2,
+      "granary": 2,
+      "house": 3,
+      "lumber_camp": 2,
+      "mine": 2,
+      "smelter": 2,
+      "toolsmith": 1,
+      "school": 1
+    }
+  },
+  "gates": [
+    {
+      "id": "settlement",
+      "label": "Farming -> Settlement",
+      "sustainTicks": 30,
+      "conditions": [
+        { "metric": "foodSurplusRatio", "op": ">=", "value": 0.15 },
+        { "metric": "fertility",        "op": ">=", "value": 0.60 },
+        { "metric": "population",       "op": ">=", "value": 40 },
+        { "metric": "foodBuffer",       "op": ">=", "value": 120 }
+      ]
+    },
+    {
+      "id": "factory",
+      "label": "Settlement -> Early Factory",
+      "sustainTicks": 30,
+      "conditions": [
+        { "metric": "housingHeadroom", "op": ">=", "value": 0 },
+        { "metric": "population",      "op": ">=", "value": 55 },
+        { "metric": "institutions",    "op": ">=", "value": 1 },
+        { "metric": "steelRate",       "op": ">=", "value": 1.2 },
+        { "metric": "toolCoverage",    "op": ">=", "value": 0.6 }
+      ]
+    }
+  ],
+  "events": []
+}
