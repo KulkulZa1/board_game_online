@@ -205,12 +205,35 @@ html, body {
   background: var(--panel2); border-radius: 10px; padding: 12px 14px; width: 100%;
 }
 #overlayHow b { color: var(--accent); }
+#saveSummary {
+  width: 100%;
+  background: rgba(74,163,255,0.1);
+  border: 1px solid rgba(74,163,255,0.35);
+  border-radius: 10px;
+  color: #b9d8ff;
+  font-size: 0.78rem;
+  line-height: 1.55;
+  padding: 9px 12px;
+}
 #startBtn {
   background: linear-gradient(135deg, var(--accent), #ffce54); color: #1a1205;
   border: none; border-radius: 9px; padding: 11px 40px; font-size: 1rem; font-weight: 800;
   cursor: pointer; transition: transform 0.1s; margin-top: 4px;
 }
 #startBtn:active { transform: scale(0.96); }
+#newRunBtn, #discardSaveBtn {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.82rem;
+  padding: 8px 22px;
+}
+#newRunBtn:hover, #discardSaveBtn:hover {
+  border-color: var(--accent2);
+  color: var(--text);
+}
 
 /* ── Help modal ───────────────────────────────── */
 #helpModal {

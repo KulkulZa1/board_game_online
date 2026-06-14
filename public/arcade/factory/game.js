@@ -18,6 +18,7 @@
   const GEN_FUEL_CAP = 20;    // 발전기 연료 버퍼 상한(초)
   const MINER_RATE   = 1.0;   // 채굴기 1개 / 1초
   const HIGH_KEY = 'arcade_factory_high';
+  const SAVE_KEY = 'arcade_factory_save_v1';
 
   // 방향: 0=동, 1=남, 2=서, 3=북
   const DIRS = [[1, 0], [0, 1], [-1, 0], [0, -1]];
@@ -224,11 +225,17 @@
   // 포인터 상태
   let ptr = { down: false, mode: null, lastSX: 0, lastSY: 0, lastTile: null, button: 0 };
   let spaceHeld = false;
+  let savedRunMeta = null;
 
   // ── 유틸 ────────────────────────────────────────────────────────
   const inBounds = (x, y) => x >= 0 && y >= 0 && x < GRID_W && y < GRID_H;
   const cellAt   = (x, y) => grid[y * GRID_W + x];
   const currentTarget = () => ERAS[Math.min(era, 4)].target;
+  const clampNum = (v, min, max, fallback) => {
+    const n = Number(v);
+    if (!Number.isFinite(n)) return fallback;
+    return Math.max(min, Math.min(max, n));
+  };
 
   function resize() {
     canvas.width  = wrapper.clientWidth;
@@ -372,6 +379,7 @@
     deliveries.push(simTime);
     floaties.push({ x: lab.x * TILE + TILE / 2, y: lab.y * TILE, vy: -28, text: `+${value} ${ITEMS[item].name}`, life: 1.0, color: ERAS[era].accent });
     if (score > highScore) highScore = score;
+    saveRun();
     if (research < goal && research % 5 === 0) {
       showToast(`${ITEMS[item].name} ${research}/${goal}`, `${goal - research}개 더 납품하면 다음 시대로 진화합니다`);
     }
@@ -391,6 +399,7 @@
     showToast(`${e.icon} ${e.name} 진입!`, e.sub + ' — 새 기술 해금');
     flashFx = 0.7;
     saveHigh();
+    saveRun();
     renderPalette();
     updateTopbar();
     setTimeout(() => showEraGuide(era), 1200);
@@ -400,6 +409,7 @@
     showToast('🌌 특이점 도달!', 'AI 시대 개막 — 무한 가동으로 최고 점수에 도전!');
     flashFx = 1.0;
     saveHigh();
+    saveRun();
     if (window.AdMobHelper) AdMobHelper.showAfterGame();
   }
 
@@ -814,6 +824,7 @@
   }
 
   function startTutorial() {
+    clearSavedRun();
     resetWorld();
     tutGuaranteeOre();
     tut.active = true; tut.step = 0;
@@ -1001,20 +1012,178 @@
     if (score > highScore) highScore = score;
     try { localStorage.setItem(HIGH_KEY, String(highScore)); } catch (_e) {}
   }
+
+  function safeBuffer(buf, max) {
+    const out = {};
+    if (!buf || typeof buf !== 'object') return out;
+    for (const key of Object.keys(buf)) {
+      if (ITEMS[key]) out[key] = clampNum(buf[key], 0, max, 0);
+    }
+    return out;
+  }
+
+  function serializeBuilding(b) {
+    const data = { id: b.id, x: b.x, y: b.y, dir: b.dir };
+    if (b.id === 'belt') {
+      data.item = ITEMS[b.item] ? b.item : null;
+      data.prog = clampNum(b.prog, 0, 1, 0);
+    } else if (B[b.id].kind === 'miner') {
+      data.timer = clampNum(b.timer, 0, MINER_RATE, 0);
+    } else if (B[b.id].kind === 'machine') {
+      data.inBuf = safeBuffer(b.inBuf, IN_CAP);
+      data.outBuf = safeBuffer(b.outBuf, OUT_CAP);
+      if (b.craft && b.craft.out) {
+        data.craft = {
+          out: safeBuffer(b.craft.out, OUT_CAP),
+          t: clampNum(b.craft.t, 0, 30, 0),
+          total: clampNum(b.craft.total, 0.1, 30, B[b.id].time || 1),
+        };
+      }
+    } else if (B[b.id].kind === 'generator') {
+      data.fuel = clampNum(b.fuel, 0, GEN_FUEL_CAP, 0);
+    }
+    return data;
+  }
+
+  function saveRun() {
+    if (state !== 'playing') return;
+    const data = {
+      version: 1,
+      savedAt: Date.now(),
+      era, research, score, won,
+      simTime: Math.round(simTime * 1000) / 1000,
+      speed, paused,
+      selected, rot, tool,
+      camera: {
+        x: Math.round(camera.x * 100) / 100,
+        y: Math.round(camera.y * 100) / 100,
+        zoom: Math.round(camera.zoom * 1000) / 1000,
+      },
+      deposits: grid.map((cell) => cell.deposit ? cell.deposit.resource : null),
+      buildings: buildings.map(serializeBuilding),
+    };
+    try {
+      localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+      savedRunMeta = data;
+    } catch (_e) {}
+  }
+
+  function readSavedRun() {
+    try {
+      const raw = localStorage.getItem(SAVE_KEY);
+      if (!raw) return null;
+      const data = JSON.parse(raw);
+      if (!data || data.version !== 1 || !Array.isArray(data.deposits) || !Array.isArray(data.buildings)) return null;
+      return data;
+    } catch (_e) {
+      return null;
+    }
+  }
+
+  function restoreBuilding(data) {
+    if (!data || !B[data.id]) return null;
+    const x = Math.floor(data.x), y = Math.floor(data.y);
+    if (!inBounds(x, y) || cellAt(x, y).b) return null;
+    const b = makeBuilding(data.id, x, y, clampNum(data.dir, 0, 3, 0) | 0);
+    const def = B[b.id];
+    if (b.id === 'belt') {
+      b.item = ITEMS[data.item] ? data.item : null;
+      b.prog = clampNum(data.prog, 0, 1, 0);
+    } else if (def.kind === 'miner') {
+      b.timer = clampNum(data.timer, 0, MINER_RATE, 0);
+    } else if (def.kind === 'machine') {
+      b.inBuf = safeBuffer(data.inBuf, IN_CAP);
+      b.outBuf = safeBuffer(data.outBuf, OUT_CAP);
+      if (data.craft && data.craft.out) {
+        b.craft = {
+          out: safeBuffer(data.craft.out, OUT_CAP),
+          t: clampNum(data.craft.t, 0, 30, 0),
+          total: clampNum(data.craft.total, 0.1, 30, def.time || 1),
+        };
+      }
+    } else if (def.kind === 'generator') {
+      b.fuel = clampNum(data.fuel, 0, GEN_FUEL_CAP, 0);
+    }
+    return b;
+  }
+
+  function restoreRun(data) {
+    grid = new Array(GRID_W * GRID_H);
+    for (let i = 0; i < grid.length; i++) {
+      const res = data.deposits[i];
+      grid[i] = { deposit: ITEMS[res] ? { resource: res } : null, b: null };
+    }
+    buildings = [];
+    era = clampNum(data.era, 1, 4, 1) | 0;
+    research = clampNum(data.research, 0, ERAS[era].count * 3, 0) | 0;
+    score = clampNum(data.score, 0, 9999999, 0) | 0;
+    won = Boolean(data.won);
+    simTime = clampNum(data.simTime, 0, 999999, 0);
+    speed = clampNum(data.speed, 1, 3, 1) | 0;
+    paused = Boolean(data.paused);
+    selected = B[data.selected] && B[data.selected].era <= era ? data.selected : 'belt';
+    rot = clampNum(data.rot, 0, 3, 0) | 0;
+    tool = ['build', 'erase', 'pan'].includes(data.tool) ? data.tool : 'build';
+    camera.x = clampNum(data.camera && data.camera.x, -TILE, GRID_W * TILE, GRID_W * TILE / 2);
+    camera.y = clampNum(data.camera && data.camera.y, -TILE, GRID_H * TILE, GRID_H * TILE / 2);
+    camera.zoom = clampNum(data.camera && data.camera.zoom, 0.5, 2.2, 1);
+    powerProd = powerDemand = 0; powerRatio = 1;
+    deliveries = []; floaties = []; warnState = { text: '', until: 0 };
+    tut.active = false;
+    for (const item of data.buildings) {
+      const b = restoreBuilding(item);
+      if (!b) continue;
+      cellAt(b.x, b.y).b = b;
+      buildings.push(b);
+    }
+    state = 'playing';
+    document.querySelectorAll('.speed-btn').forEach((b) => b.classList.toggle('active', b.dataset.speed === String(speed)));
+    document.getElementById('pauseBtn').classList.toggle('paused', paused);
+    document.getElementById('overlay').classList.remove('visible');
+    document.getElementById('tutPanel').classList.add('hidden');
+    renderPalette(); updateTopbar(); refreshTools(); showInfo(); updateHUD();
+    showToast('공장 복구 완료', `${buildings.length}개 건물 · ${ERAS[era].name}`);
+  }
+
+  function clearSavedRun() {
+    try { localStorage.removeItem(SAVE_KEY); } catch (_e) {}
+    savedRunMeta = null;
+  }
+
+  function savedRunSummary(data) {
+    if (!data) return '';
+    const e = ERAS[Math.min(clampNum(data.era, 1, 4, 1) | 0, 4)];
+    const goal = e.count;
+    const savedAt = data.savedAt ? new Date(data.savedAt).toLocaleString('ko-KR', {
+      month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
+    }) : '저장 시간 없음';
+    return `저장된 공장 · ${e.name} · 연구 ${data.research || 0}/${goal} · 점수 ${data.score || 0} · 건물 ${data.buildings.length}개 · ${savedAt}`;
+  }
+
   let saveAccum = 0;
-  window.addEventListener('visibilitychange', () => { if (document.hidden) saveHigh(); });
+  window.addEventListener('visibilitychange', () => { if (document.hidden) { saveHigh(); saveRun(); } });
+  window.addEventListener('beforeunload', () => { saveHigh(); saveRun(); });
 
   // ── 시작 / 오버레이 ─────────────────────────────────────────────
-  function start() {
+  function startNew() {
+    clearSavedRun();
     resetWorld();
     state = 'playing'; paused = false; speed = 1;
     document.querySelectorAll('.speed-btn').forEach((b) => b.classList.toggle('active', b.dataset.speed === '1'));
     document.getElementById('pauseBtn').classList.remove('paused');
     document.getElementById('overlay').classList.remove('visible');
     renderPalette(); updateTopbar(); refreshTools(); showInfo();
+    saveRun();
+  }
+
+  function startFromOverlay() {
+    const saved = savedRunMeta || readSavedRun();
+    if (saved) restoreRun(saved);
+    else startNew();
   }
 
   function fillOverlay() {
+    savedRunMeta = readSavedRun();
     document.getElementById('overlayTitle').textContent = '🏭 산업의 시대';
     document.getElementById('overlayMsg').innerHTML =
       '자원을 캐고 컨베이어로 잇고 가공해 <b>연구소</b>에 납품하세요.<br>1차 증기 → 2차 전기 → 3차 디지털 → 4차 AI 시대로 공장을 진화시킵니다.';
@@ -1023,8 +1192,14 @@
       ① <b>채굴기⛏</b>를 <b>철광석</b> 위에 → ② <b>화로🔥</b>로 철판 제련 →<br>
       ③ <b>작업대🔧</b>로 톱니바퀴 →  ④ <b>연구소🔬</b>에 납품!<br>
       <span style="color:#8595ad">건물은 <b>컨베이어➤</b>로 연결하거나 서로 맞붙여 직접 전달돼요.</span>`;
-    document.getElementById('startBtn').textContent = state === 'win' ? '새 공장 시작' : '건설 시작';
-    document.getElementById('tutBtn').classList.toggle('hidden', state === 'win');
+    const saveSummary = document.getElementById('saveSummary');
+    const hasSave = Boolean(savedRunMeta);
+    saveSummary.classList.toggle('hidden', !hasSave);
+    saveSummary.textContent = hasSave ? savedRunSummary(savedRunMeta) : '';
+    document.getElementById('startBtn').textContent = hasSave ? '이어하기' : '건설 시작';
+    document.getElementById('newRunBtn').classList.toggle('hidden', !hasSave);
+    document.getElementById('discardSaveBtn').classList.toggle('hidden', !hasSave);
+    document.getElementById('tutBtn').classList.toggle('hidden', hasSave || state === 'win');
   }
 
   // ── 메인 루프 ───────────────────────────────────────────────────
@@ -1041,7 +1216,7 @@
     if (state === 'playing') updateHUD();
     draw(dt);
     // 주기적 저장
-    saveAccum += dt; if (saveAccum > 5) { saveAccum = 0; saveHigh(); }
+    saveAccum += dt; if (saveAccum > 5) { saveAccum = 0; saveHigh(); saveRun(); }
     requestAnimationFrame(loop);
   }
 
@@ -1059,6 +1234,8 @@
     </ul>
     <h4>전력 (2차~)</h4>
     발전기⚡가 석탄을 태워 전력을 만듭니다. 전기 기계(조립기·회로공장 등)는 전력을 소비하며, <b>수요 > 생산</b>이면 모든 전기 기계가 느려집니다. 발전기를 늘려 균형을 맞추세요. (채굴기·화로·작업대는 전력이 필요 없습니다.)
+    <h4>저장</h4>
+    공장 배치와 연구 진행은 이 브라우저에 자동 저장됩니다. 다음에 들어오면 시작 화면에서 <b>이어하기</b>, <b>새 공장 시작</b>, <b>저장 삭제</b>를 선택할 수 있습니다.
     <h4>시대별 목표</h4>
     <ul>
       <li>🔥 1차: 톱니바퀴 30 (철판→톱니바퀴)</li>
@@ -1073,7 +1250,12 @@
   resetWorld();   // 시작 오버레이 뒤로 공장 그리드 미리보기 (grid 초기화 보장)
   loadHigh();
   fillOverlay();
-  document.getElementById('startBtn').addEventListener('click', start);
+  document.getElementById('startBtn').addEventListener('click', startFromOverlay);
+  document.getElementById('newRunBtn').addEventListener('click', startNew);
+  document.getElementById('discardSaveBtn').addEventListener('click', () => {
+    clearSavedRun();
+    fillOverlay();
+  });
   document.getElementById('tutBtn').addEventListener('click', startTutorial);
   document.getElementById('tutSkip').addEventListener('click', endTutorial);
   requestAnimationFrame(loop);

@@ -367,6 +367,12 @@ function checkFactoryArcadeCoverage() {
   if (!game.includes('placementIssue') || !game.includes('광맥 위에만 배치')) {
     throw new Error('Factory game should prevent dead miner placements with user feedback');
   }
+  if (!game.includes('SAVE_KEY') || !game.includes('serializeBuilding') || !game.includes('restoreRun')) {
+    throw new Error('Factory game should persist and restore in-progress factory layouts');
+  }
+  if (!page.includes('saveSummary') || !page.includes('newRunBtn') || !page.includes('discardSaveBtn')) {
+    throw new Error('Factory page should expose continue/new/discard save controls');
+  }
   if (!game.includes('function deliver') || !game.includes('다음 시대로 진화')) {
     throw new Error('Factory delivery loop should provide milestone feedback');
   }
