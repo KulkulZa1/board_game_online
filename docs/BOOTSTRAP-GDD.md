@@ -3,6 +3,10 @@
 
 > A working, validated MVP of this design's simulation core lives in
 > [`prototypes/bootstrap-sim/`](../prototypes/bootstrap-sim/) (`node prototypes/bootstrap-sim/test.js`).
+>
+> Programmer-facing data structures, simulation variables, update rules, and
+> era stability pseudocode are specified in
+> [`docs/loop-progression-technical-spec.md`](loop-progression-technical-spec.md).
 
 **The spine.** Every producer runs each tick at an **effective utilization** equal to the *minimum* of all satisfied constraints:
 

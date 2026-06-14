@@ -20,6 +20,7 @@
 - Vampire Survivors hack-and-slash layer: level-up choices can now add `Cleave Edge`, `Rupture Mark`, and `Echo Step` slash supports that widen dash slashes, apply bleed/burst pressure, and create delayed after-slashes.
 - Smoke-check coverage for Vampire Survivors character/difficulty/meta/pause/revive markers.
 - `docs/vampire-survivors-director-loop.md` with verification targets and remaining design work.
+- `docs/loop-progression-technical-spec.md` with programmer-facing data structures, simulation variables, update rules, era-loop stability checks, breakthrough rules, and MVP implementation scope for the civilization-scale progression system.
 
 ### Changed
 - Vampire Survivors enemy spawn pressure, enemy stats, boss interval, and rewards now scale from the selected difficulty, selected map, and daily modifier.
