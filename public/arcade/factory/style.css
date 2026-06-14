@@ -110,6 +110,13 @@ html, body {
   background: rgba(16,22,34,0.82); border: 1px solid var(--border);
   border-radius: 8px; padding: 4px 10px; font-size: 0.72rem; color: var(--ok);
 }
+#bottleneck {
+  background: rgba(40,20,16,0.88); border: 1px solid #7a3a2a;
+  border-radius: 8px; padding: 4px 10px; font-size: 0.72rem; color: #ffb38a;
+  max-width: 220px; text-align: right;
+}
+#bottleneck.ok { background: rgba(16,34,22,0.82); border-color: #2a5a3a; color: var(--ok); }
+#rpDisplay { color: #6ee7ff !important; }
 #speedCtl { display: flex; gap: 3px; }
 .speed-btn, #pauseBtn {
   background: var(--panel); border: 1px solid var(--border); color: var(--muted);
