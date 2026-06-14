@@ -13,7 +13,7 @@ This project has three distinct, intentional layers:
 | Layer | What | Served At | Purpose |
 |-------|------|-----------|---------|
 | **A — Board Games** | 12 turn-based 1v1 multiplayer games | `/` (lobby) → `/game.html` | Core platform — real-time multiplayer |
-| **B — Arcade Games** | 4 solo standalone games | `/arcade/*` | Solo play extension — no server needed |
+| **B — Arcade Games** | Solo standalone games including factory, tower defense, and Bootstrap civilization loop | `/arcade/*` | Solo play extension — no server needed |
 | **C — Sandbox** | 3 config-driven game design tools | local only (`npm run sandbox`) | Developer design tools — not production |
 
 All three layers are **intentional**. Arcade games and sandbox are not scope creep.
@@ -23,7 +23,7 @@ All three layers are **intentional**. Arcade games and sandbox are not scope cre
 ## Live Games
 
 **Board games (12):** 체스, 오목, 사목, 오셀로, 인디언 포커, 체커, 사과게임, 배틀십, 백가몬, 텍사스 홀덤, 도트앤박스, 만칼라  
-**Arcade games (4):** 스네이크, 벽돌깨기, 뱀파이어 서바이버, 식물 키우기  
+**Arcade games:** 스네이크, 벽돌깨기, 뱀파이어 서바이버, 식물 키우기, 타워 디펜스, 산업의 시대, 문명 루프
 **Platform:** Web (PWA) — https://board-game-online.onrender.com  
 **Deployment:** Render.com, Node.js + Socket.io, no database
 
@@ -52,7 +52,7 @@ Full Japanese riichi mahjong is tracked as a future candidate, but should start 
 - **Frontend:** `game-registry.js` as central metadata store; per-game CSS files
 - **Docs:** `ADDING_A_GAME.md` — 10-step checklist; AI agent token cost per game: 3k (was 52k)
 - **New board games:** 배틀십, 백가몬, 텍사스 홀덤, 도트앤박스, 만칼라 — 5 games added (12 total)
-- **Arcade layer:** 4 solo games at `/arcade/*` (snake, breakout, vampire, plant)
+- **Arcade layer:** solo games at `/arcade/*` (snake, breakout, vampire, plant, tower-defense, factory, bootstrap)
 - **Sandbox layer:** 3 config-driven design tools (vampire-survivors, plant-growing, tower-defense)
 - **Smoke tests:** `scripts/smoke-test.js` — 70+ assertions covering board game handlers + HTTP routes
 
@@ -75,7 +75,8 @@ Arcade games are standalone HTML/CSS/JS pages with no server dependency. See `AD
 
 | Game | Effort | Status |
 |------|--------|--------|
-| Tower Defense (towers) | Medium | ⬜ Planned — sandbox prototype done |
+| Tower Defense (towers) | Medium | Live at `/arcade/tower-defense/` |
+| Bootstrap Civilization Loop | Medium | MVP live at `/arcade/bootstrap/`; expand after stability tuning |
 | 블랙잭 (Blackjack) | Easy | ⬜ Future |
 | 지뢰찾기 (Minesweeper) | Easy | ⬜ Future |
 
@@ -87,9 +88,9 @@ Sandbox is a developer-only design tool. It is **not served in production** — 
 |---------|--------|--------------------------|
 | vampire-survivors | ✅ Complete | `/arcade/vampire/` (independent implementation) |
 | plant-growing | ✅ Complete | `/arcade/plant/` (independent implementation) |
-| tower-defense | ✅ Complete | No arcade version yet |
+| tower-defense | ✅ Complete | `/arcade/tower-defense/` via production-safe runtime alias |
 
-**Sandbox ↔ Arcade relationship:** Sandbox tools are design prototypes. Sandbox configs inform arcade game design but are not directly imported — each arcade game is a standalone, hardcoded production implementation. This is intentional: sandbox is for experimentation, arcade is for shipping.
+**Sandbox ↔ Arcade relationship:** Sandbox tools are developer-only design prototypes. Most arcade games remain standalone production implementations, while Tower Defense intentionally publishes/imports validated editor configs through a production-safe runtime path. Sandbox remains local-only; shipped arcade routes must not request `/sandbox/` assets.
 
 ### Phase C — Mobile Launch (🔄 in progress)
 
@@ -158,7 +159,7 @@ Real-time action games, 3D/physics games → Unity spin-off (v2)
 | game-registry.js pattern | Single source of truth; AI agents read 1 file instead of 5 |
 | Arcade games as standalone pages | No server dependency; zero infrastructure overhead; instantly shippable |
 | Sandbox not served in production | Dev tool only; use `npm run sandbox` locally; `express.static` covers only `public/` |
-| Sandbox ↔ Arcade: no code sharing | By design — sandbox is for experimentation, arcade is for shipping; distinct goals justify distinct implementations |
+| Sandbox ↔ Arcade: local editor, production-safe runtime | Sandbox is for experimentation, arcade is for shipping; shared runtime paths are allowed only when production routes do not request `/sandbox/` assets |
 | Keep Vanilla JS + Express + Socket.io | v1 board game layer is stable; React/TypeScript migration unjustified |
 
 ---
@@ -214,7 +215,7 @@ are scope management issues, not language/framework deficiencies.
 1. Validate all 12 board games manually on mobile (reconnect + rematch edge cases)
 2. Add per-game handler unit tests for at least 3 of the newer games (backgammon, texasholdem, dotsboxes)
 3. Replace AdMob placeholder IDs if targeting Android release
-4. Add Tower Defense arcade game (production version using sandbox TD as design reference)
-5. Decide fate of arcade games: keep 4 existing, evaluate TD arcade next, freeze other additions until v1 board games are fully stable
+4. Tune Bootstrap civilization loop balance after manual playtests and decide the next era slice.
+5. Keep arcade additions focused on reusable systems and avoid new disconnected prototypes until current solo games are stable.
 
 *Last updated: 2026-05-19*

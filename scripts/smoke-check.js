@@ -332,6 +332,7 @@ function checkProductionArcadeAssetPolicy() {
     'public/arcade/vampire/index.html',
     'public/arcade/plant/index.html',
     'public/arcade/factory/index.html',
+    'public/arcade/bootstrap/index.html',
     'public/arcade/tower-defense/index.html',
   ];
   const offenders = arcadePages.filter((file) =>
@@ -387,6 +388,50 @@ function checkFactoryArcadeCoverage() {
   }
   if (!style.includes('@media (max-width: 520px)') || !style.includes('#palette')) {
     throw new Error('Factory CSS should include mobile-specific palette/tool layout rules');
+  }
+}
+
+function checkBootstrapArcadeCoverage() {
+  const page = fs.readFileSync(path.join(root, 'public/arcade/bootstrap/index.html'), 'utf8');
+  const game = fs.readFileSync(path.join(root, 'public/arcade/bootstrap/game.js'), 'utf8');
+  const sim = fs.readFileSync(path.join(root, 'public/arcade/bootstrap/sim.js'), 'utf8');
+  const style = fs.readFileSync(path.join(root, 'public/arcade/bootstrap/style.css'), 'utf8');
+  const lobby = fs.readFileSync(path.join(root, 'public/index.html'), 'utf8');
+
+  if (!lobby.includes('/arcade/bootstrap/')) {
+    throw new Error('Lobby should expose the Bootstrap civilization loop route');
+  }
+  if (!page.includes('/js/sw-update.js') || !page.includes('sim.js') || !page.includes('game.js')) {
+    throw new Error('Bootstrap page should load the simulation core, runtime, and service-worker update helper');
+  }
+  [
+    'window.Bootstrap',
+    'class Sim',
+    'gate',
+    'sustain',
+    'min()',
+    'breakthrough',
+  ].forEach((marker) => {
+    if (!sim.includes(marker)) {
+      throw new Error(`Bootstrap simulation core is missing expected loop marker: ${marker}`);
+    }
+  });
+  [
+    'Bottleneck',
+    'renderGate',
+    'renderBottlenecks',
+    'showOverlay',
+    'startBtn',
+  ].forEach((marker) => {
+    if (!game.includes(marker)) {
+      throw new Error(`Bootstrap browser runtime is missing expected UI marker: ${marker}`);
+    }
+  });
+  if (!game.includes('textContent')) {
+    throw new Error('Bootstrap browser runtime should use textContent for direct state rendering');
+  }
+  if (!style.includes('@media (max-width: 760px)') || !style.includes('#board')) {
+    throw new Error('Bootstrap CSS should include mobile board layout rules');
   }
 }
 
@@ -1005,6 +1050,10 @@ async function main() {
       '/arcade/factory/',
       '/arcade/factory/game.js',
       '/arcade/factory/style.css',
+      '/arcade/bootstrap/',
+      '/arcade/bootstrap/sim.js',
+      '/arcade/bootstrap/game.js',
+      '/arcade/bootstrap/style.css',
       '/arcade/tower-defense/',
       '/arcade/tower-defense/runtime/config.js',
       '/arcade/tower-defense/runtime/game.js',
@@ -1030,6 +1079,7 @@ async function main() {
     checkVersionBadgeCoverage();
     checkProductionArcadeAssetPolicy();
     checkFactoryArcadeCoverage();
+    checkBootstrapArcadeCoverage();
     checkSandboxConfigBridgeRead();
     checkTowerDefenseSandboxCoverage();
     checkVampireDirectorLoopCoverage();

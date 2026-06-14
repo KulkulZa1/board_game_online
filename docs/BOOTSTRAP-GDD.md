@@ -7,6 +7,10 @@
 > Programmer-facing data structures, simulation variables, update rules, and
 > era stability pseudocode are specified in
 > [`docs/loop-progression-technical-spec.md`](loop-progression-technical-spec.md).
+>
+> A first playable browser slice is exposed at `/arcade/bootstrap/`. It covers
+> the MVP chain from Gathering through Mining with data-driven process cards,
+> bottleneck diagnostics, and sustained stability gates.
 
 **The spine.** Every producer runs each tick at an **effective utilization** equal to the *minimum* of all satisfied constraints:
 
@@ -164,7 +168,7 @@ Complexity only if **traceable** in UI; automation **changes** the decision, not
 Data schema (buildings/resources/recipes JSON), tick simulation architecture (fixed-step, deterministic, headless), formal `min()` + stock-flow model. **Success:** headless sim loads recipe files, runs 1,000 deterministic ticks with logged stocks. *(Done in the prototype.)*
 
 ### Phase 1 — Prototype (8–10 wks)
-**Systems:** `min()` engine; food/population/labor loop (2 tiers); gathering+farming+storage+spoilage+fertility; mining + Ore→Steel→Tools; tools-as-capital; 2 sustained gates; single region; Bottleneck Analyzer + labor UI. **Risks:** fiddly-not-fun loop; unreadable cascades; gate windows feel like waiting. **Tests:** induced famine reaches steel in N ticks & is traceable; gate can't pass on a 1-tick spike; removing tools deterministically drops farm output. **Success:** testers replay voluntarily and can *verbally explain* a stall from the UI alone. *(Sim core + tests complete; renderer pending.)*
+**Systems:** `min()` engine; food/population/labor loop (2 tiers); gathering+farming+storage+spoilage+fertility; mining + Ore→Steel→Tools; tools-as-capital; sustained gates; single region; Bottleneck Analyzer + labor UI. **Risks:** fiddly-not-fun loop; unreadable cascades; gate windows feel like waiting. **Tests:** induced famine reaches steel in N ticks & is traceable; gate can't pass on a 1-tick spike; removing tools deterministically drops farm output. **Success:** testers replay voluntarily and can *verbally explain* a stall from the UI alone. *(Headless sim/tests complete; first browser MVP playable at `/arcade/bootstrap/`.)*
 
 ### Phase 2 — Vertical Slice (10–14 wks)
 **Scope:** Eras A–I in one polished region with power grid (capacity+stability), pollution→fertility loop, logistics congestion, maintenance decay, research-as-infrastructure, and Dependency Graph + Era Dashboard + Chain Viewer. **Risks:** UI legibility at this complexity (make-or-break); power *stability* opacity; sim performance at city scale. **Tests:** blackout cascade recoverable via load-shed; pollution-famine reproducible & diagnosable; research gate blocked until clean-room ≥90%; ≥10 districts at target FPS. **Success:** a tutorialized new player reaches Computer Age & diagnoses ≥80% of induced failures unaided; demoable for wishlists.
