@@ -18,6 +18,7 @@
   const GEN_FUEL_CAP = 20;    // 발전기 연료 버퍼 상한(초)
   const MINER_RATE   = 1.0;   // 채굴기 1개 / 1초
   const HIGH_KEY = 'arcade_factory_high';
+  const SAVE_KEY = 'arcade_factory_save_v1';
 
   // 방향: 0=동, 1=남, 2=서, 3=북
   const DIRS = [[1, 0], [0, 1], [-1, 0], [0, -1]];
@@ -213,6 +214,7 @@
   let powerProd = 0, powerDemand = 0, powerRatio = 1;
   let deliveries = [];        // 최근 납품 시각(처리량 계산)
   let floaties = [];          // 부유 텍스트
+  let warnState = { text: '', until: 0 };
 
   // 입력/툴
   let selected = 'belt';      // 선택 건물 id
@@ -223,11 +225,17 @@
   // 포인터 상태
   let ptr = { down: false, mode: null, lastSX: 0, lastSY: 0, lastTile: null, button: 0 };
   let spaceHeld = false;
+  let savedRunMeta = null;
 
   // ── 유틸 ────────────────────────────────────────────────────────
   const inBounds = (x, y) => x >= 0 && y >= 0 && x < GRID_W && y < GRID_H;
   const cellAt   = (x, y) => grid[y * GRID_W + x];
   const currentTarget = () => ERAS[Math.min(era, 4)].target;
+  const clampNum = (v, min, max, fallback) => {
+    const n = Number(v);
+    if (!Number.isFinite(n)) return fallback;
+    return Math.max(min, Math.min(max, n));
+  };
 
   function resize() {
     canvas.width  = wrapper.clientWidth;
@@ -246,6 +254,7 @@
     era = 1; research = 0; score = 0; won = false;
     simTime = 0; deliveries = []; floaties = [];
     powerProd = powerDemand = 0; powerRatio = 1;
+    warnState = { text: '', until: 0 };
     selected = 'belt'; rot = 0; tool = 'build';
     tut.active = false;
     const _tp = document.getElementById('tutPanel'); if (_tp) _tp.classList.add('hidden');
@@ -285,18 +294,136 @@
     return b;
   }
 
+  function likelyOutputsFor(id, tx, ty) {
+    const def = B[id];
+    if (!def) return [];
+    if (def.kind === 'miner') {
+      const cell = inBounds(tx, ty) ? cellAt(tx, ty) : null;
+      return cell && cell.deposit ? [cell.deposit.resource] : ['coal', 'iron_ore', 'copper_ore', 'sand'];
+    }
+    if (def.kind === 'machine') {
+      if (def.smelt) return Object.values(def.smelt);
+      if (def.recipe && def.recipe.out) return Object.keys(def.recipe.out);
+    }
+    return [];
+  }
+
+  function targetCanReceive(target, item) {
+    const def = B[target.id];
+    if (!def) return false;
+    if (def.kind === 'belt') return true;
+    if (def.kind === 'lab') return item === currentTarget();
+    if (def.kind === 'generator') return item === 'coal';
+    if (def.kind === 'machine') {
+      if (def.smelt) {
+        if (!(item in def.smelt)) return false;
+        if (item === 'copper_ore' && era < 2) return false;
+        if (item === 'sand' && era < 3) return false;
+        return true;
+      }
+      return !!(def.recipe && def.recipe.in[item] != null);
+    }
+    return false;
+  }
+
+  function canOutputTo(id, tx, ty, dir, allowBeltTarget) {
+    const d = DIRS[dir];
+    const nx = tx + d[0], ny = ty + d[1];
+    if (!inBounds(nx, ny)) return false;
+    const target = cellAt(nx, ny).b;
+    if (!target) return false;
+    const targetDef = B[target.id];
+    if (targetDef.kind === 'miner') return false;
+    if (id === 'belt') return targetDef.kind !== 'miner';
+    if (targetDef.kind === 'belt') return !!allowBeltTarget;
+    return likelyOutputsFor(id, tx, ty).some((item) => targetCanReceive(target, item));
+  }
+
+  function inferDirForPlacement(id, tx, ty, fallback) {
+    const def = B[id];
+    if (!def || def.kind === 'lab') return fallback;
+    const allowManualBeltTarget = id === 'belt' || id === 'miner';
+    if (canOutputTo(id, tx, ty, fallback, allowManualBeltTarget)) return fallback;
+    for (let dir = 0; dir < DIRS.length; dir++) {
+      const allowBeltTarget = id === 'belt' || id === 'miner';
+      if (canOutputTo(id, tx, ty, dir, allowBeltTarget)) return dir;
+    }
+    return fallback;
+  }
+
+  function canNeighborAutoConnect(source, target) {
+    if (!source || !target || B[source.id].kind === 'lab') return false;
+    const dir = DIRS.findIndex(([dx, dy]) => source.x + dx === target.x && source.y + dy === target.y);
+    if (dir < 0) return false;
+    const allowBeltTarget = source.id === 'belt' || source.id === 'miner';
+    const targetDef = B[target.id];
+    if (targetDef.kind === 'miner') return false;
+    if (source.id === 'belt') return targetDef.kind !== 'miner';
+    if (targetDef.kind === 'belt') return allowBeltTarget;
+    return likelyOutputsFor(source.id, source.x, source.y).some((item) => targetCanReceive(target, item));
+  }
+
+  function autoOrientNeighbors(tx, ty) {
+    const target = cellAt(tx, ty).b;
+    if (!target) return;
+    for (let dir = 0; dir < DIRS.length; dir++) {
+      const d = DIRS[dir];
+      const nx = tx - d[0], ny = ty - d[1];
+      if (!inBounds(nx, ny)) continue;
+      const neighbor = cellAt(nx, ny).b;
+      if (!neighbor || B[neighbor.id].kind === 'lab') continue;
+      if (canNeighborAutoConnect(neighbor, target)) neighbor.dir = dir;
+    }
+  }
+
+  function selectedCanConnectAt(id, tx, ty) {
+    if (!inBounds(tx, ty) || placementIssue(id, tx, ty)) return false;
+    if (id === 'miner') return !!cellAt(tx, ty).deposit;
+    const preferred = inferDirForPlacement(id, tx, ty, rot);
+    if (canOutputTo(id, tx, ty, preferred, id === 'belt' || id === 'miner')) return true;
+    for (let dir = 0; dir < DIRS.length; dir++) {
+      const d = DIRS[dir];
+      const nx = tx - d[0], ny = ty - d[1];
+      if (!inBounds(nx, ny)) continue;
+      const source = cellAt(nx, ny).b;
+      if (source && canNeighborAutoConnect(source, { id, x: tx, y: ty })) return true;
+    }
+    return false;
+  }
+
+  function placementIssue(id, tx, ty) {
+    if (!inBounds(tx, ty)) return '지도 안쪽에 배치하세요';
+    const cell = cellAt(tx, ty);
+    if (cell.b && !(id === 'belt' && cell.b.id === 'belt')) return '이미 건물이 있는 칸입니다';
+    if (id === 'miner' && !cell.deposit) return '채굴기는 석탄/광석/규사 광맥 위에만 배치할 수 있어요';
+    return '';
+  }
+
+  function warn(msg, sub) {
+    const now = performance.now();
+    if (warnState.text === msg && now < warnState.until) return;
+    warnState = { text: msg, until: now + 1300 };
+    showToast(msg, sub || '');
+  }
+
   // ── 배치 / 철거 ─────────────────────────────────────────────────
   function place(tx, ty) {
     if (!inBounds(tx, ty)) return;
     const id = selected;
     if (!id || B[id].era > era) return;
-    const cell = cellAt(tx, ty);
-    if (cell.b) {
-      if (id === 'belt' && cell.b.id === 'belt') cell.b.dir = rot; // 기존 컨베이어 방향만 변경
+    const issue = placementIssue(id, tx, ty);
+    if (issue) {
+      if (issue !== '이미 건물이 있는 칸입니다') warn(issue, '색 점이 있는 자원 타일 위에 놓으면 바로 채굴이 시작됩니다');
       return;
     }
-    cell.b = makeBuilding(id, tx, ty, rot);
+    const cell = cellAt(tx, ty);
+    if (cell.b) {
+      if (id === 'belt' && cell.b.id === 'belt') cell.b.dir = inferDirForPlacement(id, tx, ty, rot); // 기존 컨베이어 방향만 변경
+      return;
+    }
+    cell.b = makeBuilding(id, tx, ty, inferDirForPlacement(id, tx, ty, rot));
     buildings.push(cell.b);
+    autoOrientNeighbors(tx, ty);
     if (tut.active) checkTutBuild(id, tx, ty);
   }
 
@@ -343,11 +470,17 @@
   }
 
   function deliver(item, lab) {
+    const value = DELIVER_SCORE[item] || 1;
+    const goal = ERAS[Math.min(era, 4)].count;
     research++;
-    score += DELIVER_SCORE[item] || 1;
+    score += value;
     deliveries.push(simTime);
-    floaties.push({ x: lab.x * TILE + TILE / 2, y: lab.y * TILE, vy: -28, text: '+1', life: 1.0, color: ERAS[era].accent });
+    floaties.push({ x: lab.x * TILE + TILE / 2, y: lab.y * TILE, vy: -28, text: `+${value} ${ITEMS[item].name}`, life: 1.0, color: ERAS[era].accent });
     if (score > highScore) highScore = score;
+    saveRun();
+    if (research < goal && research % 5 === 0) {
+      showToast(`${ITEMS[item].name} ${research}/${goal}`, `${goal - research}개 더 납품하면 다음 시대로 진화합니다`);
+    }
     checkEra();
     if (tut.active && TUT_STEPS[tut.step] && TUT_STEPS[tut.step].event === 'delivery') advanceTut();
   }
@@ -364,6 +497,7 @@
     showToast(`${e.icon} ${e.name} 진입!`, e.sub + ' — 새 기술 해금');
     flashFx = 0.7;
     saveHigh();
+    saveRun();
     renderPalette();
     updateTopbar();
     setTimeout(() => showEraGuide(era), 1200);
@@ -373,6 +507,7 @@
     showToast('🌌 특이점 도달!', 'AI 시대 개막 — 무한 가동으로 최고 점수에 도전!');
     flashFx = 1.0;
     saveHigh();
+    saveRun();
     if (window.AdMobHelper) AdMobHelper.showAfterGame();
   }
 
@@ -500,17 +635,26 @@
         const cell = cellAt(x, y);
         const px = x * TILE, py = y * TILE;
         if (cell.deposit) {
-          ctx.fillStyle = shade(ITEMS[cell.deposit.resource].c, -0.45);
+          const minerMode = state === 'playing' && tool === 'build' && selected === 'miner';
+          ctx.fillStyle = shade(ITEMS[cell.deposit.resource].c, minerMode ? -0.25 : -0.45);
           ctx.fillRect(px, py, TILE, TILE);
           ctx.fillStyle = ITEMS[cell.deposit.resource].c;
           for (let i = 0; i < 4; i++) {
             const dx = px + 8 + (i % 2) * 18 + 3, dy = py + 8 + Math.floor(i / 2) * 18 + 3;
-            ctx.beginPath(); ctx.arc(dx, dy, 4, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(dx, dy, minerMode ? 5.5 : 4, 0, Math.PI * 2); ctx.fill();
+          }
+          if (minerMode && !cell.b) {
+            ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+            ctx.lineWidth = 2;
+            rrect(px + 3, py + 3, TILE - 6, TILE - 6, 6); ctx.stroke();
+            ctx.strokeStyle = e.grid;
+            ctx.lineWidth = 1;
           }
         }
         ctx.strokeRect(px, py, TILE, TILE);
       }
     }
+    drawPlacementHints(x0, y0, x1, y1);
 
     // 건물
     for (const b of buildings) {
@@ -556,6 +700,36 @@
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       flashFx = Math.max(0, flashFx - dt * 1.4);
     }
+  }
+
+  function drawPlacementHints(x0, y0, x1, y1) {
+    if (state !== 'playing' || tool !== 'build' || !B[selected] || B[selected].era > era) return;
+    const def = B[selected];
+    ctx.save();
+    for (let y = y0; y <= y1; y++) {
+      for (let x = x0; x <= x1; x++) {
+        const cell = cellAt(x, y);
+        if (cell.b) continue;
+        const px = x * TILE, py = y * TILE;
+        if (selected === 'miner') {
+          if (!cell.deposit) continue;
+          const pulse = 0.45 + 0.25 * Math.sin(simTime * 5);
+          ctx.fillStyle = `rgba(255,255,255,${pulse * 0.16})`;
+          ctx.fillRect(px + 3, py + 3, TILE - 6, TILE - 6);
+          ctx.strokeStyle = `rgba(255,255,255,${pulse})`;
+          ctx.lineWidth = 2.5;
+          rrect(px + 4, py + 4, TILE - 8, TILE - 8, 7); ctx.stroke();
+          continue;
+        }
+        if (!selectedCanConnectAt(selected, x, y)) continue;
+        ctx.fillStyle = `${shade(def.color, 0.35).replace('rgb', 'rgba').replace(')', ',0.22)')}`;
+        ctx.fillRect(px + 5, py + 5, TILE - 10, TILE - 10);
+        ctx.strokeStyle = 'rgba(255,255,255,0.36)';
+        ctx.lineWidth = 1.5;
+        rrect(px + 6, py + 6, TILE - 12, TILE - 12, 6); ctx.stroke();
+      }
+    }
+    ctx.restore();
   }
 
   function drawBuilding(b) {
@@ -646,8 +820,7 @@
   }
 
   function drawGhost() {
-    const cell = cellAt(hover.x, hover.y);
-    const valid = !cell.b || (selected === 'belt' && cell.b.id === 'belt');
+    const valid = !placementIssue(selected, hover.x, hover.y);
     hover.valid = valid;
     ctx.globalAlpha = 0.5;
     const def = B[selected];
@@ -657,10 +830,10 @@
     ctx.globalAlpha = 0.9;
     ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.font = '18px sans-serif';
-    ctx.fillText(def.kind === 'belt' ? '➤' : def.ico, px + TILE / 2, py + TILE / 2 + 1);
+    ctx.fillText(valid ? (def.kind === 'belt' ? '➤' : def.ico) : '!', px + TILE / 2, py + TILE / 2 + 1);
     // 방향 표시
     if (def.kind !== 'lab') {
-      const d = DIRS[rot];
+      const d = DIRS[inferDirForPlacement(selected, hover.x, hover.y, rot)];
       ctx.fillStyle = '#fff';
       ctx.beginPath(); ctx.arc(px + TILE / 2 + d[0] * (TILE / 2 - 4), py + TILE / 2 + d[1] * (TILE / 2 - 4), 3, 0, Math.PI * 2); ctx.fill();
     }
@@ -732,8 +905,23 @@
       btn.className = 'pal-btn' + (id === selected ? ' selected' : '') + (locked ? ' locked' : '') + (tutFocus ? ' tut-focus' : '');
       btn.innerHTML = `<span class="pal-ico">${def.ico}</span><span class="pal-name">${def.name}</span>` +
         (locked ? `<span class="pal-lock">${ERAS[def.era].icon}</span>` : '');
-      if (!locked) btn.addEventListener('click', () => { selected = id; tool = 'build'; refreshTools(); renderPalette(); showInfo(); });
+      if (!locked) btn.addEventListener('click', () => { selected = id; tool = 'build'; refreshTools(); renderPalette(); showInfo(); selectionHint(id); });
       pal.appendChild(btn);
+    }
+  }
+
+  function selectionHint(id) {
+    if (state !== 'playing') return;
+    const def = B[id];
+    if (!def) return;
+    if (id === 'miner') {
+      showToast('채굴기 선택', '밝게 표시된 자원 타일 위에 놓으면 바로 채굴합니다.');
+    } else if (id === 'belt') {
+      showToast('컨베이어 선택', '드래그하면 방향이 이어지고, 가까운 수신 건물 쪽으로 자동 연결됩니다.');
+    } else if (def.kind === 'lab') {
+      showToast('연구소 선택', '현재 목표 아이템을 보내는 생산기나 컨베이어 옆에 배치하세요.');
+    } else {
+      showToast(`${def.name} 선택`, '밝게 표시된 칸은 연결하기 좋은 위치입니다. R키 수동 회전도 그대로 됩니다.');
     }
   }
 
@@ -788,6 +976,7 @@
   }
 
   function startTutorial() {
+    clearSavedRun();
     resetWorld();
     tutGuaranteeOre();
     tut.active = true; tut.step = 0;
@@ -975,20 +1164,178 @@
     if (score > highScore) highScore = score;
     try { localStorage.setItem(HIGH_KEY, String(highScore)); } catch (_e) {}
   }
+
+  function safeBuffer(buf, max) {
+    const out = {};
+    if (!buf || typeof buf !== 'object') return out;
+    for (const key of Object.keys(buf)) {
+      if (ITEMS[key]) out[key] = clampNum(buf[key], 0, max, 0);
+    }
+    return out;
+  }
+
+  function serializeBuilding(b) {
+    const data = { id: b.id, x: b.x, y: b.y, dir: b.dir };
+    if (b.id === 'belt') {
+      data.item = ITEMS[b.item] ? b.item : null;
+      data.prog = clampNum(b.prog, 0, 1, 0);
+    } else if (B[b.id].kind === 'miner') {
+      data.timer = clampNum(b.timer, 0, MINER_RATE, 0);
+    } else if (B[b.id].kind === 'machine') {
+      data.inBuf = safeBuffer(b.inBuf, IN_CAP);
+      data.outBuf = safeBuffer(b.outBuf, OUT_CAP);
+      if (b.craft && b.craft.out) {
+        data.craft = {
+          out: safeBuffer(b.craft.out, OUT_CAP),
+          t: clampNum(b.craft.t, 0, 30, 0),
+          total: clampNum(b.craft.total, 0.1, 30, B[b.id].time || 1),
+        };
+      }
+    } else if (B[b.id].kind === 'generator') {
+      data.fuel = clampNum(b.fuel, 0, GEN_FUEL_CAP, 0);
+    }
+    return data;
+  }
+
+  function saveRun() {
+    if (state !== 'playing') return;
+    const data = {
+      version: 1,
+      savedAt: Date.now(),
+      era, research, score, won,
+      simTime: Math.round(simTime * 1000) / 1000,
+      speed, paused,
+      selected, rot, tool,
+      camera: {
+        x: Math.round(camera.x * 100) / 100,
+        y: Math.round(camera.y * 100) / 100,
+        zoom: Math.round(camera.zoom * 1000) / 1000,
+      },
+      deposits: grid.map((cell) => cell.deposit ? cell.deposit.resource : null),
+      buildings: buildings.map(serializeBuilding),
+    };
+    try {
+      localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+      savedRunMeta = data;
+    } catch (_e) {}
+  }
+
+  function readSavedRun() {
+    try {
+      const raw = localStorage.getItem(SAVE_KEY);
+      if (!raw) return null;
+      const data = JSON.parse(raw);
+      if (!data || data.version !== 1 || !Array.isArray(data.deposits) || !Array.isArray(data.buildings)) return null;
+      return data;
+    } catch (_e) {
+      return null;
+    }
+  }
+
+  function restoreBuilding(data) {
+    if (!data || !B[data.id]) return null;
+    const x = Math.floor(data.x), y = Math.floor(data.y);
+    if (!inBounds(x, y) || cellAt(x, y).b) return null;
+    const b = makeBuilding(data.id, x, y, clampNum(data.dir, 0, 3, 0) | 0);
+    const def = B[b.id];
+    if (b.id === 'belt') {
+      b.item = ITEMS[data.item] ? data.item : null;
+      b.prog = clampNum(data.prog, 0, 1, 0);
+    } else if (def.kind === 'miner') {
+      b.timer = clampNum(data.timer, 0, MINER_RATE, 0);
+    } else if (def.kind === 'machine') {
+      b.inBuf = safeBuffer(data.inBuf, IN_CAP);
+      b.outBuf = safeBuffer(data.outBuf, OUT_CAP);
+      if (data.craft && data.craft.out) {
+        b.craft = {
+          out: safeBuffer(data.craft.out, OUT_CAP),
+          t: clampNum(data.craft.t, 0, 30, 0),
+          total: clampNum(data.craft.total, 0.1, 30, def.time || 1),
+        };
+      }
+    } else if (def.kind === 'generator') {
+      b.fuel = clampNum(data.fuel, 0, GEN_FUEL_CAP, 0);
+    }
+    return b;
+  }
+
+  function restoreRun(data) {
+    grid = new Array(GRID_W * GRID_H);
+    for (let i = 0; i < grid.length; i++) {
+      const res = data.deposits[i];
+      grid[i] = { deposit: ITEMS[res] ? { resource: res } : null, b: null };
+    }
+    buildings = [];
+    era = clampNum(data.era, 1, 4, 1) | 0;
+    research = clampNum(data.research, 0, ERAS[era].count * 3, 0) | 0;
+    score = clampNum(data.score, 0, 9999999, 0) | 0;
+    won = Boolean(data.won);
+    simTime = clampNum(data.simTime, 0, 999999, 0);
+    speed = clampNum(data.speed, 1, 3, 1) | 0;
+    paused = Boolean(data.paused);
+    selected = B[data.selected] && B[data.selected].era <= era ? data.selected : 'belt';
+    rot = clampNum(data.rot, 0, 3, 0) | 0;
+    tool = ['build', 'erase', 'pan'].includes(data.tool) ? data.tool : 'build';
+    camera.x = clampNum(data.camera && data.camera.x, -TILE, GRID_W * TILE, GRID_W * TILE / 2);
+    camera.y = clampNum(data.camera && data.camera.y, -TILE, GRID_H * TILE, GRID_H * TILE / 2);
+    camera.zoom = clampNum(data.camera && data.camera.zoom, 0.5, 2.2, 1);
+    powerProd = powerDemand = 0; powerRatio = 1;
+    deliveries = []; floaties = []; warnState = { text: '', until: 0 };
+    tut.active = false;
+    for (const item of data.buildings) {
+      const b = restoreBuilding(item);
+      if (!b) continue;
+      cellAt(b.x, b.y).b = b;
+      buildings.push(b);
+    }
+    state = 'playing';
+    document.querySelectorAll('.speed-btn').forEach((b) => b.classList.toggle('active', b.dataset.speed === String(speed)));
+    document.getElementById('pauseBtn').classList.toggle('paused', paused);
+    document.getElementById('overlay').classList.remove('visible');
+    document.getElementById('tutPanel').classList.add('hidden');
+    renderPalette(); updateTopbar(); refreshTools(); showInfo(); updateHUD();
+    showToast('공장 복구 완료', `${buildings.length}개 건물 · ${ERAS[era].name}`);
+  }
+
+  function clearSavedRun() {
+    try { localStorage.removeItem(SAVE_KEY); } catch (_e) {}
+    savedRunMeta = null;
+  }
+
+  function savedRunSummary(data) {
+    if (!data) return '';
+    const e = ERAS[Math.min(clampNum(data.era, 1, 4, 1) | 0, 4)];
+    const goal = e.count;
+    const savedAt = data.savedAt ? new Date(data.savedAt).toLocaleString('ko-KR', {
+      month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
+    }) : '저장 시간 없음';
+    return `저장된 공장 · ${e.name} · 연구 ${data.research || 0}/${goal} · 점수 ${data.score || 0} · 건물 ${data.buildings.length}개 · ${savedAt}`;
+  }
+
   let saveAccum = 0;
-  window.addEventListener('visibilitychange', () => { if (document.hidden) saveHigh(); });
+  window.addEventListener('visibilitychange', () => { if (document.hidden) { saveHigh(); saveRun(); } });
+  window.addEventListener('beforeunload', () => { saveHigh(); saveRun(); });
 
   // ── 시작 / 오버레이 ─────────────────────────────────────────────
-  function start() {
+  function startNew() {
+    clearSavedRun();
     resetWorld();
     state = 'playing'; paused = false; speed = 1;
     document.querySelectorAll('.speed-btn').forEach((b) => b.classList.toggle('active', b.dataset.speed === '1'));
     document.getElementById('pauseBtn').classList.remove('paused');
     document.getElementById('overlay').classList.remove('visible');
     renderPalette(); updateTopbar(); refreshTools(); showInfo();
+    saveRun();
+  }
+
+  function startFromOverlay() {
+    const saved = savedRunMeta || readSavedRun();
+    if (saved) restoreRun(saved);
+    else startNew();
   }
 
   function fillOverlay() {
+    savedRunMeta = readSavedRun();
     document.getElementById('overlayTitle').textContent = '🏭 산업의 시대';
     document.getElementById('overlayMsg').innerHTML =
       '자원을 캐고 컨베이어로 잇고 가공해 <b>연구소</b>에 납품하세요.<br>1차 증기 → 2차 전기 → 3차 디지털 → 4차 AI 시대로 공장을 진화시킵니다.';
@@ -997,8 +1344,14 @@
       ① <b>채굴기⛏</b>를 <b>철광석</b> 위에 → ② <b>화로🔥</b>로 철판 제련 →<br>
       ③ <b>작업대🔧</b>로 톱니바퀴 →  ④ <b>연구소🔬</b>에 납품!<br>
       <span style="color:#8595ad">건물은 <b>컨베이어➤</b>로 연결하거나 서로 맞붙여 직접 전달돼요.</span>`;
-    document.getElementById('startBtn').textContent = state === 'win' ? '새 공장 시작' : '건설 시작';
-    document.getElementById('tutBtn').classList.toggle('hidden', state === 'win');
+    const saveSummary = document.getElementById('saveSummary');
+    const hasSave = Boolean(savedRunMeta);
+    saveSummary.classList.toggle('hidden', !hasSave);
+    saveSummary.textContent = hasSave ? savedRunSummary(savedRunMeta) : '';
+    document.getElementById('startBtn').textContent = hasSave ? '이어하기' : '건설 시작';
+    document.getElementById('newRunBtn').classList.toggle('hidden', !hasSave);
+    document.getElementById('discardSaveBtn').classList.toggle('hidden', !hasSave);
+    document.getElementById('tutBtn').classList.toggle('hidden', hasSave || state === 'win');
   }
 
   // ── 메인 루프 ───────────────────────────────────────────────────
@@ -1015,7 +1368,7 @@
     if (state === 'playing') updateHUD();
     draw(dt);
     // 주기적 저장
-    saveAccum += dt; if (saveAccum > 5) { saveAccum = 0; saveHigh(); }
+    saveAccum += dt; if (saveAccum > 5) { saveAccum = 0; saveHigh(); saveRun(); }
     requestAnimationFrame(loop);
   }
 
@@ -1033,6 +1386,8 @@
     </ul>
     <h4>전력 (2차~)</h4>
     발전기⚡가 석탄을 태워 전력을 만듭니다. 전기 기계(조립기·회로공장 등)는 전력을 소비하며, <b>수요 > 생산</b>이면 모든 전기 기계가 느려집니다. 발전기를 늘려 균형을 맞추세요. (채굴기·화로·작업대는 전력이 필요 없습니다.)
+    <h4>저장</h4>
+    공장 배치와 연구 진행은 이 브라우저에 자동 저장됩니다. 다음에 들어오면 시작 화면에서 <b>이어하기</b>, <b>새 공장 시작</b>, <b>저장 삭제</b>를 선택할 수 있습니다.
     <h4>시대별 목표</h4>
     <ul>
       <li>🔥 1차: 톱니바퀴 30 (철판→톱니바퀴)</li>
@@ -1047,7 +1402,12 @@
   resetWorld();   // 시작 오버레이 뒤로 공장 그리드 미리보기 (grid 초기화 보장)
   loadHigh();
   fillOverlay();
-  document.getElementById('startBtn').addEventListener('click', start);
+  document.getElementById('startBtn').addEventListener('click', startFromOverlay);
+  document.getElementById('newRunBtn').addEventListener('click', startNew);
+  document.getElementById('discardSaveBtn').addEventListener('click', () => {
+    clearSavedRun();
+    fillOverlay();
+  });
   document.getElementById('tutBtn').addEventListener('click', startTutorial);
   document.getElementById('tutSkip').addEventListener('click', endTutorial);
   requestAnimationFrame(loop);
