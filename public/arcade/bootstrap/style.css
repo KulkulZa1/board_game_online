@@ -95,6 +95,7 @@ html, body {
 .bld-btn.plus { background: #1d3a28; border-color: #2f6043; color: var(--accent); font-weight: 700; }
 .bld-btn.plus:active { transform: scale(0.9); }
 .bld-btn.minus:active { transform: scale(0.9); }
+.bld-btn:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
 .bld-count { min-width: 22px; text-align: center; font-weight: 700; font-size: 0.9rem; }
 
 /* Health stats */

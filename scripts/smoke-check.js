@@ -418,15 +418,20 @@ function checkBootstrapArcadeCoverage() {
   });
   [
     'Bottleneck',
+    'buildStatus',
     'renderGate',
     'renderBottlenecks',
     'showOverlay',
     'startBtn',
+    'usefulCap',
   ].forEach((marker) => {
     if (!game.includes(marker)) {
       throw new Error(`Bootstrap browser runtime is missing expected UI marker: ${marker}`);
     }
   });
+  if (!game.includes('plus.disabled') || !game.includes('현재 규모로 충분')) {
+    throw new Error('Bootstrap build UI should disable wasteful construction to prevent dead-end overbuilding');
+  }
   if (!game.includes('textContent')) {
     throw new Error('Bootstrap browser runtime should use textContent for direct state rendering');
   }

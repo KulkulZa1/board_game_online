@@ -68,11 +68,76 @@
   function canAfford(id) { return (sim.stock.food || 0) >= COST[id]; }
   function build(id) {
     if (state !== 'playing') return;
-    if (!sim.isUnlocked(id)) return;
-    if (!canAfford(id)) { flashCost(id); return; }
+    const status = buildStatus(id);
+    if (!status.ok) {
+      flashCost(id);
+      return;
+    }
     sim.stock.food -= COST[id];
     sim.counts[id] = (sim.counts[id] || 0) + 1;
     render();
+  }
+
+  function buildStatus(id) {
+    if (!sim.isUnlocked(id)) return { ok: false, reason: '시대 잠김' };
+    if (!canAfford(id)) return { ok: false, reason: '식량 부족' };
+
+    const count = sim.counts[id] || 0;
+    const cap = usefulCap(id);
+    if (count >= cap) return { ok: false, reason: '현재 규모로 충분' };
+
+    const def = BLD[id];
+    const m = sim.metrics();
+    const laborNeed = laborDemand(def);
+    const laborSupply = (sim.pop.unskilled || 0) + (sim.pop.skilled || 0);
+    const projectedDemand = currentLaborDemand() + laborNeed;
+    const projectedRatio = laborSupply / Math.max(laborSupply, projectedDemand || 1);
+    const infrastructure = !!(def.housing || def.storage || def.institution || id === 'compost_yard' || id === 'irrigation_canal');
+
+    if (!infrastructure && count > 0 && projectedRatio < 0.42) {
+      return { ok: false, reason: '노동 병목' };
+    }
+    if (id !== 'shelter' && id !== 'longhouse' && m.housingHeadroom < 0) {
+      return { ok: false, reason: '주거 먼저' };
+    }
+    return { ok: true, reason: '' };
+  }
+
+  function usefulCap(id) {
+    const pop = Math.max(1, sim.totalPop());
+    const fields = sim.counts.crop_field || 0;
+    const housingNeed = Math.max(0, pop + 10 - sim.housingCap());
+    switch (id) {
+      case 'forager_camp': return Math.max(4, Math.ceil(pop / 3.5));
+      case 'hunting_lodge': return Math.max(1, Math.ceil(pop / 12));
+      case 'fire_pit': return Math.max(2, Math.ceil(pop / 10));
+      case 'shelter': return (sim.counts.shelter || 0) + Math.ceil(housingNeed / 8);
+      case 'crop_field': return Math.max(2, Math.ceil(pop / 7));
+      case 'compost_yard': return Math.max(1, Math.ceil(fields / 2));
+      case 'pasture': return Math.max(1, Math.ceil(pop / 14));
+      case 'clay_pit': return Math.max(1, Math.ceil(pop / 12));
+      case 'granary': return Math.max(1, Math.ceil(pop / 18));
+      case 'pottery_workshop': return Math.max(1, Math.ceil(pop / 14));
+      case 'irrigation_canal': return Math.max(1, fields);
+      case 'longhouse': return (sim.counts.longhouse || 0) + Math.ceil(Math.max(0, pop + 18 - sim.housingCap()) / 26);
+      case 'scribe_hall': return Math.max(1, Math.ceil(pop / 30));
+      case 'craft_school': return Math.max(1, Math.ceil(pop / 28));
+      case 'lumber_camp': return Math.max(1, Math.ceil(pop / 16));
+      case 'copper_mine': return Math.max(1, Math.ceil(pop / 18));
+      case 'smelter': return Math.max(1, Math.ceil((sim.counts.copper_mine || 1) / 2));
+      case 'toolsmith': return Math.max(1, Math.ceil(pop / 18));
+      case 'trade_post': return Math.max(1, Math.ceil(pop / 22));
+      default: return 99;
+    }
+  }
+
+  function laborDemand(def) {
+    if (!def || !def.labor) return 0;
+    return Object.values(def.labor).reduce((sum, value) => sum + value, 0);
+  }
+
+  function currentLaborDemand() {
+    return Object.keys(BLD).reduce((sum, id) => sum + laborDemand(BLD[id]) * (sim.counts[id] || 0), 0);
   }
   function demolish(id) {
     if (state !== 'playing') return;
@@ -271,7 +336,13 @@
       if (!row) continue;
       const locked = !sim.isUnlocked(id);
       row.classList.toggle('locked', locked);
-      row.classList.toggle('unaffordable', !locked && !canAfford(id));
+      const status = buildStatus(id);
+      const plus = row.querySelector('.bld-btn.plus');
+      if (plus) {
+        plus.disabled = !status.ok;
+        plus.title = status.reason || '건설';
+      }
+      row.classList.toggle('unaffordable', !locked && !status.ok);
     }
   }
 
