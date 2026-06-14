@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>BOOTSTRAP — 흙에서 특이점까지</title>
+  <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="container">
+    <header id="hdr">
+      <a href="/" class="back-btn">← 로비</a>
+      <span class="game-title">🌱 BOOTSTRAP</span>
+      <div id="hdrStats">
+        <span title="문명 지수 (복지×생산성×회복력)">문명지수 <strong id="ciValue">0</strong></span>
+        <span title="인구">👥 <strong id="popCount">0</strong></span>
+        <span title="경과 틱(시즌)">⏱ <strong id="tickCount">0</strong></span>
+      </div>
+    </header>
+
+    <!-- 자원 바 -->
+    <div id="resourceBar">
+      <div class="res-chip food"><span class="res-ico">🍞</span><b id="foodVal">0</b><span class="res-flow" id="foodFlow">+0/틱</span></div>
+      <div class="res-chip"><span class="res-ico">🪵</span><b id="woodVal">0</b></div>
+      <div class="res-chip"><span class="res-ico">⛰️</span><b id="oreVal">0</b></div>
+      <div class="res-chip"><span class="res-ico">🔩</span><b id="steelVal">0</b></div>
+      <div class="res-chip"><span class="res-ico">🛠️</span><b id="toolsVal">0</b></div>
+    </div>
+
+    <!-- 역병 배너 -->
+    <div id="eventBanner" class="hidden">🦠 작물 역병 — 토양 비옥도 회복 억제 중</div>
+
+    <main id="board">
+      <!-- 왼쪽: 건설 패널 -->
+      <section id="buildPanel" class="panel">
+        <h3>🏗️ 건설 <span class="hint">🍞 식량으로 건설 · 철거 시 50% 환급</span></h3>
+        <div id="buildList"></div>
+      </section>
+
+      <!-- 오른쪽: 대시보드 -->
+      <section id="dash">
+        <div class="panel" id="healthPanel">
+          <h3>📊 문명 건강</h3>
+          <div class="stat">
+            <div class="stat-label"><span>인구 구성</span><span id="popLabel">비숙련 0 · 숙련 0</span></div>
+            <div class="stat-track pyramid" id="popPyramid"><div id="popBarU"></div><div id="popBarS"></div></div>
+          </div>
+          <div class="stat">
+            <div class="stat-label"><span>식량 흑자율</span><span id="surplusLabel">0%</span></div>
+          </div>
+          <div class="stat">
+            <div class="stat-label"><span>토양 비옥도</span><span id="fertLabel">0%</span></div>
+            <div class="stat-track"><div id="fertBar"></div></div>
+          </div>
+          <div class="stat">
+            <div class="stat-label"><span>도구 보급률</span><span id="toolLabel">0%</span></div>
+            <div class="stat-track"><div id="toolBar"></div></div>
+          </div>
+          <div class="stat">
+            <div class="stat-label"><span>주거 (인구/수용)</span><span id="houseLabel">0 / 0</span></div>
+            <div class="stat-track"><div id="houseBar"></div></div>
+          </div>
+          <div class="stat">
+            <div class="stat-label"><span>철광맥 잔량</span><span id="depositLabel">0</span></div>
+            <div class="stat-track"><div id="depositBar"></div></div>
+          </div>
+        </div>
+
+        <div class="panel" id="gatePanel">
+          <h3>🎯 시대 게이트 <span class="hint">모든 조건 30틱 연속 유지</span></h3>
+          <div id="gateList"></div>
+        </div>
+
+        <div class="panel" id="bottleneckPanel">
+          <h3>🧭 병목 분석기 <span class="hint">가장 낮은 가동률을 넓히세요</span></h3>
+          <div id="bottleneckList"></div>
+        </div>
+      </section>
+    </main>
+
+    <!-- 컨트롤 바 -->
+    <div id="controls">
+      <button id="pauseBtn" title="일시정지">⏸</button>
+      <div id="speedCtl">
+        <button class="speed-btn active" data-speed="1">1×</button>
+        <button class="speed-btn" data-speed="2">2×</button>
+        <button class="speed-btn" data-speed="4">4×</button>
+        <button class="speed-btn" data-speed="8">8×</button>
+      </div>
+      <button id="restartBtn" title="다시 시작">↺</button>
+      <button id="helpBtn" title="도움말">?</button>
+    </div>
+
+    <!-- 시작 오버레이 -->
+    <div id="startOverlay" class="overlay visible">
+      <div class="ov-box">
+        <div class="ov-icon">🌱</div>
+        <h2>BOOTSTRAP — 흙에서 특이점까지</h2>
+        <p class="ov-msg">한 줌의 사람들이 베리를 줍는 데서 시작합니다. 식량→인구→노동의 사슬을 키워
+          <b>정착</b>과 <b>초기 공장</b>을 세우세요. 모든 생산자는 가장 부족한 제약만큼만 가동합니다 — <b>병목을 찾아 넓히는 것</b>이 게임입니다.</p>
+        <label class="challenge-row"><input type="checkbox" id="challengeToggle"> 🦠 도전: 작물 역병(중반 비옥도 급락)</label>
+        <button id="startBtn">문명 시작</button>
+      </div>
+    </div>
+
+    <!-- 종료 오버레이 -->
+    <div id="overlay" class="overlay">
+      <div class="ov-box">
+        <div class="ov-icon" id="ovIcon">🏛️</div>
+        <h2 id="ovTitle">문명의 도약!</h2>
+        <p class="ov-msg" id="ovMsg"></p>
+        <button id="ovBtn">다시 시작</button>
+      </div>
+    </div>
+
+    <!-- 도움말 -->
+    <div id="helpModal" class="hidden">
+      <div id="helpBox">
+        <div class="help-head"><span>📖 가이드</span><button id="helpClose">✕</button></div>
+        <div id="helpBody"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/admob.js?v=1.0"></script>
+  <script src="sim.js?v=1.0"></script>
+  <script src="game.js?v=1.0"></script>
+  <script src="/js/sw-update.js?v=20260520b"></script>
+</body>
+</html>

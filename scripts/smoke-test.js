@@ -118,6 +118,8 @@ setTimeout(() => {
     { path: '/arcade/tower-defense/runtime/game.js', label: '/arcade/tower-defense/runtime/game.js → 200', expect: 200 },
     { path: '/arcade/factory/',  label: '/arcade/factory/ → 200',  expect: 200 },
     { path: '/arcade/factory/game.js', label: '/arcade/factory/game.js → 200', expect: 200 },
+    { path: '/arcade/bootstrap/', label: '/arcade/bootstrap/ → 200', expect: 200 },
+    { path: '/arcade/bootstrap/sim.js', label: '/arcade/bootstrap/sim.js → 200', expect: 200 },
   ];
 
   let pending = ROUTES.length + 1; // +1 for JSON structure check
