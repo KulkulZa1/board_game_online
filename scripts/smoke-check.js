@@ -370,6 +370,12 @@ function checkFactoryArcadeCoverage() {
   if (!game.includes('SAVE_KEY') || !game.includes('serializeBuilding') || !game.includes('restoreRun')) {
     throw new Error('Factory game should persist and restore in-progress factory layouts');
   }
+  if (!game.includes('inferDirForPlacement') || !game.includes('autoOrientNeighbors')) {
+    throw new Error('Factory placement should auto-connect nearby buildings without blocking manual rotation');
+  }
+  if (!game.includes('drawPlacementHints') || !game.includes('selectionHint')) {
+    throw new Error('Factory palette selections should show placement hints and resource visibility cues');
+  }
   if (!page.includes('saveSummary') || !page.includes('newRunBtn') || !page.includes('discardSaveBtn')) {
     throw new Error('Factory page should expose continue/new/discard save controls');
   }

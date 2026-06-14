@@ -294,6 +294,103 @@
     return b;
   }
 
+  function likelyOutputsFor(id, tx, ty) {
+    const def = B[id];
+    if (!def) return [];
+    if (def.kind === 'miner') {
+      const cell = inBounds(tx, ty) ? cellAt(tx, ty) : null;
+      return cell && cell.deposit ? [cell.deposit.resource] : ['coal', 'iron_ore', 'copper_ore', 'sand'];
+    }
+    if (def.kind === 'machine') {
+      if (def.smelt) return Object.values(def.smelt);
+      if (def.recipe && def.recipe.out) return Object.keys(def.recipe.out);
+    }
+    return [];
+  }
+
+  function targetCanReceive(target, item) {
+    const def = B[target.id];
+    if (!def) return false;
+    if (def.kind === 'belt') return true;
+    if (def.kind === 'lab') return item === currentTarget();
+    if (def.kind === 'generator') return item === 'coal';
+    if (def.kind === 'machine') {
+      if (def.smelt) {
+        if (!(item in def.smelt)) return false;
+        if (item === 'copper_ore' && era < 2) return false;
+        if (item === 'sand' && era < 3) return false;
+        return true;
+      }
+      return !!(def.recipe && def.recipe.in[item] != null);
+    }
+    return false;
+  }
+
+  function canOutputTo(id, tx, ty, dir, allowBeltTarget) {
+    const d = DIRS[dir];
+    const nx = tx + d[0], ny = ty + d[1];
+    if (!inBounds(nx, ny)) return false;
+    const target = cellAt(nx, ny).b;
+    if (!target) return false;
+    const targetDef = B[target.id];
+    if (targetDef.kind === 'miner') return false;
+    if (id === 'belt') return targetDef.kind !== 'miner';
+    if (targetDef.kind === 'belt') return !!allowBeltTarget;
+    return likelyOutputsFor(id, tx, ty).some((item) => targetCanReceive(target, item));
+  }
+
+  function inferDirForPlacement(id, tx, ty, fallback) {
+    const def = B[id];
+    if (!def || def.kind === 'lab') return fallback;
+    const allowManualBeltTarget = id === 'belt' || id === 'miner';
+    if (canOutputTo(id, tx, ty, fallback, allowManualBeltTarget)) return fallback;
+    for (let dir = 0; dir < DIRS.length; dir++) {
+      const allowBeltTarget = id === 'belt' || id === 'miner';
+      if (canOutputTo(id, tx, ty, dir, allowBeltTarget)) return dir;
+    }
+    return fallback;
+  }
+
+  function canNeighborAutoConnect(source, target) {
+    if (!source || !target || B[source.id].kind === 'lab') return false;
+    const dir = DIRS.findIndex(([dx, dy]) => source.x + dx === target.x && source.y + dy === target.y);
+    if (dir < 0) return false;
+    const allowBeltTarget = source.id === 'belt' || source.id === 'miner';
+    const targetDef = B[target.id];
+    if (targetDef.kind === 'miner') return false;
+    if (source.id === 'belt') return targetDef.kind !== 'miner';
+    if (targetDef.kind === 'belt') return allowBeltTarget;
+    return likelyOutputsFor(source.id, source.x, source.y).some((item) => targetCanReceive(target, item));
+  }
+
+  function autoOrientNeighbors(tx, ty) {
+    const target = cellAt(tx, ty).b;
+    if (!target) return;
+    for (let dir = 0; dir < DIRS.length; dir++) {
+      const d = DIRS[dir];
+      const nx = tx - d[0], ny = ty - d[1];
+      if (!inBounds(nx, ny)) continue;
+      const neighbor = cellAt(nx, ny).b;
+      if (!neighbor || B[neighbor.id].kind === 'lab') continue;
+      if (canNeighborAutoConnect(neighbor, target)) neighbor.dir = dir;
+    }
+  }
+
+  function selectedCanConnectAt(id, tx, ty) {
+    if (!inBounds(tx, ty) || placementIssue(id, tx, ty)) return false;
+    if (id === 'miner') return !!cellAt(tx, ty).deposit;
+    const preferred = inferDirForPlacement(id, tx, ty, rot);
+    if (canOutputTo(id, tx, ty, preferred, id === 'belt' || id === 'miner')) return true;
+    for (let dir = 0; dir < DIRS.length; dir++) {
+      const d = DIRS[dir];
+      const nx = tx - d[0], ny = ty - d[1];
+      if (!inBounds(nx, ny)) continue;
+      const source = cellAt(nx, ny).b;
+      if (source && canNeighborAutoConnect(source, { id, x: tx, y: ty })) return true;
+    }
+    return false;
+  }
+
   function placementIssue(id, tx, ty) {
     if (!inBounds(tx, ty)) return '지도 안쪽에 배치하세요';
     const cell = cellAt(tx, ty);
@@ -321,11 +418,12 @@
     }
     const cell = cellAt(tx, ty);
     if (cell.b) {
-      if (id === 'belt' && cell.b.id === 'belt') cell.b.dir = rot; // 기존 컨베이어 방향만 변경
+      if (id === 'belt' && cell.b.id === 'belt') cell.b.dir = inferDirForPlacement(id, tx, ty, rot); // 기존 컨베이어 방향만 변경
       return;
     }
-    cell.b = makeBuilding(id, tx, ty, rot);
+    cell.b = makeBuilding(id, tx, ty, inferDirForPlacement(id, tx, ty, rot));
     buildings.push(cell.b);
+    autoOrientNeighbors(tx, ty);
     if (tut.active) checkTutBuild(id, tx, ty);
   }
 
@@ -537,17 +635,26 @@
         const cell = cellAt(x, y);
         const px = x * TILE, py = y * TILE;
         if (cell.deposit) {
-          ctx.fillStyle = shade(ITEMS[cell.deposit.resource].c, -0.45);
+          const minerMode = state === 'playing' && tool === 'build' && selected === 'miner';
+          ctx.fillStyle = shade(ITEMS[cell.deposit.resource].c, minerMode ? -0.25 : -0.45);
           ctx.fillRect(px, py, TILE, TILE);
           ctx.fillStyle = ITEMS[cell.deposit.resource].c;
           for (let i = 0; i < 4; i++) {
             const dx = px + 8 + (i % 2) * 18 + 3, dy = py + 8 + Math.floor(i / 2) * 18 + 3;
-            ctx.beginPath(); ctx.arc(dx, dy, 4, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(dx, dy, minerMode ? 5.5 : 4, 0, Math.PI * 2); ctx.fill();
+          }
+          if (minerMode && !cell.b) {
+            ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+            ctx.lineWidth = 2;
+            rrect(px + 3, py + 3, TILE - 6, TILE - 6, 6); ctx.stroke();
+            ctx.strokeStyle = e.grid;
+            ctx.lineWidth = 1;
           }
         }
         ctx.strokeRect(px, py, TILE, TILE);
       }
     }
+    drawPlacementHints(x0, y0, x1, y1);
 
     // 건물
     for (const b of buildings) {
@@ -593,6 +700,36 @@
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       flashFx = Math.max(0, flashFx - dt * 1.4);
     }
+  }
+
+  function drawPlacementHints(x0, y0, x1, y1) {
+    if (state !== 'playing' || tool !== 'build' || !B[selected] || B[selected].era > era) return;
+    const def = B[selected];
+    ctx.save();
+    for (let y = y0; y <= y1; y++) {
+      for (let x = x0; x <= x1; x++) {
+        const cell = cellAt(x, y);
+        if (cell.b) continue;
+        const px = x * TILE, py = y * TILE;
+        if (selected === 'miner') {
+          if (!cell.deposit) continue;
+          const pulse = 0.45 + 0.25 * Math.sin(simTime * 5);
+          ctx.fillStyle = `rgba(255,255,255,${pulse * 0.16})`;
+          ctx.fillRect(px + 3, py + 3, TILE - 6, TILE - 6);
+          ctx.strokeStyle = `rgba(255,255,255,${pulse})`;
+          ctx.lineWidth = 2.5;
+          rrect(px + 4, py + 4, TILE - 8, TILE - 8, 7); ctx.stroke();
+          continue;
+        }
+        if (!selectedCanConnectAt(selected, x, y)) continue;
+        ctx.fillStyle = `${shade(def.color, 0.35).replace('rgb', 'rgba').replace(')', ',0.22)')}`;
+        ctx.fillRect(px + 5, py + 5, TILE - 10, TILE - 10);
+        ctx.strokeStyle = 'rgba(255,255,255,0.36)';
+        ctx.lineWidth = 1.5;
+        rrect(px + 6, py + 6, TILE - 12, TILE - 12, 6); ctx.stroke();
+      }
+    }
+    ctx.restore();
   }
 
   function drawBuilding(b) {
@@ -696,7 +833,7 @@
     ctx.fillText(valid ? (def.kind === 'belt' ? '➤' : def.ico) : '!', px + TILE / 2, py + TILE / 2 + 1);
     // 방향 표시
     if (def.kind !== 'lab') {
-      const d = DIRS[rot];
+      const d = DIRS[inferDirForPlacement(selected, hover.x, hover.y, rot)];
       ctx.fillStyle = '#fff';
       ctx.beginPath(); ctx.arc(px + TILE / 2 + d[0] * (TILE / 2 - 4), py + TILE / 2 + d[1] * (TILE / 2 - 4), 3, 0, Math.PI * 2); ctx.fill();
     }
@@ -768,8 +905,23 @@
       btn.className = 'pal-btn' + (id === selected ? ' selected' : '') + (locked ? ' locked' : '') + (tutFocus ? ' tut-focus' : '');
       btn.innerHTML = `<span class="pal-ico">${def.ico}</span><span class="pal-name">${def.name}</span>` +
         (locked ? `<span class="pal-lock">${ERAS[def.era].icon}</span>` : '');
-      if (!locked) btn.addEventListener('click', () => { selected = id; tool = 'build'; refreshTools(); renderPalette(); showInfo(); });
+      if (!locked) btn.addEventListener('click', () => { selected = id; tool = 'build'; refreshTools(); renderPalette(); showInfo(); selectionHint(id); });
       pal.appendChild(btn);
+    }
+  }
+
+  function selectionHint(id) {
+    if (state !== 'playing') return;
+    const def = B[id];
+    if (!def) return;
+    if (id === 'miner') {
+      showToast('채굴기 선택', '밝게 표시된 자원 타일 위에 놓으면 바로 채굴합니다.');
+    } else if (id === 'belt') {
+      showToast('컨베이어 선택', '드래그하면 방향이 이어지고, 가까운 수신 건물 쪽으로 자동 연결됩니다.');
+    } else if (def.kind === 'lab') {
+      showToast('연구소 선택', '현재 목표 아이템을 보내는 생산기나 컨베이어 옆에 배치하세요.');
+    } else {
+      showToast(`${def.name} 선택`, '밝게 표시된 칸은 연결하기 좋은 위치입니다. R키 수동 회전도 그대로 됩니다.');
     }
   }
 
