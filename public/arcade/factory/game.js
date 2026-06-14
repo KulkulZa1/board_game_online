@@ -20,6 +20,15 @@
   const HIGH_KEY = 'arcade_factory_high';
   const SAVE_KEY = 'arcade_factory_save_v1';
 
+  // 업그레이드: 티어 1~3 (속도/생산 배율 + 누적 RP 비용)
+  const TIER_MULT = [1, 1.7, 2.6];   // 티어별 속도 배율
+  const TIER_COST = [0, 40, 120];    // 해당 티어로 올리는 누적 RP 비용
+  const MAX_TIER  = 3;
+  // 유한 광맥: 셀당 매장량(채굴 1회 = 1 소모). 고갈 시 채굴기 유휴.
+  const DEPOSIT_MIN = 600, DEPOSIT_VAR = 900;
+  // 납품 1건당 획득 RP (연구포인트) — 시대 목표 아이템일수록 큼
+  const DELIVER_RP = { gear: 2, motor: 8, robot: 30, ai_core: 100 };
+
   // 방향: 0=동, 1=남, 2=서, 3=북
   const DIRS = [[1, 0], [0, 1], [-1, 0], [0, -1]];
 
@@ -114,6 +123,9 @@
         <h4>팁</h4>
         <div class="tip">채굴기·화로·작업대·연구소를 일렬로 세우고 컨베이어로 연결하면 간단한 생산라인이 완성됩니다.</div>
         <div class="tip">같은 라인을 여러 개 만들면 납품 속도가 올라갑니다!</div>
+        <div class="tip">납품하면 <b>🔩 RP</b>가 쌓여요. 🔼 업그레이드 모드로 건물을 클릭해 <b>티어를 올리면</b> 같은 자리에서 더 빠르게 생산합니다.</div>
+        <div class="tip">광맥은 <b>유한</b>합니다(타일 하단 게이지). 고갈되면 채굴기를 새 광맥으로 옮기거나 늘려 확장하세요.</div>
+        <div class="tip">막히면 우상단 <b>병목</b> 표시가 무엇이 부족한지 알려줍니다.</div>
       `,
     },
     2: {
@@ -210,16 +222,18 @@
   let paused = false;
   let speed = 1;
   let era = 1, research = 0, score = 0, highScore = 0, won = false;
+  let rp = 0;                 // 연구포인트(RP) — 납품으로 획득, 업그레이드에 소비
   let simTime = 0;            // 누적 시뮬레이션 시간(연출/처리량용)
   let powerProd = 0, powerDemand = 0, powerRatio = 1;
   let deliveries = [];        // 최근 납품 시각(처리량 계산)
   let floaties = [];          // 부유 텍스트
-  let warnState = { text: '', until: 0 };
+  let bottleneck = '';        // 현재 병목 진단 텍스트
+  let bottleneckAccum = 0;    // 병목 계산 throttle
 
   // 입력/툴
   let selected = 'belt';      // 선택 건물 id
   let rot = 0;                // 배치 회전 방향
-  let tool = 'build';         // build | erase | pan
+  let tool = 'build';         // build | erase | pan | upgrade
   let hover = { x: -1, y: -1, valid: false };
 
   // 포인터 상태
@@ -251,18 +265,18 @@
     genDeposits();
     camera.zoom = 1;
     centerCamera();
-    era = 1; research = 0; score = 0; won = false;
+    era = 1; research = 0; score = 0; won = false; rp = 0;
     simTime = 0; deliveries = []; floaties = [];
     powerProd = powerDemand = 0; powerRatio = 1;
-    warnState = { text: '', until: 0 };
+    bottleneck = ''; bottleneckAccum = 0;
     selected = 'belt'; rot = 0; tool = 'build';
     tut.active = false;
     const _tp = document.getElementById('tutPanel'); if (_tp) _tp.classList.add('hidden');
   }
 
-  // 자원 군집 생성 — 무작위 위치에 랜덤워크 블롭
+  // 자원 군집 생성 — 무작위 위치에 랜덤워크 블롭 (셀마다 유한 매장량)
   function genDeposits() {
-    const specs = [['coal', 6], ['iron_ore', 6], ['copper_ore', 4], ['sand', 3]];
+    const specs = [['coal', 8], ['iron_ore', 9], ['copper_ore', 6], ['sand', 5]];
     for (const [res, clusters] of specs) {
       for (let c = 0; c < clusters; c++) {
         let cx = 3 + Math.floor(Math.random() * (GRID_W - 6));
@@ -270,7 +284,10 @@
         const size = 4 + Math.floor(Math.random() * 6);
         let x = cx, y = cy;
         for (let k = 0; k < size; k++) {
-          if (inBounds(x, y) && !cellAt(x, y).deposit) cellAt(x, y).deposit = { resource: res };
+          if (inBounds(x, y) && !cellAt(x, y).deposit) {
+            const amt = DEPOSIT_MIN + Math.floor(Math.random() * DEPOSIT_VAR);
+            cellAt(x, y).deposit = { resource: res, amount: amt, max: amt };
+          }
           const d = DIRS[Math.floor(Math.random() * 4)];
           x += d[0]; y += d[1];
         }
@@ -286,7 +303,7 @@
 
   function makeBuilding(id, x, y, dir) {
     const def = B[id];
-    const b = { id, x, y, dir };
+    const b = { id, x, y, dir, tier: 1 };
     if (def.kind === 'belt') { b.item = null; b.prog = 0; }
     else if (def.kind === 'miner') { b.timer = 0; }
     else if (def.kind === 'machine') { b.inBuf = {}; b.outBuf = {}; b.craft = null; }
@@ -436,6 +453,29 @@
     cell.b = null;
   }
 
+  // ── 업그레이드 ──────────────────────────────────────────────────
+  //   티어가 오르면 채굴/가공/발전 속도가 TIER_MULT 배로 빨라진다. 컨베이어는 제외.
+  const tierMult = (b) => TIER_MULT[(b.tier || 1) - 1];
+
+  function upgradeAt(tx, ty) {
+    if (!inBounds(tx, ty)) return;
+    const b = cellAt(tx, ty).b;
+    if (!b) return;
+    if (B[b.id].kind === 'belt' || B[b.id].kind === 'lab') {
+      floatText(tx, ty, '업그레이드 불가', '#e74c3c'); return;
+    }
+    if (b.tier >= MAX_TIER) { floatText(tx, ty, 'MAX', '#f1c40f'); return; }
+    const cost = TIER_COST[b.tier]; // 다음 티어 비용
+    if (rp < cost) { floatText(tx, ty, `RP ${cost} 필요`, '#e74c3c'); return; }
+    rp -= cost; b.tier++;
+    floatText(tx, ty, `▲ T${b.tier}`, '#6ee7ff');
+    updateHUD();
+  }
+
+  function floatText(tx, ty, text, color) {
+    floaties.push({ x: tx * TILE + TILE / 2, y: ty * TILE, vy: -28, text, life: 1.1, color });
+  }
+
   // ── 아이템 전달 (모든 출력의 공통 경로) ──────────────────────────
   //   fromB 가 바라보는 칸으로 item 1개를 밀어넣을 수 있으면 처리하고 true.
   function tryDeposit(fromB, item) {
@@ -473,7 +513,8 @@
     const value = DELIVER_SCORE[item] || 1;
     const goal = ERAS[Math.min(era, 4)].count;
     research++;
-    score += value;
+    score += DELIVER_SCORE[item] || 1;
+    rp += DELIVER_RP[item] || 1;
     deliveries.push(simTime);
     floaties.push({ x: lab.x * TILE + TILE / 2, y: lab.y * TILE, vy: -28, text: `+${value} ${ITEMS[item].name}`, life: 1.0, color: ERAS[era].accent });
     if (score > highScore) highScore = score;
@@ -529,13 +570,65 @@
     }
     // 처리량: 최근 20초 납품 수 → 분당
     while (deliveries.length && deliveries[0] < simTime - 20) deliveries.shift();
+    // 병목 진단 (0.5초마다)
+    bottleneckAccum += dt;
+    if (bottleneckAccum >= 0.5) { bottleneckAccum = 0; computeBottleneck(); }
+  }
+
+  // 가장 큰 병목(생산을 가로막는 구속 조건)을 찾아 한 줄로 진단한다.
+  function computeBottleneck() {
+    if (!buildings.length) { bottleneck = ''; return; }
+    // 1) 전력 부족이 최우선
+    if (era >= 2 && powerDemand > powerProd) { bottleneck = '⚡ 전력 부족 — 발전기를 늘리세요'; return; }
+    // 2) 채굴기 유휴(광맥 없음/고갈 또는 출력 막힘) 집계
+    let minerIdle = 0, minerTotal = 0;
+    let starve = {}, blocked = {}, machTotal = {};
+    for (const b of buildings) {
+      const def = B[b.id];
+      if (def.kind === 'miner') {
+        minerTotal++;
+        const dep = cellAt(b.x, b.y).deposit;
+        if (!dep || b.timer >= MINER_RATE / tierMult(b)) minerIdle++;
+      } else if (def.kind === 'machine') {
+        machTotal[b.id] = (machTotal[b.id] || 0) + 1;
+        if (!b.craft) {
+          const r = resolveRecipe(b);
+          if (!r) { starve[b.id] = (starve[b.id] || 0) + 1; }
+          else {
+            let lackIn = false;
+            for (const it in r.in) if ((b.inBuf[it] || 0) < r.in[it]) lackIn = true;
+            let outFull = false;
+            for (const it in r.out) if ((b.outBuf[it] || 0) + r.out[it] > OUT_CAP) outFull = true;
+            if (lackIn) starve[b.id] = (starve[b.id] || 0) + 1;
+            else if (outFull) blocked[b.id] = (blocked[b.id] || 0) + 1;
+          }
+        }
+      }
+    }
+    // 3) 가장 비율 높은 굶주린 기계
+    let worst = '', worstFrac = 0, worstReason = '';
+    for (const id in machTotal) {
+      const sFrac = (starve[id] || 0) / machTotal[id];
+      if (sFrac > worstFrac) { worstFrac = sFrac; worst = id; worstReason = '입력 부족'; }
+    }
+    for (const id in machTotal) {
+      const bFrac = (blocked[id] || 0) / machTotal[id];
+      if (bFrac > worstFrac) { worstFrac = bFrac; worst = id; worstReason = '출력 막힘'; }
+    }
+    if (minerTotal && minerIdle / minerTotal > 0.5 && minerIdle / minerTotal >= worstFrac) {
+      bottleneck = '⛏ 채굴 부족 — 광맥 고갈/막힘, 채굴기를 이전·증설하세요';
+    } else if (worst && worstFrac > 0.3) {
+      bottleneck = `${B[worst].ico} ${B[worst].name} ${worstReason}`;
+    } else {
+      bottleneck = '✅ 원활';
+    }
   }
 
   function computePower(dt) {
     let prod = 0, demand = 0;
     for (const b of buildings) {
       const def = B[b.id];
-      if (def.kind === 'generator') { if (b.fuel > 0) prod += GEN_OUTPUT; }
+      if (def.kind === 'generator') { if (b.fuel > 0) prod += GEN_OUTPUT * tierMult(b); }
       else if (def.kind === 'machine' && def.power > 0) {
         if (b.craft || canStart(b)) demand += def.power;
       }
@@ -548,11 +641,16 @@
 
   function updateMiner(b, dt) {
     const dep = cellAt(b.x, b.y).deposit;
-    if (!dep) return;            // 광맥 위가 아니면 유휴
+    if (!dep) return;            // 광맥이 없거나 고갈 → 유휴
     b.timer += dt;
-    if (b.timer >= MINER_RATE) {
-      if (tryDeposit(b, dep.resource)) b.timer = 0;
-      else b.timer = MINER_RATE;  // 출력 막힘 → 대기
+    const rate = MINER_RATE / tierMult(b);   // 티어가 높을수록 채굴 간격 단축
+    if (b.timer >= rate) {
+      if (tryDeposit(b, dep.resource)) {
+        b.timer = 0;
+        if (--dep.amount <= 0) cellAt(b.x, b.y).deposit = null;  // 매장량 고갈
+      } else {
+        b.timer = rate;          // 출력 막힘 → 대기
+      }
     }
   }
 
@@ -587,7 +685,7 @@
       b.craft = { out: r.out, t: 0, total: def.time };
     }
     if (b.craft) {
-      const spd = def.power > 0 ? powerRatio : 1;
+      const spd = (def.power > 0 ? powerRatio : 1) * tierMult(b);
       b.craft.t += dt * spd;
       if (b.craft.t >= b.craft.total) {
         for (const it in b.craft.out) b.outBuf[it] = (b.outBuf[it] || 0) + b.craft.out[it];
@@ -635,11 +733,14 @@
         const cell = cellAt(x, y);
         const px = x * TILE, py = y * TILE;
         if (cell.deposit) {
-          const minerMode = state === 'playing' && tool === 'build' && selected === 'miner';
-          ctx.fillStyle = shade(ITEMS[cell.deposit.resource].c, minerMode ? -0.25 : -0.45);
+          const dep = cell.deposit;
+          const frac = dep.max ? dep.amount / dep.max : 1;   // 남은 매장량 비율
+          ctx.fillStyle = shade(ITEMS[dep.resource].c, -0.45);
           ctx.fillRect(px, py, TILE, TILE);
-          ctx.fillStyle = ITEMS[cell.deposit.resource].c;
-          for (let i = 0; i < 4; i++) {
+          ctx.fillStyle = ITEMS[dep.resource].c;
+          // 매장량이 줄수록 광물 점이 줄어든다 (4 → 1)
+          const dots = Math.max(1, Math.ceil(frac * 4));
+          for (let i = 0; i < dots; i++) {
             const dx = px + 8 + (i % 2) * 18 + 3, dy = py + 8 + Math.floor(i / 2) * 18 + 3;
             ctx.beginPath(); ctx.arc(dx, dy, minerMode ? 5.5 : 4, 0, Math.PI * 2); ctx.fill();
           }
@@ -650,6 +751,10 @@
             ctx.strokeStyle = e.grid;
             ctx.lineWidth = 1;
           }
+          // 하단 매장량 게이지 (낮으면 붉게)
+          ctx.fillStyle = '#0a0e15'; ctx.fillRect(px + 4, py + TILE - 5, TILE - 8, 3);
+          ctx.fillStyle = frac < 0.25 ? '#e74c3c' : (frac < 0.5 ? '#f1c40f' : '#2ecc71');
+          ctx.fillRect(px + 4, py + TILE - 5, (TILE - 8) * frac, 3);
         }
         ctx.strokeRect(px, py, TILE, TILE);
       }
@@ -680,6 +785,9 @@
       drawGhost();
     } else if (state === 'playing' && tool === 'erase' && hover.x >= 0) {
       ctx.fillStyle = 'rgba(231,76,60,0.3)';
+      ctx.fillRect(hover.x * TILE, hover.y * TILE, TILE, TILE);
+    } else if (state === 'playing' && tool === 'upgrade' && hover.x >= 0) {
+      ctx.fillStyle = 'rgba(110,231,255,0.25)';
       ctx.fillRect(hover.x * TILE, hover.y * TILE, TILE, TILE);
     }
 
@@ -808,6 +916,13 @@
       rrect(px + 4, py + 4, s - 8, s - 8, 5); ctx.stroke();
       ctx.globalAlpha = 1;
     }
+    // 업그레이드 티어 표시 (T2/T3 — 우상단 별)
+    if (b.tier > 1) {
+      ctx.fillStyle = '#6ee7ff';
+      ctx.textAlign = 'right'; ctx.textBaseline = 'top';
+      ctx.font = 'bold 9px sans-serif';
+      ctx.fillText('★'.repeat(b.tier - 1), px + s - 4, py + 3);
+    }
   }
 
   function drawItem(cx, cy, item) {
@@ -891,6 +1006,13 @@
     // 처리량 (분당 목표 아이템)
     const perMin = deliveries.length * 3; // 20초창 → ×3 = 분당
     document.getElementById('throughput').textContent = `${perMin.toFixed(0)} ${ITEMS[currentTarget()].name}/분`;
+    // RP (연구포인트)
+    document.getElementById('rpDisplay').textContent = `🔩 RP ${rp}`;
+    // 병목 진단
+    const bn = document.getElementById('bottleneck');
+    bn.textContent = bottleneck ? `병목: ${bottleneck}` : '';
+    bn.classList.toggle('ok', bottleneck === '✅ 원활');
+    bn.classList.toggle('hidden', !bottleneck);
   }
 
   // 빌드 팔레트 렌더
@@ -928,6 +1050,7 @@
   function refreshTools() {
     document.getElementById('eraseBtn').classList.toggle('active', tool === 'erase');
     document.getElementById('panBtn').classList.toggle('active', tool === 'pan');
+    document.getElementById('upgradeBtn').classList.toggle('active', tool === 'upgrade');
   }
 
   // 선택 건물 레시피 안내
@@ -972,7 +1095,7 @@
   function tutGuaranteeOre() {
     const cx = Math.floor(GRID_W / 2) - 2, cy = Math.floor(GRID_H / 2) - 1;
     const spots = [[cx, cy], [cx + 1, cy], [cx, cy + 1], [cx + 1, cy + 1], [cx, cy + 2], [cx + 1, cy + 2]];
-    for (const [x, y] of spots) if (inBounds(x, y) && !cellAt(x, y).deposit) cellAt(x, y).deposit = { resource: 'iron_ore' };
+    for (const [x, y] of spots) if (inBounds(x, y) && !cellAt(x, y).deposit) cellAt(x, y).deposit = { resource: 'iron_ore', amount: 1200, max: 1200 };
   }
 
   function startTutorial() {
@@ -1061,6 +1184,7 @@
     const panning = (tool === 'pan') || spaceHeld || button === 1;
     if (panning) { ptr.mode = 'pan'; return; }
     if (button === 2 || tool === 'erase') { ptr.mode = 'erase'; const t = screenToTile(sx, sy); erase(t.x, t.y); ptr.lastTile = t; return; }
+    if (tool === 'upgrade') { ptr.mode = 'upgrade'; const t = screenToTile(sx, sy); upgradeAt(t.x, t.y); ptr.lastTile = t; return; }
     ptr.mode = 'place';
     const t = screenToTile(sx, sy);
     place(t.x, t.y); ptr.lastTile = t;
@@ -1121,6 +1245,7 @@
     if (e.key === 'r' || e.key === 'R') { rot = (rot + 1) % 4; showInfo(); }
     else if (e.key === 'e' || e.key === 'E') { tool = (tool === 'erase') ? 'build' : 'erase'; refreshTools(); }
     else if (e.key === 'g' || e.key === 'G') showEraGuide(era);
+    else if (e.key === 'u' || e.key === 'U') { tool = (tool === 'upgrade') ? 'build' : 'upgrade'; refreshTools(); }
     else if (e.key === 'h' || e.key === 'H') toggleHelp();
     else if (e.key === 'p' || e.key === 'P') togglePause();
     else if (e.key >= '1' && e.key <= '9') {
@@ -1134,6 +1259,7 @@
   document.getElementById('rotateBtn').addEventListener('click', () => { rot = (rot + 1) % 4; showInfo(); });
   document.getElementById('eraseBtn').addEventListener('click', () => { tool = (tool === 'erase') ? 'build' : 'erase'; refreshTools(); });
   document.getElementById('panBtn').addEventListener('click', () => { tool = (tool === 'pan') ? 'build' : 'pan'; refreshTools(); });
+  document.getElementById('upgradeBtn').addEventListener('click', () => { tool = (tool === 'upgrade') ? 'build' : 'upgrade'; refreshTools(); });
   document.getElementById('helpBtn').addEventListener('click', toggleHelp);
   document.getElementById('helpClose').addEventListener('click', toggleHelp);
   document.getElementById('guideBtn').addEventListener('click', () => showEraGuide(era));
@@ -1385,14 +1511,19 @@
     <ul>
       <li>좌클릭/드래그: 선택한 건물 배치 (컨베이어는 드래그로 선 긋기)</li>
       <li>우클릭/드래그 또는 <span class="k">E</span>: 철거</li>
+      <li><span class="k">U</span> 또는 🔼: 업그레이드 모드 → 건물 클릭 시 RP로 강화</li>
       <li><span class="k">R</span>: 배치 방향 회전</li>
       <li><span class="k">스페이스</span>+드래그 또는 ✋ 버튼: 화면 이동 · 휠: 확대/축소</li>
       <li><span class="k">1</span>~<span class="k">9</span>: 건물 빠른 선택 · <span class="k">P</span>: 일시정지 · <span class="k">G</span>: 현재 시대 가이드</li>
     </ul>
+    <h4>🔩 연구포인트(RP) & 업그레이드</h4>
+    연구소에 납품할 때마다 <b>RP</b>를 얻습니다(상위 아이템일수록 큼). 🔼 업그레이드 모드에서 채굴기·기계·발전기를 클릭하면 RP를 써서 <b>티어 1→2→3</b>으로 강화돼 속도/생산이 빨라집니다(★ 표시). 납품으로 번 RP를 공장에 재투자하는 것이 최적화의 핵심입니다.
+    <h4>⛏ 유한 광맥</h4>
+    각 광맥 타일은 <b>매장량이 정해져</b> 있어 채굴할수록 줄어듭니다(타일 하단 게이지). 고갈되면 채굴기가 멈추므로(붉은 테두리), 새 광맥으로 채굴기를 옮기거나 증설하며 <b>확장</b>해야 합니다. 채굴은 끝까지 중요합니다.
+    <h4>🧭 병목 진단</h4>
+    우측 상단 <b>병목</b> 표시가 지금 생산을 가로막는 구속 조건(전력·채굴·특정 기계의 입력/출력)을 알려줍니다. 그곳을 넓히는 것이 생산성 향상의 지름길입니다.
     <h4>전력 (2차~)</h4>
-    발전기⚡가 석탄을 태워 전력을 만듭니다. 전기 기계(조립기·회로공장 등)는 전력을 소비하며, <b>수요 > 생산</b>이면 모든 전기 기계가 느려집니다. 발전기를 늘려 균형을 맞추세요. (채굴기·화로·작업대는 전력이 필요 없습니다.)
-    <h4>저장</h4>
-    공장 배치와 연구 진행은 이 브라우저에 자동 저장됩니다. 다음에 들어오면 시작 화면에서 <b>이어하기</b>, <b>새 공장 시작</b>, <b>저장 삭제</b>를 선택할 수 있습니다.
+    발전기⚡가 석탄을 태워 전력을 만듭니다. 전기 기계(조립기·회로공장 등)는 전력을 소비하며, <b>수요 > 생산</b>이면 모든 전기 기계가 느려집니다. 발전기를 늘리거나 업그레이드해 균형을 맞추세요. (채굴기·화로·작업대는 전력이 필요 없습니다.)
     <h4>시대별 목표</h4>
     <ul>
       <li>🔥 1차: 톱니바퀴 30 (철판→톱니바퀴)</li>
