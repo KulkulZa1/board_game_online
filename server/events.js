@@ -464,8 +464,11 @@ function registerEvents(io) {
       if (typeof text !== 'string') return;
       if (!text.trim().length) return;
 
-      // Rate limit: 10초 내 20회
-      if (!rateCheck(socket.id, 'chat', 20, 10 * 1000)) return;
+      // Rate limit: keep chat usable while preventing bubble/log flooding.
+      if (!rateCheck(socket.id, 'chat', 8, 10 * 1000)) {
+        socket.emit('chat:ratelimit', { message: 'Chat is limited to 8 messages every 10 seconds.' });
+        return;
+      }
 
       const found     = getRoomBySocketId(socket.id);
       const specFound = !found ? getSpectatorBySocketId(socket.id) : null;

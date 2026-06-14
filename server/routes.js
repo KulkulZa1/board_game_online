@@ -88,7 +88,6 @@ function registerRoutes(app, server, PORT, TUNNEL_URL, SERVER_START_TIME) {
 
     const data = {
       uptime: Math.floor((Date.now() - SERVER_START_TIME) / 1000),
-      tunnelUrl: TUNNEL_URL,
       rooms: {
         active:  list.filter(r => r.status === 'active').length,
         waiting: list.filter(r => r.status === 'waiting').length,
@@ -99,9 +98,12 @@ function registerRoutes(app, server, PORT, TUNNEL_URL, SERVER_START_TIME) {
           n + (r.players.host.connected  ? 1 : 0)
             + (r.players.guest.connected ? 1 : 0), 0),
       },
-      roomList,
     };
-    if (isLocal) data.shutdownKey = state.shutdownKey;
+    if (isLocal) {
+      data.tunnelUrl = TUNNEL_URL;
+      data.roomList = roomList;
+      data.shutdownKey = state.shutdownKey;
+    }
     res.json(data);
   });
 
