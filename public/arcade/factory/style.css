@@ -299,3 +299,73 @@ html, body {
   0%, 100% { box-shadow: 0 0 0 2px var(--accent), 0 0 10px rgba(245,166,35,0.3); }
   50%       { box-shadow: 0 0 0 2px var(--accent), 0 0 22px rgba(245,166,35,0.75); }
 }
+
+@media (max-width: 520px) {
+  #container { padding: 5px 6px; gap: 3px; }
+  #hdr { font-size: 0.88rem; }
+  .back-btn { padding: 4px 5px; }
+  .game-title { font-size: 0.92rem; }
+  #scores { gap: 8px; font-size: 0.72rem; }
+
+  #topbar {
+    top: 7px;
+    left: 7px;
+    right: 7px;
+    gap: 6px;
+  }
+  #eraBadge {
+    padding: 6px 9px;
+    max-width: 42%;
+  }
+  #eraIcon { font-size: 1.35rem; }
+  .era-text #eraName { font-size: 0.78rem; }
+  .era-text #eraSub { font-size: 0.65rem; }
+  #researchWrap, #powerWrap {
+    min-width: 0;
+    padding: 6px 9px;
+  }
+
+  #statBox {
+    top: 64px;
+    right: 10px;
+    gap: 5px;
+  }
+
+  #palette {
+    left: 8px;
+    right: 58px;
+    bottom: 8px;
+    transform: none;
+    max-width: none;
+    padding: 5px;
+  }
+  .pal-btn {
+    width: 55px;
+    height: 58px;
+  }
+
+  #toolbar {
+    right: 8px;
+    bottom: 8px;
+    gap: 5px;
+  }
+  #toolbar button {
+    width: 42px;
+    height: 42px;
+  }
+
+  #infoPanel {
+    left: 8px;
+    right: 58px;
+    bottom: 76px;
+    transform: none;
+    max-width: none;
+  }
+
+  #tutPanel {
+    left: 8px;
+    right: 58px;
+    bottom: 84px;
+    width: auto;
+  }
+}

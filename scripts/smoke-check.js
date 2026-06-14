@@ -331,6 +331,7 @@ function checkProductionArcadeAssetPolicy() {
   const arcadePages = [
     'public/arcade/vampire/index.html',
     'public/arcade/plant/index.html',
+    'public/arcade/factory/index.html',
     'public/arcade/tower-defense/index.html',
   ];
   const offenders = arcadePages.filter((file) =>
@@ -348,6 +349,29 @@ function checkProductionArcadeAssetPolicy() {
   const server = fs.readFileSync(path.join(root, 'server/index.js'), 'utf8');
   if (!server.includes("'/arcade/tower-defense/runtime'") || server.includes("app.use('/sandbox'")) {
     throw new Error('Server should expose Tower Defense runtime under arcade path while keeping /sandbox/ unserved');
+  }
+}
+
+function checkFactoryArcadeCoverage() {
+  const page = fs.readFileSync(path.join(root, 'public/arcade/factory/index.html'), 'utf8');
+  const game = fs.readFileSync(path.join(root, 'public/arcade/factory/game.js'), 'utf8');
+  const style = fs.readFileSync(path.join(root, 'public/arcade/factory/style.css'), 'utf8');
+  const lobby = fs.readFileSync(path.join(root, 'public/index.html'), 'utf8');
+
+  if (!lobby.includes('/arcade/factory/')) {
+    throw new Error('Lobby should expose the Factory arcade route');
+  }
+  if (!page.includes('/js/sw-update.js') || !page.includes('game.js')) {
+    throw new Error('Factory page should load the runtime and service-worker update helper');
+  }
+  if (!game.includes('placementIssue') || !game.includes('광맥 위에만 배치')) {
+    throw new Error('Factory game should prevent dead miner placements with user feedback');
+  }
+  if (!game.includes('function deliver') || !game.includes('다음 시대로 진화')) {
+    throw new Error('Factory delivery loop should provide milestone feedback');
+  }
+  if (!style.includes('@media (max-width: 520px)') || !style.includes('#palette')) {
+    throw new Error('Factory CSS should include mobile-specific palette/tool layout rules');
   }
 }
 
@@ -963,6 +987,9 @@ async function main() {
       '/arcade/vampire/game.js',
       '/arcade/plant/',
       '/arcade/plant/game.js',
+      '/arcade/factory/',
+      '/arcade/factory/game.js',
+      '/arcade/factory/style.css',
       '/arcade/tower-defense/',
       '/arcade/tower-defense/runtime/config.js',
       '/arcade/tower-defense/runtime/game.js',
@@ -987,6 +1014,7 @@ async function main() {
     checkServiceWorkerUpdateCoverage();
     checkVersionBadgeCoverage();
     checkProductionArcadeAssetPolicy();
+    checkFactoryArcadeCoverage();
     checkSandboxConfigBridgeRead();
     checkTowerDefenseSandboxCoverage();
     checkVampireDirectorLoopCoverage();

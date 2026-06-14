@@ -213,6 +213,7 @@
   let powerProd = 0, powerDemand = 0, powerRatio = 1;
   let deliveries = [];        // 최근 납품 시각(처리량 계산)
   let floaties = [];          // 부유 텍스트
+  let warnState = { text: '', until: 0 };
 
   // 입력/툴
   let selected = 'belt';      // 선택 건물 id
@@ -246,6 +247,7 @@
     era = 1; research = 0; score = 0; won = false;
     simTime = 0; deliveries = []; floaties = [];
     powerProd = powerDemand = 0; powerRatio = 1;
+    warnState = { text: '', until: 0 };
     selected = 'belt'; rot = 0; tool = 'build';
     tut.active = false;
     const _tp = document.getElementById('tutPanel'); if (_tp) _tp.classList.add('hidden');
@@ -285,11 +287,31 @@
     return b;
   }
 
+  function placementIssue(id, tx, ty) {
+    if (!inBounds(tx, ty)) return '지도 안쪽에 배치하세요';
+    const cell = cellAt(tx, ty);
+    if (cell.b && !(id === 'belt' && cell.b.id === 'belt')) return '이미 건물이 있는 칸입니다';
+    if (id === 'miner' && !cell.deposit) return '채굴기는 석탄/광석/규사 광맥 위에만 배치할 수 있어요';
+    return '';
+  }
+
+  function warn(msg, sub) {
+    const now = performance.now();
+    if (warnState.text === msg && now < warnState.until) return;
+    warnState = { text: msg, until: now + 1300 };
+    showToast(msg, sub || '');
+  }
+
   // ── 배치 / 철거 ─────────────────────────────────────────────────
   function place(tx, ty) {
     if (!inBounds(tx, ty)) return;
     const id = selected;
     if (!id || B[id].era > era) return;
+    const issue = placementIssue(id, tx, ty);
+    if (issue) {
+      if (issue !== '이미 건물이 있는 칸입니다') warn(issue, '색 점이 있는 자원 타일 위에 놓으면 바로 채굴이 시작됩니다');
+      return;
+    }
     const cell = cellAt(tx, ty);
     if (cell.b) {
       if (id === 'belt' && cell.b.id === 'belt') cell.b.dir = rot; // 기존 컨베이어 방향만 변경
@@ -343,11 +365,16 @@
   }
 
   function deliver(item, lab) {
+    const value = DELIVER_SCORE[item] || 1;
+    const goal = ERAS[Math.min(era, 4)].count;
     research++;
-    score += DELIVER_SCORE[item] || 1;
+    score += value;
     deliveries.push(simTime);
-    floaties.push({ x: lab.x * TILE + TILE / 2, y: lab.y * TILE, vy: -28, text: '+1', life: 1.0, color: ERAS[era].accent });
+    floaties.push({ x: lab.x * TILE + TILE / 2, y: lab.y * TILE, vy: -28, text: `+${value} ${ITEMS[item].name}`, life: 1.0, color: ERAS[era].accent });
     if (score > highScore) highScore = score;
+    if (research < goal && research % 5 === 0) {
+      showToast(`${ITEMS[item].name} ${research}/${goal}`, `${goal - research}개 더 납품하면 다음 시대로 진화합니다`);
+    }
     checkEra();
     if (tut.active && TUT_STEPS[tut.step] && TUT_STEPS[tut.step].event === 'delivery') advanceTut();
   }
@@ -646,8 +673,7 @@
   }
 
   function drawGhost() {
-    const cell = cellAt(hover.x, hover.y);
-    const valid = !cell.b || (selected === 'belt' && cell.b.id === 'belt');
+    const valid = !placementIssue(selected, hover.x, hover.y);
     hover.valid = valid;
     ctx.globalAlpha = 0.5;
     const def = B[selected];
@@ -657,7 +683,7 @@
     ctx.globalAlpha = 0.9;
     ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.font = '18px sans-serif';
-    ctx.fillText(def.kind === 'belt' ? '➤' : def.ico, px + TILE / 2, py + TILE / 2 + 1);
+    ctx.fillText(valid ? (def.kind === 'belt' ? '➤' : def.ico) : '!', px + TILE / 2, py + TILE / 2 + 1);
     // 방향 표시
     if (def.kind !== 'lab') {
       const d = DIRS[rot];

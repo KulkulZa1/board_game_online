@@ -26,6 +26,7 @@
 - Public `/api/status` now keeps detailed room lists and tunnel URLs loopback-only, and Socket.io no longer defaults to wildcard CORS in production.
 - Multiplayer chat now shows real shared-shell speech bubbles on current main and gives visible feedback when chat is rate limited.
 - `scripts/check.sh` now matches the dev-only sandbox policy by expecting `/sandbox/` to return 404 and checking the production Tower Defense runtime path instead.
+- Factory arcade now prevents dead miner placements, adds delivery milestone feedback, improves mobile palette/tool layout, and is covered by the deep smoke-check route/policy assertions.
 
 이 프로젝트의 모든 주요 변경사항을 기록합니다.
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.0.0/) 를 따릅니다.
