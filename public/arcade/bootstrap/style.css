@@ -34,8 +34,27 @@ html, body {
 #hdrStats { display: flex; gap: 14px; font-size: 0.76rem; color: var(--muted); }
 #hdrStats strong { color: var(--accent2); font-size: 0.95rem; }
 
+/* Era bar */
+#eraBar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-shrink: 0;
+  background: linear-gradient(90deg, var(--panel2), var(--panelbg)); border: 1px solid var(--border);
+  border-radius: 11px; padding: 6px 12px; }
+#eraBadge { display: flex; align-items: center; gap: 10px; }
+#eraBadge.flash { animation: eraFlash 0.9s; }
+@keyframes eraFlash { 0%,100% { background: transparent; } 30% { background: rgba(111,207,151,0.25); box-shadow: 0 0 24px rgba(111,207,151,0.5); } }
+#eraLetter { width: 34px; height: 34px; border-radius: 9px; background: var(--accent); color: #06140c;
+  font-weight: 900; font-size: 1.2rem; display: flex; align-items: center; justify-content: center; }
+#eraText { display: flex; flex-direction: column; line-height: 1.25; }
+#eraText b { font-size: 0.92rem; }
+#eraText span { font-size: 0.68rem; color: var(--muted); }
+#eraTrack { display: flex; gap: 6px; }
+.era-dot { width: 24px; height: 24px; border-radius: 50%; border: 1px solid var(--border); background: var(--panelbg);
+  color: var(--muted); font-size: 0.72rem; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+.era-dot.done { background: #1d3a28; border-color: #2f6043; color: var(--accent); }
+.era-dot.current { background: var(--accent); border-color: var(--accent); color: #06140c; box-shadow: 0 0 10px rgba(111,207,151,0.6); }
+
 /* Resource bar */
 #resourceBar { display: flex; gap: 8px; flex-shrink: 0; flex-wrap: wrap; }
+.res-chip.dim { opacity: 0.4; }
 .res-chip { display: flex; align-items: center; gap: 5px; background: var(--panelbg); border: 1px solid var(--border);
   border-radius: 9px; padding: 5px 11px; font-size: 0.82rem; }
 .res-chip b { color: var(--text); font-size: 0.9rem; min-width: 20px; }
@@ -151,6 +170,39 @@ html, body {
 #helpBody ul { margin-left: 16px; }
 #helpBody code { display: block; background: var(--panel2); border-radius: 6px; padding: 6px 9px; margin: 5px 0;
   font-size: 0.74rem; color: var(--accent2); }
+
+/* Era sections in build panel */
+.era-section { font-size: 0.7rem; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: 0.04em;
+  margin: 8px 0 2px; display: flex; align-items: center; gap: 6px; }
+.era-section:first-child { margin-top: 0; }
+.era-section.locked { color: var(--muted); }
+.era-tag { background: var(--accent); color: #06140c; border-radius: 5px; padding: 0 6px; font-size: 0.66rem; }
+.era-section.locked .era-tag { background: var(--border); color: var(--muted); }
+.bld-row.locked { opacity: 0.32; filter: grayscale(0.6); pointer-events: none; }
+.bld-row.locked .bld-btn { display: none; }
+.bld-row.locked .bld-ctl::after { content: '🔒'; font-size: 0.9rem; }
+.tag-inst { font-size: 0.6rem; background: #5a3d6b; color: #e0c6ff; padding: 1px 5px; border-radius: 4px; }
+
+/* Breakthroughs */
+#breakthroughList { display: flex; flex-direction: column; gap: 4px; }
+.bt-row { display: flex; align-items: center; gap: 8px; background: var(--panel2); border: 1px solid var(--border);
+  border-radius: 8px; padding: 5px 9px; opacity: 0.55; }
+.bt-row.got { opacity: 1; border-color: var(--accent2); background: rgba(233,196,106,0.08); }
+.bt-ico { font-size: 1.1rem; }
+.bt-name { font-size: 0.8rem; font-weight: 600; flex: 1; }
+.bt-state { font-size: 0.68rem; color: var(--muted); }
+.bt-row.got .bt-state { color: var(--accent2); }
+
+/* Breakthrough / era toast */
+#btToast { position: fixed; top: 14px; left: 50%; transform: translateX(-50%) translateY(-20px);
+  background: var(--panelbg); border: 1px solid var(--accent2); border-radius: 12px; padding: 10px 16px;
+  display: flex; align-items: center; gap: 12px; max-width: 92%; z-index: 70; opacity: 0;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.5); transition: opacity 0.3s, transform 0.3s; }
+#btToast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+#btToast .bt-icon { font-size: 1.8rem; }
+#btToast .bt-body { display: flex; flex-direction: column; line-height: 1.35; }
+#btToast .bt-body b { font-size: 0.92rem; color: var(--accent2); }
+#btToast .bt-body span { font-size: 0.74rem; color: var(--text); }
 
 .hidden { display: none !important; }
 

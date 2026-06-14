@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>BOOTSTRAP — 흙에서 특이점까지</title>
+  <title>CIVILIZATION ENGINE — 루프로 자라는 문명</title>
   <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="style.css">
 </head>
@@ -11,7 +11,7 @@
   <div id="container">
     <header id="hdr">
       <a href="/" class="back-btn">← 로비</a>
-      <span class="game-title">🌱 BOOTSTRAP</span>
+      <span class="game-title">🌱 문명 엔진</span>
       <div id="hdrStats">
         <span title="문명 지수 (복지×생산성×회복력)">문명지수 <strong id="ciValue">0</strong></span>
         <span title="인구">👥 <strong id="popCount">0</strong></span>
@@ -19,17 +19,26 @@
       </div>
     </header>
 
-    <!-- 자원 바 -->
-    <div id="resourceBar">
-      <div class="res-chip food"><span class="res-ico">🍞</span><b id="foodVal">0</b><span class="res-flow" id="foodFlow">+0/틱</span></div>
-      <div class="res-chip"><span class="res-ico">🪵</span><b id="woodVal">0</b></div>
-      <div class="res-chip"><span class="res-ico">⛰️</span><b id="oreVal">0</b></div>
-      <div class="res-chip"><span class="res-ico">🔩</span><b id="steelVal">0</b></div>
-      <div class="res-chip"><span class="res-ico">🛠️</span><b id="toolsVal">0</b></div>
+    <!-- 시대 배지 -->
+    <div id="eraBar">
+      <div id="eraBadge">
+        <span id="eraLetter">A</span>
+        <div id="eraText"><b id="eraName">채집 시대</b><span id="eraSub">야생에서 칼로리를 줍는다</span></div>
+      </div>
+      <div id="eraTrack" title="시대 진행">
+        <div class="era-dot" data-era="A">A</div>
+        <div class="era-dot" data-era="B">B</div>
+        <div class="era-dot" data-era="C">C</div>
+        <div class="era-dot" data-era="D">D</div>
+        <div class="era-dot" data-era="E">E</div>
+      </div>
     </div>
 
-    <!-- 역병 배너 -->
-    <div id="eventBanner" class="hidden">🦠 작물 역병 — 토양 비옥도 회복 억제 중</div>
+    <!-- 자원 바 -->
+    <div id="resourceBar"></div>
+
+    <!-- 활성 사건 배너 -->
+    <div id="eventBanner" class="hidden"></div>
 
     <main id="board">
       <!-- 왼쪽: 건설 패널 -->
@@ -40,6 +49,11 @@
 
       <!-- 오른쪽: 대시보드 -->
       <section id="dash">
+        <div class="panel" id="gatePanel">
+          <h3>🎯 시대 게이트 <span class="hint" id="gateHint">현재 시대 루프를 닫으세요</span></h3>
+          <div id="gateList"></div>
+        </div>
+
         <div class="panel" id="healthPanel">
           <h3>📊 문명 건강</h3>
           <div class="stat">
@@ -62,14 +76,22 @@
             <div class="stat-track"><div id="houseBar"></div></div>
           </div>
           <div class="stat">
-            <div class="stat-label"><span>철광맥 잔량</span><span id="depositLabel">0</span></div>
+            <div class="stat-label"><span>생태 지식</span><span id="ecoLabel">0%</span></div>
+            <div class="stat-track"><div id="ecoBar"></div></div>
+          </div>
+          <div class="stat">
+            <div class="stat-label"><span>문자·행정</span><span id="writeLabel">0%</span></div>
+            <div class="stat-track"><div id="writeBar"></div></div>
+          </div>
+          <div class="stat">
+            <div class="stat-label"><span>구리 광맥 잔량</span><span id="depositLabel">0</span></div>
             <div class="stat-track"><div id="depositBar"></div></div>
           </div>
         </div>
 
-        <div class="panel" id="gatePanel">
-          <h3>🎯 시대 게이트 <span class="hint">모든 조건 30틱 연속 유지</span></h3>
-          <div id="gateList"></div>
+        <div class="panel" id="breakthroughPanel">
+          <h3>💡 돌파 <span class="hint">조건이 무르익으면 발견된다</span></h3>
+          <div id="breakthroughList"></div>
         </div>
 
         <div class="panel" id="bottleneckPanel">
@@ -92,14 +114,21 @@
       <button id="helpBtn" title="도움말">?</button>
     </div>
 
+    <!-- 돌파 토스트 -->
+    <div id="btToast" class="hidden">
+      <div class="bt-icon" id="btToastIcon">💡</div>
+      <div class="bt-body"><b id="btToastName">돌파</b><span id="btToastText"></span></div>
+    </div>
+
     <!-- 시작 오버레이 -->
     <div id="startOverlay" class="overlay visible">
       <div class="ov-box">
         <div class="ov-icon">🌱</div>
-        <h2>BOOTSTRAP — 흙에서 특이점까지</h2>
-        <p class="ov-msg">한 줌의 사람들이 베리를 줍는 데서 시작합니다. 식량→인구→노동의 사슬을 키워
-          <b>정착</b>과 <b>초기 공장</b>을 세우세요. 모든 생산자는 가장 부족한 제약만큼만 가동합니다 — <b>병목을 찾아 넓히는 것</b>이 게임입니다.</p>
-        <label class="challenge-row"><input type="checkbox" id="challengeToggle"> 🦠 도전: 작물 역병(중반 비옥도 급락)</label>
+        <h2>문명 엔진 — 루프로 자라는 문명</h2>
+        <p class="ov-msg">한 줌의 사람들이 베리를 줍는 데서 시작합니다. <b>채집 → 농경 → 정착 → 분업 → 야금술</b>.
+          다음 시대는 자원을 모아서가 아니라 <b>현재 시대의 자급 루프를 안정적으로 닫았을 때</b> 열립니다.
+          모든 생산자는 가장 부족한 제약만큼만 가동합니다 — <b>병목을 찾아 넓히는 것</b>이 게임입니다.</p>
+        <label class="challenge-row"><input type="checkbox" id="challengeToggle"> ⚡ 도전: 가뭄·홍수·혹한 빈발</label>
         <button id="startBtn">문명 시작</button>
       </div>
     </div>
@@ -124,8 +153,8 @@
   </div>
 
   <script src="/js/admob.js?v=1.0"></script>
-  <script src="sim.js?v=1.0"></script>
-  <script src="game.js?v=1.0"></script>
+  <script src="sim.js?v=2.0"></script>
+  <script src="game.js?v=2.0"></script>
   <script src="/js/sw-update.js?v=20260520b"></script>
 </body>
 </html>
