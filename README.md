@@ -144,6 +144,8 @@ main    ← 안정 배포 버전 (Render.com 자동 배포)
 | 런칭 준비/배포 검증 | `docs/launch-readiness.md` |
 | Android 빌드 가이드 | `BUILDING_ANDROID.md` |
 | AI 어시스턴트 가이드 | `CLAUDE.md` |
+| BOOTSTRAP civilization GDD | `docs/BOOTSTRAP-GDD.md` |
+| Civilization loop progression technical spec | `docs/loop-progression-technical-spec.md` |
 
 ---
 
