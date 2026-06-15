@@ -89,6 +89,8 @@ html, body {
 @keyframes flashRed { 0%,100% { color: var(--accent2); } 30% { color: var(--bad); transform: scale(1.2); } }
 .tag-skill { font-size: 0.6rem; background: #2a3d6b; color: #acc6ff; padding: 1px 5px; border-radius: 4px; }
 .bld-note { font-size: 0.65rem; color: var(--muted); line-height: 1.3; margin-top: 1px; }
+.bld-util-wrap { height: 3px; background: rgba(255,255,255,0.07); border-radius: 2px; margin-top: 5px; overflow: hidden; }
+.bld-util-fill { height: 100%; border-radius: 2px; transition: width 0.35s, background 0.35s; }
 .bld-ctl { display: flex; align-items: center; gap: 4px; }
 .bld-btn { width: 26px; height: 26px; border-radius: 7px; border: 1px solid var(--border); background: var(--panelbg);
   color: var(--text); font-size: 1rem; cursor: pointer; line-height: 1; }
@@ -120,6 +122,7 @@ html, body {
 .gate-conds li.ok { color: var(--ok); }
 .gate-conds li.no { color: var(--muted); }
 .gate-conds .cur { color: var(--text); opacity: 0.7; }
+.gate-advice { font-size: 0.68rem; color: var(--warn); margin-top: 2px; padding-left: 14px; line-height: 1.4; }
 
 /* Bottlenecks */
 #bottleneckList { display: flex; flex-direction: column; gap: 5px; }
@@ -132,6 +135,7 @@ html, body {
 .bn-track { height: 6px; background: #0a120d; border-radius: 4px; overflow: hidden; margin-top: 3px; }
 .bn-fill { height: 100%; transition: width 0.2s; }
 .bn-util { font-size: 0.78rem; font-weight: 700; min-width: 38px; text-align: right; }
+.bn-fix { font-size: 0.68rem; color: var(--warn); margin-top: 3px; line-height: 1.4; }
 
 /* Controls */
 #controls { display: flex; align-items: center; justify-content: center; gap: 8px; flex-shrink: 0; }
@@ -188,10 +192,14 @@ html, body {
 .bt-row { display: flex; align-items: center; gap: 8px; background: var(--panel2); border: 1px solid var(--border);
   border-radius: 8px; padding: 5px 9px; opacity: 0.55; }
 .bt-row.got { opacity: 1; border-color: var(--accent2); background: rgba(233,196,106,0.08); }
-.bt-ico { font-size: 1.1rem; }
-.bt-name { font-size: 0.8rem; font-weight: 600; flex: 1; }
+.bt-ico { font-size: 1.1rem; flex-shrink: 0; }
+.bt-body { flex: 1; min-width: 0; }
+.bt-head { display: flex; justify-content: space-between; align-items: center; }
+.bt-name { font-size: 0.8rem; font-weight: 600; }
 .bt-state { font-size: 0.68rem; color: var(--muted); }
 .bt-row.got .bt-state { color: var(--accent2); }
+.bt-prog-wrap { height: 3px; background: rgba(255,255,255,0.07); border-radius: 2px; margin-top: 4px; overflow: hidden; }
+.bt-prog-fill { height: 100%; background: var(--accent2); border-radius: 2px; transition: width 0.5s; }
 
 /* Breakthrough / era toast */
 #btToast { position: fixed; top: 14px; left: 50%; transform: translateX(-50%) translateY(-20px);
@@ -203,6 +211,21 @@ html, body {
 #btToast .bt-body { display: flex; flex-direction: column; line-height: 1.35; }
 #btToast .bt-body b { font-size: 0.92rem; color: var(--accent2); }
 #btToast .bt-body span { font-size: 0.74rem; color: var(--text); }
+
+/* Tutorial box */
+#tutBox { background: linear-gradient(135deg, rgba(28,56,38,0.97), rgba(18,38,25,0.97));
+  border: 1px solid rgba(111,207,151,0.35); border-radius: 10px;
+  padding: 9px 13px; margin: 0 0 4px; color: var(--text); font-size: 0.8rem; line-height: 1.55;
+  box-shadow: 0 2px 14px rgba(0,0,0,0.45); flex-shrink: 0; }
+#tutBox b { color: var(--accent); }
+.tut-foot { display: flex; justify-content: space-between; align-items: center; margin-top: 5px; }
+.tut-prog { color: var(--muted); font-size: 0.68rem; }
+#tutDismiss { background: transparent; border: 1px solid rgba(111,207,151,0.25); border-radius: 5px;
+  color: var(--muted); font-size: 0.68rem; padding: 2px 9px; cursor: pointer; transition: border-color 0.2s, color 0.2s; }
+#tutDismiss:hover { border-color: var(--accent); color: var(--accent); }
+
+/* Mute button */
+#muteBtn { font-size: 0.95rem; min-width: 36px; }
 
 .hidden { display: none !important; }
 
