@@ -47,6 +47,7 @@
     return {
       toggle: () => { muted = !muted; return muted; },
       isMuted: () => muted,
+      resume: () => { try { const c = ac(); if (c.state === 'suspended') c.resume(); } catch (e) {} },
       build:        () => { tone(520, 'sine', 0.12, 0.10); tone(780, 'sine', 0.08, 0.06, 0.07); },
       demolish:     () => tone(220, 'triangle', 0.22, 0.09),
       eraAdvance:   () => [523, 659, 784, 1047].forEach((f, i) => tone(f, 'sine', 0.55, 0.15, i * 0.12)),
@@ -87,9 +88,13 @@
   ];
 
   const TICKS_PER_SEC = 2;
+  const TUT_KEY = 'civ_tut_done';
   let sim, state, speed, paused, elapsedAcc, lastTime, challenge, lastEra, toastTimer;
   let tutStep = 0;
   let prevEventKeys = new Set();
+
+  function tutSeen() { try { return localStorage.getItem(TUT_KEY) === '1'; } catch (e) { return false; } }
+  function markTutSeen() { try { localStorage.setItem(TUT_KEY, '1'); } catch (e) {} }
 
   const $ = (id) => document.getElementById(id);
 
@@ -100,7 +105,8 @@
     sim = new Sim(RES, BLD, sc);
     if (challenge) sim.stock.food = 70;
     speed = 1; paused = false; elapsedAcc = 0; lastTime = performance.now();
-    state = 'playing'; lastEra = 0; tutStep = 0; prevEventKeys = new Set();
+    state = 'playing'; lastEra = 0; prevEventKeys = new Set();
+    tutStep = tutSeen() ? TUT.length - 1 : 0;
     buildBuildPanel();
     buildResourceBar();
     setSpeedButtons();
@@ -231,7 +237,6 @@
     const curKeys = new Set(Object.keys(sim.activeEvents));
     for (const k of curKeys) if (!prevEventKeys.has(k)) { Sound.event(); break; }
     prevEventKeys = curKeys;
-    advanceTutorial();
   }
 
   function checkEnd() {
@@ -258,6 +263,7 @@
     renderHealth(m, pop);
     renderBreakthroughs(m);
     renderBottlenecks();
+    advanceTutorial();
   }
 
   function renderEra() {
@@ -365,7 +371,11 @@
         </div>`;
       wrap.appendChild(row);
     }
-    wrap.addEventListener('click', (e) => {
+  }
+
+  // 건설/철거 클릭 위임 — init()에서 한 번만 바인딩(리셋마다 누적 방지)
+  function bindBuildPanel() {
+    $('buildList').addEventListener('click', (e) => {
       const btn = e.target.closest('.bld-btn'); if (!btn) return;
       if (btn.dataset.act === '+') build(btn.dataset.id); else demolish(btn.dataset.id);
     });
@@ -560,7 +570,11 @@
   // ── 튜토리얼 ─────────────────────────────────────────────────────────────
   function advanceTutorial() {
     if (tutStep >= TUT.length - 1) return;
-    if (TUT[tutStep].done && TUT[tutStep].done()) { tutStep++; renderTutorial(); }
+    if (TUT[tutStep].done && TUT[tutStep].done()) {
+      tutStep++;
+      if (tutStep >= TUT.length - 1) markTutSeen();  // 마지막 단계까지 완료 → 다시 표시 안 함
+      renderTutorial();
+    }
   }
 
   function renderTutorial() {
@@ -622,7 +636,7 @@
     $('ovBtn').addEventListener('click', reset);
     $('helpBtn').addEventListener('click', () => $('helpModal').classList.toggle('hidden'));
     $('helpClose').addEventListener('click', () => $('helpModal').classList.add('hidden'));
-    $('startBtn').addEventListener('click', () => { challenge = $('challengeToggle').checked; reset(); });
+    $('startBtn').addEventListener('click', () => { Sound.resume(); challenge = $('challengeToggle').checked; reset(); });
     const muteBtn = $('muteBtn');
     if (muteBtn) muteBtn.addEventListener('click', () => {
       const m = Sound.toggle();
@@ -632,8 +646,10 @@
     const tutDismiss = $('tutDismiss');
     if (tutDismiss) tutDismiss.addEventListener('click', () => {
       tutStep = TUT.length - 1;
+      markTutSeen();
       $('tutBox').classList.add('hidden');
     });
+    bindBuildPanel();
     fillHelp();
     requestAnimationFrame(loop);
   }
