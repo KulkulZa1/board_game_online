@@ -133,7 +133,7 @@
     render();
   }
 
-  function buildStatus(id) {
+  function buildStatus(id, m) {
     if (!sim.isUnlocked(id)) return { ok: false, reason: '시대 잠김' };
     if (!canAfford(id)) return { ok: false, reason: '식량 부족' };
 
@@ -142,17 +142,20 @@
     if (count >= cap) return { ok: false, reason: '현재 규모로 충분' };
 
     const def = BLD[id];
-    const m = sim.metrics();
+    m = m || sim.metrics();
     const laborNeed = laborDemand(def);
     const laborSupply = (sim.pop.unskilled || 0) + (sim.pop.skilled || 0);
     const projectedDemand = currentLaborDemand() + laborNeed;
     const projectedRatio = laborSupply / Math.max(laborSupply, projectedDemand || 1);
     const infrastructure = !!(def.housing || def.storage || def.institution || id === 'compost_yard' || id === 'irrigation_canal');
+    const producesFood = !!(def.outputs && def.outputs.food);
 
     if (!infrastructure && count > 0 && projectedRatio < 0.42) {
       return { ok: false, reason: '노동 병목' };
     }
-    if (id !== 'shelter' && id !== 'longhouse' && m.housingHeadroom < 0) {
+    // 주거 부족 시 산업·추출 건물만 차단 — 식량 생산과 기반시설(주거·저장·기관)은 항상 허용해
+    // 과밀+기아 상태에서도 생존 루프를 회복할 수 있게 한다.
+    if (!infrastructure && !producesFood && m.housingHeadroom < 0) {
       return { ok: false, reason: '주거 먼저' };
     }
     return { ok: true, reason: '' };
@@ -258,7 +261,7 @@
     renderEra();
     renderResourceBar();
     renderEventBanner();
-    renderBuildCounts();
+    renderBuildCounts(m);
     renderGate(m);
     renderHealth(m, pop);
     renderBreakthroughs(m);
@@ -381,7 +384,8 @@
     });
   }
 
-  function renderBuildCounts() {
+  function renderBuildCounts(m) {
+    m = m || sim.metrics();
     document.querySelectorAll('.era-section').forEach((h) => {
       const locked = ERA_LETTERS.indexOf(h.dataset.era) > sim.eraIndex;
       h.classList.toggle('locked', locked);
@@ -394,6 +398,16 @@
       const locked = !sim.isUnlocked(id);
       row.classList.toggle('locked', locked);
       row.classList.toggle('unaffordable', !locked && !canAfford(id));
+      // + 버튼 상태 — 구조적 차단(규모·노동·주거)은 비활성, 식량 부족은 활성 유지(클릭 시 비용 플래시)
+      const plus = row.querySelector('.bld-btn.plus');
+      if (plus) {
+        if (locked) { plus.disabled = false; plus.title = '시대 잠김'; }
+        else {
+          const st = buildStatus(id, m);
+          plus.disabled = !st.ok && st.reason !== '식량 부족';
+          plus.title = st.ok ? '건설' : st.reason;
+        }
+      }
       // 인라인 가동률 바
       const fill = row.querySelector(`[data-uf="${id}"]`);
       if (fill) {
