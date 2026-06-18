@@ -386,8 +386,30 @@ function checkFactoryArcadeCoverage() {
   if (!game.includes('function deliver') || !game.includes('다음 시대로 진화')) {
     throw new Error('Factory delivery loop should provide milestone feedback');
   }
+  if (!page.includes('stabilityWrap') || !game.includes('eraGateStatus') || !game.includes('updateEraGate') || !style.includes('phase-chip')) {
+    throw new Error('Factory game should gate industrial revolutions through visible stability conditions');
+  }
   if (!style.includes('@media (max-width: 520px)') || !style.includes('#palette')) {
     throw new Error('Factory CSS should include mobile-specific palette/tool layout rules');
+  }
+}
+
+function checkPlantArcadeCoverage() {
+  const page = fs.readFileSync(path.join(root, 'public/arcade/plant/index.html'), 'utf8');
+  const game = fs.readFileSync(path.join(root, 'public/arcade/plant/game.js'), 'utf8');
+  const style = fs.readFileSync(path.join(root, 'public/arcade/plant/style.css'), 'utf8');
+
+  if (!page.includes('burstBtn') || !page.includes('loopPanel')) {
+    throw new Error('Plant clicker should expose growth burst and loop progression UI');
+  }
+  if (!game.includes('BREAKTHROUGHS') || !game.includes('checkBreakthroughs') || !game.includes('renderLoopPanel')) {
+    throw new Error('Plant clicker should have data-driven idle breakthrough progression');
+  }
+  if (!game.includes('burstCost') || !game.includes('onGrowthBurst')) {
+    throw new Error('Plant clicker should support a resource-spending growth burst action');
+  }
+  if (!style.includes('breakthrough-row') || !style.includes('loop-stat') || !style.includes('burst-btn')) {
+    throw new Error('Plant clicker should style idle-loop and breakthrough UI for mobile play');
   }
 }
 
@@ -1084,6 +1106,7 @@ async function main() {
     checkVersionBadgeCoverage();
     checkProductionArcadeAssetPolicy();
     checkFactoryArcadeCoverage();
+    checkPlantArcadeCoverage();
     checkBootstrapArcadeCoverage();
     checkSandboxConfigBridgeRead();
     checkTowerDefenseSandboxCoverage();

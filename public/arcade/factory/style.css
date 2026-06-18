@@ -87,7 +87,7 @@ html, body {
 .era-text #eraName { font-size: 0.82rem; font-weight: 700; }
 .era-text #eraSub  { font-size: 0.68rem; color: var(--muted); }
 
-#researchWrap, #powerWrap {
+#researchWrap, #powerWrap, #stabilityWrap {
   background: rgba(16,22,34,0.82);
   border: 1px solid var(--border);
   border-radius: 10px; padding: 6px 12px;
@@ -100,6 +100,31 @@ html, body {
 #researchFill { height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent), #ffd166); border-radius: 4px; transition: width 0.25s; }
 #powerFill { height: 100%; width: 0%; background: linear-gradient(90deg, #4aa3ff, #6ee7ff); border-radius: 4px; transition: width 0.2s; }
 #powerFill.over { background: linear-gradient(90deg, #e74c3c, #ff8a5c); }
+#stabilityFill { height: 100%; width: 0%; background: linear-gradient(90deg, #2ecc71, #9be15d); border-radius: 4px; transition: width 0.2s; }
+#stabilityFill.waiting { background: linear-gradient(90deg, #8595ad, #4a5870); }
+#phaseChecklist {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 5px;
+  font-size: 0.64rem;
+  line-height: 1.2;
+}
+.phase-chip {
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 999px;
+  color: var(--muted);
+  padding: 2px 6px;
+  max-width: 100%;
+}
+.phase-chip.ok {
+  border-color: rgba(46,204,113,0.45);
+  color: var(--ok);
+}
+.phase-chip.no {
+  border-color: rgba(231,76,60,0.35);
+  color: #ffb38a;
+}
 
 /* ── Stat box ───────────────────────────────────── */
 #statBox {
@@ -350,9 +375,19 @@ html, body {
   #eraIcon { font-size: 1.35rem; }
   .era-text #eraName { font-size: 0.78rem; }
   .era-text #eraSub { font-size: 0.65rem; }
-  #researchWrap, #powerWrap {
+  #researchWrap, #powerWrap, #stabilityWrap {
     min-width: 0;
     padding: 6px 9px;
+  }
+  #stabilityWrap {
+    flex-basis: 100%;
+    max-width: none;
+  }
+  #phaseChecklist {
+    gap: 3px;
+    font-size: 0.6rem;
+    max-height: 40px;
+    overflow: hidden;
   }
 
   #statBox {

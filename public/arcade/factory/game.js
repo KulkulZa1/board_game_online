@@ -87,6 +87,7 @@
     { name: '3차 산업혁명', sub: '디지털 시대',   icon: '💾', target: 'robot',   count: 30, bg: '#08140f', grid: '#14361f', accent: '#2ecc71', label: '🤖 로봇 연구' },
     { name: '4차 산업혁명', sub: '인공지능 시대', icon: '🧠', target: 'ai_core', count: 20, bg: '#120a1e', grid: '#2c1947', accent: '#b388ff', label: '🧠 AI 코어 연구' },
   ];
+  const ERA_STABILITY_SEC = 5;
   const DELIVER_SCORE = { gear: 1, motor: 6, robot: 25, ai_core: 120 };
 
   // ── 튜토리얼 단계 정의 ──────────────────────────────────────────
@@ -222,6 +223,7 @@
   let paused = false;
   let speed = 1;
   let era = 1, research = 0, score = 0, highScore = 0, won = false;
+  let eraStable = 0;
   let rp = 0;                 // 연구포인트(RP) — 납품으로 획득, 업그레이드에 소비
   let simTime = 0;            // 누적 시뮬레이션 시간(연출/처리량용)
   let powerProd = 0, powerDemand = 0, powerRatio = 1;
@@ -229,6 +231,7 @@
   let floaties = [];          // 부유 텍스트
   let bottleneck = '';        // 현재 병목 진단 텍스트
   let bottleneckAccum = 0;    // 병목 계산 throttle
+  let warnState = { text: '', until: 0 };
 
   // 입력/툴
   let selected = 'belt';      // 선택 건물 id
@@ -265,10 +268,11 @@
     genDeposits();
     camera.zoom = 1;
     centerCamera();
-    era = 1; research = 0; score = 0; won = false; rp = 0;
+    era = 1; research = 0; score = 0; won = false; rp = 0; eraStable = 0;
     simTime = 0; deliveries = []; floaties = [];
     powerProd = powerDemand = 0; powerRatio = 1;
     bottleneck = ''; bottleneckAccum = 0;
+    warnState = { text: '', until: 0 };
     selected = 'belt'; rot = 0; tool = 'build';
     tut.active = false;
     const _tp = document.getElementById('tutPanel'); if (_tp) _tp.classList.add('hidden');
@@ -522,15 +526,82 @@
     if (research < goal && research % 5 === 0) {
       showToast(`${ITEMS[item].name} ${research}/${goal}`, `${goal - research}개 더 납품하면 다음 시대로 진화합니다`);
     }
-    checkEra();
+    updateEraGate(0);
     if (tut.active && TUT_STEPS[tut.step] && TUT_STEPS[tut.step].event === 'delivery') advanceTut();
   }
 
-  function checkEra() {
-    const goal = ERAS[Math.min(era, 4)].count;
-    if (research < goal) return;
-    if (era < 4) { era++; research = 0; onEraUp(); }
-    else if (!won) { won = true; onSingularity(); }
+  function throughputPerMin() {
+    return deliveries.length * 3;
+  }
+
+  function countBuilt(ids) {
+    return buildings.filter((b) => ids.includes(b.id)).length;
+  }
+
+  function phaseLineReady(ids) {
+    return ids.every((id) => countBuilt([id]) > 0);
+  }
+
+  function powerStable(minRatio) {
+    if (era < 2 || powerDemand <= 0) return true;
+    return powerRatio >= minRatio;
+  }
+
+  function eraGateStatus() {
+    const e = ERAS[Math.min(era, 4)];
+    const targetName = ITEMS[e.target].name;
+    const conditions = [
+      { label: `${targetName} ${research}/${e.count}`, ok: research >= e.count },
+    ];
+
+    if (era === 1) {
+      conditions.push(
+        { label: '채굴-제련-가공-연구 라인', ok: phaseLineReady(['miner', 'furnace', 'workshop', 'lab']) },
+        { label: '최근 납품 흐름', ok: throughputPerMin() >= 3 }
+      );
+    } else if (era === 2) {
+      conditions.push(
+        { label: '발전기 가동', ok: countBuilt(['generator']) > 0 },
+        { label: '전력 85%+', ok: powerStable(0.85) },
+        { label: '전선-조립 라인', ok: phaseLineReady(['wiremill', 'assembler']) },
+        { label: '모터 흐름 유지', ok: throughputPerMin() >= 3 }
+      );
+    } else if (era === 3) {
+      conditions.push(
+        { label: '회로-로봇 라인', ok: phaseLineReady(['circuitfab', 'roboasm']) },
+        { label: '전력 80%+', ok: powerStable(0.80) },
+        { label: '로봇 흐름 유지', ok: throughputPerMin() >= 2 }
+      );
+    } else {
+      conditions.push(
+        { label: '데이터- AI 라인', ok: phaseLineReady(['datacenter', 'ailab']) },
+        { label: '전력 75%+', ok: powerStable(0.75) },
+        { label: 'AI 코어 흐름 유지', ok: throughputPerMin() >= 1 }
+      );
+    }
+
+    return {
+      conditions,
+      ready: conditions.every((c) => c.ok),
+      required: ERA_STABILITY_SEC,
+    };
+  }
+
+  function updateEraGate(dt) {
+    if (state !== 'playing' || won) return;
+    const gate = eraGateStatus();
+    if (gate.ready) eraStable = Math.min(gate.required, eraStable + dt);
+    else eraStable = Math.max(0, eraStable - dt * 0.75);
+    if (eraStable < gate.required) return;
+    if (era < 4) {
+      era++;
+      research = 0;
+      eraStable = 0;
+      onEraUp();
+    } else if (!won) {
+      won = true;
+      onSingularity();
+    }
   }
 
   function onEraUp() {
@@ -573,6 +644,7 @@
     // 병목 진단 (0.5초마다)
     bottleneckAccum += dt;
     if (bottleneckAccum >= 0.5) { bottleneckAccum = 0; computeBottleneck(); }
+    updateEraGate(dt);
   }
 
   // 가장 큰 병목(생산을 가로막는 구속 조건)을 찾아 한 줄로 진단한다.
@@ -713,6 +785,7 @@
   function draw(dt) {
     chevT = (chevT + dt * BELT_SPEED) % 1;
     const e = ERAS[Math.min(era, 4)];
+    const minerMode = selected === 'miner' && tool === 'build';
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.fillStyle = e.bg;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -982,12 +1055,14 @@
     document.getElementById('eraName').textContent = e.name;
     document.getElementById('eraSub').textContent = e.sub;
     document.getElementById('researchLabel').textContent = e.label;
+    document.getElementById('stabilityLabel').textContent = era < 4 ? '다음 산업혁명 안정도' : '최종 자동화 안정도';
     const powerWrap = document.getElementById('powerWrap');
     if (era >= 2) powerWrap.classList.remove('hidden'); else powerWrap.classList.add('hidden');
   }
 
   function updateHUD() {
     const e = ERAS[Math.min(era, 4)];
+    const gate = eraGateStatus();
     const goal = e.count;
     const pct = won && era === 4 ? 100 : Math.min(100, research / goal * 100);
     document.getElementById('researchFill').style.width = pct + '%';
@@ -1006,6 +1081,20 @@
     // 처리량 (분당 목표 아이템)
     const perMin = deliveries.length * 3; // 20초창 → ×3 = 분당
     document.getElementById('throughput').textContent = `${perMin.toFixed(0)} ${ITEMS[currentTarget()].name}/분`;
+    const stablePct = Math.min(100, eraStable / gate.required * 100);
+    const stabilityFill = document.getElementById('stabilityFill');
+    stabilityFill.style.width = stablePct + '%';
+    stabilityFill.classList.toggle('waiting', !gate.ready);
+    document.getElementById('stabilityCount').textContent =
+      gate.ready ? `${eraStable.toFixed(1)} / ${gate.required}초` : '조건 대기';
+    const checklist = document.getElementById('phaseChecklist');
+    checklist.innerHTML = '';
+    for (const cond of gate.conditions) {
+      const chip = document.createElement('span');
+      chip.className = 'phase-chip ' + (cond.ok ? 'ok' : 'no');
+      chip.textContent = (cond.ok ? '✓ ' : '• ') + cond.label;
+      checklist.appendChild(chip);
+    }
     // RP (연구포인트)
     document.getElementById('rpDisplay').textContent = `🔩 RP ${rp}`;
     // 병목 진단
@@ -1328,7 +1417,7 @@
     const data = {
       version: 1,
       savedAt: Date.now(),
-      era, research, score, won,
+      era, research, score, won, eraStable,
       simTime: Math.round(simTime * 1000) / 1000,
       speed, paused,
       selected, rot, tool,
@@ -1396,6 +1485,7 @@
     research = clampNum(data.research, 0, ERAS[era].count * 3, 0) | 0;
     score = clampNum(data.score, 0, 9999999, 0) | 0;
     won = Boolean(data.won);
+    eraStable = clampNum(data.eraStable, 0, ERA_STABILITY_SEC, 0);
     simTime = clampNum(data.simTime, 0, 999999, 0);
     speed = clampNum(data.speed, 1, 3, 1) | 0;
     paused = Boolean(data.paused);
