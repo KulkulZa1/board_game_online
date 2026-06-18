@@ -103,6 +103,39 @@
     },
   ];
 
+  const BREAKTHROUGHS = [
+    {
+      id: 'root_network', icon: '🌿', name: '뿌리 네트워크',
+      desc: '영양분 루프가 안정되어 성장 속도와 영양분 자동 생산이 오른다.',
+      check: () => save.stageIdx >= 2 && upgradeLevel('earthworm') >= 1,
+      hint: '줄기 단계 + 지렁이 Lv.1',
+    },
+    {
+      id: 'irrigation_loop', icon: '💧', name: '관수 루프',
+      desc: '물 주기와 비구름이 연결되어 클릭 물 수확과 자동 물 생산이 오른다.',
+      check: () => upgradeLevel('waterCan') >= 3 && upgradeLevel('rainCloud') >= 1,
+      hint: '물뿌리개 Lv.3 + 비구름 Lv.1',
+    },
+    {
+      id: 'solar_canopy', icon: '☀️', name: '태양 캐노피',
+      desc: '잎이 넓어져 햇빛 생산과 클릭 보너스가 동시에 오른다.',
+      check: () => save.stageIdx >= 3 && upgradeLevel('sunPanel') >= 2,
+      hint: '관목 단계 + 태양광 Lv.2',
+    },
+    {
+      id: 'pollination', icon: '🌸', name: '수분 생태계',
+      desc: '꽃이 생태계를 불러 별가루와 성장 배율을 함께 끌어올린다.',
+      check: () => save.stageIdx >= 4 && upgradeLevel('fertilizer') >= 2,
+      hint: '꽃 단계 + 비료 Lv.2',
+    },
+    {
+      id: 'ancient_seed', icon: '✨', name: '고대 씨앗 기억',
+      desc: '오래 자란 식물이 모든 자동 루프를 더 효율적으로 만든다.',
+      check: () => save.stageIdx >= 6 && upgradeLevel('starDust') >= 1,
+      hint: '나무 단계 + 별가루 Lv.1',
+    },
+  ];
+
   // ── 업적 ────────────────────────────────────────────────────────
   const ACHIEVEMENTS = [
     { id: 'first_water', name: '첫 물주기',    cond: (s) => s.totalClicks >= 1 },
@@ -123,6 +156,7 @@
       growth: 0, stageIdx: 0,
       upgrades: {},          // id → level
       achievements: [],
+      breakthroughs: [],
       totalClicks: 0,
       lastSave: Date.now(),
     };
@@ -134,6 +168,8 @@
       if (!raw) return defaultSave();
       const loaded = { ...defaultSave(), ...JSON.parse(raw) };
       loaded.stageIdx = Math.max(0, Math.min(loaded.stageIdx || 0, STAGES.length - 1));
+      loaded.achievements = Array.isArray(loaded.achievements) ? loaded.achievements : [];
+      loaded.breakthroughs = Array.isArray(loaded.breakthroughs) ? loaded.breakthroughs : [];
       return loaded;
     } catch { return defaultSave(); }
   }
@@ -146,11 +182,19 @@
   let save = loadSave();
   let toastTimer;
 
+  function upgradeLevel(id) {
+    return save.upgrades[id] || 0;
+  }
+
+  function hasBreakthrough(id) {
+    return save.breakthroughs.includes(id);
+  }
+
   // ── 파생 스탯 계산 ─────────────────────────────────────────────
   function calcStats() {
-    const lv = (id) => save.upgrades[id] || 0;
+    const lv = upgradeLevel;
     const stageTap = STAGES[save.stageIdx] && STAGES[save.stageIdx].tapValue;
-    return {
+    const stats = {
       clickWater:    (stageTap || 1) + lv('waterCan') * 1,
       sunPerSec:     0   + lv('sunPanel')   * 0.5,
       growthMult:    1   + lv('fertilizer') * 0.15,
@@ -159,6 +203,29 @@
       starPerGrowth: 0   + lv('starDust')   * 0.005,
       sunPerClick:   0   + lv('photosyn')   * 0.5,
     };
+    if (hasBreakthrough('root_network')) {
+      stats.growthMult += 0.12;
+      stats.nutrientPerSec += 0.4;
+    }
+    if (hasBreakthrough('irrigation_loop')) {
+      stats.clickWater += 2;
+      stats.waterPerSec += 0.6;
+    }
+    if (hasBreakthrough('solar_canopy')) {
+      stats.sunPerSec += 1.0;
+      stats.sunPerClick += 0.8;
+    }
+    if (hasBreakthrough('pollination')) {
+      stats.growthMult += 0.20;
+      stats.starPerGrowth += 0.008;
+    }
+    if (hasBreakthrough('ancient_seed')) {
+      stats.sunPerSec *= 1.15;
+      stats.waterPerSec *= 1.15;
+      stats.nutrientPerSec *= 1.15;
+      stats.growthMult += 0.18;
+    }
+    return stats;
   }
 
   // ── 오프라인 진행 ───────────────────────────────────────────────
@@ -201,6 +268,7 @@
     }, 50);
     if (window.AdMobHelper && idx === STAGES.length - 1) AdMobHelper.showAfterGame();
     checkAchievements();
+    checkBreakthroughs();
   }
 
   // ── 업적 확인 ───────────────────────────────────────────────────
@@ -214,8 +282,51 @@
   }
 
   // ── 클릭 ────────────────────────────────────────────────────────
+  function checkBreakthroughs() {
+    for (const bt of BREAKTHROUGHS) {
+      if (!hasBreakthrough(bt.id) && bt.check()) {
+        save.breakthroughs.push(bt.id);
+        showToast(`${bt.icon} 돌파: ${bt.name}`);
+      }
+    }
+  }
+
+  function burstCost() {
+    const scale = save.stageIdx + 1;
+    return {
+      water: 12 + scale * 3,
+      sun: 8 + scale * 2,
+      nutrient: 5 + scale,
+    };
+  }
+
+  function canBurst(cost) {
+    return save.water >= cost.water && save.sun >= cost.sun && save.nutrient >= cost.nutrient;
+  }
+
+  function onGrowthBurst(e) {
+    const cost = burstCost();
+    if (!canBurst(cost)) {
+      showToast('성장 폭발 재료 부족');
+      return;
+    }
+    const st = calcStats();
+    save.water -= cost.water;
+    save.sun -= cost.sun;
+    save.nutrient -= cost.nutrient;
+    const growthGain = (20 + save.stageIdx * 6) * st.growthMult;
+    applyGrowth(growthGain);
+    save.star += 0.05 + save.stageIdx * 0.01;
+    spawnClickFx(e || {}, `+${fmt(growthGain)} 성장`);
+    checkAchievements();
+    checkBreakthroughs();
+    renderAll();
+    saveGame();
+  }
+
   document.getElementById('plantStage').addEventListener('click', onWaterClick);
   document.getElementById('waterBtn').addEventListener('click', onWaterClick);
+  document.getElementById('burstBtn').addEventListener('click', onGrowthBurst);
 
   function onWaterClick(e) {
     const st = calcStats();
@@ -231,6 +342,7 @@
     spawnClickFx(e, `+${fmt(st.clickWater)}💧`);
     if (st.sunPerClick > 0) spawnClickFx(e, `+${fmt(st.sunPerClick)}☀`, 20);
     checkAchievements();
+    checkBreakthroughs();
     renderAll();
   }
 
@@ -256,6 +368,7 @@
     if (save[def.costRes] < cost) { showToast(`${resName(def.costRes)} 부족!`); return; }
     save[def.costRes] -= cost;
     save.upgrades[id] = lv + 1;
+    checkBreakthroughs();
     showToast(`✅ ${def.name} Lv.${lv + 1} 업그레이드!`);
     renderAll();
     saveGame();
@@ -280,6 +393,7 @@
     }
 
     renderResources();
+    renderLoopPanel();
     saveGame();
   }, 500);
 
@@ -287,6 +401,7 @@
   function renderAll() {
     renderResources();
     renderPlant();
+    renderLoopPanel();
     renderUpgrades();
   }
 
@@ -313,6 +428,46 @@
     } else {
       document.getElementById('growthFill').style.width = '100%';
       document.getElementById('growthText').textContent = '✨ 최고 단계 달성!';
+    }
+  }
+
+  function renderLoopPanel() {
+    const st = calcStats();
+    const cost = burstCost();
+    const burstBtn = document.getElementById('burstBtn');
+    burstBtn.disabled = !canBurst(cost);
+    document.getElementById('burstCost').textContent =
+      `${fmt(cost.water)}💧 ${fmt(cost.sun)}☀ ${fmt(cost.nutrient)}🌿`;
+
+    const passiveGrowth = st.sunPerSec > 0 ? st.sunPerSec * 0.1 * st.growthMult : 0;
+    document.getElementById('loopSummary').innerHTML = `
+      <div class="loop-stat"><b>${fmt(passiveGrowth)}/초</b><span>방치 성장</span></div>
+      <div class="loop-stat"><b>${fmt(st.growthMult)}x</b><span>성장 배율</span></div>
+      <div class="loop-stat"><b>${save.breakthroughs.length}/${BREAKTHROUGHS.length}</b><span>돌파</span></div>
+    `;
+
+    const list = document.getElementById('breakthroughList');
+    list.innerHTML = '';
+    const unlocked = BREAKTHROUGHS.filter((bt) => hasBreakthrough(bt.id));
+    const next = BREAKTHROUGHS.find((bt) => !hasBreakthrough(bt.id));
+    for (const bt of unlocked.slice(-3)) {
+      const row = document.createElement('div');
+      row.className = 'breakthrough-row unlocked';
+      row.innerHTML = `
+        <div class="breakthrough-name"><span>${bt.icon} ${bt.name}</span><span>활성</span></div>
+        <div class="breakthrough-desc">${bt.desc}</div>
+      `;
+      list.appendChild(row);
+    }
+    if (next) {
+      const row = document.createElement('div');
+      row.className = 'breakthrough-row';
+      row.innerHTML = `
+        <div class="breakthrough-name"><span>${next.icon} 다음 돌파</span><span>${next.name}</span></div>
+        <div class="breakthrough-desc">${next.desc}</div>
+        <div class="breakthrough-check">${next.check() ? '조건 충족, 곧 해금' : next.hint}</div>
+      `;
+      list.appendChild(row);
     }
   }
 
