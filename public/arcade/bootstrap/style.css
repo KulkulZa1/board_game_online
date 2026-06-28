@@ -58,8 +58,10 @@ html, body {
 .res-chip { display: flex; align-items: center; gap: 5px; background: var(--panelbg); border: 1px solid var(--border);
   border-radius: 9px; padding: 5px 11px; font-size: 0.82rem; }
 .res-chip b { color: var(--text); font-size: 0.9rem; min-width: 20px; }
+.res-chip b.full { color: var(--accent2); }
 .res-chip .res-ico { font-size: 1rem; }
 .res-chip.food { border-color: #3a5a3a; }
+.res-cap { font-size: 0.66rem; color: var(--muted); }
 .res-flow { font-size: 0.68rem; color: var(--muted); }
 
 #eventBanner { background: rgba(120,30,30,0.4); border: 1px solid var(--bad); color: #ffb3a0;
@@ -180,7 +182,9 @@ html, body {
 .era-section { font-size: 0.7rem; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: 0.04em;
   margin: 8px 0 2px; display: flex; align-items: center; gap: 6px; }
 .era-section:first-child { margin-top: 0; }
-.era-section.locked { color: var(--muted); }
+.era-section.locked { color: var(--muted); opacity: 0.85; border: 1px dashed var(--border);
+  border-radius: 7px; padding: 5px 8px; background: rgba(255,255,255,0.015); text-transform: none; letter-spacing: 0; }
+.era-lock { font-size: 0.62rem; font-weight: 400; color: var(--muted); margin-left: auto; text-transform: none; letter-spacing: 0; }
 .era-tag { background: var(--accent); color: #06140c; border-radius: 5px; padding: 0 6px; font-size: 0.66rem; }
 .era-section.locked .era-tag { background: var(--border); color: var(--muted); }
 .bld-row.locked { opacity: 0.32; filter: grayscale(0.6); pointer-events: none; }

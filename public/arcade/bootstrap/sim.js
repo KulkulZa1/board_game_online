@@ -164,6 +164,8 @@
       irrigationBonus: 0.22,            // 관개 수로 1기당 작물 출력 보정(작물 수 대비)
       potteryStorageFactor: 1.6,        // 토기 1단위당 식량 저장 한도 가산
       ecologyKnowledgeMax: 1.0,
+      baseFoodStorage: 90,              // 기본(신선) 식량 저장 한도 — 저장 건물로 확장
+      overflowSpoil: 0.40,              // 저장 한도 초과분의 틱당 소실률(저장이 비축의 실질 상한)
     },
     initial: {
       population: { unskilled: 14, skilled: 3 },
@@ -279,6 +281,7 @@
         toolBonus: 1.0, toolsPerUser: 2.0, toolWear: 0.012,
         fertilityRegen: 0.0006, spoilFloorFactor: 0.22,
         irrigationBonus: 0.22, potteryStorageFactor: 1.6, ecologyKnowledgeMax: 1.0,
+        baseFoodStorage: 90, overflowSpoil: 0.40,
       }, scenario.config || {});
 
       this.challenge = !!this.cfg.challenge;
@@ -341,7 +344,7 @@
       return h;
     }
     storageCap(resId) {
-      let s = 0;
+      let s = resId === 'food' ? this.cfg.baseFoodStorage : 0;
       for (const id of this.order) { const d = this.bdefs[id]; if (d.storage && d.storage[resId]) s += d.storage[resId] * (this.counts[id] || 0); }
       if (resId === 'food') s += (this.stock.pottery || 0) * this.cfg.potteryStorageFactor;
       return s;
@@ -501,15 +504,19 @@
         }
       }
 
-      // 6) 부패 — 저장(곡물창고+토기)이 클수록 억제, 돌파(토기)로 추가 경감
+      // 6) 부패 — 저장 한도가 비축의 실질 상한이다.
+      //    한도 내 식량: 저장(곡물창고·토기)이 보호해 천천히 부패.
+      //    한도 초과분: 빠르게 소실 → 저장을 늘리지 않으면 식량을 쌓아둘 수 없다("칼로리는 흐른다").
       for (const r in this.res) {
         if (!this.res[r].perishable) continue;
-        const amt = this.stock[r] || 0; if (amt <= 0) continue;
-        const cap = this.storageCap(r);
-        const protectedFrac = clamp(cap / Math.max(amt, 1), 0, 1);
-        let effRate = this.res[r].spoilRate * (this.cfg.spoilFloorFactor * protectedFrac + (1 - protectedFrac));
-        effRate *= this.mods.spoilMult;
-        this.stock[r] = amt * (1 - effRate * dt);
+        let amt = this.stock[r] || 0; if (amt <= 0) continue;
+        const cap = Math.max(1, this.storageCap(r));
+        if (amt > cap) {
+          const over = amt - cap;
+          amt = cap + over * Math.max(0, 1 - this.cfg.overflowSpoil * dt);
+        }
+        const baseRate = this.res[r].spoilRate * this.cfg.spoilFloorFactor * this.mods.spoilMult;
+        this.stock[r] = amt * (1 - baseRate * dt);
       }
 
       // 7) 비옥도 자연 회복

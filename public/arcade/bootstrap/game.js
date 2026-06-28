@@ -78,7 +78,7 @@
   const TUT = [
     { text: '👋 시작: <b>막집 ⛺</b>을 1채 건설해 주거 한도를 확보하세요. 인구가 한도를 초과하면 성장이 멈춥니다.',
       done: () => (sim.counts.shelter || 0) >= 1 },
-    { text: '🔥 <b>화덕</b>을 1채 건설하세요. 식량 부패를 억제해 비축이 안정됩니다.',
+    { text: '🔥 <b>화덕</b>을 지어 식량 <b>저장 한도</b>를 늘리세요. 한도를 넘는 식량은 빠르게 썩습니다 — 저장이 비축의 상한입니다.',
       done: () => (sim.counts.fire_pit || 0) >= 1 },
     { text: '🔍 <b>병목 분석기</b>(우측 하단)를 보세요. 빨간 항목이 루프의 약점입니다. 채집 캠프를 더 지어 생산을 늘려보세요.',
       done: () => (sim.counts.forager_camp || 0) >= 5 },
@@ -230,7 +230,7 @@
   }
 
   function handleSimEvents() {
-    if (sim.eraIndex !== lastEra) { lastEra = sim.eraIndex; flashEraAdvance(); }
+    if (sim.eraIndex !== lastEra) { lastEra = sim.eraIndex; buildBuildPanel(); flashEraAdvance(); }
     if (sim.pendingBreakthrough) {
       const bt = sim.pendingBreakthrough; sim.pendingBreakthrough = null;
       Sound.breakthrough();
@@ -289,7 +289,7 @@
       chip.className = 'res-chip' + (r === 'food' ? ' food' : '');
       chip.dataset.res = r;
       chip.innerHTML = `<span class="res-ico">${def.icon}</span><b data-rv="${r}">0</b>` +
-        (r === 'food' ? `<span class="res-flow" id="foodFlow">+0/틱</span>` : `<span class="res-flow" data-rf="${r}"></span>`);
+        (r === 'food' ? `<span class="res-cap" id="foodCap"></span><span class="res-flow" id="foodFlow">+0/틱</span>` : `<span class="res-flow" data-rf="${r}"></span>`);
       bar.appendChild(chip);
     }
   }
@@ -301,8 +301,12 @@
       if (el) el.textContent = fmt(v, r === 'food' || r === 'wood' || r === 'clay' || r === 'copper' ? 0 : 1);
       const chip = document.querySelector(`.res-chip[data-res="${r}"]`);
       if (chip) chip.classList.toggle('dim', v <= 0 && !producesRes(r));
-      if (r === 'food') { $('foodFlow').textContent = flowStr(); }
-      else {
+      if (r === 'food') {
+        $('foodFlow').textContent = flowStr();
+        const cap = Math.round(sim.storageCap('food'));
+        const capEl = $('foodCap'); if (capEl) capEl.textContent = '/ ' + cap;
+        if (el) el.classList.toggle('full', v >= cap - 1);  // 한도 도달 → 저장 확장·소비 권장
+      } else {
         const fl = document.querySelector(`[data-rf="${r}"]`);
         if (fl) { const made = sim.lastOutputs[r] || 0; fl.textContent = made > 0.001 ? `+${fmt(made, 1)}` : ''; }
       }
@@ -341,21 +345,25 @@
     return (wellbeing * productivity * (0.5 + 0.5 * resilience)) * 100 * (1 + m.population / 80) * eraMult * btMult;
   }
 
-  // 건설 패널 — 시대 구획으로 나눠 1회 생성, 해금 여부는 매 틱 갱신
+  // 건설 패널 — 시대 구획으로 나눠 생성. 잠긴 미래 시대는 헤더만(타일 숨김),
+  // 시대 진입 시 다시 그려 새 타일을 공개한다(시작 화면 정돈 + 진보의 보상감).
   function buildBuildPanel() {
     const wrap = $('buildList');
     wrap.innerHTML = '';
     let curEra = null;
     for (const id of ORDER) {
       const d = BLD[id];
+      const locked = ERA_LETTERS.indexOf(d.era) > sim.eraIndex;
       if (d.era !== curEra) {
         curEra = d.era;
         const hdr = document.createElement('div');
-        hdr.className = 'era-section';
+        hdr.className = 'era-section' + (locked ? ' locked' : '');
         hdr.dataset.era = curEra;
-        hdr.innerHTML = `<span class="era-tag">${curEra}</span> ${ERA_NAMES[curEra]}`;
+        hdr.innerHTML = `<span class="era-tag">${curEra}</span> ${ERA_NAMES[curEra]}` +
+          (locked ? `<span class="era-lock">🔒 이전 시대 통과 시 공개</span>` : '');
         wrap.appendChild(hdr);
       }
+      if (locked) continue;  // 잠긴 시대 타일은 표시하지 않음(정돈)
       const skilled = d.labor && d.labor.skilled ? '<span class="tag-skill">숙련</span>' : '';
       const inst = d.institution ? '<span class="tag-inst">기관</span>' : '';
       const row = document.createElement('div');
@@ -678,6 +686,9 @@
       <code>가동률 = min(노동, 입력 자원, 광맥)</code>
       한 층(식량·노동)이 무너지면 위층(금속)까지 연쇄로 무너집니다.
       각 건물 행의 <b>색 가동률 바</b>(녹색=정상 / 노랑=경고 / 빨강=병목)가 실시간으로 보여줍니다.
+      <h4>식량과 저장 🍞</h4>
+      식량은 칼로리 통화이자 <b>건설 비용</b>입니다. <b>저장 한도를 넘는 식량은 빠르게 썩어</b> 사라집니다 —
+      화덕·곡물창고·토기로 한도를 늘려야 큰 비축이 가능합니다. 자원 바의 <b>X / 한도</b>가 노랗게 차면 저장을 늘리거나 더 건설하세요.
       <h4>시대 흐름</h4>
       <ul>
         <li><b>A 채집</b> — 채집/사냥으로 인구를 키우고 생태 지식을 쌓는다</li>
