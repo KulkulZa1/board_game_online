@@ -24,6 +24,8 @@ All three layers are **intentional**. Arcade games and sandbox are not scope cre
 
 **Board games (12):** 체스, 오목, 사목, 오셀로, 인디언 포커, 체커, 사과게임, 배틀십, 백가몬, 텍사스 홀덤, 도트앤박스, 만칼라  
 **Arcade games:** 스네이크, 벽돌깨기, 뱀파이어 서바이버, 식물 키우기, 타워 디펜스, 산업의 시대, 문명 루프
+
+**Current solo-game direction:** `산업의 시대` is the main automation game and should carry the satisfying civilization-style phase transition feeling through stable factory loops, throughput, power, and bottleneck diagnosis. `식물 키우기` is the clearer clicker/idle track and should reuse loop ideas as breakthroughs, passive growth, and resource-spending bursts rather than becoming another factory simulator.
 **Platform:** Web (PWA) — https://board-game-online.onrender.com  
 **Deployment:** Render.com, Node.js + Socket.io, no database
 

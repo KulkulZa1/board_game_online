@@ -22,6 +22,7 @@
 - `docs/vampire-survivors-director-loop.md` with verification targets and remaining design work.
 - `docs/loop-progression-technical-spec.md` with programmer-facing data structures, simulation variables, update rules, era-loop stability checks, breakthrough rules, and MVP implementation scope for the civilization-scale progression system.
 - Bootstrap civilization-loop arcade MVP at `/arcade/bootstrap/`, with data-driven eras/processes, bottleneck diagnostics, stability-gated era unlocks, mobile-friendly DOM UI, and smoke-check coverage.
+- Plant Growing idle loop: growth burst action, data-driven breakthrough bonuses, loop summary panel, and mobile-friendly progression UI for `/arcade/plant/`.
 
 ### Changed
 - Vampire Survivors enemy spawn pressure, enemy stats, boss interval, and rewards now scale from the selected difficulty, selected map, and daily modifier.
@@ -29,6 +30,7 @@
 - Multiplayer chat now shows real shared-shell speech bubbles on current main and gives visible feedback when chat is rate limited.
 - `scripts/check.sh` now matches the dev-only sandbox policy by expecting `/sandbox/` to return 404 and checking the production Tower Defense runtime path instead.
 - Factory arcade now prevents dead miner placements, highlights valid resource/connection tiles, auto-connects nearby factory outputs while preserving manual rotation, adds delivery milestone feedback, autosaves/restores factory layouts, improves mobile palette/tool layout, and is covered by the deep smoke-check route/policy assertions.
+- Factory arcade era changes now use civilization-style stability gates: target deliveries, required production lines, throughput, and power stability must hold briefly before the next industrial phase unlocks.
 
 이 프로젝트의 모든 주요 변경사항을 기록합니다.
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.0.0/) 를 따릅니다.
