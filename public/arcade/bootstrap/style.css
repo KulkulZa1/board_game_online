@@ -66,6 +66,7 @@ html, body {
 
 #eventBanner { background: rgba(120,30,30,0.4); border: 1px solid var(--bad); color: #ffb3a0;
   border-radius: 8px; padding: 5px 12px; font-size: 0.78rem; text-align: center; flex-shrink: 0; }
+#eventBanner.good { background: rgba(40,90,45,0.35); border-color: var(--ok); color: #b8f0c0; }
 
 /* Board */
 #board { flex: 1 1 0; min-height: 340px; display: grid; grid-template-columns: 1fr 1.15fr; gap: 8px; }
@@ -231,6 +232,28 @@ html, body {
 
 /* Mute button */
 #muteBtn { font-size: 0.95rem; min-width: 36px; }
+
+/* Chronicle */
+#chronicleList { display: flex; flex-direction: column; gap: 2px; max-height: 190px; overflow-y: auto; }
+.chron-row { display: flex; gap: 7px; font-size: 0.7rem; color: var(--text); align-items: baseline;
+  padding: 2px 0; border-bottom: 1px dashed rgba(255,255,255,0.05); }
+.chron-row:last-child { border-bottom: none; }
+.chron-t { color: var(--muted); font-size: 0.62rem; min-width: 44px; text-align: right; }
+
+/* History chart */
+#histChart { width: 100%; display: block; background: #0a120d; border-radius: 6px; }
+.hist-legend { font-weight: 400 !important; }
+.hist-legend i.lg { display: inline-block; width: 9px; height: 3px; border-radius: 2px; margin: 0 3px 2px 8px; vertical-align: middle; }
+.lg-pop { background: var(--accent); }
+.lg-food { background: var(--accent2); }
+
+/* Start overlay extras */
+.start-btns { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+#continueBtn { background: var(--panel2); color: var(--accent); border: 1px solid var(--accent);
+  border-radius: 10px; padding: 11px 20px; font-size: 0.92rem; font-weight: 700; cursor: pointer; }
+#continueBtn:active { transform: scale(0.96); }
+.best-line { font-size: 0.74rem; color: var(--accent2); }
+.stars { color: var(--accent2); letter-spacing: 0.15em; font-size: 1rem; }
 
 .hidden { display: none !important; }
 

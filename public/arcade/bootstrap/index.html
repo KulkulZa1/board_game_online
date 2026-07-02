@@ -57,6 +57,10 @@
         <div class="panel" id="healthPanel">
           <h3>📊 문명 건강</h3>
           <div class="stat">
+            <div class="stat-label"><span>추이</span><span class="hist-legend"><i class="lg lg-pop"></i>인구 <i class="lg lg-food"></i>식량</span></div>
+            <canvas id="histChart" height="48"></canvas>
+          </div>
+          <div class="stat">
             <div class="stat-label"><span>인구 구성</span><span id="popLabel">비숙련 0 · 숙련 0</span></div>
             <div class="stat-track pyramid" id="popPyramid"><div id="popBarU"></div><div id="popBarS"></div></div>
           </div>
@@ -97,6 +101,11 @@
         <div class="panel" id="bottleneckPanel">
           <h3>🧭 병목 분석기 <span class="hint">가장 낮은 가동률을 넓히세요</span></h3>
           <div id="bottleneckList"></div>
+        </div>
+
+        <div class="panel" id="chroniclePanel">
+          <h3>📜 연대기 <span class="hint">문명의 역사가 기록된다</span></h3>
+          <div id="chronicleList"></div>
         </div>
       </section>
     </main>
@@ -139,7 +148,11 @@
           다음 시대는 자원을 모아서가 아니라 <b>현재 시대의 자급 루프를 안정적으로 닫았을 때</b> 열립니다.
           모든 생산자는 가장 부족한 제약만큼만 가동합니다 — <b>병목을 찾아 넓히는 것</b>이 게임입니다.</p>
         <label class="challenge-row"><input type="checkbox" id="challengeToggle"> ⚡ 도전: 가뭄·홍수·혹한 빈발</label>
-        <button id="startBtn">문명 시작</button>
+        <div id="bestLine" class="best-line hidden"></div>
+        <div class="start-btns">
+          <button id="startBtn">문명 시작</button>
+          <button id="continueBtn" class="hidden">이어하기</button>
+        </div>
       </div>
     </div>
 
@@ -163,8 +176,8 @@
   </div>
 
   <script src="/js/admob.js?v=1.0"></script>
-  <script src="sim.js?v=2.1"></script>
-  <script src="game.js?v=2.1"></script>
+  <script src="sim.js?v=2.2"></script>
+  <script src="game.js?v=2.2"></script>
   <script src="/js/sw-update.js?v=20260520b"></script>
 </body>
 </html>

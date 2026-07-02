@@ -269,6 +269,20 @@
       precond: (s) => s.t > 40,
       p: (s) => 0.012 * (s.challenge ? 2.4 : 1),
     },
+    harvest: {
+      name: '풍년', icon: '🌾',
+      desc: '온화한 계절 — 작물 수확이 크게 늘어납니다.',
+      duration: 20, cooldown: 90, positive: true,
+      precond: (s) => s.t > 60 && (s.counts.crop_field || 0) >= 2,
+      p: () => 0.010,   // 도전 모드에서도 행운은 늘지 않는다
+    },
+    plague: {
+      name: '역병', icon: '☠️',
+      desc: '과밀한 정착지에 역병이 퍼집니다 — 주거 여유를 확보하면 피해가 줄어듭니다.',
+      duration: 22, cooldown: 140,
+      precond: (s) => s.t > 100 && s.totalPop() >= 50 && (s.housingCap() - s.totalPop()) < -2,
+      p: (s) => 0.025 * (s.challenge ? 1.5 : 1),
+    },
   };
 
   // ── 시뮬레이션 코어 ─────────────────────────────────────────────────────
@@ -378,6 +392,8 @@
         const crops = Math.max(1, this.cropCount() + (this.counts.pasture || 0));
         const irr = clamp(canals / crops, 0, 1) * this.cfg.irrigationBonus;
         m *= (1 + irr + this.mods.farmBonus);
+        // 풍년: 작물 출력 대폭 증가(양의 사건)
+        if (this.activeEvents.harvest) m *= 1.45;
         // 가뭄: 작물 출력 급감(관개/돌파로 완화)
         if (this.activeEvents.drought) m *= (this.mods.droughtResist || canals > 0) ? 0.78 : 0.5;
       }
@@ -492,6 +508,12 @@
         surplusRatio = -deficitFrac;
       }
       this.foodSurplusRatio = lerp(this.foodSurplusRatio, surplusRatio, 0.2);
+
+      // 역병 — 과밀이 부른 재난. 주거 여유를 회복하면 피해가 절반으로 준다.
+      if (this.activeEvents.plague) {
+        const guard = (this.housingCap() - this.totalPop()) >= 0 ? 0.5 : 1.0;
+        this._removePop(0.0035 * this.totalPop() * guard * dt);
+      }
 
       // 5) 숙련 전환(식량 흑자 시)
       if (this.foodSurplusRatio >= 0) {

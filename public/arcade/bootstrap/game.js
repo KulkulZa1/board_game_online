@@ -31,6 +31,7 @@
   // ── 절차적 사운드 (Web Audio API) ──────────────────────────────────────
   const Sound = (() => {
     let ctx, muted = false;
+    try { muted = localStorage.getItem('civ_muted') === '1'; } catch (e) {}
     const ac = () => { if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)(); return ctx; };
     function tone(freq, type, dur, vol, delay) {
       if (muted) return;
@@ -45,7 +46,11 @@
       } catch (e) {}
     }
     return {
-      toggle: () => { muted = !muted; return muted; },
+      toggle: () => {
+        muted = !muted;
+        try { localStorage.setItem('civ_muted', muted ? '1' : '0'); } catch (e) {}
+        return muted;
+      },
       isMuted: () => muted,
       resume: () => { try { const c = ac(); if (c.state === 'suspended') c.resume(); } catch (e) {} },
       build:        () => { tone(520, 'sine', 0.12, 0.10); tone(780, 'sine', 0.08, 0.06, 0.07); },
@@ -53,6 +58,7 @@
       eraAdvance:   () => [523, 659, 784, 1047].forEach((f, i) => tone(f, 'sine', 0.55, 0.15, i * 0.12)),
       breakthrough: () => [880, 1108, 1320, 1760].forEach((f, i) => tone(f, 'triangle', 0.4, 0.12, i * 0.08)),
       event:        () => { tone(300, 'sawtooth', 0.3, 0.12); tone(200, 'sawtooth', 0.35, 0.10, 0.18); },
+      good:         () => { tone(660, 'sine', 0.25, 0.10); tone(990, 'sine', 0.3, 0.08, 0.12); },
       victory:      () => [523, 659, 784, 1047, 1319].forEach((f, i) => tone(f, 'sine', 0.8, 0.18, i * 0.14)),
       collapse:     () => [350, 250, 140, 80].forEach((f, i) => tone(f, 'sawtooth', 0.5, 0.14, i * 0.18)),
     };
@@ -89,24 +95,98 @@
 
   const TICKS_PER_SEC = 2;
   const TUT_KEY = 'civ_tut_done';
+  const SAVE_KEY = 'civ_save_v2';
+  const BEST_KEY = 'civ_best_v1';
+  const MILES = [25, 50, 75, 100, 125];   // 연대기 인구 이정표
   let sim, state, speed, paused, elapsedAcc, lastTime, challenge, lastEra, toastTimer;
   let tutStep = 0;
   let prevEventKeys = new Set();
+  let hist = [];            // {p:인구, f:식량} 추이 (2틱마다)
+  let chron = [];           // 연대기 항목 {t, icon, text}
+  let chronDirty = true;
+  let mileIdx = 0;
+  let lastSaveT = 0;
 
   function tutSeen() { try { return localStorage.getItem(TUT_KEY) === '1'; } catch (e) { return false; } }
   function markTutSeen() { try { localStorage.setItem(TUT_KEY, '1'); } catch (e) {} }
 
   const $ = (id) => document.getElementById(id);
 
+  // ── 저장 / 이어하기 ──────────────────────────────────────────────────────
+  function serialize() {
+    return {
+      v: 2, challenge,
+      hist: hist.slice(-400), chron: chron.slice(0, 40), mileIdx,
+      s: {
+        t: sim.t, pop: { u: sim.pop.unskilled, s: sim.pop.skilled },
+        fertility: sim.fertility, copperDeposit: sim.copperDeposit,
+        stock: sim.stock, counts: sim.counts, eraIndex: sim.eraIndex,
+        sustain: sim.curGate ? sim.curGate.sustain : 0,
+        fsr: sim.foodSurplusRatio, bronzeRate: sim.bronzeRate,
+        writing: sim.writing, eco: sim.ecologicalKnowledge,
+        bts: Array.from(sim.breakthroughs), droughtCount: sim.droughtCount,
+        activeEvents: sim.activeEvents, eventCooldown: sim.eventCooldown,
+        mods: sim.mods,
+      },
+    };
+  }
+  function applySave(d) {
+    const s = d.s;
+    sim.t = s.t;
+    sim.pop.unskilled = s.pop.u; sim.pop.skilled = s.pop.s;
+    sim.fertility = s.fertility; sim.copperDeposit = s.copperDeposit;
+    sim.stock = Object.assign({}, sim.stock, s.stock);
+    sim.counts = Object.assign({}, sim.counts, s.counts);
+    sim.eraIndex = s.eraIndex;
+    sim.curGate = sim._mkGate(s.eraIndex);
+    if (sim.curGate) sim.curGate.sustain = s.sustain || 0;
+    sim.foodSurplusRatio = s.fsr || 0; sim.bronzeRate = s.bronzeRate || 0;
+    sim.writing = s.writing || 0; sim.ecologicalKnowledge = s.eco || 0;
+    sim.droughtCount = s.droughtCount || 0;
+    sim.activeEvents = s.activeEvents || {}; sim.eventCooldown = s.eventCooldown || {};
+    sim.mods = Object.assign(sim._freshMods(), s.mods);
+    sim.breakthroughs = new Set(s.bts || []);
+    hist = Array.isArray(d.hist) ? d.hist : [];
+    chron = Array.isArray(d.chron) ? d.chron : [];
+    mileIdx = d.mileIdx || 0;
+  }
+  function saveGame() {
+    if (!sim || state !== 'playing') return;
+    try { localStorage.setItem(SAVE_KEY, JSON.stringify(serialize())); } catch (e) {}
+  }
+  function loadSaveData() {
+    try {
+      const d = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null');
+      if (!d || d.v !== 2 || !d.s || !d.s.counts || !d.s.pop) return null;
+      for (const k in d.s.counts) if (!BLD[k]) return null;   // 건물 세트 불일치 → 무효
+      return d;
+    } catch (e) { return null; }
+  }
+  function clearSave() { try { localStorage.removeItem(SAVE_KEY); } catch (e) {} }
+
+  // ── 최고 기록(★) ─────────────────────────────────────────────────────────
+  function loadBest() { try { return JSON.parse(localStorage.getItem(BEST_KEY) || 'null'); } catch (e) { return null; } }
+  function starsFor(t) { return t <= 560 ? 3 : (t <= 850 ? 2 : 1); }
+  function starStr(n) { return '★★★'.slice(0, n) + '☆☆☆'.slice(0, 3 - n); }
+
   // ── 시작/리셋 ────────────────────────────────────────────────────────────
-  function reset() {
+  // restore: loadSaveData()가 돌려준 세이브 객체(없으면 새 게임)
+  function reset(restore) {
+    const valid = restore && restore.s;
+    if (valid) challenge = !!restore.challenge;
     const sc = clone(SCENARIO);
     if (challenge) sc.config = Object.assign({}, sc.config, { challenge: true });
     sim = new Sim(RES, BLD, sc);
-    if (challenge) sim.stock.food = 70;
+    if (challenge && !valid) sim.stock.food = 70;
+    hist = []; chron = []; chronDirty = true; mileIdx = 0;
+    if (valid) { try { applySave(restore); } catch (e) { /* 손상 세이브 → 새 게임으로 진행 */ } }
     speed = 1; paused = false; elapsedAcc = 0; lastTime = performance.now();
-    state = 'playing'; lastEra = 0; prevEventKeys = new Set();
-    tutStep = tutSeen() ? TUT.length - 1 : 0;
+    state = 'playing'; lastEra = sim.eraIndex;
+    prevEventKeys = new Set(Object.keys(sim.activeEvents));
+    lastSaveT = sim.t;
+    tutStep = (tutSeen() || sim.eraIndex > 0) ? TUT.length - 1 : 0;
+    if (valid) addChron('📂', '기록에서 문명을 이어간다');
+    else { clearSave(); addChron('🌱', '작은 무리가 정착을 시작했다'); }
     buildBuildPanel();
     buildResourceBar();
     setSpeedButtons();
@@ -224,22 +304,49 @@
         checkEnd();
         if (state !== 'playing') break;
       }
-      if (steps > 0) render();
+      if (steps > 0) {
+        render();
+        // 자동 저장(25틱마다) — 탭을 닫아도 이어서 할 수 있다
+        if (sim.t - lastSaveT >= 25 && state === 'playing') { lastSaveT = sim.t; saveGame(); }
+      }
     }
     requestAnimationFrame(loop);
   }
 
   function handleSimEvents() {
-    if (sim.eraIndex !== lastEra) { lastEra = sim.eraIndex; buildBuildPanel(); flashEraAdvance(); }
+    const pop = sim.totalPop();
+    if (sim.eraIndex !== lastEra) {
+      lastEra = sim.eraIndex; buildBuildPanel(); flashEraAdvance();
+      addChron('🏛️', ERA_NAMES[sim.eraLetter()] + ' 진입 — ' + sim.eraSub());
+      lastSaveT = sim.t; saveGame();   // 시대 진입은 잃기 아까운 순간 — 즉시 저장
+    }
     if (sim.pendingBreakthrough) {
       const bt = sim.pendingBreakthrough; sim.pendingBreakthrough = null;
       Sound.breakthrough();
       showToast(bt.icon, bt.name + ' 발견!', bt.narrative);
+      addChron(bt.icon, bt.name + ' 돌파 발견');
     }
-    // 새 사건 발생 시 경고음
+    // 사건 시작/종료 감지 → 연대기 + 사운드(양의 사건은 밝은 차임)
+    const E = window.Bootstrap.EVENTS;
     const curKeys = new Set(Object.keys(sim.activeEvents));
-    for (const k of curKeys) if (!prevEventKeys.has(k)) { Sound.event(); break; }
+    for (const k of curKeys) if (!prevEventKeys.has(k)) {
+      if (E[k] && E[k].positive) Sound.good(); else Sound.event();
+      addChron(E[k] ? E[k].icon : '⚠', (E[k] ? E[k].name : k) + ' 시작');
+    }
+    for (const k of prevEventKeys) if (!curKeys.has(k)) {
+      addChron(E[k] ? E[k].icon : '·', (E[k] ? E[k].name : k) + ' 종료');
+    }
     prevEventKeys = curKeys;
+    // 인구 이정표
+    while (mileIdx < MILES.length && pop >= MILES[mileIdx]) {
+      addChron('👥', '인구 ' + MILES[mileIdx] + ' 달성');
+      mileIdx++;
+    }
+    // 추이 기록(2틱마다, 최근 2400틱 창)
+    if (sim.t % 2 === 0) {
+      hist.push({ p: pop, f: sim.stock.food || 0 });
+      if (hist.length > 1200) hist.shift();
+    }
   }
 
   function checkEnd() {
@@ -266,7 +373,48 @@
     renderHealth(m, pop);
     renderBreakthroughs(m);
     renderBottlenecks();
+    renderChronicle();
+    drawHist();
     advanceTutorial();
+  }
+
+  // ── 연대기 ───────────────────────────────────────────────────────────────
+  function addChron(icon, text) {
+    chron.unshift({ t: sim ? sim.t : 0, icon, text });
+    if (chron.length > 80) chron.pop();
+    chronDirty = true;
+  }
+  function renderChronicle() {
+    if (!chronDirty) return;
+    chronDirty = false;
+    const wrap = $('chronicleList'); if (!wrap) return;
+    wrap.innerHTML = chron.map((c) =>
+      `<div class="chron-row"><span class="chron-t">${c.t}틱</span><span>${c.icon}</span><span>${c.text}</span></div>`
+    ).join('');
+  }
+
+  // ── 추이 그래프(인구·식량) ────────────────────────────────────────────────
+  function drawHist() {
+    const cv = $('histChart'); if (!cv || !cv.getContext) return;
+    const c2 = cv.getContext('2d'); if (!c2) return;
+    const w = cv.clientWidth || 280;
+    if (cv.width !== w) cv.width = w;
+    const h = cv.height;
+    c2.clearRect(0, 0, w, h);
+    if (hist.length < 2) return;
+    let maxP = 20, maxF = 50;
+    for (const d of hist) { if (d.p > maxP) maxP = d.p; if (d.f > maxF) maxF = d.f; }
+    const line = (key, max, color, width) => {
+      c2.beginPath();
+      for (let i = 0; i < hist.length; i++) {
+        const x = i / (hist.length - 1) * (w - 2) + 1;
+        const y = h - 2 - (hist[i][key] / max) * (h - 6);
+        if (i) c2.lineTo(x, y); else c2.moveTo(x, y);
+      }
+      c2.strokeStyle = color; c2.lineWidth = width; c2.stroke();
+    };
+    line('f', maxF, 'rgba(255,209,102,0.5)', 1);
+    line('p', maxP, '#6fcf97', 1.5);
   }
 
   function renderEra() {
@@ -330,7 +478,9 @@
     if (!active.length) { banner.classList.add('hidden'); return; }
     const E = window.Bootstrap.EVENTS;
     const parts = active.map((n) => `${E[n].icon} ${E[n].name} (${Math.ceil(sim.activeEvents[n].remaining)}틱)`);
-    banner.textContent = '⚠ ' + parts.join(' · ') + ' — ' + active.map((n) => E[n].desc).join(' ');
+    const anyBad = active.some((n) => !(E[n] && E[n].positive));
+    banner.classList.toggle('good', !anyBad);
+    banner.textContent = (anyBad ? '⚠ ' : '☀ ') + parts.join(' · ') + ' — ' + active.map((n) => E[n].desc).join(' ');
     banner.classList.remove('hidden');
   }
 
@@ -630,11 +780,22 @@
 
   function showOverlay(victory) {
     if (victory) Sound.victory(); else Sound.collapse();
+    clearSave();   // 종료된 게임의 세이브는 폐기
     const ov = $('overlay');
     $('ovIcon').textContent = victory ? '🏛️' : '💀';
     $('ovTitle').textContent = victory ? '야금술 시대 도달!' : '문명 붕괴';
+    let recordLine = '';
+    if (victory) {
+      const st = starsFor(sim.t);
+      const best = loadBest() || { t: Infinity, wins: 0, stars: 0 };
+      const isRecord = sim.t < best.t;
+      const nb = { t: Math.min(best.t, sim.t), wins: (best.wins || 0) + 1, stars: Math.max(best.stars || 0, st) };
+      try { localStorage.setItem(BEST_KEY, JSON.stringify(nb)); } catch (e) {}
+      recordLine = `<br><span class="stars">${starStr(st)}</span> ` +
+        (isRecord ? '<b>신기록!</b>' : `최고 기록 <b>${nb.t}틱</b>`) + ` · 통산 승리 <b>${nb.wins}회</b>`;
+    }
     $('ovMsg').innerHTML = victory
-      ? `네 개의 시대 게이트를 모두 지속 통과했습니다.<br><b>${sim.t}틱</b> 만에 채집에서 금속으로 — 문명의 자급 루프를 차례로 닫았습니다.<br>최종 인구 <b>${fmt(sim.totalPop(), 0)}</b> · 문명 지수 <b>${fmt(civIndex(sim.metrics()), 0)}</b> · 돌파 <b>${sim.breakthroughs.size}/3</b>`
+      ? `네 개의 시대 게이트를 모두 지속 통과했습니다.<br><b>${sim.t}틱</b> 만에 채집에서 금속으로 — 문명의 자급 루프를 차례로 닫았습니다.<br>최종 인구 <b>${fmt(sim.totalPop(), 0)}</b> · 문명 지수 <b>${fmt(civIndex(sim.metrics()), 0)}</b> · 돌파 <b>${sim.breakthroughs.size}/3</b>${recordLine}`
       : `인구가 0에 도달했습니다.<br>식량→인구→노동 사슬이 무너지면 모든 생산이 멈춥니다.<br>식량 흑자와 비축, 토양 비옥도를 먼저 안정시키세요.`;
     $('ovBtn').textContent = '다시 시작';
     ov.classList.add('visible');
@@ -654,23 +815,57 @@
       btn.addEventListener('click', () => { speed = +btn.dataset.speed; paused = false; lastTime = performance.now(); setSpeedButtons(); });
     });
     $('pauseBtn').addEventListener('click', togglePause);
-    $('restartBtn').addEventListener('click', reset);
-    $('ovBtn').addEventListener('click', reset);
+    $('restartBtn').addEventListener('click', () => reset());
+    $('ovBtn').addEventListener('click', () => reset());
     $('helpBtn').addEventListener('click', () => $('helpModal').classList.toggle('hidden'));
     $('helpClose').addEventListener('click', () => $('helpModal').classList.add('hidden'));
     $('startBtn').addEventListener('click', () => { Sound.resume(); challenge = $('challengeToggle').checked; reset(); });
     const muteBtn = $('muteBtn');
-    if (muteBtn) muteBtn.addEventListener('click', () => {
-      const m = Sound.toggle();
-      muteBtn.textContent = m ? '🔇' : '🔊';
-      muteBtn.title = m ? '소리 켜기' : '음소거';
-    });
+    if (muteBtn) {
+      if (Sound.isMuted()) { muteBtn.textContent = '🔇'; muteBtn.title = '소리 켜기'; }
+      muteBtn.addEventListener('click', () => {
+        const m = Sound.toggle();
+        muteBtn.textContent = m ? '🔇' : '🔊';
+        muteBtn.title = m ? '소리 켜기' : '음소거';
+      });
+    }
     const tutDismiss = $('tutDismiss');
     if (tutDismiss) tutDismiss.addEventListener('click', () => {
       tutStep = TUT.length - 1;
       markTutSeen();
       $('tutBox').classList.add('hidden');
     });
+
+    // 시작 화면 — 최고 기록 + 이어하기
+    const best = loadBest();
+    if (best && best.wins) {
+      const bl = $('bestLine');
+      if (bl) { bl.textContent = `🏆 최고 기록 ${starStr(best.stars || 1)} ${best.t}틱 · 통산 승리 ${best.wins}회`; bl.classList.remove('hidden'); }
+    }
+    const sv = loadSaveData();
+    const contBtn = $('continueBtn');
+    if (sv && contBtn) {
+      contBtn.textContent = `📂 이어하기 — 시대 ${ERA_LETTERS[sv.s.eraIndex] || 'A'} · ${sv.s.t}틱`;
+      contBtn.classList.remove('hidden');
+      contBtn.addEventListener('click', () => { Sound.resume(); reset(loadSaveData()); });
+    }
+
+    // 키보드 단축키: Space 일시정지 · 1–4 배속 · H/? 도움말
+    document.addEventListener('keydown', (e) => {
+      if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+      if (e.code === 'Space') {
+        if (state === 'playing') { e.preventDefault(); togglePause(); }
+      } else if (e.key >= '1' && e.key <= '4') {
+        if (state === 'playing') { speed = [1, 2, 4, 8][+e.key - 1]; paused = false; lastTime = performance.now(); setSpeedButtons(); }
+      } else if (e.key === '?' || e.key === 'h' || e.key === 'H') {
+        $('helpModal').classList.toggle('hidden');
+      }
+    });
+
+    // 탭 이탈/닫기 직전 저장
+    document.addEventListener('visibilitychange', () => { if (document.hidden) saveGame(); });
+    window.addEventListener('pagehide', saveGame);
+
     bindBuildPanel();
     fillHelp();
     requestAnimationFrame(loop);
@@ -701,9 +896,14 @@
       <b>토기·관개·문자</b>는 구매가 아니라 조건이 무르익으면 자동으로 <b>발견</b>됩니다.
       돌파 패널의 <b>진행률(%)</b>이 각 발견까지 얼마나 왔는지 보여줍니다.
       <h4>사건 ⚠</h4>
-      가뭄(작물 급감)·홍수(토양·식량 피해)·혹한(소비 증가). 비축과 흑자 여유가 충분하면 견딥니다.
+      가뭄(작물 급감)·홍수(토양·식량 피해)·혹한(소비 증가)·<b>역병(과밀 시 인구 감소 — 주거 여유로 예방)</b>.
+      가끔 <b>풍년 🌾</b>이 찾아와 수확이 크게 늘기도 합니다. 비축과 흑자 여유가 충분하면 견딥니다.
       <h4>진단 도구</h4>
-      <b>병목 분석기</b>가 가동률·구속 사유·개선 조언을 실시간으로 보여줍니다. 빨간 항목의 조언을 따르세요.`;
+      <b>병목 분석기</b>가 가동률·구속 사유·개선 조언을 실시간으로, <b>연대기 📜</b>가 문명의 역사를,
+      <b>추이 그래프</b>가 인구·식량의 흐름을 보여줍니다.
+      <h4>저장·단축키</h4>
+      진행은 <b>25틱마다 자동 저장</b>되어 다음 방문 때 이어할 수 있습니다(승리·붕괴 시 초기화).
+      <b>Space</b> 일시정지 · <b>1–4</b> 배속 · <b>H</b> 도움말. 승리 시 소요 틱에 따라 ★ 등급과 최고 기록이 남습니다.`;
   }
 
   init();
