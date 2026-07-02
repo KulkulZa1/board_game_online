@@ -848,6 +848,7 @@
     screenShake = Math.min(screenShake + 0.65, 0.9);
     hitStop = Math.max(hitStop, 0.16);   // 진화 순간 극적인 정지
     evolveFlash = 0.55;                  // 금빛 섬광 (정지 동안 유지 후 페이드)
+    vibrate([25, 40, 25, 40, 50]);       // 진화 — 가장 굵직한 순간
     floatTexts.push({
       text: `EVOLVED: ${evolved.icon} ${evolved.name}`,
       life: 3.0,
@@ -2641,63 +2642,110 @@
     saveRunSnapshot('beforeunload');
   });
 
-  // 조이스틱
+  // ── 플로팅 조이스틱 — 캔버스 아무 곳이나 터치하면 그 자리에 나타난다 ──
+  //    터치 identifier로 추적해 두 번째 손가락(액션 버튼)이 이동을 끊지 않는다.
+  //    엄지가 반경을 크게 벗어나면 베이스가 따라와 방향 전환이 끊기지 않는다(follow).
   let joyActive = false, joyDx = 0, joyDy = 0;
-  const joyZone  = document.getElementById('joystickZone');
+  let joyTouchId = null, joyCx = 0, joyCy = 0;
   const joyBase  = document.getElementById('joystickBase');
   const joyKnob  = document.getElementById('joystickKnob');
-  const JOY_R    = 30;
+  const JOY_R    = 44;
+  const JOY_FOLLOW = JOY_R * 1.5;   // 이 거리를 넘으면 베이스가 손가락을 따라온다
 
-  function joyPos(e) {
-    const t = e.touches[0];
-    const r = joyBase.getBoundingClientRect();
-    const cx = r.left + r.width  / 2;
-    const cy = r.top  + r.height / 2;
-    const dx = t.clientX - cx;
-    const dy = t.clientY - cy;
-    const dist = Math.sqrt(dx * dx + dy * dy);
-    const clamp = Math.min(dist, JOY_R);
-    const angle = Math.atan2(dy, dx);
-    joyDx = Math.cos(angle) * (clamp / JOY_R);
-    joyDy = Math.sin(angle) * (clamp / JOY_R);
-    joyKnob.style.transform = `translate(${Math.cos(angle)*clamp}px, ${Math.sin(angle)*clamp}px)`;
+  function joyPlaceBase() {
+    const wr = wrapper.getBoundingClientRect();
+    joyBase.style.left = (joyCx - wr.left) + 'px';
+    joyBase.style.top  = (joyCy - wr.top) + 'px';
   }
-
-  joyZone.addEventListener('touchstart', (e) => {
-    e.preventDefault();
+  function joyStart(t) {
+    joyTouchId = t.identifier;
     joyActive = true;
-    joyPos(e);
-  }, { passive: false });
-
-  joyZone.addEventListener('touchmove', (e) => {
-    e.preventDefault();
-    if (joyActive) joyPos(e);
-  }, { passive: false });
-
-  joyZone.addEventListener('touchend', (e) => {
-    e.preventDefault();
-    joyActive = false;
+    joyCx = t.clientX; joyCy = t.clientY;
     joyDx = joyDy = 0;
     joyKnob.style.transform = '';
-  }, { passive: false });
+    joyPlaceBase();
+    joyBase.classList.add('active');
+  }
+  function joyMove(t) {
+    let dx = t.clientX - joyCx, dy = t.clientY - joyCy;
+    let d = Math.hypot(dx, dy);
+    const a = Math.atan2(dy, dx);
+    if (d > JOY_FOLLOW) {            // 베이스 끌려오기
+      const ex = d - JOY_FOLLOW;
+      joyCx += Math.cos(a) * ex; joyCy += Math.sin(a) * ex;
+      d = JOY_FOLLOW;
+      joyPlaceBase();
+    }
+    const c = Math.min(d, JOY_R);
+    joyDx = Math.cos(a) * (c / JOY_R);
+    joyDy = Math.sin(a) * (c / JOY_R);
+    joyKnob.style.transform = `translate(${Math.cos(a) * c}px, ${Math.sin(a) * c}px)`;
+  }
+  function joyEnd() {
+    joyActive = false; joyTouchId = null;
+    joyDx = joyDy = 0;
+    joyKnob.style.transform = '';
+    joyBase.classList.remove('active');
+  }
 
-  // 모바일: 오버드라이브 게이지 바 탭으로 발동 지원
   canvas.addEventListener('touchstart', (e) => {
-    if (overdriveCharge < 100 || overdriveActive > 0 || state !== 'playing') return;
-    const t = e.touches[0];
-    const r = canvas.getBoundingClientRect();
-    const cx = t.clientX - r.left;
-    const cy = t.clientY - r.top;
-    const W  = canvas.width, H = canvas.height;
-    const scaleX = W / r.width, scaleY = H / r.height;
-    const gx = cx * scaleX, gy = cy * scaleY;
-    const odW = Math.min(180, W * 0.36), odH = 11;
-    const odX = W / 2 - odW / 2, odY = H - 58;
-    if (gx >= odX - 10 && gx <= odX + odW + 10 && gy >= odY - 16 && gy <= odY + odH + 6) {
-      activateOverdrive();
-      e.preventDefault();
+    for (const t of e.changedTouches) {
+      if (joyTouchId === null) { e.preventDefault(); joyStart(t); break; }
     }
   }, { passive: false });
+  canvas.addEventListener('touchmove', (e) => {
+    if (joyTouchId === null) return;
+    for (const t of e.changedTouches) {
+      if (t.identifier === joyTouchId) { e.preventDefault(); joyMove(t); break; }
+    }
+  }, { passive: false });
+  const joyEndHandler = (e) => {
+    if (joyTouchId === null) return;
+    for (const t of e.changedTouches) {
+      if (t.identifier === joyTouchId) { e.preventDefault(); joyEnd(); break; }
+    }
+  };
+  canvas.addEventListener('touchend', joyEndHandler, { passive: false });
+  canvas.addEventListener('touchcancel', joyEndHandler, { passive: false });
+
+  // ── 모바일 액션 버튼 — 오버드라이브 / 타워 설치 / 타워 종류 변경 ──
+  //    버튼은 캔버스와 형제 요소라 조이스틱 터치와 충돌하지 않는다.
+  function bindMobBtn(id, fn) {
+    const b = document.getElementById(id);
+    if (!b) return null;
+    b.addEventListener('touchstart', (e) => { e.preventDefault(); e.stopPropagation(); fn(); }, { passive: false });
+    b.addEventListener('click', (e) => { e.preventDefault(); fn(); });
+    return b;
+  }
+  bindMobBtn('odBtn', () => activateOverdrive());
+  bindMobBtn('mobTowerBtn', () => placeHybridTower());
+  bindMobBtn('mobTowerCycle', () => cycleHybridTowerType());
+
+  // 모바일 버튼 상태 갱신 — HUD 주기로 호출
+  function updateMobileButtons() {
+    const od = document.getElementById('odBtn');
+    if (od) {
+      const label = document.getElementById('odBtnLabel');
+      const active = overdriveActive > 0;
+      const ready = overdriveCharge >= 100 && !active;
+      od.classList.toggle('ready', ready);
+      od.classList.toggle('active-od', active);
+      if (label) label.textContent = active ? '⚡' : (ready ? 'OD!' : Math.floor(overdriveCharge) + '%');
+    }
+    const tw = document.getElementById('mobTowerBtn');
+    if (tw && player) {
+      const def = currentHybridTowerType();
+      const charges = player.towerCharges || 0;
+      tw.textContent = `${def.icon}${charges}`;
+      tw.disabled = charges <= 0;
+      tw.style.borderColor = def.color;
+    }
+  }
+
+  // ── 햅틱(진동) — 지원 기기에서만, 굵직한 순간에 짧게 ──
+  function vibrate(pattern) {
+    try { if (navigator.vibrate) navigator.vibrate(pattern); } catch (e) {}
+  }
 
   function getMoveDir() {
     let dx = 0, dy = 0;
@@ -2942,6 +2990,7 @@
     screenShake = Math.min(screenShake + 0.45, 0.7);
     floatTexts.push({ text: '⚡ OVERDRIVE!', life: 2.2, maxLife: 2.2, screenSpace: true, color: '#f1c40f', size: 28 });
     SFX.boss();
+    vibrate(35);
   }
 
   function spawnSandboxEnemy(typeKey) {
@@ -3931,6 +3980,7 @@
     const daily = dailyChallengeEnabled ? dailyChallenge() : null;
     bossActive  = true;
     bossWarning = 2.5;
+    vibrate([40, 60, 40]);
     const bossNum = Math.floor(elapsed / (runDifficulty.bossInterval || BOSS_INTERVAL));
     // 보스 HP는 경과 시간에 비례해 스케일 — 해당 시점 플레이어 DPS로 약 15~25초 교전이 되도록 설계
     //   1번째(5분)≈22.5k, 2번째(10분)≈52k, 3번째(15분)≈93.5k
@@ -3983,6 +4033,7 @@
   function showLevelUp() {
     state = 'levelup';
     SFX.levelup();
+    vibrate(15);
     document.getElementById('lvDisp').textContent = player.level;
     setText('levelTitle', '⬆ 레벨 업!');
     const builder = () => buildChoices();
@@ -4291,6 +4342,7 @@
 
   // ── HUD 업데이트 ────────────────────────────────────────────────
   function updateHUD() {
+    updateMobileButtons();
     const hpRatio = getPlayerHpRatio();
     const hpPct = hpRatio * 100;
     player.lowestHpPct = Math.min(player.lowestHpPct ?? 1, hpRatio);
@@ -6466,6 +6518,7 @@
   // ── 게임 종료 ───────────────────────────────────────────────────
   function endGame(result) {
     state = result;
+    vibrate(result === 'win' ? [30, 50, 30, 50, 80] : 120);
     clearRunSnapshot();
     cancelAnimationFrame(frameId);
     const reward = awardRunRewards(result);

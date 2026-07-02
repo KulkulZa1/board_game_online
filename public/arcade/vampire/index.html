@@ -2,10 +2,10 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>뱀파이어 서바이버 — 보드게임 온라인</title>
   <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=4.5">
 </head>
 <body>
   <div id="container">
@@ -22,6 +22,18 @@
 
     <div id="gameWrapper">
       <canvas id="c" tabindex="0"></canvas>
+
+      <!-- 플로팅 조이스틱 — 캔버스 아무 곳이나 터치하면 그 자리에 나타난다 -->
+      <div id="joystickBase"><div id="joystickKnob"></div></div>
+
+      <!-- 모바일 액션 버튼(터치 기기 전용) — 엄지가 닿는 우하단 -->
+      <div id="mobileActions">
+        <div class="tower-cluster">
+          <button id="mobTowerCycle" class="mob-btn mob-cycle" title="타워 종류 변경 (Y)">↻</button>
+          <button id="mobTowerBtn" class="mob-btn mob-tower" title="타워 설치 (T)">🗼</button>
+        </div>
+        <button id="odBtn" class="mob-btn mob-od" title="오버드라이브 (Q)"><span id="odBtnLabel">0%</span></button>
+      </div>
 
       <!-- 레벨업 / 아이템 선택 오버레이 -->
       <div id="levelOverlay" style="display:none;">
@@ -87,13 +99,6 @@
 
     <!-- 무기 슬롯 -->
     <div id="weaponSlots"></div>
-
-    <!-- 모바일 조이스틱 -->
-    <div id="joystickZone">
-      <div id="joystickBase">
-        <div id="joystickKnob"></div>
-      </div>
-    </div>
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
@@ -106,7 +111,7 @@
     }
   </script>
   <script src="vps-equipment.js?v=1.5"></script>
-  <script src="game.js?v=4.4"></script>
+  <script src="game.js?v=4.5"></script>
   <script src="/js/sw-update.js?v=20260607b"></script>
 </body>
 </html>
