@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>월세 잭팟 — 슬롯 로그라이트</title>
+  <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css?v=1.0">
+</head>
+<body>
+  <div id="container">
+    <header id="hdr">
+      <a href="/" class="back-btn">← 로비</a>
+      <span class="game-title">🎰 월세 잭팟</span>
+      <div id="hdrStats">
+        <span title="최고 완납 단계">🏆 <strong id="bestDisp">0</strong></span>
+        <button id="deckBtn" class="hdr-btn" title="내 덱 보기 (D)">📦 <b id="deckCount">9</b></button>
+        <button id="muteBtn" class="hdr-btn" title="음소거 (M)">🔊</button>
+      </div>
+    </header>
+
+    <!-- 월세 패널 -->
+    <div id="rentPanel">
+      <div id="rentInfo">
+        <span id="stageLabel">1단계</span>
+        <span id="rentLabel">월세 <b id="rentAmt">22</b></span>
+      </div>
+      <div id="spinDots"></div>
+      <div id="coinBox">💰 <b id="coinDisp">0</b></div>
+    </div>
+
+    <!-- 슬롯 그리드 -->
+    <div id="slotWrap">
+      <div id="slotGrid"></div>
+      <div id="flashLayer"></div>
+      <div id="stamp" class="hidden"></div>
+      <div id="fxLayer"></div>
+    </div>
+
+    <!-- 이번 스핀 지급 -->
+    <div id="payLine">&nbsp;</div>
+
+    <!-- 스핀 버튼 -->
+    <button id="spinBtn" disabled>SPIN</button>
+
+    <!-- 심볼 선택 모달 -->
+    <div id="pickModal" class="modal hidden">
+      <div class="modal-box">
+        <div id="pickTitle" class="pick-title">🎁 심볼 하나를 골라 덱에 추가</div>
+        <div id="pickCards"></div>
+        <button id="skipBtn" class="skip-btn">건너뛰고 +2 코인 <span class="key-hint">0</span></button>
+      </div>
+    </div>
+
+    <!-- 덱 뷰어 모달 -->
+    <div id="deckModal" class="modal hidden">
+      <div class="modal-box">
+        <div class="pick-title">📦 내 덱 <span id="deckModalCount"></span><button id="deckClose" class="modal-close">✕</button></div>
+        <div id="deckList"></div>
+      </div>
+    </div>
+
+    <!-- 시작 / 종료 오버레이 -->
+    <div id="overlay" class="overlay visible">
+      <div class="ov-box">
+        <div class="ov-icon" id="ovIcon">🎰</div>
+        <h2 id="ovTitle">월세 잭팟</h2>
+        <p class="ov-msg" id="ovMsg">슬롯을 돌려 코인을 벌고 <b>4스핀마다 월세</b>를 내세요.
+          스핀마다 새 심볼을 뽑아 덱을 키우고, 옆 칸끼리 <b>시너지</b>를 노리세요.
+          <b>10번 완납</b>하면 내 집 마련! 월세는 점점 오릅니다.</p>
+        <div id="bestLine" class="best-line hidden"></div>
+        <button id="startBtn">입주하기</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/admob.js?v=1.0"></script>
+  <script src="sim.js?v=1.0"></script>
+  <script src="game.js?v=1.0"></script>
+  <script src="/js/sw-update.js?v=20260520b"></script>
+</body>
+</html>
