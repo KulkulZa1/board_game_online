@@ -346,3 +346,20 @@ html, body {
   from { box-shadow: 0 4px 0 #9a6b14, 0 0 14px rgba(255,123,58,0.5); }
   to   { box-shadow: 0 4px 0 #9a6b14, 0 0 30px rgba(255,123,58,0.95); }
 }
+
+/* ── 📌 붙박이 ── */
+.cell.pinned { border-color: var(--accent); box-shadow: inset 0 0 8px rgba(179,136,255,0.25); }
+.pin-badge {
+  position: absolute; left: 2px; top: 2px; font-size: 0.62rem;
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,0.8)); pointer-events: none;
+}
+#slotGrid.pinning .cell {
+  cursor: pointer; border-color: var(--accent);
+  animation: pinTarget 0.7s ease-in-out infinite alternate;
+}
+@keyframes pinTarget {
+  from { background: var(--panel2); }
+  to   { background: rgba(179,136,255,0.16); }
+}
+.deck-item.fixed { border-color: var(--accent); background: rgba(179,136,255,0.12); }
+button.deck-item { color: var(--text); cursor: pointer; font-family: inherit; }

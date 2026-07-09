@@ -28,6 +28,16 @@
     if (el) el.textContent = '⚠ 오류가 발생했습니다: ' + (e.message || '알 수 없음');
   });
 
+  // ── 오터치 가드 — 모달/오버레이가 뜬 직후 잠깐 입력을 무시한다 ────
+  // 스핀 연타 중 선택지가 갑자기 나타나면 진행 중이던 탭이 카드에 꽂힌다.
+  // 열릴 때 armGuard() → 380ms 동안 카드/버튼 클릭 무효(키보드 선택은 즉시 허용).
+  let modalGuardUntil = 0;
+  function armGuard() { modalGuardUntil = performance.now() + (FAST ? 0 : 380); }
+  function guarded(e) {
+    if (e && e.detail === 0) return false;   // 키보드 유래 클릭(detail 0)은 통과
+    return performance.now() < modalGuardUntil;
+  }
+
   // ── 사운드 (Web Audio 절차 효과음) ───────────────────────────────
   const Sound = (() => {
     let ctx, muted = false;
@@ -124,6 +134,7 @@
     animateCoins(run.coins);
     renderMeta();
     renderEventBanner();
+    renderPins();
   }
 
   // 유물 바 + 현재 동네 칩 (요소 없으면 무시 — 구버전 HTML 안전망)
@@ -381,13 +392,15 @@
       return;
     }
     phase = 'pick';
+    armGuard();
     const list = $('movingList'); list.innerHTML = '';
     for (const d of run.deck) {
       const def = SYMBOLS[d.id];
       const b = document.createElement('button');
       b.className = `deck-item ${def.rarity} deck-remove`;
       b.innerHTML = `${run.displayIcon(d)} ${def.name}`;
-      b.addEventListener('click', () => {
+      b.addEventListener('click', (e) => {
+        if (guarded(e)) return;
         run.removeCard(d.uid);
         Sound.pick();
         $('movingModal').classList.add('hidden');
@@ -459,6 +472,7 @@
     }
     routeBonusNext = !!bonusAfter;
     phase = 'pick';
+    armGuard();
     const wrap = $('routeCards'); wrap.innerHTML = '';
     run.pendingRoutes.forEach((rt, i) => {
       const btn = document.createElement('button');
@@ -469,7 +483,8 @@
           <span class="pick-name">${rt.name} <span class="key-hint">${i + 1}</span></span>
           <span class="pick-desc">${rt.desc}</span>
         </span>`;
-      btn.addEventListener('click', () => {
+      btn.addEventListener('click', (e) => {
+        if (guarded(e)) return;
         run.chooseRoute(rt.id);
         Sound.pick();
         $('routeModal').classList.add('hidden');
@@ -491,6 +506,7 @@
       return;
     }
     phase = 'pick';
+    armGuard();
     const wrap = $('relicCards'); wrap.innerHTML = '';
     run.pendingRelics.forEach((rl, i) => {
       const btn = document.createElement('button');
@@ -501,7 +517,8 @@
           <span class="pick-name">${rl.name} <span class="key-hint">${i + 1}</span></span>
           <span class="pick-desc">✨ ${rl.good}<br>☠️ 저주: ${rl.bad}</span>
         </span>`;
-      btn.addEventListener('click', () => {
+      btn.addEventListener('click', (e) => {
+        if (guarded(e)) return;
         run.chooseRelic(rl.id);
         Sound.jackpot();
         vibrate([20, 30, 40]);
@@ -520,6 +537,7 @@
     if (run.state !== 'playing') return;
     bonusQueued = !!queueBonus;
     phase = 'pick';
+    armGuard();
     const offers = run.offers(isBonus);
     const title = $('pickTitle');
     title.textContent = isBonus ? '💜 보너스 뽑기! (잉여 완납 보상)' : '🎁 심볼 하나를 골라 덱에 추가';
@@ -537,7 +555,7 @@
             <span class="key-hint">${i + 1}</span></span>
           <span class="pick-desc">${def.desc}</span>
         </span>`;
-      btn.addEventListener('click', () => resolvePick(id));
+      btn.addEventListener('click', (e) => { if (guarded(e)) return; resolvePick(id); });
       wrap.appendChild(btn);
       if (def.rarity === 'rare') vibrate(15);
     });
@@ -555,12 +573,13 @@
     renderHUD();
     if (bonusQueued) { bonusQueued = false; setTimeout(() => showPick(true), T(180)); return; }
     phase = 'idle';
-    $('spinBtn').disabled = false;
+    setTimeout(() => { if (phase === 'idle') $('spinBtn').disabled = false; }, T(220));
   }
 
   // ── 승리 / 게임오버 ─────────────────────────────────────────────
   function showVictory() {
     phase = 'over';
+    armGuard();
     Sound.win();
     vibrate([40, 60, 40, 60, 90]);
     confetti(); confetti();
@@ -580,6 +599,7 @@
 
   function gameOver(settle) {
     phase = 'over';
+    armGuard();
     saveBest(run.stage - 1 + (run.won ? 1 : 0));
     const nearMiss = settle.shortfall <= Math.ceil(settle.rent * 0.2);
     $('ovIcon').textContent = '📦';
@@ -623,21 +643,65 @@
     $('overlay').classList.remove('visible');
     hideEl('pickModal'); hideEl('routeModal'); hideEl('relicModal');
     hideEl('movingModal'); hideEl('stamp'); hideEl('megaWin');
+    exitPinMode();
+    renderPins();
     $('spinBtn').disabled = false;
   }
 
-  // ── 덱 뷰어 ─────────────────────────────────────────────────────
+  // ── 📌 붙박이 — 심볼을 지정 칸에 고정해 인접 시너지를 설계한다 ─────
+  let pinMode = null;   // 배치 대기 중인 심볼 uid
+  function renderPins() {
+    document.querySelectorAll('.pin-badge').forEach((b) => b.remove());
+    document.querySelectorAll('.cell.pinned').forEach((c) => c.classList.remove('pinned'));
+    if (!run) return;
+    for (const f of run.fixtures) {
+      const el = cellEl(f.cell); if (!el) continue;
+      el.classList.add('pinned');
+      const b = document.createElement('span');
+      b.className = 'pin-badge'; b.textContent = '📌';
+      el.appendChild(b);
+    }
+  }
+  function enterPinMode(uid) {
+    pinMode = uid;
+    const m = $('deckModal'); if (m) m.classList.add('hidden');
+    const g = $('slotGrid'); if (g) g.classList.add('pinning');
+    setText('payLine', '📌 고정할 칸을 탭하세요 (빈 칸 아무데나 · ESC 취소)');
+  }
+  function exitPinMode() {
+    pinMode = null;
+    const g = $('slotGrid'); if (g) g.classList.remove('pinning');
+  }
+
+  // ── 덱 뷰어 — 심볼 탭으로 붙박이 지정/해제 ───────────────────────
   function showDeck() {
     if (!run) return;
-    const list = $('deckList'); list.innerHTML = '';
+    const list = $('deckList'); if (!list) return;
+    list.innerHTML = '';
     for (const { id, n, def } of run.deckSummary()) {
-      const d = document.createElement('div');
-      d.className = `deck-item ${def.rarity}`;
-      d.title = def.desc;
-      d.innerHTML = `${def.icon} ${def.name} <span class="n">×${n}</span>`;
-      list.appendChild(d);
+      const fixedItem = run.deck.find((d) => d.id === id && run.isFixed(d.uid));
+      const freeItem = run.deck.find((d) => d.id === id && !run.isFixed(d.uid));
+      const b = document.createElement('button');
+      b.className = `deck-item ${def.rarity}` + (fixedItem ? ' fixed' : '');
+      b.title = def.desc + (fixedItem ? ' — 탭하면 붙박이 해제' : ' — 탭하면 붙박이 고정(칸 선택)');
+      b.innerHTML = `${def.icon} ${def.name} <span class="n">×${n}</span>${fixedItem ? ' 📌' : ''}`;
+      b.addEventListener('click', (e) => {
+        if (guarded(e)) return;
+        if (fixedItem) {   // 해제
+          run.clearFixture(fixedItem.uid);
+          renderPins(); showDeck();
+          setText('payLine', '📌 붙박이 해제');
+        } else if (freeItem) {
+          if (run.fixtures.length >= window.Jackpot.MAX_FIXTURES) {
+            setText('payLine', `붙박이는 최대 ${window.Jackpot.MAX_FIXTURES}개 — 기존 📌를 해제하세요`);
+            return;
+          }
+          enterPinMode(freeItem.uid);
+        }
+      });
+      list.appendChild(b);
     }
-    $('deckModalCount').textContent = `(${run.deck.length}장)`;
+    setText('deckModalCount', `(${run.deck.length}장 · 📌${run.fixtures.length}/${window.Jackpot.MAX_FIXTURES})`);
     $('deckModal').classList.remove('hidden');
   }
 
@@ -652,15 +716,30 @@
       bl.classList.remove('hidden');
     }
     // 방어적 바인딩 — 어떤 요소가 없어도(HTML/JS 버전 스큐) 나머지는 정상 동작
-    onEl('startBtn', 'click', start);
+    onEl('startBtn', 'click', (e) => { if (guarded(e)) return; start(); });
     onEl('spinBtn', 'click', doSpin);
-    onEl('skipBtn', 'click', () => resolvePick(null));
-    onEl('movingSkip', 'click', () => {
+    onEl('skipBtn', 'click', (e) => { if (guarded(e)) return; resolvePick(null); });
+    onEl('movingSkip', 'click', (e) => {
+      if (guarded(e)) return;
       run.declineRemoval();
       const m = $('movingModal'); if (m) m.classList.add('hidden');
       afterMoving();
     });
     onEl('deckBtn', 'click', showDeck);
+    // 📌 붙박이 배치 — 핀 모드에서 칸 탭 = 고정, 평시 고정 칸 탭 = 해제
+    onEl('slotGrid', 'click', (e) => {
+      const cell = e.target.closest('.cell'); if (!cell || !run) return;
+      const idx = +cell.dataset.idx;
+      if (pinMode != null) {
+        if (run.setFixture(pinMode, idx)) { Sound.pick(); setText('payLine', '📌 붙박이 고정! 매 스핀 이 칸에 나타납니다'); }
+        else setText('payLine', '고정 실패 — 이미 사용 중인 칸이거나 슬롯이 가득');
+        exitPinMode();
+        renderPins();
+      } else if (phase === 'idle') {
+        const f = run.fixtureAt(idx);
+        if (f) { run.clearFixture(f.uid); renderPins(); setText('payLine', '📌 붙박이 해제'); }
+      }
+    });
     onEl('deckClose', 'click', () => { const m = $('deckModal'); if (m) m.classList.add('hidden'); });
     onEl('deckModal', 'click', (e) => { if (e.target === $('deckModal')) $('deckModal').classList.add('hidden'); });
     const muteBtn = $('muteBtn');
@@ -701,6 +780,7 @@
       } else if (e.key === 'm' || e.key === 'M') {
         if (muteBtn) muteBtn.click();
       } else if (e.key === 'Escape') {
+        if (pinMode != null) { exitPinMode(); setText('payLine', '📌 배치 취소'); return; }
         const m = $('deckModal'); if (m) m.classList.add('hidden');
       }
     });

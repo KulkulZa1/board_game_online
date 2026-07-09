@@ -10,9 +10,10 @@
   const DECK_CAP = 30;             // 덱 상한(닭 폭주 방지)
   const SKIP_COINS = 2;            // 심볼 안 뽑고 넘기면 +2코인 (희석 관리)
   const EVENT_CHANCE = 0.10;       // 스핀당 월드 이벤트 확률(달동네 ×2)
+  const MAX_FIXTURES = 2;          // 📌 붙박이 — 항상 지정 칸에 나타나는 심볼(배치 전략의 핵심)
 
   // 월세 곡선 — 완납할수록 가파르게 오른다 (잉여 이월을 감안해 후반 급등)
-  const rentFor = (stage) => Math.round(22 * Math.pow(1.42, stage - 1));
+  const rentFor = (stage) => Math.round(22 * Math.pow(1.44, stage - 1));
 
   // ── 심볼 정의 ──────────────────────────────────────────────────
   //  base: 스핀당 기본 지급. ev: 봇/추천용 기대값 추정치.
@@ -28,6 +29,7 @@
     ramen:   { name: '라면',     icon: '🍜', rarity: 'common',   base: 2, ev: 2.0, desc: '+2. 옆의 알마다 +2 (계란 라면)' },
     soju:    { name: '소주',     icon: '🍺', rarity: 'common',   base: 2, ev: 1.8, desc: '+2. 옆 라면이 있으면 해장 +2. 옆 회사원은 숙취' },
     dumpling:{ name: '만두',     icon: '🥟', rarity: 'common',   base: 2, ev: 2.0, desc: '+2. 든든하다' },
+    dog:     { name: '강아지',   icon: '🐶', rarity: 'common',   base: 3, ev: 2.2, desc: '+3. 옆에 고양이가 있으면 싸워서 둘 다 0 (우유도 못 마심)' },
 
     // 언커먼 — 시너지 엔진
     worker:  { name: '회사원',   icon: '💼', rarity: 'uncommon', base: 3, ev: 2.8, desc: '+3. 옆 소주는 숙취(+1로), 옆 사장님은 보너스 +3' },
@@ -40,6 +42,7 @@
     cleaner: { name: '청소부',   icon: '🧹', rarity: 'uncommon', base: 1, ev: 1.8, desc: '+1. 옆의 양말을 정리해 +6' },
     clover:  { name: '클로버',   icon: '🍀', rarity: 'uncommon', base: 1, ev: 1.6, desc: '+1. 옆 슬롯머신·로또의 당첨 확률 2배' },
     baby:    { name: '아기',     icon: '👶', rarity: 'uncommon', base: 0, ev: 2.6, desc: '3스핀마다 +9. 옆에 할머니가 있으면 매 스핀 +3' },
+    chef:    { name: '요리사',   icon: '👨‍🍳', rarity: 'uncommon', base: 1, ev: 2.8, desc: '+1. 옆의 음식(밥·김밥·우유·알·라면·만두)마다 +2' },
 
     // 레어 — 한 방
     slotm:   { name: '슬롯머신', icon: '🎰', rarity: 'rare',     base: 0, ev: 5.0, desc: '12.5% 확률로 +40' },
@@ -126,7 +129,22 @@
       // 피버 — 좋은 스핀(총 15+)을 3연속 만들면 다음 스핀 당첨 확률 2배
       this.feverStreak = 0;
       this.feverArmed = false;
+      // 📌 붙박이 — 지정한 심볼이 항상 지정 칸에 나타난다 (인접 시너지를 설계하는 수단)
+      this.fixtures = [];   // [{uid, cell}] 최대 MAX_FIXTURES
     }
+
+    // ── 붙박이 API ────────────────────────────────────────────────
+    setFixture(uid, cell) {
+      if (cell < 0 || cell >= CELLS) return false;
+      if (!this.deck.some((d) => d.uid === uid)) return false;
+      this.fixtures = this.fixtures.filter((f) => f.uid !== uid && f.cell !== cell);
+      if (this.fixtures.length >= MAX_FIXTURES) return false;
+      this.fixtures.push({ uid, cell });
+      return true;
+    }
+    clearFixture(uid) { this.fixtures = this.fixtures.filter((f) => f.uid !== uid); }
+    fixtureAt(cell) { return this.fixtures.find((f) => f.cell === cell) || null; }
+    isFixed(uid) { return this.fixtures.some((f) => f.uid === uid); }
 
     _mk(id) { return { uid: ++this._uid, id, bank: 0, tick: 0 }; }
     _chance(p) { return this.rng() < p; }
@@ -194,11 +212,16 @@
       }
       const evActive = (id) => this.activeEvent && this.activeEvent.id === id;
 
-      // 1) 보드 샘플 — 덱을 섞어 최대 12칸에 무작위 배치(빈칸도 무작위)
-      const drawn = this._shuffle(this.deck.slice()).slice(0, CELLS);
+      // 1) 보드 샘플 — 📌 붙박이를 먼저 지정 칸에, 나머지 덱을 남은 칸에 무작위 배치
       const board = new Array(CELLS).fill(null);
-      const cellsOrder = this._shuffle([...Array(CELLS).keys()]);
-      drawn.forEach((item, k) => { board[cellsOrder[k]] = item; });
+      const fixedUids = new Set();
+      for (const f of this.fixtures) {
+        const item = this.deck.find((d) => d.uid === f.uid);
+        if (item && board[f.cell] === null) { board[f.cell] = item; fixedUids.add(f.uid); }
+      }
+      const rest = this._shuffle(this.deck.filter((d) => !fixedUids.has(d.uid)));
+      const freeCells = this._shuffle([...Array(CELLS).keys()].filter((i) => board[i] === null));
+      for (let k = 0; k < rest.length && k < freeCells.length; k++) board[freeCells[k]] = rest[k];
 
       const pays = [];
       const events = [];
@@ -211,7 +234,8 @@
       // 2) 파괴 페이즈 — 보드 순서대로, 먼저 선언한 쪽이 가져간다
       for (let i = 0; i < CELLS; i++) {
         const it = at(i); if (!it) continue;
-        if (it.id === 'cat' && !this.has('cheese')) {   // 치즈 숙성고: 우유가 치즈라 못 마신다
+        // 치즈 숙성고: 우유가 치즈라 못 마심 / 옆에 강아지: 싸우느라 못 마심
+        if (it.id === 'cat' && !this.has('cheese') && !adjHas(i, 'dog')) {
           for (const n of NEIGHBORS[i]) {
             const t = at(n);
             if (t && t.id === 'milk') {
@@ -285,8 +309,16 @@
 
         if (it.id === 'milk' && this.has('cheese')) {
           amt = 3;   // 치즈 — 고양이는 못 먹지만 비싸다
-        } else if (it.id === 'cat' && this.has('catfeeder')) {
-          amt = 3;   // 급식소 고양이는 통통하다
+        } else if (it.id === 'cat') {
+          if (this.has('catfeeder')) amt = 3;   // 급식소 고양이는 통통하다
+          if (adjHas(i, 'dog')) amt = 0;        // 개와 싸우는 중
+        } else if (it.id === 'dog') {
+          if (adjHas(i, 'cat')) amt = 0;        // 고양이와 싸우는 중 — 배치로 피하라
+        } else if (it.id === 'chef') {
+          // 요리사 — 옆의 음식마다 +2 (음식 밀집 배치를 보상)
+          amt += 2 * NEIGHBORS[i].reduce((s, n) => {
+            const t = at(n); return s + (t && FOOD_IDS.includes(t.id) ? 1 : 0);
+          }, 0);
         } else if (it.id === 'worker') {
           if (adjHas(i, 'soju')) amt = 1;   // 숙취 (사장님 보너스는 bonus로 별도 가산)
         } else if (it.id === 'ramen') {
@@ -344,7 +376,10 @@
         }
       }
 
-      if (destroyed.size) this.deck = this.deck.filter((d) => !destroyed.has(d.uid));
+      if (destroyed.size) {
+        this.deck = this.deck.filter((d) => !destroyed.has(d.uid));
+        this.fixtures = this.fixtures.filter((f) => !destroyed.has(f.uid));   // 부서진 붙박이 해제
+      }
 
       let total = pays.reduce((s, p) => s + p.amt, 0);
       if (evActive('boom')) {   // 경제 호황
@@ -503,7 +538,7 @@
   const api = {
     Run, SYMBOLS, RELICS, ROUTES, WORLD_EVENTS, NEIGHBORS, STARTER_DECK, RARITY_WEIGHT,
     COLS, ROWS, CELLS, BASE_SPINS_PER_RENT, WIN_STAGE, DECK_CAP, SKIP_COINS, EVENT_CHANCE,
-    rentFor,
+    MAX_FIXTURES, rentFor,
   };
   if (typeof window !== 'undefined') window.Jackpot = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
