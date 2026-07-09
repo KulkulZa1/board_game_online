@@ -58,12 +58,14 @@ app.use(express.json());
 
 // 배포 직후 게임 로직이 오래된 브라우저/SW 캐시에서 실행되지 않도록
 // HTML, SW, JS, CSS, manifest는 항상 재검증 없이 네트워크에서 받게 한다.
+// 디렉터리 URL(/arcade/jackpot/ 등)도 HTML 문서다 — 누락되면 모바일이 옛 HTML을 휴리스틱 캐시한다.
 app.use((req, res, next) => {
   const p = req.path;
   if (
     p === '/' ||
     p === '/sw.js' ||
     p === '/manifest.json' ||
+    p.endsWith('/') ||
     p.endsWith('.html') ||
     p.endsWith('.js') ||
     p.endsWith('.css')

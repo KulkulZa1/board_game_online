@@ -9,11 +9,24 @@
   const BEST_KEY = 'arcade_jackpot_best';
   const WINS_KEY = 'arcade_jackpot_wins';
   const MUTE_KEY = 'arcade_jackpot_muted';
+  const TURBO_KEY = 'arcade_jackpot_turbo';
   const FAST = !!window.__JACKPOT_FAST;           // 헤드리스 테스트용: 연출 시간 0
-  const T = (ms) => (FAST ? 0 : ms);
+  let turbo = false;
+  try { turbo = localStorage.getItem(TURBO_KEY) === '1'; } catch (e) {}
+  const T = (ms) => (FAST ? 0 : Math.round(ms * (turbo ? 0.45 : 1)));
 
   const $ = (id) => document.getElementById(id);
+  // 방어적 바인딩 — 요소가 없으면(구버전 HTML 캐시 등) 조용히 건너뛴다.
+  // HTML/JS 버전이 어긋나도 게임 시작 자체가 벽돌이 되지 않게 하는 안전망.
+  const onEl = (id, ev, fn) => { const el = $(id); if (el) el.addEventListener(ev, fn); return el; };
+  const setText = (id, txt) => { const el = $(id); if (el) el.textContent = txt; };
   const RARITY_KO = { common: '커먼', uncommon: '언커먼', rare: '레어' };
+
+  // 전역 오류 표시 — 조용한 실패 대신 화면에 알린다
+  window.addEventListener('error', (e) => {
+    const el = $('payLine');
+    if (el) el.textContent = '⚠ 오류가 발생했습니다: ' + (e.message || '알 수 없음');
+  });
 
   // ── 사운드 (Web Audio 절차 효과음) ───────────────────────────────
   const Sound = (() => {
@@ -44,6 +57,9 @@
       evict: () => [300, 240, 180, 120].forEach((f, i) => tone(f, 'sawtooth', 0.4, 0.13, i * 0.16)),
       win: () => [523, 659, 784, 1047, 1319].forEach((f, i) => tone(f, 'sine', 0.7, 0.16, i * 0.13)),
       pick: () => tone(880, 'sine', 0.1, 0.09),
+      tension: () => [392, 440, 494, 523].forEach((f, i) => tone(f, 'square', 0.09, 0.07, i * 0.13)),   // 잭팟 예감 두근두근
+      fever: () => [659, 784, 988, 1319].forEach((f, i) => tone(f, 'sawtooth', 0.22, 0.1, i * 0.07)),
+      mega: () => [523, 659, 784, 1047, 1319, 1568, 2093].forEach((f, i) => tone(f, 'triangle', 0.55, 0.15, i * 0.08)),
     };
   })();
   function vibrate(p) { try { if (navigator.vibrate) navigator.vibrate(p); } catch (e) {} }
@@ -110,25 +126,42 @@
     renderEventBanner();
   }
 
-  // 유물 바 + 현재 동네 칩
+  // 유물 바 + 현재 동네 칩 (요소 없으면 무시 — 구버전 HTML 안전망)
   function renderMeta() {
-    const route = ROUTES[run.route];
-    $('routeChip').textContent = `${route.icon} ${route.name}`;
-    $('routeChip').title = route.desc;
-    const bar = $('relicBar'); bar.innerHTML = '';
-    for (const id of run.relics) {
-      const def = RELICS[id];
-      const s = document.createElement('span');
-      s.className = 'relic-chip';
-      s.textContent = def.icon;
-      s.title = `${def.name} — ${def.good} / 저주: ${def.bad}`;
-      bar.appendChild(s);
+    const chip = $('routeChip');
+    if (chip) {
+      const route = ROUTES[run.route];
+      chip.textContent = `${route.icon} ${route.name}`;
+      chip.title = route.desc;
     }
+    const bar = $('relicBar');
+    if (bar) {
+      bar.innerHTML = '';
+      for (const id of run.relics) {
+        const def = RELICS[id];
+        const s = document.createElement('span');
+        s.className = 'relic-chip';
+        s.textContent = def.icon;
+        s.title = `${def.name} — ${def.good} / 저주: ${def.bad}`;
+        bar.appendChild(s);
+      }
+    }
+    renderFever();
+  }
+
+  // 피버 게이지 — 3연속 좋은 스핀이면 다음 스핀 점화
+  function renderFever() {
+    const bar = $('feverBar'); if (!bar) return;
+    bar.classList.toggle('armed', run.feverArmed);
+    const dots = bar.querySelectorAll('.fdot');
+    dots.forEach((d, i) => d.classList.toggle('on', run.feverArmed || i < run.feverStreak));
+    const spinBtn = $('spinBtn');
+    if (spinBtn) spinBtn.classList.toggle('fever', run.feverArmed);
   }
 
   // 지속 월드 이벤트 배너
   function renderEventBanner() {
-    const b = $('eventBanner');
+    const b = $('eventBanner'); if (!b) return;
     const ev = run.activeEvent;
     if (!ev) { b.classList.add('hidden'); return; }
     const def = WORLD_EVENTS[ev.id];
@@ -174,12 +207,26 @@
       }, 55);
       rollTimers.push(iv);
     }
+    // 잭팟 예감 — 확률 심볼(슬롯머신·로또)이 보드에 있으면 마지막 열을 늦추고 긴장음
+    const teaseCols = new Set();
+    for (let i = 0; i < CELLS; i++) {
+      const b = result.board[i];
+      if (b && (b.id === 'slotm' || b.id === 'lotto')) teaseCols.add(i % COLS);
+    }
+    const maxTease = teaseCols.size ? Math.max(...teaseCols) : -1;
+
     const stopCol = (col) => {
       for (let r = 0; r < CELLS / COLS; r++) {
         const i = r * COLS + col;
         clearInterval(rollTimers[i]);
-        cellEl(i).classList.remove('rolling');
+        const el = cellEl(i);
+        el.classList.remove('rolling');
         setCell(i, result.board[i]);
+        const b = result.board[i];
+        if (b && (b.id === 'slotm' || b.id === 'lotto')) {   // 두근두근 금빛 점멸
+          el.classList.add('tease');
+          setTimeout(() => el.classList.remove('tease'), T(1100));
+        }
       }
       Sound.thunk();
     };
@@ -187,8 +234,17 @@
       for (let c = 0; c < COLS; c++) stopCol(c);
       payoutSequence(result);
     } else {
-      for (let c = 0; c < COLS; c++) setTimeout(() => stopCol(c), 300 + c * 140);
-      setTimeout(() => payoutSequence(result), 300 + COLS * 140 + 120);
+      let delay = 300, lastDelay = 300;
+      for (let c = 0; c < COLS; c++) {
+        delay = 300 + c * 140;
+        if (c === maxTease && c === COLS - 1) {   // 마지막 열이 잭팟 후보 — 시간을 끌며 긴장
+          delay += 520;
+          setTimeout(() => Sound.tension(), delay - 480);
+        }
+        lastDelay = delay;
+        setTimeout(() => stopCol(c), delay);
+      }
+      setTimeout(() => payoutSequence(result), lastDelay + 140);
     }
   }
 
@@ -236,6 +292,22 @@
     if (pays.length) stepOne(); else finishSpin(result);
   }
 
+  // MEGA WIN 배너 + 그리드 셰이크
+  let megaTimer = 0;
+  function showMega(text) {
+    const el = $('megaWin'); if (!el) return;
+    el.textContent = text;
+    el.classList.remove('hidden', 'show'); void el.offsetWidth; el.classList.add('show');
+    clearTimeout(megaTimer);
+    megaTimer = setTimeout(() => el.classList.add('hidden'), T(1400));
+    confetti();
+  }
+  function shakeGrid() {
+    const g = $('slotWrap'); if (!g) return;
+    g.classList.remove('shake'); void g.offsetWidth; g.classList.add('shake');
+    setTimeout(() => g.classList.remove('shake'), T(500));
+  }
+
   function confetti() {
     if (FAST) return;
     const layer = $('fxLayer');
@@ -252,14 +324,33 @@
     }
   }
 
+  // 스핀 총액별 풍미 문구 — 같은 결과도 다르게 읽힌다
+  const FLAVOR_ZERO = ['꽝... 다음 스핀!', '오늘은 공쳤다...', '바람만 스쳐갔다'];
+  const FLAVOR_BIG = ['🔥 대박!', '💸 돈벼락!', '🤑 살림살이가 폈다!'];
+  const pickFlavor = (arr) => arr[Math.floor(Math.random() * arr.length)];
+
   function finishSpin(result) {
     const pl = $('payLine');
-    let txt = result.total > 0 ? `이번 스핀 +${result.total}` : '꽝... 다음 스핀!';
+    let txt = result.total > 0 ? `이번 스핀 +${result.total}` : pickFlavor(FLAVOR_ZERO);
     if (result.extra && result.extra.length) {
-      txt += '  (' + result.extra.map((e) => `${e.label} ${e.amt >= 0 ? '+' : ''}${e.amt}`).join(' · ') + ')';
+      txt += '  (' + result.extra.map((e) => e.amt !== 0 ? `${e.label} ${e.amt >= 0 ? '+' : ''}${e.amt}` : e.label).join(' · ') + ')';
     }
     pl.textContent = txt;
-    if (result.total >= 40) { pl.classList.add('mega'); pl.textContent = `🔥 대박! +${result.total}`; }
+    if (result.total >= 40) { pl.classList.add('mega'); pl.textContent = `${pickFlavor(FLAVOR_BIG)} +${result.total}`; }
+
+    // MEGA WIN — 화면을 채우는 황금 배너 + 셰이크
+    if (result.total >= 50) {
+      showMega(result.total >= 90 ? `JACKPOT! +${result.total}` : `MEGA WIN +${result.total}`);
+      shakeGrid();
+      Sound.mega();
+      vibrate([40, 50, 40, 50, 80]);
+    }
+    // 피버 점화 안내
+    if (result.feverArmed && !result.feverNow) {
+      showMega('🔥 FEVER SPIN!');
+      Sound.fever();
+      vibrate([25, 35, 25]);
+    }
     renderHUD();
 
     // 월드 이벤트 발동 토스트(도장 자리 재활용)
@@ -284,6 +375,11 @@
 
   // ── 이삿짐 정리 — 덱에서 1장 버리기(선택) ───────────────────────
   function showMoving() {
+    if (!$('movingModal') || !$('movingList')) {   // 안전망: 그냥 넘어간다
+      run.declineRemoval();
+      afterMoving();
+      return;
+    }
     phase = 'pick';
     const list = $('movingList'); list.innerHTML = '';
     for (const d of run.deck) {
@@ -353,6 +449,14 @@
   let routeBonusNext = false;
   function showRoute(bonusAfter) {
     if (run.state !== 'playing' || !run.pendingRoutes) { showPick(false, bonusAfter); return; }
+    // 구버전 HTML에 모달이 없으면 자동 선택(평범한 동네) — 시작 벽돌 방지 안전망
+    if (!$('routeModal') || !$('routeCards')) {
+      const ids = run.pendingRoutes.map((r) => r.id);
+      run.chooseRoute(ids.includes('normal') ? 'normal' : ids[0]);
+      if (run.pendingRelics) run.chooseRelic(run.pendingRelics[0].id);
+      showPick(false, bonusAfter);
+      return;
+    }
     routeBonusNext = !!bonusAfter;
     phase = 'pick';
     const wrap = $('routeCards'); wrap.innerHTML = '';
@@ -381,6 +485,11 @@
   // ── 유물 선택 (유물 골목 입주 보상) ─────────────────────────────
   function showRelic() {
     if (!run.pendingRelics) { showPick(false, routeBonusNext); return; }
+    if (!$('relicModal') || !$('relicCards')) {   // 안전망: 자동 선택
+      run.chooseRelic(run.pendingRelics[0].id);
+      showPick(false, routeBonusNext);
+      return;
+    }
     phase = 'pick';
     const wrap = $('relicCards'); wrap.innerHTML = '';
     run.pendingRelics.forEach((rl, i) => {
@@ -510,12 +619,10 @@
     buildGrid();
     renderHUD();
     $('payLine').textContent = ' ';
+    const hideEl = (id, cls) => { const el = $(id); if (el) el.classList.add(cls || 'hidden'); };
     $('overlay').classList.remove('visible');
-    $('pickModal').classList.add('hidden');
-    $('routeModal').classList.add('hidden');
-    $('relicModal').classList.add('hidden');
-    $('movingModal').classList.add('hidden');
-    $('stamp').classList.add('hidden');
+    hideEl('pickModal'); hideEl('routeModal'); hideEl('relicModal');
+    hideEl('movingModal'); hideEl('stamp'); hideEl('megaWin');
     $('spinBtn').disabled = false;
   }
 
@@ -544,42 +651,57 @@
       bl.textContent = `🏆 최고 기록: ${best}단계 완납`;
       bl.classList.remove('hidden');
     }
-    $('startBtn').addEventListener('click', start);
-    $('spinBtn').addEventListener('click', doSpin);
-    $('skipBtn').addEventListener('click', () => resolvePick(null));
-    $('movingSkip').addEventListener('click', () => {
+    // 방어적 바인딩 — 어떤 요소가 없어도(HTML/JS 버전 스큐) 나머지는 정상 동작
+    onEl('startBtn', 'click', start);
+    onEl('spinBtn', 'click', doSpin);
+    onEl('skipBtn', 'click', () => resolvePick(null));
+    onEl('movingSkip', 'click', () => {
       run.declineRemoval();
-      $('movingModal').classList.add('hidden');
+      const m = $('movingModal'); if (m) m.classList.add('hidden');
       afterMoving();
     });
-    $('deckBtn').addEventListener('click', showDeck);
-    $('deckClose').addEventListener('click', () => $('deckModal').classList.add('hidden'));
-    $('deckModal').addEventListener('click', (e) => { if (e.target === $('deckModal')) $('deckModal').classList.add('hidden'); });
+    onEl('deckBtn', 'click', showDeck);
+    onEl('deckClose', 'click', () => { const m = $('deckModal'); if (m) m.classList.add('hidden'); });
+    onEl('deckModal', 'click', (e) => { if (e.target === $('deckModal')) $('deckModal').classList.add('hidden'); });
     const muteBtn = $('muteBtn');
-    if (Sound.isMuted()) muteBtn.textContent = '🔇';
-    muteBtn.addEventListener('click', () => { muteBtn.textContent = Sound.toggle() ? '🔇' : '🔊'; });
+    if (muteBtn) {
+      if (Sound.isMuted()) muteBtn.textContent = '🔇';
+      muteBtn.addEventListener('click', () => { muteBtn.textContent = Sound.toggle() ? '🔇' : '🔊'; });
+    }
+    const turboBtn = $('turboBtn');
+    if (turboBtn) {
+      turboBtn.classList.toggle('on', turbo);
+      turboBtn.addEventListener('click', () => {
+        turbo = !turbo;
+        try { localStorage.setItem(TURBO_KEY, turbo ? '1' : '0'); } catch (e) {}
+        turboBtn.classList.toggle('on', turbo);
+      });
+    }
 
+    const isOpen = (id) => { const el = $(id); return el && !el.classList.contains('hidden'); };
     document.addEventListener('keydown', (e) => {
       if (e.code === 'Space' || e.key === 'Enter') {
         if (phase === 'idle') { e.preventDefault(); doSpin(); }
         else if ($('overlay').classList.contains('visible')) { e.preventDefault(); start(); }
       } else if (phase === 'pick' && ['1', '2', '3', '4'].includes(e.key)) {
         // 열려 있는 모달(뽑기/루트/유물)에서 숫자키 선택
-        const openSel = !$('routeModal').classList.contains('hidden') ? '#routeCards .pick-card'
-          : !$('relicModal').classList.contains('hidden') ? '#relicCards .pick-card'
+        const openSel = isOpen('routeModal') ? '#routeCards .pick-card'
+          : isOpen('relicModal') ? '#relicCards .pick-card'
           : '#pickCards .pick-card';
         const btns = document.querySelectorAll(openSel);
         const b = btns[parseInt(e.key, 10) - 1];
         if (b) { e.preventDefault(); b.click(); }
-      } else if (phase === 'pick' && e.key === '0' && !$('pickModal').classList.contains('hidden')) {
+      } else if (phase === 'pick' && e.key === '0' && isOpen('pickModal')) {
         e.preventDefault(); resolvePick(null);
       } else if (e.key === 'd' || e.key === 'D') {
-        if ($('deckModal').classList.contains('hidden')) showDeck();
+        if (!isOpen('deckModal')) showDeck();
         else $('deckModal').classList.add('hidden');
+      } else if ((e.key === 't' || e.key === 'T') && turboBtn) {
+        turboBtn.click();
       } else if (e.key === 'm' || e.key === 'M') {
-        muteBtn.click();
+        if (muteBtn) muteBtn.click();
       } else if (e.key === 'Escape') {
-        $('deckModal').classList.add('hidden');
+        const m = $('deckModal'); if (m) m.classList.add('hidden');
       }
     });
   }

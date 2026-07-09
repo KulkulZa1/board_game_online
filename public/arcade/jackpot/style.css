@@ -284,3 +284,65 @@ html, body {
 @media (min-width: 700px) {
   #container { max-width: 520px; }
 }
+
+/* ── v1.2 도파민 연출: 잭팟 예감 / 셰이크 / MEGA WIN / 피버 / 터보 ── */
+.cell.tease {
+  border-color: var(--gold);
+  animation: teasePulse 0.55s ease-in-out infinite alternate;
+}
+@keyframes teasePulse {
+  from { box-shadow: 0 0 4px rgba(255,209,102,0.3); }
+  to   { box-shadow: 0 0 18px rgba(255,209,102,0.85); }
+}
+
+#slotWrap.shake { animation: gridShake 0.45s; }
+@keyframes gridShake {
+  0%, 100% { transform: translate(0, 0); }
+  15% { transform: translate(-5px, 2px); }
+  30% { transform: translate(5px, -2px); }
+  45% { transform: translate(-4px, -2px); }
+  60% { transform: translate(4px, 2px); }
+  75% { transform: translate(-2px, 1px); }
+  90% { transform: translate(2px, -1px); }
+}
+
+#megaWin {
+  position: absolute; left: 50%; top: 42%; z-index: 9;
+  transform: translate(-50%, -50%) scale(0.4);
+  font-size: clamp(1.6rem, 9vw, 2.6rem); font-weight: 900; letter-spacing: 0.06em;
+  color: var(--gold); text-shadow: 0 0 22px rgba(255,209,102,0.9), 0 3px 0 #7a5510;
+  white-space: nowrap; pointer-events: none; opacity: 0;
+}
+#megaWin.show { animation: megaIn 1.4s forwards; }
+@keyframes megaIn {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.4); }
+  18% { opacity: 1; transform: translate(-50%, -50%) scale(1.15); }
+  30% { transform: translate(-50%, -50%) scale(1); }
+  78% { opacity: 1; }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1.05); }
+}
+
+#feverBar { display: flex; gap: 4px; margin-left: auto; align-items: center; }
+.fdot {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: var(--panel2); border: 1px solid var(--border);
+  transition: background 0.25s, box-shadow 0.25s;
+}
+.fdot.on { background: #ff7b3a; border-color: #ff7b3a; box-shadow: 0 0 8px rgba(255,123,58,0.7); }
+#feverBar.armed .fdot { animation: feverPulse 0.6s ease-in-out infinite alternate; }
+@keyframes feverPulse {
+  from { box-shadow: 0 0 4px rgba(255,123,58,0.5); }
+  to   { box-shadow: 0 0 14px rgba(255,123,58,1); }
+}
+
+#turboBtn { opacity: 0.55; }
+#turboBtn.on { opacity: 1; border-color: var(--gold); color: var(--gold); box-shadow: 0 0 8px rgba(255,209,102,0.35); }
+
+#spinBtn.fever {
+  background: linear-gradient(135deg, #ff7b3a, var(--gold));
+  animation: feverBtn 0.7s ease-in-out infinite alternate;
+}
+@keyframes feverBtn {
+  from { box-shadow: 0 4px 0 #9a6b14, 0 0 14px rgba(255,123,58,0.5); }
+  to   { box-shadow: 0 4px 0 #9a6b14, 0 0 30px rgba(255,123,58,0.95); }
+}

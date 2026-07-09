@@ -123,6 +123,9 @@
       this.pendingRelics = null;     // 유물 골목 입주 보상 선택지
       this.pendingRemoval = false;   // 이삿짐 정리 — 해소 전엔 스핀 불가
       this.activeEvent = null;       // { id, remaining }
+      // 피버 — 좋은 스핀(총 15+)을 3연속 만들면 다음 스핀 당첨 확률 2배
+      this.feverStreak = 0;
+      this.feverArmed = false;
     }
 
     _mk(id) { return { uid: ++this._uid, id, bank: 0, tick: 0 }; }
@@ -157,6 +160,8 @@
       this.spinsIntoStage++;
       const coinsAtStart = this.coins;
       const extra = [];   // 전역 가감 내역 [{label, amt}] — UI 표시용
+      const feverNow = this.feverArmed;   // 이번 스핀이 피버인가
+      if (feverNow) this.feverArmed = false;
 
       // 0) 월드 이벤트 발동 판정 (지속 이벤트 중엔 새로 안 뜸)
       let firedEvent = null;
@@ -297,6 +302,7 @@
           if (adjHas(i, 'clover')) p *= 2;
           if (this.has('dice')) p *= 1.5;
           if (evActive('lucky')) p *= 2;
+          if (feverNow) p *= 2;   // 🔥 피버 스핀
           p = Math.min(0.6, p);
           if (this._chance(p)) {
             amt = it.id === 'slotm' ? 40 : 70;
@@ -362,6 +368,15 @@
       this.totalEarned += Math.max(0, total);
       if (total > this.bestSpin) this.bestSpin = total;
 
+      // 피버 게이지 — 총 15+ 스핀 3연속이면 다음 스핀 점화
+      if (feverNow) extra.push({ label: '🔥 피버 스핀', amt: 0 });
+      if (total >= 15) {
+        this.feverStreak++;
+        if (this.feverStreak >= 3 && !this.feverArmed) { this.feverArmed = true; this.feverStreak = 0; }
+      } else {
+        this.feverStreak = 0;
+      }
+
       // 지속 이벤트 소진
       if (this.activeEvent) {
         this.activeEvent.remaining--;
@@ -403,7 +418,11 @@
         }
       }
 
-      return { board, pays, events, total, coins: this.coins, spinNo: this.spinNo, settle, firedEvent, activeEvent: this.activeEvent, extra, destroyed };
+      return {
+        board, pays, events, total, coins: this.coins, spinNo: this.spinNo, settle,
+        firedEvent, activeEvent: this.activeEvent, extra, destroyed,
+        feverNow, feverStreak: this.feverStreak, feverArmed: this.feverArmed,
+      };
     }
 
     _advanceStage() {
