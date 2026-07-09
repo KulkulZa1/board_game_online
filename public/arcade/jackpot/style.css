@@ -65,6 +65,32 @@ html, body {
 #coinBox.bump b { animation: coinBump 0.3s; }
 @keyframes coinBump { 30% { transform: scale(1.3); color: #fff; } }
 
+/* ── 유물 바 + 동네 칩 ── */
+#metaBar {
+  display: flex; align-items: center; gap: 8px; width: 100%; flex-shrink: 0; min-height: 24px;
+}
+#routeChip {
+  font-size: 0.7rem; font-weight: 700; color: var(--muted);
+  background: var(--panel); border: 1px solid var(--border); border-radius: 99px; padding: 3px 10px;
+  white-space: nowrap;
+}
+#relicBar { display: flex; gap: 4px; flex-wrap: wrap; }
+.relic-chip {
+  font-size: 0.95rem; background: rgba(255,209,102,0.1);
+  border: 1px solid rgba(255,209,102,0.4); border-radius: 8px; padding: 1px 6px;
+  cursor: help;
+}
+
+/* ── 월드 이벤트 배너 ── */
+#eventBanner {
+  width: 100%; flex-shrink: 0; text-align: center;
+  background: rgba(255,93,108,0.12); border: 1px solid rgba(255,93,108,0.5); color: #ffb3bb;
+  border-radius: 9px; padding: 4px 10px; font-size: 0.72rem; font-weight: 700;
+}
+#eventBanner.good {
+  background: rgba(74,222,128,0.1); border-color: rgba(74,222,128,0.5); color: #a9f0c2;
+}
+
 /* ── 슬롯 그리드 ── */
 #slotWrap { position: relative; width: 100%; flex-shrink: 0; }
 #slotGrid {
@@ -208,6 +234,14 @@ html, body {
   border: 1px dashed var(--border); border-radius: 10px; padding: 9px; font-size: 0.8rem; cursor: pointer;
 }
 .skip-btn:hover { color: var(--text); }
+
+.route-card .pick-desc { color: var(--text); opacity: 0.75; }
+.relic-card .pick-desc { line-height: 1.5; }
+
+#movingList { display: flex; flex-wrap: wrap; gap: 6px; max-height: 46dvh; overflow-y: auto; }
+.deck-remove { cursor: pointer; transition: transform 0.08s, border-color 0.12s; }
+.deck-remove:active { transform: scale(0.94); }
+.deck-remove:hover { border-color: var(--bad); }
 
 #deckList { display: flex; flex-wrap: wrap; gap: 6px; }
 .deck-item {

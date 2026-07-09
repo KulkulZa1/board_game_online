@@ -1,36 +1,37 @@
-// 월세 잭팟 — 슬롯 로그라이트 시뮬레이션 코어
-// 순수 로직(심볼·스핀 해석·시너지·월세)만 담아 UI와 분리한다.
+// 월세 잭팟 — 슬롯 로그라이트 시뮬레이션 코어 v2
+// 순수 로직(심볼·시너지·유물·루트·월드 이벤트·월세)만 담아 UI와 분리한다.
 // 헤드리스 밸런스 검증: node prototypes/jackpot-autoplay.js
 (function () {
   'use strict';
 
   const COLS = 4, ROWS = 3, CELLS = COLS * ROWS;
-  const SPINS_PER_RENT = 4;   // 4스핀마다 월세 정산
-  const WIN_STAGE = 10;       // 10번 완납 → 내 집 마련(승리), 이후 무한 모드
-  const DECK_CAP = 30;        // 덱 상한(닭 폭주 방지)
-  const SKIP_COINS = 2;       // 심볼 안 뽑고 넘기면 +2코인 (희석 관리)
+  const BASE_SPINS_PER_RENT = 4;   // 월세 주기(연장 계약서 유물로 +1)
+  const WIN_STAGE = 10;            // 10번 완납 → 내 집 마련(승리), 이후 무한 모드
+  const DECK_CAP = 30;             // 덱 상한(닭 폭주 방지)
+  const SKIP_COINS = 2;            // 심볼 안 뽑고 넘기면 +2코인 (희석 관리)
+  const EVENT_CHANCE = 0.10;       // 스핀당 월드 이벤트 확률(달동네 ×2)
 
   // 월세 곡선 — 완납할수록 가파르게 오른다 (잉여 이월을 감안해 후반 급등)
-  const rentFor = (stage) => Math.round(22 * Math.pow(1.40, stage - 1));
+  const rentFor = (stage) => Math.round(22 * Math.pow(1.42, stage - 1));
 
   // ── 심볼 정의 ──────────────────────────────────────────────────
   //  base: 스핀당 기본 지급. ev: 봇/추천용 기대값 추정치.
-  //  특수 행동은 Run._resolve()에서 id별로 구현된다.
+  //  특수 행동·조합은 Run.spin()에서 id별로 구현된다.
   const SYMBOLS = {
     // 커먼 — 생활의 기본기
     rice:    { name: '밥',       icon: '🍚', rarity: 'common',   base: 1, ev: 1.2, desc: '+1. 할머니 옆이면 +2 추가' },
     gimbap:  { name: '김밥',     icon: '🍙', rarity: 'common',   base: 2, ev: 2.2, desc: '+2. 할머니 옆이면 +2 추가' },
     milk:    { name: '우유',     icon: '🥛', rarity: 'common',   base: 1, ev: 1.4, desc: '+1. 고양이가 마시면 +9 (우유 소멸)' },
     cat:     { name: '고양이',   icon: '🐱', rarity: 'common',   base: 1, ev: 1.8, desc: '+1. 옆의 우유를 마셔 +9' },
-    egg:     { name: '알',       icon: '🥚', rarity: 'common',   base: 1, ev: 1.6, desc: '+1. 12% 확률로 닭으로 부화' },
+    egg:     { name: '알',       icon: '🥚', rarity: 'common',   base: 1, ev: 1.6, desc: '+1. 12% 확률로 닭으로 부화. 옆 라면을 계란라면으로' },
     sock:    { name: '양말',     icon: '🧦', rarity: 'common',   base: 0, ev: 0.4, desc: '0. 청소부가 정리하면 +6 (양말 소멸)' },
-    ramen:   { name: '라면',     icon: '🍜', rarity: 'common',   base: 2, ev: 2.0, desc: '+2. 야근의 동반자' },
-    soju:    { name: '소주',     icon: '🍺', rarity: 'common',   base: 2, ev: 1.8, desc: '+2. 옆 회사원은 숙취로 지급 급감' },
+    ramen:   { name: '라면',     icon: '🍜', rarity: 'common',   base: 2, ev: 2.0, desc: '+2. 옆의 알마다 +2 (계란 라면)' },
+    soju:    { name: '소주',     icon: '🍺', rarity: 'common',   base: 2, ev: 1.8, desc: '+2. 옆 라면이 있으면 해장 +2. 옆 회사원은 숙취' },
     dumpling:{ name: '만두',     icon: '🥟', rarity: 'common',   base: 2, ev: 2.0, desc: '+2. 든든하다' },
 
     // 언커먼 — 시너지 엔진
-    worker:  { name: '회사원',   icon: '💼', rarity: 'uncommon', base: 3, ev: 2.8, desc: '+3. 옆에 소주가 있으면 숙취로 +1' },
-    granny:  { name: '할머니',   icon: '👵', rarity: 'uncommon', base: 1, ev: 2.6, desc: '+1. 옆의 밥·김밥마다 +2씩 얹어준다' },
+    worker:  { name: '회사원',   icon: '💼', rarity: 'uncommon', base: 3, ev: 2.8, desc: '+3. 옆 소주는 숙취(+1로), 옆 사장님은 보너스 +3' },
+    granny:  { name: '할머니',   icon: '👵', rarity: 'uncommon', base: 1, ev: 2.6, desc: '+1. 옆의 밥·김밥마다 +2, 옆 아기 돌봄 +3' },
     chicken: { name: '닭',       icon: '🐔', rarity: 'uncommon', base: 2, ev: 2.8, desc: '+2. 30% 확률로 알을 낳는다(덱 추가)' },
     piggy:   { name: '저금통',   icon: '🐷', rarity: 'uncommon', base: 0, ev: 1.6, desc: '매 스핀 +1 적립. 망치에 깨지면 적립×3 지급' },
     hammer:  { name: '망치',     icon: '🔨', rarity: 'uncommon', base: 1, ev: 1.8, desc: '+1. 옆의 저금통·보석을 깨서 정산한다' },
@@ -38,19 +39,51 @@
     miner:   { name: '광부',     icon: '⛏️', rarity: 'uncommon', base: 2, ev: 2.6, desc: '+2. 옆의 보석을 캐서 +12' },
     cleaner: { name: '청소부',   icon: '🧹', rarity: 'uncommon', base: 1, ev: 1.8, desc: '+1. 옆의 양말을 정리해 +6' },
     clover:  { name: '클로버',   icon: '🍀', rarity: 'uncommon', base: 1, ev: 1.6, desc: '+1. 옆 슬롯머신·로또의 당첨 확률 2배' },
-    baby:    { name: '아기',     icon: '👶', rarity: 'uncommon', base: 0, ev: 2.6, desc: '3스핀마다 +9 (무럭무럭)' },
+    baby:    { name: '아기',     icon: '👶', rarity: 'uncommon', base: 0, ev: 2.6, desc: '3스핀마다 +9. 옆에 할머니가 있으면 매 스핀 +3' },
 
     // 레어 — 한 방
     slotm:   { name: '슬롯머신', icon: '🎰', rarity: 'rare',     base: 0, ev: 5.0, desc: '12.5% 확률로 +40' },
     lotto:   { name: '로또',     icon: '🎟️', rarity: 'rare',     base: 0, ev: 4.5, desc: '10% 확률로 +70, 당첨되면 소멸' },
     bank:    { name: '은행',     icon: '🏦', rarity: 'rare',     base: 0, ev: 4.0, desc: '보유 코인 15당 +1 이자 (최대 +10)' },
     moon:    { name: '보름달',   icon: '🌕', rarity: 'rare',     base: 0, ev: 3.5, desc: '옆 8칸의 심볼마다 +1씩 비춘다' },
-    king:    { name: '사장님',   icon: '👑', rarity: 'rare',     base: 5, ev: 5.0, desc: '+5. 그냥 돈이 많다' },
+    king:    { name: '사장님',   icon: '👑', rarity: 'rare',     base: 5, ev: 5.0, desc: '+5. 옆 회사원에게 보너스 +3을 준다' },
     sebae:   { name: '세뱃돈',   icon: '🧧', rarity: 'rare',     base: 0, ev: 5.0, desc: '첫 등장에서 +20 지급 후 소멸 (한 방)' },
   };
 
   const RARITY_WEIGHT = { common: 60, uncommon: 30, rare: 10 };
   const RARITY_ORDER = ['common', 'uncommon', 'rare'];
+  const FOOD_IDS = ['rice', 'gimbap', 'ramen', 'dumpling', 'milk', 'egg'];
+
+  // ── 유물 — 이득과 저주가 한 몸 ─────────────────────────────────
+  const RELICS = {
+    cheese:    { name: '치즈 숙성고',    icon: '🧀', good: '우유가 치즈가 되어 +3 지급',        bad: '고양이가 마실 우유가 없다' },
+    stock:     { name: '주식 계좌',      icon: '📈', good: '매 스핀 보유 코인의 4% 이자',        bad: '월세 정산마다 수수료 -8' },
+    dice:      { name: '도박사의 주사위', icon: '🎲', good: '로또·슬롯머신 당첨 확률 +50%',      bad: '꽝이 나올 때마다 -1코인' },
+    mart:      { name: '대형마트 회원권', icon: '🛒', good: '뽑기가 4장 제시된다',               bad: '건너뛰기 보상이 사라진다' },
+    catfeeder: { name: '길고양이 급식소', icon: '🐈', good: '고양이 +2, 우유를 마시면 +14',      bad: '매 스핀 사료값 -1' },
+    basement:  { name: '반지하 계약서',  icon: '🕳️', good: '월세 -20%',                        bad: '잭팟 당첨금이 절반이 된다' },
+    extend:    { name: '연장 계약서',    icon: '⏰', good: '월세 주기가 5스핀으로 늘어난다',     bad: '월세 +15%' },
+    angel:     { name: '전세 수호천사',  icon: '👼', good: '퇴거를 1회 무효화한다',             bad: '발동 시 덱에서 랜덤 2장 압류' },
+  };
+
+  // ── 스테이지 루트 — 완납 후 다음 동네를 고른다 (분기점) ─────────
+  const ROUTES = {
+    normal:     { name: '평범한 동네', icon: '🏠', desc: '무난하다. 월세 기본, 특별할 것 없음.',            rentMult: 1.0 },
+    rich:       { name: '부촌',        icon: '💎', desc: '월세 +35%. 뽑기에 레어가 잘 나온다.',             rentMult: 1.35, rareBoost: true },
+    slum:       { name: '달동네',      icon: '🏚️', desc: '월세 -15%. 특수 이벤트가 2배로 잦다.',            rentMult: 0.85, eventMult: 2 },
+    relicAlley: { name: '유물 골목',   icon: '🏛️', desc: '월세 +25%. 입주하며 유물을 하나 얻는다.',         rentMult: 1.25, relic: true },
+  };
+
+  // ── 월드 이벤트 — 스핀 중 무작위로 세상이 요동친다 ─────────────
+  const WORLD_EVENTS = {
+    depression: { name: '세계 대공황',  icon: '📉', desc: '3스핀 동안 모든 심볼 지급 -1',          duration: 3, kind: 'bad' },
+    boom:       { name: '경제 호황',    icon: '📊', desc: '3스핀 동안 총지급 +25%',               duration: 3, kind: 'good' },
+    lucky:      { name: '행운의 날',    icon: '🌈', desc: '2스핀 동안 당첨 확률 2배',             duration: 2, kind: 'good' },
+    moving:     { name: '이삿짐 정리',  icon: '📦', desc: '덱에서 카드 1장을 골라 버릴 수 있다',   kind: 'choice' },
+    gift:       { name: '이웃의 선물',  icon: '🎁', desc: '이웃이 반찬을 나눠줬다 (+월세의 15%)',  kind: 'good' },
+    rats:       { name: '쥐 소동',      icon: '🐀', desc: '쥐가 덱의 음식 하나를 훔쳐갔다',        kind: 'bad' },
+    phishing:   { name: '보이스피싱',   icon: '📱', desc: '보유 코인의 8%를 뜯겼다',              kind: 'bad' },
+  };
 
   // 시작 덱 — 고양이×우유로 파괴 시너지를 첫 판부터 가르친다
   const STARTER_DECK = ['rice', 'rice', 'rice', 'milk', 'milk', 'cat', 'gimbap', 'sock', 'sock'];
@@ -72,20 +105,27 @@
     constructor(rng) {
       this.rng = rng || Math.random;
       this.coins = 0;
-      this.stage = 1;              // 현재 월세 단계(1부터)
-      this.spinNo = 0;             // 총 스핀 수
-      this.spinsIntoStage = 0;     // 이번 단계에서 돈 스핀 수
-      this.state = 'playing';      // playing | dead
-      this.won = false;            // 10단계 완납 여부(무한 모드에서도 유지)
+      this.stage = 1;
+      this.spinNo = 0;
+      this.spinsIntoStage = 0;
+      this.state = 'playing';        // playing | dead
+      this.won = false;
       this.rentsPaid = 0;
       this.totalEarned = 0;
       this.bestSpin = 0;
       this._uid = 0;
       this.deck = STARTER_DECK.map((id) => this._mk(id));
+      // v2: 유물 / 루트 / 이벤트
+      this.relics = new Set();
+      this.angelUsed = false;
+      this.route = 'normal';
+      this.pendingRoutes = null;     // 완납 후 다음 동네 선택지
+      this.pendingRelics = null;     // 유물 골목 입주 보상 선택지
+      this.pendingRemoval = false;   // 이삿짐 정리 — 해소 전엔 스핀 불가
+      this.activeEvent = null;       // { id, remaining }
     }
 
     _mk(id) { return { uid: ++this._uid, id, bank: 0, tick: 0 }; }
-    rent() { return rentFor(this.stage); }
     _chance(p) { return this.rng() < p; }
     _shuffle(a) {
       for (let i = a.length - 1; i > 0; i--) {
@@ -94,13 +134,60 @@
       }
       return a;
     }
+    has(relic) { return this.relics.has(relic); }
+    spinsPerRent() { return BASE_SPINS_PER_RENT + (this.has('extend') ? 1 : 0); }
+
+    rent() {
+      let r = rentFor(this.stage) * ROUTES[this.route].rentMult;
+      if (this.has('basement')) r *= 0.8;
+      if (this.has('extend')) r *= 1.15;
+      return Math.round(r);
+    }
+
+    // 표시용 아이콘 — 치즈 숙성고가 있으면 우유는 치즈다
+    displayIcon(item) {
+      if (item.id === 'milk' && this.has('cheese')) return '🧀';
+      return SYMBOLS[item.id].icon;
+    }
 
     // ── 스핀 한 번을 완전히 해석한다 ──────────────────────────────
     spin() {
-      if (this.state !== 'playing') return null;
+      if (this.state !== 'playing' || this.pendingRemoval || this.pendingRoutes || this.pendingRelics) return null;
       this.spinNo++;
       this.spinsIntoStage++;
       const coinsAtStart = this.coins;
+      const extra = [];   // 전역 가감 내역 [{label, amt}] — UI 표시용
+
+      // 0) 월드 이벤트 발동 판정 (지속 이벤트 중엔 새로 안 뜸)
+      let firedEvent = null;
+      const evMult = ROUTES[this.route].eventMult || 1;
+      if (!this.activeEvent && this.spinNo > 2 && this._chance(EVENT_CHANCE * evMult)) {
+        const ids = Object.keys(WORLD_EVENTS);
+        const id = ids[Math.floor(this.rng() * ids.length)];
+        const def = WORLD_EVENTS[id];
+        firedEvent = { id, name: def.name, icon: def.icon, desc: def.desc, kind: def.kind };
+        if (def.duration) {
+          this.activeEvent = { id, remaining: def.duration };
+        } else if (id === 'gift') {
+          const amt = Math.ceil(this.rent() * 0.15);
+          this.coins += amt;
+          extra.push({ label: '🎁 이웃의 선물', amt });
+        } else if (id === 'rats') {
+          const foods = this.deck.filter((d) => FOOD_IDS.includes(d.id));
+          if (foods.length) {
+            const victim = foods[Math.floor(this.rng() * foods.length)];
+            this.deck = this.deck.filter((d) => d.uid !== victim.uid);
+            firedEvent.detail = `${SYMBOLS[victim.id].icon} ${SYMBOLS[victim.id].name} 도난!`;
+          } else firedEvent.detail = '훔칠 음식이 없었다';
+        } else if (id === 'phishing') {
+          const amt = Math.ceil(this.coins * 0.08);
+          this.coins = Math.max(0, this.coins - amt);
+          extra.push({ label: '📱 보이스피싱', amt: -amt });
+        } else if (id === 'moving') {
+          this.pendingRemoval = true;   // 스핀 후 UI가 제거 선택을 해소한다
+        }
+      }
+      const evActive = (id) => this.activeEvent && this.activeEvent.id === id;
 
       // 1) 보드 샘플 — 덱을 섞어 최대 12칸에 무작위 배치(빈칸도 무작위)
       const drawn = this._shuffle(this.deck.slice()).slice(0, CELLS);
@@ -108,24 +195,26 @@
       const cellsOrder = this._shuffle([...Array(CELLS).keys()]);
       drawn.forEach((item, k) => { board[cellsOrder[k]] = item; });
 
-      const pays = [];     // {idx, amt} — UI 팝 연출용
-      const events = [];   // {type, idx, targetIdx?, amt?} — 파괴/잭팟 연출용
-      const destroyed = new Set();   // uid
-      const bonus = new Array(CELLS).fill(0);   // 할머니·보름달 등 인접 가산
-
+      const pays = [];
+      const events = [];
+      const destroyed = new Set();
+      const bonus = new Array(CELLS).fill(0);
       const at = (i) => (board[i] && !destroyed.has(board[i].uid)) ? board[i] : null;
+      const adjHas = (i, id) => NEIGHBORS[i].some((n) => { const t = at(n); return t && t.id === id; });
+      const adjCount = (i, id) => NEIGHBORS[i].reduce((s, n) => { const t = at(n); return s + (t && t.id === id ? 1 : 0); }, 0);
 
       // 2) 파괴 페이즈 — 보드 순서대로, 먼저 선언한 쪽이 가져간다
       for (let i = 0; i < CELLS; i++) {
         const it = at(i); if (!it) continue;
-        if (it.id === 'cat') {
+        if (it.id === 'cat' && !this.has('cheese')) {   // 치즈 숙성고: 우유가 치즈라 못 마신다
           for (const n of NEIGHBORS[i]) {
             const t = at(n);
             if (t && t.id === 'milk') {
               destroyed.add(t.uid);
-              pays.push({ idx: i, amt: 9 });
-              events.push({ type: 'eat', idx: i, targetIdx: n, amt: 9 });
-              break;   // 스핀당 한 잔만
+              const amt = this.has('catfeeder') ? 14 : 9;
+              pays.push({ idx: i, amt });
+              events.push({ type: 'eat', idx: i, targetIdx: n, amt });
+              break;
             }
           }
         } else if (it.id === 'miner') {
@@ -164,8 +253,7 @@
         }
       }
 
-      // 3) 지급 페이즈 — 생존 심볼의 기본 지급 + 인접 보정
-      //    먼저 가산 심볼(할머니·보름달)을 집계한다
+      // 3) 인접 가산 집계 (할머니·보름달)
       for (let i = 0; i < CELLS; i++) {
         const it = at(i); if (!it) continue;
         if (it.id === 'granny') {
@@ -175,33 +263,53 @@
           }
         } else if (it.id === 'moon') {
           for (const n of NEIGHBORS[i]) if (at(n)) bonus[n] += 1;
+        } else if (it.id === 'king') {
+          for (const n of NEIGHBORS[i]) {
+            const t = at(n);
+            if (t && t.id === 'worker') bonus[n] += 3;   // 사장님 보너스
+          }
         }
       }
 
+      // 4) 지급 페이즈
+      let probMisses = 0;   // 도박사의 주사위 저주 계산용
       for (let i = 0; i < CELLS; i++) {
         const it = at(i); if (!it) continue;
         const def = SYMBOLS[it.id];
         let amt = def.base;
 
-        if (it.id === 'worker') {
-          const hungover = NEIGHBORS[i].some((n) => { const t = at(n); return t && t.id === 'soju'; });
-          if (hungover) amt = 1;
+        if (it.id === 'milk' && this.has('cheese')) {
+          amt = 3;   // 치즈 — 고양이는 못 먹지만 비싸다
+        } else if (it.id === 'cat' && this.has('catfeeder')) {
+          amt = 3;   // 급식소 고양이는 통통하다
+        } else if (it.id === 'worker') {
+          if (adjHas(i, 'soju')) amt = 1;   // 숙취 (사장님 보너스는 bonus로 별도 가산)
+        } else if (it.id === 'ramen') {
+          amt += 2 * adjCount(i, 'egg');    // 계란 라면
+        } else if (it.id === 'soju') {
+          if (adjHas(i, 'ramen')) amt += 2; // 해장 세트
+        } else if (it.id === 'baby') {
+          it.tick += 1;
+          if (adjHas(i, 'granny')) amt += 3;   // 할머니의 돌봄
+          if (it.tick % 3 === 0) { amt += 9; events.push({ type: 'grow', idx: i, amt: 9 }); }
         } else if (it.id === 'slotm' || it.id === 'lotto') {
-          const luck = NEIGHBORS[i].some((n) => { const t = at(n); return t && t.id === 'clover'; });
           let p = it.id === 'slotm' ? 0.125 : 0.10;
-          if (luck) p = Math.min(0.45, p * 2);
+          if (adjHas(i, 'clover')) p *= 2;
+          if (this.has('dice')) p *= 1.5;
+          if (evActive('lucky')) p *= 2;
+          p = Math.min(0.6, p);
           if (this._chance(p)) {
             amt = it.id === 'slotm' ? 40 : 70;
+            if (this.has('basement')) amt = Math.ceil(amt / 2);   // 반지하의 곰팡이가 운을 갉아먹는다
             events.push({ type: 'jackpot', idx: i, amt });
-            if (it.id === 'lotto') destroyed.add(it.uid);   // 당첨된 로또는 소멸
+            if (it.id === 'lotto') destroyed.add(it.uid);
+          } else {
+            probMisses++;
           }
         } else if (it.id === 'bank') {
           amt = Math.min(10, Math.floor(coinsAtStart / 15));
         } else if (it.id === 'piggy') {
-          it.bank += 1;   // 지급 없이 적립
-        } else if (it.id === 'baby') {
-          it.tick += 1;
-          if (it.tick % 3 === 0) { amt = 9; events.push({ type: 'grow', idx: i, amt }); }
+          it.bank += 1;
         } else if (it.id === 'sebae') {
           amt = 20;
           destroyed.add(it.uid);
@@ -209,10 +317,16 @@
         }
 
         amt += bonus[i];
+        if (evActive('depression')) amt = Math.max(0, amt - 1);   // 세계 대공황
         if (amt > 0) pays.push({ idx: i, amt });
       }
 
-      // 4) 성장 페이즈 — 닭이 알을 낳고, 알이 부화한다
+      // 대공황은 파괴·잭팟 지급에도 그림자를 드리운다
+      if (evActive('depression')) {
+        for (const p of pays) if (p.amt > 0) p.amt = Math.max(0, p.amt);   // (심볼 지급에서 이미 반영)
+      }
+
+      // 5) 성장 페이즈 — 닭이 알을 낳고, 알이 부화한다
       for (let i = 0; i < CELLS; i++) {
         const it = at(i); if (!it) continue;
         if (it.id === 'chicken' && this.deck.length < DECK_CAP && this._chance(0.30)) {
@@ -224,18 +338,41 @@
         }
       }
 
-      // 파괴 확정 — 덱에서 영구 제거
       if (destroyed.size) this.deck = this.deck.filter((d) => !destroyed.has(d.uid));
 
-      const total = pays.reduce((s, p) => s + p.amt, 0);
-      this.coins += total;
-      this.totalEarned += total;
+      let total = pays.reduce((s, p) => s + p.amt, 0);
+      if (evActive('boom')) {   // 경제 호황
+        const boost = Math.round(total * 0.25);
+        if (boost > 0) { total += boost; extra.push({ label: '📊 경제 호황', amt: boost }); }
+      }
+
+      // 유물 전역 효과
+      if (this.has('stock')) {
+        const interest = Math.floor(coinsAtStart * 0.04);
+        if (interest > 0) { total += interest; extra.push({ label: '📈 주식 이자', amt: interest }); }
+      }
+      if (this.has('dice') && probMisses > 0) {
+        total -= probMisses; extra.push({ label: '🎲 주사위 저주', amt: -probMisses });
+      }
+      if (this.has('catfeeder')) {
+        total -= 1; extra.push({ label: '🐈 사료값', amt: -1 });
+      }
+
+      this.coins = Math.max(0, this.coins + total);
+      this.totalEarned += Math.max(0, total);
       if (total > this.bestSpin) this.bestSpin = total;
 
-      // 5) 월세 정산 — 이번 단계 4번째 스핀이면 즉시
+      // 지속 이벤트 소진
+      if (this.activeEvent) {
+        this.activeEvent.remaining--;
+        if (this.activeEvent.remaining <= 0) this.activeEvent = null;
+      }
+
+      // 6) 월세 정산
       let settle = null;
-      if (this.spinsIntoStage >= SPINS_PER_RENT) {
+      if (this.spinsIntoStage >= this.spinsPerRent()) {
         const rent = this.rent();
+        if (this.has('stock')) { this.coins = Math.max(0, this.coins - 8); extra.push({ label: '📈 증권사 수수료', amt: -8 }); }
         if (this.coins >= rent) {
           this.coins -= rent;
           const surplus = this.coins;
@@ -243,29 +380,83 @@
           settle = {
             type: this.stage >= WIN_STAGE && !this.won ? 'won' : 'paid',
             rent, stage: this.stage, surplus,
-            bonus: surplus >= Math.ceil(rent * 0.5),   // 잉여 50%↑ → 보너스 뽑기
+            bonus: surplus >= Math.ceil(rent * 0.5),
           };
           if (settle.type === 'won') this.won = true;
-          this.stage++;
-          this.spinsIntoStage = 0;
+          this._advanceStage();
+        } else if (this.has('angel') && !this.angelUsed) {
+          // 전세 수호천사 — 퇴거 무효, 대신 덱 2장 압류
+          this.angelUsed = true;
+          this.relics.delete('angel');
+          const seized = [];
+          for (let k = 0; k < 2 && this.deck.length > 1; k++) {
+            const idx = Math.floor(this.rng() * this.deck.length);
+            seized.push(SYMBOLS[this.deck[idx].id].name);
+            this.deck.splice(idx, 1);
+          }
+          this.coins = 0;
+          settle = { type: 'revived', rent, stage: this.stage, seized };
+          this._advanceStage();
         } else {
           settle = { type: 'evicted', rent, stage: this.stage, shortfall: rent - this.coins };
           this.state = 'dead';
         }
       }
 
-      return { board, pays, events, total, coins: this.coins, spinNo: this.spinNo, settle, destroyed };
+      return { board, pays, events, total, coins: this.coins, spinNo: this.spinNo, settle, firedEvent, activeEvent: this.activeEvent, extra, destroyed };
     }
 
-    // ── 심볼 제안 3장 (rareBoost: 보너스 뽑기 — 레어 확률 상승) ──
+    _advanceStage() {
+      this.stage++;
+      this.spinsIntoStage = 0;
+      this.pendingRoutes = this._routeOptions();   // 분기점 — 다음 동네를 고른다
+    }
+
+    // ── 루트 분기 — 유물 골목은 가끔만 나타난다(희소성) ────────────
+    _routeOptions() {
+      let pool = ['normal', 'rich', 'slum'];
+      if (this._chance(0.45)) pool.push('relicAlley');
+      const ids = this._shuffle(pool).slice(0, 3);
+      return ids.map((id) => Object.assign({ id }, ROUTES[id]));
+    }
+    chooseRoute(id) {
+      if (!this.pendingRoutes || !ROUTES[id]) return;
+      this.route = id;
+      this.pendingRoutes = null;
+      if (ROUTES[id].relic) {
+        const unowned = Object.keys(RELICS).filter((r) => !this.relics.has(r) && !(r === 'angel' && this.angelUsed));
+        if (unowned.length) {
+          this.pendingRelics = this._shuffle(unowned).slice(0, 2).map((r) => Object.assign({ id: r }, RELICS[r]));
+        } else {
+          this.coins += 15;   // 모든 유물 보유 — 골동품을 판다
+        }
+      }
+    }
+    chooseRelic(id) {
+      if (!this.pendingRelics || !RELICS[id]) return;
+      this.relics.add(id);
+      this.pendingRelics = null;
+    }
+
+    // ── 이삿짐 정리 해소 ──────────────────────────────────────────
+    removeCard(uid) {
+      if (!this.pendingRemoval) return false;
+      const before = this.deck.length;
+      if (before > 1) this.deck = this.deck.filter((d) => d.uid !== uid);
+      this.pendingRemoval = false;
+      return this.deck.length < before;
+    }
+    declineRemoval() { this.pendingRemoval = false; }
+
+    // ── 심볼 제안 (마트 회원권: 4장 / 부촌·보너스: 레어 부스트) ────
     offers(rareBoost) {
-      const w = rareBoost
-        ? { common: 20, uncommon: 45, rare: 35 }
-        : RARITY_WEIGHT;
+      const boosted = rareBoost || !!ROUTES[this.route].rareBoost;
+      const w = boosted ? { common: 20, uncommon: 45, rare: 35 } : RARITY_WEIGHT;
+      const count = this.has('mart') ? 4 : 3;
       const ids = Object.keys(SYMBOLS);
       const out = [];
       let guard = 0;
-      while (out.length < 3 && guard++ < 60) {
+      while (out.length < count && guard++ < 80) {
         const roll = this.rng() * (w.common + w.uncommon + w.rare);
         const rarity = roll < w.common ? 'common' : (roll < w.common + w.uncommon ? 'uncommon' : 'rare');
         const pool = ids.filter((id) => SYMBOLS[id].rarity === rarity && !out.includes(id));
@@ -275,12 +466,12 @@
       return out;
     }
 
+    skipReward() { return this.has('mart') ? 0 : SKIP_COINS; }
     pick(id) {
       if (id && SYMBOLS[id] && this.deck.length < DECK_CAP) this.deck.push(this._mk(id));
-      else this.coins += SKIP_COINS;   // 건너뛰기 보상
+      else this.coins += this.skipReward();
     }
 
-    // 덱 요약(UI 덱 뷰어용): id → 개수
     deckSummary() {
       const m = {};
       for (const d of this.deck) m[d.id] = (m[d.id] || 0) + 1;
@@ -291,8 +482,8 @@
   }
 
   const api = {
-    Run, SYMBOLS, NEIGHBORS, STARTER_DECK, RARITY_WEIGHT,
-    COLS, ROWS, CELLS, SPINS_PER_RENT, WIN_STAGE, DECK_CAP, SKIP_COINS,
+    Run, SYMBOLS, RELICS, ROUTES, WORLD_EVENTS, NEIGHBORS, STARTER_DECK, RARITY_WEIGHT,
+    COLS, ROWS, CELLS, BASE_SPINS_PER_RENT, WIN_STAGE, DECK_CAP, SKIP_COINS, EVENT_CHANCE,
     rentFor,
   };
   if (typeof window !== 'undefined') window.Jackpot = api;
