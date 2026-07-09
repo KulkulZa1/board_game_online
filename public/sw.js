@@ -8,7 +8,7 @@
 // 캐시 무효화:
 //   activate 시 /api/version 호출 → commit 해시가 바뀌면 캐시 전체 삭제
 
-const CACHE_NAME   = 'boardgame-v8';
+const CACHE_NAME   = 'boardgame-v9';   // v9: 디렉터리 URL(/arcade/x/)이 cacheFirst로 오분류돼 HTML이 영구 캐시되던 버그 — 전체 퍼지
 const COMMIT_KEY   = 'sw_last_commit';
 
 // 사전 캐시 — HTML 제외, 진짜 정적 자산만 (icons/ 미존재 시 phantom 경로 제외)
@@ -79,8 +79,9 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // ② HTML 파일 / 루트 → 네트워크 우선, 실패 시 캐시 폴백
-  if (path === '/' || path.endsWith('.html')) {
+  // ② HTML 문서 → 네트워크 우선, 실패 시 캐시 폴백
+  //    디렉터리 URL(/arcade/jackpot/ 등)도 HTML이다 — cacheFirst로 새면 배포 후 옛 HTML이 영구 서빙된다
+  if (path === '/' || path.endsWith('.html') || path.endsWith('/') || request.mode === 'navigate') {
     event.respondWith(networkFirst(request));
     return;
   }

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>월세 잭팟 — 슬롯 로그라이트</title>
   <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="style.css?v=1.1">
+  <link rel="stylesheet" href="style.css?v=1.3">
 </head>
 <body>
   <div id="container">
@@ -15,6 +15,7 @@
       <div id="hdrStats">
         <span title="최고 완납 단계">🏆 <strong id="bestDisp">0</strong></span>
         <button id="deckBtn" class="hdr-btn" title="내 덱 보기 (D)">📦 <b id="deckCount">9</b></button>
+        <button id="turboBtn" class="hdr-btn" title="터보 모드 (T)">⚡</button>
         <button id="muteBtn" class="hdr-btn" title="음소거 (M)">🔊</button>
       </div>
     </header>
@@ -29,10 +30,13 @@
       <div id="coinBox">💰 <b id="coinDisp">0</b></div>
     </div>
 
-    <!-- 유물 바 + 현재 동네 -->
+    <!-- 유물 바 + 현재 동네 + 피버 게이지 -->
     <div id="metaBar">
       <span id="routeChip">🏠 평범한 동네</span>
       <div id="relicBar"></div>
+      <div id="feverBar" title="좋은 스핀(+15↑) 3연속 → 피버! 다음 스핀 당첨 확률 2배">
+        <span class="fdot"></span><span class="fdot"></span><span class="fdot"></span>
+      </div>
     </div>
 
     <!-- 월드 이벤트 배너 -->
@@ -43,6 +47,7 @@
       <div id="slotGrid"></div>
       <div id="flashLayer"></div>
       <div id="stamp" class="hidden"></div>
+      <div id="megaWin" class="hidden"></div>
       <div id="fxLayer"></div>
     </div>
 
@@ -103,6 +108,7 @@
           스핀마다 새 심볼을 뽑아 덱을 키우고, 옆 칸끼리 <b>시너지</b>를 노리세요.
           완납할 때마다 <b>다음 동네를 선택</b>합니다 — 유물 골목에선 <b>이득과 저주가 한 몸인 유물</b>을 얻습니다.
           대공황·경제 호황 같은 <b>월드 이벤트</b>가 세상을 흔듭니다.
+          📦 덱에서 심볼을 탭해 <b>📌 붙박이(최대 2)</b>로 칸에 고정하면 시너지를 설계할 수 있습니다.
           <b>10번 완납</b>하면 내 집 마련!</p>
         <div id="bestLine" class="best-line hidden"></div>
         <button id="startBtn">입주하기</button>
@@ -111,8 +117,8 @@
   </div>
 
   <script src="/js/admob.js?v=1.0"></script>
-  <script src="sim.js?v=1.1"></script>
-  <script src="game.js?v=1.1"></script>
+  <script src="sim.js?v=1.3"></script>
+  <script src="game.js?v=1.3"></script>
   <script src="/js/sw-update.js?v=20260520b"></script>
 </body>
 </html>

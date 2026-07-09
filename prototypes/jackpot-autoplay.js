@@ -28,6 +28,17 @@ function botPick(run, offers) {
   run.pick(best);
 }
 
+// 📌 붙박이 전략 — 시너지 쌍을 인접 칸(5,6)에 고정
+function botFixtures(run) {
+  if (run.fixtures.length >= 2) return;
+  const find = (id) => run.deck.find((d) => d.id === id && !run.isFixed(d.uid));
+  const pairs = [['clover', 'slotm'], ['clover', 'lotto'], ['granny', 'gimbap'], ['chef', 'gimbap'], ['chef', 'ramen']];
+  for (const [a, b] of pairs) {
+    const A = find(a), B = find(b);
+    if (A && B) { run.setFixture(A.uid, 5); run.setFixture(B.uid, 6); return; }
+  }
+}
+
 // 분기·유물·이삿짐 대응
 function botResolvePending(run) {
   if (run.pendingRoutes) {
@@ -67,6 +78,7 @@ function play(seed, maxSpins) {
     if (run.state !== 'playing') break;
     botPick(run, run.offers(r.settle && r.settle.bonus));
     if (r.settle && r.settle.bonus) botPick(run, run.offers(true));
+    botFixtures(run);
   }
   return {
     won: run.won,
