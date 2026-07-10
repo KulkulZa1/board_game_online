@@ -105,6 +105,8 @@ function get(path, cb) {
 
 setTimeout(() => {
   const ROUTES = [
+    { path: '/arcade/factory/state.js', label: '/arcade/factory/state.js -> 200', expect: 200 },
+    { path: '/arcade/factory/evolution.js', label: '/arcade/factory/evolution.js -> 200', expect: 200 },
     { path: '/api/status',     label: '/api/status → 200',                  expect: 200 },
     { path: '/',               label: '/ → 200 (로비)',                      expect: 200 },
     { path: '/game.html',      label: '/game.html → 200 (게임 페이지)',       expect: 200 },
@@ -122,9 +124,12 @@ setTimeout(() => {
     { path: '/arcade/bootstrap/sim.js', label: '/arcade/bootstrap/sim.js → 200', expect: 200 },
     { path: '/arcade/jackpot/', label: '/arcade/jackpot/ → 200', expect: 200 },
     { path: '/arcade/jackpot/sim.js', label: '/arcade/jackpot/sim.js → 200', expect: 200 },
+    { path: '/arcade/neon-cascade/', label: '/arcade/neon-cascade/ → 200', expect: 200 },
+    { path: '/arcade/neon-cascade/sim.js', label: '/arcade/neon-cascade/sim.js → 200', expect: 200 },
   ];
 
-  let pending = ROUTES.length + 1; // +1 for JSON structure check
+  const regularRoutes = ROUTES.filter(({ path }) => path !== '/api/status');
+  let pending = regularRoutes.length + 2;
   function done() {
     pending--;
     if (pending > 0) return;
@@ -142,7 +147,7 @@ setTimeout(() => {
     done(); // counts for route check
   });
 
-  ROUTES.slice(1).forEach(({ path, label, expect }) => {
+  regularRoutes.forEach(({ path, label, expect }) => {
     get(path, (err, code) => {
       check(label, !err && code === expect);
       done();

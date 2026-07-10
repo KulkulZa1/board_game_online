@@ -50,7 +50,11 @@ This launch-readiness pass found and fixed:
 
 Current production observations before this branch is merged and Render redeploys:
 
-- Production home and arcade routes loaded on current `main`; `/sandbox/` is expected to return 404.
+- On 2026-07-10, `/api/version` reported production commit `f09f83a` on `main`, while `origin/main` was `b0f8b94`. The deployed service was one merge behind the repository, so this mismatch is a Render deploy-state issue rather than only a browser cache issue.
+- The deployed Factory and Bootstrap routes both started successfully with no captured console warnings/errors at desktop size. Factory did not contain the new breakthrough HUD and Bootstrap did not contain the new active-action control, as expected before this branch is merged and redeployed.
+- At a 390x844 production viewport, both routes avoided horizontal page overflow. Bootstrap's dashboard content overflowed its mobile grid height and visually collided with the tutorial/control region; this branch changes the mobile board to content-height document flow.
+- Factory's production mobile HUD placed the throughput/speed box over the phase-stability panel. This branch moves that box above the bottom build controls on narrow screens so the expanded breakthrough panel remains readable.
+- Production home and arcade routes loaded on the deployed `main` commit; `/sandbox/` is expected to return 404.
 - Branch changes that move Tower Defense runtime files off `/sandbox/...` require merge and Render redeploy before they are visible on production.
 - The new chat speech-bubble behavior is not visible on production until this branch is merged and Render redeploys.
 - Production currently still serves `sw.js` with the old JS/CSS stale-while-revalidate policy until this branch is merged and Render redeploys.

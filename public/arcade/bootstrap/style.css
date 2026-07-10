@@ -64,6 +64,64 @@ html, body {
 .res-cap { font-size: 0.66rem; color: var(--muted); }
 .res-flow { font-size: 0.68rem; color: var(--muted); }
 
+#idleActionPanel {
+  display: grid;
+  grid-template-columns: minmax(240px, 0.8fr) minmax(220px, 1.2fr);
+  gap: 8px;
+  flex-shrink: 0;
+}
+#activeActionBtn {
+  min-height: 54px;
+  display: grid;
+  grid-template-columns: 34px 1fr 44px;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  padding: 7px 12px;
+  background: linear-gradient(135deg, var(--panel2), var(--panelbg));
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+  touch-action: manipulation;
+  transition: transform 0.12s ease-out, border-color 0.2s ease-in-out, filter 0.2s ease-in-out;
+}
+#activeActionBtn:hover { filter: brightness(1.12); }
+#activeActionBtn:active { transform: scale(0.98); }
+#activeActionBtn:focus-visible { outline: 2px solid var(--accent2); outline-offset: 2px; }
+#activeActionBtn.boosted { border-color: var(--accent2); filter: brightness(1.16); }
+#activeActionIcon { font-size: 1.45rem; text-align: center; }
+.active-action-copy { display: flex; flex-direction: column; min-width: 0; }
+.active-action-copy b { font-size: 0.86rem; }
+.active-action-copy small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.66rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#activeCombo {
+  color: var(--accent2);
+  font-size: 1rem;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+#goldenAgeWrap {
+  min-height: 54px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 7px 12px;
+  background: var(--panelbg);
+}
+.golden-age-line { display: flex; justify-content: space-between; gap: 8px; font-size: 0.72rem; font-weight: 700; }
+#goldenAgeCount { color: var(--accent2); font-variant-numeric: tabular-nums; }
+.golden-age-track { height: 7px; margin: 5px 0 3px; overflow: hidden; border-radius: 4px; background: var(--bg); }
+#goldenAgeFill { width: 0; height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2)); transition: width 0.25s ease-in-out; }
+#idleStatus { color: var(--muted); font-size: 0.65rem; }
+
 #eventBanner { background: rgba(120,30,30,0.4); border: 1px solid var(--bad); color: #ffb3a0;
   border-radius: 8px; padding: 5px 12px; font-size: 0.78rem; text-align: center; flex-shrink: 0; }
 #eventBanner.good { background: rgba(40,90,45,0.35); border-color: var(--ok); color: #b8f0c0; }
@@ -261,7 +319,22 @@ html, body {
 @media (max-width: 760px) {
   html, body { overflow: auto; }
   #container { height: auto; min-height: 100dvh; overflow: visible; }
-  #board { grid-template-columns: 1fr; min-height: 0; overflow: visible; }
-  #board .panel, #buildPanel, #dash, #buildList { overflow: visible; }
+  #board {
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+  }
+  #board .panel, #buildPanel, #dash, #buildList { height: auto; min-height: 0; overflow: visible; }
+  #dash { flex: none; }
   #hdrStats { gap: 8px; font-size: 0.68rem; }
+  #idleActionPanel { grid-template-columns: 1fr; }
+  #activeActionBtn, #goldenAgeWrap { min-height: 58px; }
+  #controls { flex-wrap: wrap; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #activeActionBtn, #goldenAgeFill { transition: none; }
 }

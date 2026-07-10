@@ -19,6 +19,10 @@
   const livesEl    = document.getElementById('livesDisplay');
   const levelLabel = document.getElementById('levelLabel');
   const brickFill  = document.getElementById('brickFill');
+  const comboEl    = document.getElementById('comboDisplay');
+  const feverLabel = document.getElementById('feverLabel');
+  const feverFill  = document.getElementById('feverFill');
+  const gameWrapper = document.getElementById('gameWrapper');
 
   // ── Config ───────────────────────────────────────────────────
   const COLS   = 10;
@@ -27,6 +31,8 @@
   const PAD_GAP = 4;          // gap between bricks
   const BALL_BASE_SPEED = 5;
   const POWERUP_CHANCE  = 0.18;
+  const FEVER_TARGET = 12;
+  const FEVER_DURATION_MS = 6000;
 
   const BRICK_COLORS = [
     '#ff4757','#ff6b81','#ffa502',
@@ -39,6 +45,7 @@
   let W, H, brickW, brickH, brickTop;
   let paddle, balls, bricks, particles, powerups, falling;
   let score, lives, level, totalBricks, highScore;
+  let combo, bestCombo, feverUntil;
   let running = false, animId = 0;
 
   highScore = +(localStorage.getItem('breakout_hs') || 0);
@@ -112,6 +119,9 @@
     score  = 0;
     lives  = 3;
     level  = 1;
+    combo = 0;
+    bestCombo = 0;
+    feverUntil = 0;
     paddle = makePaddle();
     scoreEl.textContent = 0;
     livesEl.textContent = 3;
@@ -128,11 +138,35 @@
   function loop(ts) {
     if (!running) return;
     animId = requestAnimationFrame(loop);
-    update();
+    update(ts);
     draw();
   }
 
-  function update() {
+  function isFever(now) {
+    return feverUntil > (now || performance.now());
+  }
+
+  function activateFever(now) {
+    feverUntil = now + FEVER_DURATION_MS;
+    playFever();
+    vibrate([25, 35, 25, 55]);
+  }
+
+  function renderMomentum(ts) {
+    const active = isFever(ts);
+    const progress = active
+      ? Math.max(0, (feverUntil - ts) / FEVER_DURATION_MS * 100)
+      : (combo % FEVER_TARGET) / FEVER_TARGET * 100;
+    comboEl.textContent = `x${Math.max(1, combo || 1)}`;
+    comboEl.classList.toggle('hot', combo >= 4);
+    feverFill.style.width = `${progress}%`;
+    feverLabel.textContent = active ? 'FEVER!' : 'FEVER';
+    feverLabel.classList.toggle('active', active);
+    gameWrapper.classList.toggle('fever', active);
+  }
+
+  function update(ts) {
+    renderMomentum(ts);
     // Move balls
     balls.forEach(ball => {
       ball.x += ball.vx;
@@ -164,6 +198,8 @@
     balls = balls.filter(b => b.y - b.r < H);
     if (balls.length === 0) {
       lives--;
+      combo = 0;
+      feverUntil = 0;
       livesEl.textContent = lives;
       if (lives <= 0) {
         gameOver(false);
@@ -182,11 +218,15 @@
         brick.hp--;
         if (brick.hp <= 0) {
           brick.alive = false;
-          const pts = 10 * level * brick.maxHp;
+          combo++;
+          bestCombo = Math.max(bestCombo, combo);
+          if (combo % FEVER_TARGET === 0) activateFever(performance.now());
+          const chainMult = 1 + Math.floor((combo - 1) / 4) * 0.5;
+          const pts = Math.round(10 * level * brick.maxHp * chainMult * (isFever() ? 3 : 1));
           score += pts;
           scoreEl.textContent = score;
           spawnParticles(brick.x + brick.w / 2, brick.y + brick.h / 2, brick.color, 8);
-          if (brick.hasPowerup) spawnFalling(brick);
+          if (brick.hasPowerup || (isFever() && combo % 3 === 0)) spawnFalling(brick);
           playBreak(brick.maxHp);
           updateLevelBar();
         } else {
@@ -374,7 +414,7 @@
     }
     overlayIcon.textContent  = won ? '🎉' : '💀';
     overlayTitle.textContent = won ? `Level ${level - 1} 클리어!` : '게임 오버';
-    overlayMsg.textContent   = `점수: ${score}${isRecord && score > 0 ? ' — 신기록!' : ''}`;
+    overlayMsg.textContent   = `점수: ${score} · 최고 연쇄 x${bestCombo}${isRecord && score > 0 ? ' — 신기록!' : ''}`;
     startBtn.textContent     = '다시 시작';
     overlay.classList.add('visible');
     if (window.AdMobHelper && score > 0) AdMobHelper.showAfterGame();
@@ -423,6 +463,8 @@
   function playDeath()    { beep(150, 0.3, 'sawtooth', 0.2); }
   function playPowerup()  { beep(660, 0.1, 'sine', 0.15); setTimeout(() => beep(880, 0.1, 'sine', 0.15), 100); }
   function playLevelUp()  { [440,550,660,880].forEach((f,i) => setTimeout(() => beep(f,0.12,'sine',0.15), i*80)); }
+  function playFever()    { [523,659,784,1047].forEach((f,i) => setTimeout(() => beep(f,0.18,'triangle',0.14), i*65)); }
+  function vibrate(pattern) { try { if (navigator.vibrate) navigator.vibrate(pattern); } catch (_) {} }
 
   // ── Start ────────────────────────────────────────────────────
   function startGame() {

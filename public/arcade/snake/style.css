@@ -67,6 +67,7 @@ html, body {
   color: var(--accent);
   font-size: 1rem;
 }
+#comboDisplay.hot { color: #ffd166; text-shadow: 0 0 10px rgba(255,209,102,0.7); }
 
 /* ── Canvas wrapper ───────────────────────────────────────────── */
 #gameWrapper {
@@ -205,6 +206,40 @@ html, body {
   transition: width 0.3s, background 0.5s;
 }
 
+#rushBar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  max-width: 480px;
+  flex-shrink: 0;
+}
+#rushLabel {
+  min-width: 42px;
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+#rushLabel.active { color: #ffd166; text-shadow: 0 0 8px rgba(255,209,102,0.7); }
+#rushTrack {
+  flex: 1;
+  height: 5px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--panel);
+}
+#rushFill {
+  width: 0%;
+  height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, #ff4757, #ffd166, #2effa5);
+  transition: width 0.18s;
+}
+#gameWrapper.rush {
+  border-color: #ffd166;
+  box-shadow: 0 0 28px rgba(255,209,102,0.28);
+}
+
 /* ── Hide d-pad on wide screens ───────────────────────────────── */
 @media (min-width: 520px) and (min-height: 640px) {
   #dpad { display: none; }
@@ -216,5 +251,5 @@ html, body {
   #dpad { flex-direction: row; gap: 6px; }
   .dpad-row { flex-direction: column; }
   #dpad button { width: 44px; height: 44px; }
-  #levelBar { display: none; }
+  #levelBar, #rushBar { display: none; }
 }

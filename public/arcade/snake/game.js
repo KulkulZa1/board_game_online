@@ -13,6 +13,9 @@
   const SPEED_STEP = 3;  // ms faster per food eaten
   const FOODS_PER_LEVEL = 5;
   const SCORE_BASE = 10;
+  const COMBO_WINDOW_MS = 3500;
+  const RUSH_DURATION_MS = 6000;
+  const GOLD_FOOD_CHANCE = 0.12;
 
   // ── DOM ──────────────────────────────────────────────────────
   const canvas     = document.getElementById('c');
@@ -25,6 +28,10 @@
   const highEl     = document.getElementById('highDisplay');
   const levelLabel = document.getElementById('levelLabel');
   const levelFill  = document.getElementById('levelFill');
+  const comboEl    = document.getElementById('comboDisplay');
+  const rushLabel  = document.getElementById('rushLabel');
+  const rushFill   = document.getElementById('rushFill');
+  const gameWrapper = document.getElementById('gameWrapper');
 
   // ── Persistent state ─────────────────────────────────────────
   let highScore = +(localStorage.getItem('snake_hs') || 0);
@@ -32,6 +39,7 @@
 
   // ── Game state ───────────────────────────────────────────────
   let snake, dir, nextDir, food, score, foodEaten, tickMs;
+  let combo, bestCombo, lastEatAt, rushCharge, rushUntil;
   let running = false, lastTick = 0, animId = 0;
 
   // ── Sizing ───────────────────────────────────────────────────
@@ -62,7 +70,13 @@
     score    = 0;
     foodEaten = 0;
     tickMs   = BASE_MS;
+    combo = 0;
+    bestCombo = 0;
+    lastEatAt = 0;
+    rushCharge = 0;
+    rushUntil = 0;
     scoreEl.textContent = 0;
+    renderMomentum(0);
     setLevel(1, 0);
     placeFood();
   }
@@ -72,7 +86,7 @@
     let f;
     do { f = { x: (Math.random() * COLS) | 0, y: (Math.random() * ROWS) | 0 }; }
     while (occupied.has(`${f.x},${f.y}`));
-    food = f;
+    food = { ...f, type: Math.random() < (isRush(performance.now()) ? 0.32 : GOLD_FOOD_CHANCE) ? 'gold' : 'normal' };
   }
 
   function setLevel(lv, fill) {
@@ -88,6 +102,7 @@
   function loop(ts) {
     if (!running) return;
     animId = requestAnimationFrame(loop);
+    updateMomentum(ts);
     if (ts - lastTick >= tickMs) {
       lastTick = ts;
       tick();
@@ -105,15 +120,25 @@
     snake.unshift(head);
 
     if (head.x === food.x && head.y === food.y) {
+      const now = performance.now();
+      combo = lastEatAt && now - lastEatAt <= COMBO_WINDOW_MS ? combo + 1 : 1;
+      bestCombo = Math.max(bestCombo, combo);
+      lastEatAt = now;
       foodEaten++;
       const lv    = Math.floor(foodEaten / FOODS_PER_LEVEL) + 1;
       const fill  = (foodEaten % FOODS_PER_LEVEL) / FOODS_PER_LEVEL;
       setLevel(lv, fill);
-      score  += SCORE_BASE * lv;
+      const gold = food.type === 'gold';
+      const chainMult = 1 + Math.min(8, combo - 1) * 0.25;
+      const rushMult = isRush(now) ? 2 : 1;
+      score += Math.round(SCORE_BASE * lv * chainMult * rushMult * (gold ? 5 : 1));
+      rushCharge = Math.min(100, rushCharge + (gold ? 34 : 14));
+      if (rushCharge >= 100 && !isRush(now)) activateRush(now);
       tickMs  = Math.max(FLOOR_MS, tickMs - SPEED_STEP);
       scoreEl.textContent = score;
       placeFood();
-      playEat();
+      playEat(gold, combo);
+      if (gold) vibrate([18, 24, 18]);
     } else {
       snake.pop();
     }
@@ -133,12 +158,42 @@
     draw();  // render final frame
     overlayIcon.textContent = isRecord ? '🏆' : '💀';
     overlayMsg.textContent  = score > 0
-      ? `점수: ${score}${isRecord ? ' — 신기록!' : ''}`
+      ? `점수: ${score} · 최고 연쇄 x${bestCombo}${isRecord ? ' — 신기록!' : ''}`
       : '뱀을 움직여 사과를 먹으세요';
     startBtn.textContent = score > 0 ? '다시 시작' : '시작하기';
     overlay.classList.add('visible');
 
     if (window.AdMobHelper && score > 0) AdMobHelper.showAfterGame();
+  }
+
+  function isRush(now) { return rushUntil > (now || performance.now()); }
+
+  function activateRush(now) {
+    rushCharge = 100;
+    rushUntil = now + RUSH_DURATION_MS;
+    playRush();
+    vibrate([30, 40, 30, 60]);
+  }
+
+  function updateMomentum(ts) {
+    if (combo > 0 && ts - lastEatAt > COMBO_WINDOW_MS) combo = 0;
+    if (isRush(ts)) {
+      rushCharge = Math.max(0, (rushUntil - ts) / RUSH_DURATION_MS * 100);
+    } else if (rushUntil) {
+      rushUntil = 0;
+      rushCharge = 0;
+    }
+    renderMomentum(ts);
+  }
+
+  function renderMomentum(ts) {
+    comboEl.textContent = `x${Math.max(1, combo || 1)}`;
+    comboEl.classList.toggle('hot', combo >= 3);
+    rushFill.style.width = `${Math.max(0, Math.min(100, rushCharge))}%`;
+    const active = isRush(ts || performance.now());
+    rushLabel.textContent = active ? 'RUSH!' : 'RUSH';
+    rushLabel.classList.toggle('active', active);
+    gameWrapper.classList.toggle('rush', active);
   }
 
   // ── Renderer ─────────────────────────────────────────────────
@@ -161,14 +216,14 @@
       ctx.beginPath(); ctx.moveTo(0, i * cs);  ctx.lineTo(W, i * cs);  ctx.stroke();
     }
 
-    // Food — glowing red circle
     if (food) {
       const fx = food.x * cs + cs * 0.5;
       const fy = food.y * cs + cs * 0.5;
       const r  = cs * 0.38;
-      ctx.shadowColor = '#ff4757';
-      ctx.shadowBlur  = 10;
-      ctx.fillStyle   = '#ff4757';
+      const gold = food.type === 'gold';
+      ctx.shadowColor = gold ? '#ffd166' : '#ff4757';
+      ctx.shadowBlur  = gold ? 18 : 10;
+      ctx.fillStyle   = gold ? '#ffd166' : '#ff4757';
       ctx.beginPath();
       ctx.arc(fx, fy, r, 0, Math.PI * 2);
       ctx.fill();
@@ -178,6 +233,13 @@
       ctx.beginPath();
       ctx.arc(fx - r * 0.25, fy - r * 0.3, r * 0.3, 0, Math.PI * 2);
       ctx.fill();
+      if (gold) {
+        ctx.strokeStyle = '#fff4bd';
+        ctx.lineWidth = Math.max(1, cs * 0.07);
+        ctx.beginPath();
+        ctx.arc(fx, fy, r * 1.25, 0, Math.PI * 2);
+        ctx.stroke();
+      }
     }
 
     ctx.shadowBlur = 0;
@@ -197,6 +259,10 @@
       const g = Math.round(0x6a + (0xff - 0x6a) * t);
       const b = Math.round(0x48 + (0xa5 - 0x48) * t);
       ctx.fillStyle = `rgb(${r},${g},${b})`;
+      if (isRush()) {
+        ctx.shadowColor = i % 2 ? '#ffd166' : '#2effa5';
+        ctx.shadowBlur = i === 0 ? 18 : 8;
+      }
 
       ctx.beginPath();
       if (ctx.roundRect) {
@@ -205,6 +271,7 @@
         roundRect(ctx, x, y, s, s, rad);
       }
       ctx.fill();
+      ctx.shadowBlur = 0;
     });
 
     // Eyes on head
@@ -254,17 +321,37 @@
     return _ac;
   }
 
-  function playEat() {
+  function playEat(gold, chain) {
     try {
       const a = ac(), o = a.createOscillator(), g = a.createGain();
       o.connect(g); g.connect(a.destination);
       o.type = 'square';
-      o.frequency.setValueAtTime(300, a.currentTime);
-      o.frequency.exponentialRampToValueAtTime(900, a.currentTime + 0.07);
-      g.gain.setValueAtTime(0.12, a.currentTime);
+      o.frequency.setValueAtTime(gold ? 520 : 300 + Math.min(chain || 1, 8) * 25, a.currentTime);
+      o.frequency.exponentialRampToValueAtTime(gold ? 1560 : 900, a.currentTime + 0.07);
+      g.gain.setValueAtTime(gold ? 0.18 : 0.12, a.currentTime);
       g.gain.linearRampToValueAtTime(0, a.currentTime + 0.1);
       o.start(); o.stop(a.currentTime + 0.1);
     } catch (_) {}
+  }
+
+  function playRush() {
+    try {
+      const a = ac();
+      [440, 660, 880, 1320].forEach((freq, i) => {
+        const o = a.createOscillator(), g = a.createGain();
+        o.connect(g); g.connect(a.destination);
+        o.type = 'triangle';
+        const t = a.currentTime + i * 0.06;
+        o.frequency.setValueAtTime(freq, t);
+        g.gain.setValueAtTime(0.14, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
+        o.start(t); o.stop(t + 0.2);
+      });
+    } catch (_) {}
+  }
+
+  function vibrate(pattern) {
+    try { if (navigator.vibrate) navigator.vibrate(pattern); } catch (_) {}
   }
 
   // ── Input ────────────────────────────────────────────────────

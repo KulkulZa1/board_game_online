@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>CIVILIZATION ENGINE — 루프로 자라는 문명</title>
+  <title>문명 키우기 — 클릭하고 방치하며 성장</title>
   <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="style.css">
 </head>
@@ -11,7 +11,7 @@
   <div id="container">
     <header id="hdr">
       <a href="/" class="back-btn">← 로비</a>
-      <span class="game-title">🌱 문명 엔진</span>
+      <span class="game-title">🌱 문명 키우기</span>
       <div id="hdrStats">
         <span title="문명 지수 (복지×생산성×회복력)">문명지수 <strong id="ciValue">0</strong></span>
         <span title="인구">👥 <strong id="popCount">0</strong></span>
@@ -36,6 +36,19 @@
 
     <!-- 자원 바 -->
     <div id="resourceBar"></div>
+
+    <section id="idleActionPanel" aria-label="문명 직접 행동과 황금기">
+      <button id="activeActionBtn" type="button">
+        <span id="activeActionIcon">✋</span>
+        <span class="active-action-copy"><b id="activeActionName">채집 돕기</b><small id="activeActionGain">클릭해 문명을 돕습니다</small></span>
+        <strong id="activeCombo">x1</strong>
+      </button>
+      <div id="goldenAgeWrap">
+        <div class="golden-age-line"><span id="goldenAgeLabel">황금기 충전</span><span id="goldenAgeCount">0%</span></div>
+        <div class="golden-age-track"><div id="goldenAgeFill"></div></div>
+        <small id="idleStatus">자동 생산 중 · 직접 행동으로 가속</small>
+      </div>
+    </section>
 
     <!-- 활성 사건 배너 -->
     <div id="eventBanner" class="hidden"></div>
@@ -143,14 +156,13 @@
     <div id="startOverlay" class="overlay visible">
       <div class="ov-box">
         <div class="ov-icon">🌱</div>
-        <h2>문명 엔진 — 루프로 자라는 문명</h2>
-        <p class="ov-msg">한 줌의 사람들이 베리를 줍는 데서 시작합니다. <b>채집 → 농경 → 정착 → 분업 → 야금술</b>.
-          다음 시대는 자원을 모아서가 아니라 <b>현재 시대의 자급 루프를 안정적으로 닫았을 때</b> 열립니다.
-          모든 생산자는 가장 부족한 제약만큼만 가동합니다 — <b>병목을 찾아 넓히는 것</b>이 게임입니다.</p>
+        <h2>문명 키우기</h2>
+        <p class="ov-msg">클릭으로 작은 무리를 돕고, 건물을 키우면 문명은 스스로 생산합니다. 빠른 연속 행동으로 <b>황금기</b>를 열어 자동 생산을 폭발시키세요.<br>
+          <b>채집 → 농경 → 정착 → 분업 → 야금술</b>. 현재 시대의 자급 루프를 안정시키면 다음 시대가 열립니다.</p>
         <label class="challenge-row"><input type="checkbox" id="challengeToggle"> ⚡ 도전: 가뭄·홍수·혹한 빈발</label>
         <div id="bestLine" class="best-line hidden"></div>
         <div class="start-btns">
-          <button id="startBtn">문명 시작</button>
+          <button id="startBtn">키우기 시작</button>
           <button id="continueBtn" class="hidden">이어하기</button>
         </div>
       </div>
@@ -176,8 +188,8 @@
   </div>
 
   <script src="/js/admob.js?v=1.0"></script>
-  <script src="sim.js?v=2.2"></script>
-  <script src="game.js?v=2.2"></script>
+  <script src="sim.js?v=3.0"></script>
+  <script src="game.js?v=3.0"></script>
   <script src="/js/sw-update.js?v=20260520b"></script>
 </body>
 </html>

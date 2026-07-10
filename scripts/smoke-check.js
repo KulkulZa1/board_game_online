@@ -334,6 +334,7 @@ function checkProductionArcadeAssetPolicy() {
     'public/arcade/factory/index.html',
     'public/arcade/bootstrap/index.html',
     'public/arcade/tower-defense/index.html',
+    'public/arcade/neon-cascade/index.html',
   ];
   const offenders = arcadePages.filter((file) =>
     fs.readFileSync(path.join(root, file), 'utf8').includes('/sandbox/')
@@ -356,13 +357,15 @@ function checkProductionArcadeAssetPolicy() {
 function checkFactoryArcadeCoverage() {
   const page = fs.readFileSync(path.join(root, 'public/arcade/factory/index.html'), 'utf8');
   const game = fs.readFileSync(path.join(root, 'public/arcade/factory/game.js'), 'utf8');
+  const evolution = fs.readFileSync(path.join(root, 'public/arcade/factory/evolution.js'), 'utf8');
+  const stateHelpers = fs.readFileSync(path.join(root, 'public/arcade/factory/state.js'), 'utf8');
   const style = fs.readFileSync(path.join(root, 'public/arcade/factory/style.css'), 'utf8');
   const lobby = fs.readFileSync(path.join(root, 'public/index.html'), 'utf8');
 
   if (!lobby.includes('/arcade/factory/')) {
     throw new Error('Lobby should expose the Factory arcade route');
   }
-  if (!page.includes('/js/sw-update.js') || !page.includes('game.js')) {
+  if (!page.includes('/js/sw-update.js') || !page.includes('game.js') || !page.includes('evolution.js') || !page.includes('state.js')) {
     throw new Error('Factory page should load the runtime and service-worker update helper');
   }
   if (!game.includes('placementIssue') || !game.includes('광맥 위에만 배치')) {
@@ -389,8 +392,34 @@ function checkFactoryArcadeCoverage() {
   if (!page.includes('stabilityWrap') || !game.includes('eraGateStatus') || !game.includes('updateEraGate') || !style.includes('phase-chip')) {
     throw new Error('Factory game should gate industrial revolutions through visible stability conditions');
   }
+  if (!page.includes('breakthroughMini') || !game.includes('currentBreakthroughStatus') || !game.includes('addChronicle')) {
+    throw new Error('Factory game should expose bottleneck-driven breakthroughs and an industrial chronicle');
+  }
+  if (!game.includes('FactoryState.SAVE_VERSION') || !game.includes('data.rp') || !game.includes('data.tier')) {
+    throw new Error('Factory save should preserve research points, building tiers, and the versioned state format');
+  }
   if (!style.includes('@media (max-width: 520px)') || !style.includes('#palette')) {
     throw new Error('Factory CSS should include mobile-specific palette/tool layout rules');
+  }
+
+  const context = { window: {} };
+  vm.createContext(context);
+  vm.runInContext(evolution, context, { filename: 'public/arcade/factory/evolution.js' });
+  vm.runInContext(stateHelpers, context, { filename: 'public/arcade/factory/state.js' });
+  const evolutionApi = context.window.FactoryEvolution;
+  const stateApi = context.window.FactoryState;
+  const status = evolutionApi.evaluate(evolutionApi.forEra(1), { research: 20, throughput: 3, upgraded: 1 });
+  if (!status.ready || evolutionApi.modifiers(['standardization']).beltSpeed !== 1.2) {
+    throw new Error('Factory standardization breakthrough should unlock and improve belt speed');
+  }
+  const matureFactory = { research: 100, throughput: 100, upgraded: 10, powerRatio: 1, generatorCount: 2 };
+  if (!evolutionApi.BREAKTHROUGHS.every((definition) => evolutionApi.evaluate(definition, matureFactory).ready)) {
+    throw new Error('Every Factory breakthrough definition should have a reachable complete state');
+  }
+  const legacyDeposit = stateApi.restoreDeposit('iron_ore', () => true, 600);
+  const savedDeposit = stateApi.restoreDeposit({ resource: 'copper_ore', amount: 321, max: 900 }, () => true, 600);
+  if (!legacyDeposit || legacyDeposit.amount !== 600 || !savedDeposit || savedDeposit.amount !== 321) {
+    throw new Error('Factory save migration should restore legacy and quantity-aware deposits');
   }
 }
 
@@ -410,6 +439,61 @@ function checkPlantArcadeCoverage() {
   }
   if (!style.includes('breakthrough-row') || !style.includes('loop-stat') || !style.includes('burst-btn')) {
     throw new Error('Plant clicker should style idle-loop and breakthrough UI for mobile play');
+  }
+}
+
+function checkQuickArcadeRewardCoverage() {
+  const snakePage = fs.readFileSync(path.join(root, 'public/arcade/snake/index.html'), 'utf8');
+  const snakeGame = fs.readFileSync(path.join(root, 'public/arcade/snake/game.js'), 'utf8');
+  const snakeStyle = fs.readFileSync(path.join(root, 'public/arcade/snake/style.css'), 'utf8');
+  const breakoutPage = fs.readFileSync(path.join(root, 'public/arcade/breakout/index.html'), 'utf8');
+  const breakoutGame = fs.readFileSync(path.join(root, 'public/arcade/breakout/game.js'), 'utf8');
+  const breakoutStyle = fs.readFileSync(path.join(root, 'public/arcade/breakout/style.css'), 'utf8');
+
+  if (!snakePage.includes('comboDisplay') || !snakePage.includes('rushBar') ||
+      !snakeGame.includes('COMBO_WINDOW_MS') || !snakeGame.includes('RUSH_DURATION_MS') ||
+      !snakeStyle.includes('.rush')) {
+    throw new Error('Snake should retain combo, golden-food, and RUSH reward feedback');
+  }
+  if (!breakoutPage.includes('comboDisplay') || !breakoutPage.includes('feverInfo') ||
+      !breakoutGame.includes('FEVER_TARGET') || !breakoutGame.includes('activateFever') ||
+      !breakoutStyle.includes('.fever')) {
+    throw new Error('Breakout should retain destruction combo and FEVER reward feedback');
+  }
+}
+
+function checkNeonCascadeCoverage() {
+  const page = fs.readFileSync(path.join(root, 'public/arcade/neon-cascade/index.html'), 'utf8');
+  const game = fs.readFileSync(path.join(root, 'public/arcade/neon-cascade/game.js'), 'utf8');
+  const sim = fs.readFileSync(path.join(root, 'public/arcade/neon-cascade/sim.js'), 'utf8');
+  const style = fs.readFileSync(path.join(root, 'public/arcade/neon-cascade/style.css'), 'utf8');
+  const lobby = fs.readFileSync(path.join(root, 'public/index.html'), 'utf8');
+
+  if (!lobby.includes('/arcade/neon-cascade/')) {
+    throw new Error('Lobby should expose the Neon Cascade arcade route');
+  }
+  if (!page.includes('sim.js') || !page.includes('game.js') || !page.includes('/js/sw-update.js')) {
+    throw new Error('Neon Cascade page should load simulation, runtime, and update helper');
+  }
+  if (!game.includes('bestPulseTarget') || !game.includes('OVERDRIVE') || !game.includes('smartPulseBtn')) {
+    throw new Error('Neon Cascade runtime should expose direct and assisted chain-reaction play');
+  }
+  if (!style.includes('@media (max-width: 420px)') || !style.includes('prefers-reduced-motion')) {
+    throw new Error('Neon Cascade should include mobile and reduced-motion presentation rules');
+  }
+
+  const context = { window: {} };
+  vm.createContext(context);
+  vm.runInContext(sim, context, { filename: 'public/arcade/neon-cascade/sim.js' });
+  const api = context.window.NeonCascade;
+  const state = api.createState(42);
+  const target = api.bestPulseTarget(state);
+  if (!api.pulse(state, target.x, target.y)) {
+    throw new Error('Neon Cascade deterministic pulse should start successfully');
+  }
+  for (let i = 0; i < 400; i++) api.step(state, 0.05);
+  if (state.score <= 0 || state.bestChain <= 0 || state.charges > api.MAX_CHARGES) {
+    throw new Error('Neon Cascade deterministic run should score a chain within charge limits');
   }
 }
 
@@ -459,6 +543,35 @@ function checkBootstrapArcadeCoverage() {
   }
   if (!style.includes('@media (max-width: 760px)') || !style.includes('#board')) {
     throw new Error('Bootstrap CSS should include mobile board layout rules');
+  }
+  if (!page.includes('activeActionBtn') || !page.includes('goldenAgeFill') || !game.includes('runActiveAction')) {
+    throw new Error('Civilization grower should expose a direct action and Golden Age loop');
+  }
+  if (!sim.includes('performActiveAction') || !sim.includes('applyRestBonus') || !sim.includes('activeBoostTicks')) {
+    throw new Error('Civilization simulation should support clicker actions, idle rest, and production boosts');
+  }
+  if (!style.includes('#idleActionPanel') || !style.includes('touch-action: manipulation') ||
+      !style.includes('prefers-reduced-motion') || !style.includes('flex: none')) {
+    throw new Error('Civilization clicker controls should include mobile touch and reduced-motion rules');
+  }
+
+  const context = { window: {} };
+  vm.createContext(context);
+  vm.runInContext(sim, context, { filename: 'public/arcade/bootstrap/sim.js' });
+  const api = context.window.Bootstrap;
+  if (Object.keys(api.ACTIVE_ACTIONS).length !== api.ERA_LETTERS.length) {
+    throw new Error('Every civilization era should define a direct clicker action');
+  }
+  const simulation = new api.Sim(api.RES, api.BLD, api.clone(api.SCENARIO));
+  const foodBefore = simulation.stock.food;
+  let result;
+  for (let i = 1; i <= 12; i++) result = simulation.performActiveAction(i);
+  while (!result.boostTriggered) result = simulation.performActiveAction(10);
+  if (simulation.stock.food <= foodBefore || simulation.activeBoostTicks <= 0 || simulation.outputMult(api.BLD.forager_camp) < 1.7) {
+    throw new Error('Civilization active actions should grant resources and trigger boosted passive production');
+  }
+  if (simulation.applyRestBonus(3600).charge <= 0) {
+    throw new Error('Civilization idle loop should grant a bounded rest bonus');
   }
 }
 
@@ -1075,12 +1188,18 @@ async function main() {
       '/arcade/plant/',
       '/arcade/plant/game.js',
       '/arcade/factory/',
+      '/arcade/factory/state.js',
+      '/arcade/factory/evolution.js',
       '/arcade/factory/game.js',
       '/arcade/factory/style.css',
       '/arcade/bootstrap/',
       '/arcade/bootstrap/sim.js',
       '/arcade/bootstrap/game.js',
       '/arcade/bootstrap/style.css',
+      '/arcade/neon-cascade/',
+      '/arcade/neon-cascade/sim.js',
+      '/arcade/neon-cascade/game.js',
+      '/arcade/neon-cascade/style.css',
       '/arcade/tower-defense/',
       '/arcade/tower-defense/runtime/config.js',
       '/arcade/tower-defense/runtime/game.js',
@@ -1107,6 +1226,8 @@ async function main() {
     checkProductionArcadeAssetPolicy();
     checkFactoryArcadeCoverage();
     checkPlantArcadeCoverage();
+    checkQuickArcadeRewardCoverage();
+    checkNeonCascadeCoverage();
     checkBootstrapArcadeCoverage();
     checkSandboxConfigBridgeRead();
     checkTowerDefenseSandboxCoverage();

@@ -8,9 +8,13 @@
 > era stability pseudocode are specified in
 > [`docs/loop-progression-technical-spec.md`](loop-progression-technical-spec.md).
 >
-> A first playable browser slice is exposed at `/arcade/bootstrap/`. It covers
-> the MVP chain from Gathering through Mining with data-driven process cards,
-> bottleneck diagnostics, and sustained stability gates.
+> The current browser slice at `/arcade/bootstrap/` is intentionally positioned
+> as **문명 키우기**, a clicker/idle management game. It covers Gathering through
+> Mining with direct era actions, passive production, bottleneck diagnostics,
+> and sustained stability gates. Spatial factory automation and industrial-era
+> breakthroughs belong to `/arcade/factory/`; the larger simulation described
+> below remains the long-term systems reference rather than a claim that the
+> current browser slice implements every listed era.
 
 **The spine.** Every producer runs each tick at an **effective utilization** equal to the *minimum* of all satisfied constraints:
 
