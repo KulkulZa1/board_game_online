@@ -35,6 +35,7 @@
 - Factory industrial phases now resolve a historical bottleneck through a data-driven breakthrough (`standardization`, `grid coordination`, `programmable control`, and `autonomous optimization`). Each discovery changes the running factory, becomes a required era-gate condition, and is recorded in the industrial chronicle.
 - Factory saves now preserve deposit quantities, research points, building tiers, breakthroughs, and chronicle history. Version 1 saves with resource-only deposits migrate safely instead of restoring mines with invalid quantities.
 - Bootstrap is now presented as `문명 키우기`, with era-specific direct actions, rapid-tap combos, a Golden Age that boosts all passive production, bounded rest charging on continue, mobile touch controls, and an `F` keyboard command.
+- Production WebSocket transitive dependencies were refreshed to `engine.io 6.6.9`, `socket.io-adapter 2.5.8`, and `ws 8.21.0` after the dependency audit reported the older `ws` denial-of-service advisory.
 - Snake now rewards fast food chains with multipliers, rare golden food, and a six-second RUSH state; Breakout now tracks destruction combos and triggers score-tripling FEVER every 12 bricks.
 
 ### Documentation

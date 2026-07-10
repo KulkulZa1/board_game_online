@@ -47,6 +47,7 @@ This launch-readiness pass found and fixed:
 - Server responses for HTML, `sw.js`, JS, CSS, and `manifest.json` now send `Cache-Control: no-cache, no-store, must-revalidate`.
 - Public `/api/status` no longer exposes room ids, room detail snapshots, or tunnel URLs to proxied/non-local traffic.
 - Chat spam now emits a clear rate-limit message after 8 messages in 10 seconds instead of silently dropping messages.
+- The production lockfile now resolves `ws` to 8.21.0 through updated Engine.IO/Socket.io adapter packages; `npm audit fix` reported zero remaining vulnerabilities in the successful audit run.
 
 Current production observations before this branch is merged and Render redeploys:
 
