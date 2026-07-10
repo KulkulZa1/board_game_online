@@ -363,3 +363,24 @@ html, body {
 }
 .deck-item.fixed { border-color: var(--accent); background: rgba(179,136,255,0.12); }
 button.deck-item { color: var(--text); cursor: pointer; font-family: inherit; }
+
+/* ── ⚡ 합성 / ✨ 황금 / Lv ── */
+.pick-card.golden {
+  border-color: var(--gold);
+  background: linear-gradient(135deg, rgba(255,209,102,0.22), rgba(244,168,54,0.12));
+  animation: goldenGlow 0.8s ease-in-out infinite alternate;
+}
+@keyframes goldenGlow {
+  from { box-shadow: 0 0 8px rgba(255,209,102,0.4); }
+  to   { box-shadow: 0 0 22px rgba(255,209,102,0.9); }
+}
+.rarity-tag.gold-tag { background: #6b5310; color: var(--gold); border: 1px solid var(--gold); }
+.cell.goldsym { border-color: var(--gold); background: rgba(255,209,102,0.08); }
+.lv-badge {
+  position: absolute; right: 2px; top: 2px;
+  background: rgba(179,136,255,0.9); color: #1a0f2e;
+  font-size: 0.54rem; font-weight: 900; border-radius: 5px; padding: 0 3px;
+  pointer-events: none;
+}
+.deck-item.gold { border-color: var(--gold); background: rgba(255,209,102,0.1); }
+.deck-item .lvtxt { color: var(--accent); font-size: 0.7rem; }
