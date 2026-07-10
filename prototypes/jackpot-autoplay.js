@@ -21,11 +21,11 @@ function botPick(run, offers) {
   const deckN = run.deck.length;
   const dilution = Math.min(1, CELLS / (deckN + 1));
   let best = null, bestVal = run.skipReward() * 0.6;
-  for (const id of offers) {
-    const val = SYMBOLS[id].ev * dilution;
-    if (val > bestVal) { bestVal = val; best = id; }
+  for (const o of offers) {
+    const val = SYMBOLS[o.id].ev * dilution * (o.gold ? 2.5 : 1);   // 황금 = ×3 지급이므로 크게 선호
+    if (val > bestVal) { bestVal = val; best = o; }
   }
-  run.pick(best);
+  run.pick(best && best.id, best && best.gold);
 }
 
 // 📌 붙박이 전략 — 시너지 쌍을 인접 칸(5,6)에 고정

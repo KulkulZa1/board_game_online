@@ -70,6 +70,8 @@
       tension: () => [392, 440, 494, 523].forEach((f, i) => tone(f, 'square', 0.09, 0.07, i * 0.13)),   // 잭팟 예감 두근두근
       fever: () => [659, 784, 988, 1319].forEach((f, i) => tone(f, 'sawtooth', 0.22, 0.1, i * 0.07)),
       mega: () => [523, 659, 784, 1047, 1319, 1568, 2093].forEach((f, i) => tone(f, 'triangle', 0.55, 0.15, i * 0.08)),
+      fuse: () => [330, 392, 494, 659, 988].forEach((f, i) => tone(f, 'sawtooth', 0.18, 0.11, i * 0.06)),   // ⚡ 합성
+      golden: () => { tone(1568, 'triangle', 0.35, 0.13); tone(2093, 'triangle', 0.45, 0.11, 0.1); },        // ✨ 황금 등장
     };
   })();
   function vibrate(p) { try { if (navigator.vibrate) navigator.vibrate(p); } catch (e) {} }
@@ -108,10 +110,16 @@
     const el = cellEl(i); if (!el) return;
     const sym = el.querySelector('.sym');
     sym.textContent = item ? run.displayIcon(item) : '';
-    el.querySelectorAll('.piggy-badge').forEach((b) => b.remove());
+    el.querySelectorAll('.piggy-badge, .lv-badge').forEach((b) => b.remove());
+    el.classList.toggle('goldsym', !!(item && item.gold));
     if (item && item.id === 'piggy' && item.bank > 0) {
       const b = document.createElement('span');
       b.className = 'piggy-badge'; b.textContent = item.bank;
+      el.appendChild(b);
+    }
+    if (item && item.lv > 1) {
+      const b = document.createElement('span');
+      b.className = 'lv-badge'; b.textContent = 'Lv' + item.lv;
       el.appendChild(b);
     }
   }
@@ -303,6 +311,16 @@
     if (pays.length) stepOne(); else finishSpin(result);
   }
 
+  // ⚡ 합성 축하 — 3장이 한 장의 상위 카드로
+  function celebrateMerges(merges) {
+    if (!merges || !merges.length) return;
+    const m = merges[merges.length - 1];
+    const def = SYMBOLS[m.id];
+    showMega(`⚡ 합성! ${def.icon} Lv${m.lv}${m.gold ? ' ✨' : ''}`);
+    Sound.fuse();
+    vibrate([20, 30, 40]);
+  }
+
   // MEGA WIN 배너 + 그리드 셰이크
   let megaTimer = 0;
   function showMega(text) {
@@ -356,6 +374,8 @@
       Sound.mega();
       vibrate([40, 50, 40, 50, 80]);
     }
+    // 스핀 중 합성(닭이 낳은 알 3개 등)
+    if (result.merges && result.merges.length) celebrateMerges(result.merges);
     // 피버 점화 안내
     if (result.feverArmed && !result.feverNow) {
       showMega('🔥 FEVER SPIN!');
@@ -543,22 +563,26 @@
     title.textContent = isBonus ? '💜 보너스 뽑기! (잉여 완납 보상)' : '🎁 심볼 하나를 골라 덱에 추가';
     title.classList.toggle('bonus', !!isBonus);
     const wrap = $('pickCards'); wrap.innerHTML = '';
-    offers.forEach((id, i) => {
-      const def = SYMBOLS[id];
+    let anyGold = false;
+    offers.forEach((o, i) => {
+      const def = SYMBOLS[o.id];
+      if (o.gold) anyGold = true;
       const btn = document.createElement('button');
-      btn.className = `pick-card ${def.rarity}`;
+      btn.className = `pick-card ${def.rarity}` + (o.gold ? ' golden' : '');
       btn.innerHTML = `
         <span class="pick-ico">${def.icon}</span>
         <span class="pick-body">
           <span class="pick-name">${def.name}
+            ${o.gold ? '<span class="rarity-tag gold-tag">✨황금 ×3</span>' : ''}
             <span class="rarity-tag ${def.rarity}">${RARITY_KO[def.rarity]}</span>
             <span class="key-hint">${i + 1}</span></span>
           <span class="pick-desc">${def.desc}</span>
         </span>`;
-      btn.addEventListener('click', (e) => { if (guarded(e)) return; resolvePick(id); });
+      btn.addEventListener('click', (e) => { if (guarded(e)) return; resolvePick(o.id, o.gold); });
       wrap.appendChild(btn);
       if (def.rarity === 'rare') vibrate(15);
     });
+    if (anyGold) { Sound.golden(); vibrate([20, 30, 20]); }   // 황금 등장 — 드래프트의 잭팟
     const sr = run.skipReward();
     $('skipBtn').innerHTML = sr > 0
       ? `건너뛰고 +${sr} 코인 <span class="key-hint">0</span>`
@@ -566,9 +590,10 @@
     $('pickModal').classList.remove('hidden');
   }
 
-  function resolvePick(id) {
-    run.pick(id);
+  function resolvePick(id, gold) {
+    const merges = run.pick(id, gold) || [];
     Sound.pick();
+    celebrateMerges(merges);
     $('pickModal').classList.add('hidden');
     renderHUD();
     if (bonusQueued) { bonusQueued = false; setTimeout(() => showPick(true), T(180)); return; }
@@ -678,13 +703,14 @@
     if (!run) return;
     const list = $('deckList'); if (!list) return;
     list.innerHTML = '';
-    for (const { id, n, def } of run.deckSummary()) {
-      const fixedItem = run.deck.find((d) => d.id === id && run.isFixed(d.uid));
-      const freeItem = run.deck.find((d) => d.id === id && !run.isFixed(d.uid));
+    for (const { id, lv, gold, n, def } of run.deckSummary()) {
+      const match = (d) => d.id === id && d.lv === lv && !!d.gold === !!gold;
+      const fixedItem = run.deck.find((d) => match(d) && run.isFixed(d.uid));
+      const freeItem = run.deck.find((d) => match(d) && !run.isFixed(d.uid));
       const b = document.createElement('button');
-      b.className = `deck-item ${def.rarity}` + (fixedItem ? ' fixed' : '');
+      b.className = `deck-item ${def.rarity}` + (fixedItem ? ' fixed' : '') + (gold ? ' gold' : '');
       b.title = def.desc + (fixedItem ? ' — 탭하면 붙박이 해제' : ' — 탭하면 붙박이 고정(칸 선택)');
-      b.innerHTML = `${def.icon} ${def.name} <span class="n">×${n}</span>${fixedItem ? ' 📌' : ''}`;
+      b.innerHTML = `${def.icon} ${def.name}${lv > 1 ? ` <b class="lvtxt">Lv${lv}</b>` : ''}${gold ? ' ✨' : ''} <span class="n">×${n}</span>${fixedItem ? ' 📌' : ''}`;
       b.addEventListener('click', (e) => {
         if (guarded(e)) return;
         if (fixedItem) {   // 해제
