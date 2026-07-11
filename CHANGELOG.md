@@ -39,6 +39,7 @@
 - Snake now rewards fast food chains with multipliers, rare golden food, and a six-second RUSH state; Breakout now tracks destruction combos and triggers score-tripling FEVER every 12 bricks.
 - Changed Factory, Bootstrap, Snake, and Breakout asset URLs now carry release versions, and the service-worker cache namespace advances to `boardgame-v10`, preventing an offline fallback from pinning pre-deploy gameplay or CSS after the server returns.
 - Bootstrap mobile layout now places onboarding and pause/speed controls before the long build dashboard, keeps Korean guidance words intact, and gives both toolbar and building actions 42px touch targets. Factory save actions and the Neon mute control use the same minimum.
+- Render Blueprint now explicitly deploys every commit on `main` instead of inheriting a potentially disabled dashboard auto-deploy setting.
 
 ### Documentation
 - Added `DESIGN.md`, extracted from the existing platform and arcade visual patterns, to define shared game-shell tokens, responsive rules, feedback states, and reusable progress/action components.

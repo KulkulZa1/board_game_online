@@ -263,6 +263,11 @@ function assertNoStoreHeader(res, pathname) {
 }
 
 async function checkDeploymentCachePolicy() {
+  const renderBlueprint = fs.readFileSync(path.join(root, 'render.yaml'), 'utf8');
+  if (!renderBlueprint.includes('branch: main') || !renderBlueprint.includes('autoDeployTrigger: commit')) {
+    throw new Error('Render Blueprint should deploy every commit from main');
+  }
+
   const version = await checkUrl('/api/version');
   assertNoStoreHeader(version, '/api/version');
 
