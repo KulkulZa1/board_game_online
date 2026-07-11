@@ -8,6 +8,7 @@ These notes capture the current launch-readiness checks for the Node/Express sta
 - Local start: `npm start` or `npm run dev`.
 - Render start command: `node server.js`.
 - Render build command: `npm install`.
+- Render auto-deploy trigger: every commit on `main` (`autoDeployTrigger: commit`).
 - Health endpoint: `/api/status`.
 - Render deploys from `main`, so branch changes are not visible on production until the PR is merged and Render redeploys.
 
@@ -44,6 +45,7 @@ This launch-readiness pass found and fixed:
 - Tower Defense arcade now exposes game-first controls: `Play Stage 1`, quick Cannon/Frost/Tesla/Amplifier placement, and a Meteor panic ability. The editor remains available, but the route is no longer dependent on the Stages tab for the first playable action.
 - Service worker caching no longer serves old JS/CSS before checking the network; this prevents deployed game logic from appearing stale after Render deploys.
 - Arcade pages with changed gameplay or CSS use versioned asset URLs, and `boardgame-v10` invalidates the previous runtime cache. This also recovers correctly after an offline fallback served an older cached page.
+- `render.yaml` explicitly enables commit-triggered deployment. Existing Render services retain their dashboard auto-deploy value when this field is omitted, which allowed the service to remain on an older `main` commit after PR #53 merged.
 - All HTML pages now load `/js/sw-update.js`, which registers the service worker consistently and reloads controlled pages once after an updated worker takes control.
 - Server responses for HTML, `sw.js`, JS, CSS, and `manifest.json` now send `Cache-Control: no-cache, no-store, must-revalidate`.
 - Public `/api/status` no longer exposes room ids, room detail snapshots, or tunnel URLs to proxied/non-local traffic.

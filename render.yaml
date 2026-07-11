@@ -3,6 +3,7 @@ services:
     name: boardgame-online
     runtime: node
     branch: main
+    autoDeployTrigger: commit
     buildCommand: npm install
     startCommand: node server.js
     envVars:
