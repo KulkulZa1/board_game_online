@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>스네이크 — 보드게임 온라인</title>
   <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=2.0">
 </head>
 <body>
   <div id="container">
@@ -16,6 +16,7 @@
       <div id="scores">
         <span>점수 <strong id="scoreDisplay">0</strong></span>
         <span>최고 <strong id="highDisplay">0</strong></span>
+        <span>연쇄 <strong id="comboDisplay">x1</strong></span>
       </div>
     </header>
 
@@ -48,10 +49,15 @@
       <div id="levelTrack"><div id="levelFill"></div></div>
     </div>
 
+    <div id="rushBar">
+      <span id="rushLabel">RUSH</span>
+      <div id="rushTrack"><div id="rushFill"></div></div>
+    </div>
+
   </div>
 
   <script src="/js/admob.js?v=1.0"></script>
-  <script src="game.js?v=1.0"></script>
+  <script src="game.js?v=2.0"></script>
   <script src="/js/sw-update.js?v=20260520b"></script>
 </body>
 </html>

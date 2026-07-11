@@ -57,6 +57,8 @@
       demolish:     () => tone(220, 'triangle', 0.22, 0.09),
       eraAdvance:   () => [523, 659, 784, 1047].forEach((f, i) => tone(f, 'sine', 0.55, 0.15, i * 0.12)),
       breakthrough: () => [880, 1108, 1320, 1760].forEach((f, i) => tone(f, 'triangle', 0.4, 0.12, i * 0.08)),
+      action:        (combo) => tone(420 + Math.min(combo, 12) * 24, 'sine', 0.1, 0.07),
+      goldenAge:     () => [660, 880, 1108, 1320].forEach((f, i) => tone(f, 'triangle', 0.45, 0.13, i * 0.07)),
       event:        () => { tone(300, 'sawtooth', 0.3, 0.12); tone(200, 'sawtooth', 0.35, 0.10, 0.18); },
       good:         () => { tone(660, 'sine', 0.25, 0.10); tone(990, 'sine', 0.3, 0.08, 0.12); },
       victory:      () => [523, 659, 784, 1047, 1319].forEach((f, i) => tone(f, 'sine', 0.8, 0.18, i * 0.14)),
@@ -82,6 +84,8 @@
 
   // ── 튜토리얼 단계 ──────────────────────────────────────────────────────
   const TUT = [
+    { text: '✋ <b>채집 돕기</b>를 세 번 눌러 문명에 직접 개입하세요. 빠르게 연속 행동하면 황금기 충전이 더 빨라집니다.',
+      done: () => sim.totalActions >= 3 },
     { text: '👋 시작: <b>막집 ⛺</b>을 1채 건설해 주거 한도를 확보하세요. 인구가 한도를 초과하면 성장이 멈춥니다.',
       done: () => (sim.counts.shelter || 0) >= 1 },
     { text: '🔥 <b>화덕</b>을 지어 식량 <b>저장 한도</b>를 늘리세요. 한도를 넘는 식량은 빠르게 썩습니다 — 저장이 비축의 상한입니다.',
@@ -99,6 +103,8 @@
   const BEST_KEY = 'civ_best_v1';
   const MILES = [25, 50, 75, 100, 125];   // 연대기 인구 이정표
   let sim, state, speed, paused, elapsedAcc, lastTime, challenge, lastEra, toastTimer;
+  let tapCombo = 0;
+  let lastTapAt = 0;
   let tutStep = 0;
   let prevEventKeys = new Set();
   let hist = [];            // {p:인구, f:식량} 추이 (2틱마다)
@@ -115,7 +121,7 @@
   // ── 저장 / 이어하기 ──────────────────────────────────────────────────────
   function serialize() {
     return {
-      v: 2, challenge,
+      v: 3, challenge, savedAt: Date.now(),
       hist: hist.slice(-400), chron: chron.slice(0, 40), mileIdx,
       s: {
         t: sim.t, pop: { u: sim.pop.unskilled, s: sim.pop.skilled },
@@ -127,6 +133,8 @@
         bts: Array.from(sim.breakthroughs), droughtCount: sim.droughtCount,
         activeEvents: sim.activeEvents, eventCooldown: sim.eventCooldown,
         mods: sim.mods,
+        actionCharge: sim.actionCharge, activeBoostTicks: sim.activeBoostTicks,
+        totalActions: sim.totalActions,
       },
     };
   }
@@ -146,6 +154,9 @@
     sim.activeEvents = s.activeEvents || {}; sim.eventCooldown = s.eventCooldown || {};
     sim.mods = Object.assign(sim._freshMods(), s.mods);
     sim.breakthroughs = new Set(s.bts || []);
+    sim.actionCharge = Math.max(0, Math.min(100, Number(s.actionCharge) || 0));
+    sim.activeBoostTicks = Math.max(0, Math.min(120, Number(s.activeBoostTicks) || 0));
+    sim.totalActions = Math.max(0, Number(s.totalActions) || 0);
     hist = Array.isArray(d.hist) ? d.hist : [];
     chron = Array.isArray(d.chron) ? d.chron : [];
     mileIdx = d.mileIdx || 0;
@@ -157,7 +168,7 @@
   function loadSaveData() {
     try {
       const d = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null');
-      if (!d || d.v !== 2 || !d.s || !d.s.counts || !d.s.pop) return null;
+      if (!d || (d.v !== 2 && d.v !== 3) || !d.s || !d.s.counts || !d.s.pop) return null;
       for (const k in d.s.counts) if (!BLD[k]) return null;   // 건물 세트 불일치 → 무효
       return d;
     } catch (e) { return null; }
@@ -179,13 +190,23 @@
     sim = new Sim(RES, BLD, sc);
     if (challenge && !valid) sim.stock.food = 70;
     hist = []; chron = []; chronDirty = true; mileIdx = 0;
-    if (valid) { try { applySave(restore); } catch (e) { /* 손상 세이브 → 새 게임으로 진행 */ } }
+    let restBonus = null;
+    if (valid) {
+      try {
+        applySave(restore);
+        restBonus = sim.applyRestBonus(Math.max(0, (Date.now() - (restore.savedAt || Date.now())) / 1000));
+      } catch (e) { /* 손상 세이브 → 새 게임으로 진행 */ }
+    }
     speed = 1; paused = false; elapsedAcc = 0; lastTime = performance.now();
     state = 'playing'; lastEra = sim.eraIndex;
+    tapCombo = 0; lastTapAt = 0;
     prevEventKeys = new Set(Object.keys(sim.activeEvents));
     lastSaveT = sim.t;
     tutStep = (tutSeen() || sim.eraIndex > 0) ? TUT.length - 1 : 0;
-    if (valid) addChron('📂', '기록에서 문명을 이어간다');
+    if (valid) {
+      addChron('📂', '기록에서 문명을 이어간다');
+      if (restBonus && restBonus.charge >= 1) addChron('☀', `휴식 보너스로 황금기 ${Math.round(restBonus.charge)}% 충전`);
+    }
     else { clearSave(); addChron('🌱', '작은 무리가 정착을 시작했다'); }
     buildBuildPanel();
     buildResourceBar();
@@ -196,6 +217,10 @@
     $('btToast').classList.add('hidden');
     renderTutorial();
     render();
+    if (restBonus && restBonus.charge >= 1) {
+      showToast('☀', '휴식 보너스', `황금기 충전 +${Math.round(restBonus.charge)}%`);
+    }
+    if (valid) saveGame();
   }
 
   // ── 건설/철거 ─────────────────────────────────────────────────────────────
@@ -285,6 +310,23 @@
     Sound.demolish();
     render();
   }
+
+  function runActiveAction() {
+    if (state !== 'playing') return;
+    const now = performance.now();
+    tapCombo = now - lastTapAt <= 1250 ? Math.min(20, tapCombo + 1) : 1;
+    lastTapAt = now;
+    const result = sim.performActiveAction(tapCombo);
+    Sound.action(tapCombo);
+    if (navigator.vibrate) navigator.vibrate(result.boostTriggered ? [25, 35, 55] : 10);
+    if (result.boostTriggered) {
+      Sound.goldenAge();
+      addChron('☀', '황금기 시작 — 자동 생산 1.8배');
+      showToast('☀', '황금기!', '15초 분량 동안 모든 자동 생산 1.8배');
+      saveGame();
+    }
+    render();
+  }
   function flashCost(id) {
     const el = document.querySelector(`.bld-row[data-id="${id}"] .bld-cost`);
     if (!el) return;
@@ -367,6 +409,7 @@
     $('ciValue').textContent = fmt(civIndex(m), 0);
     renderEra();
     renderResourceBar();
+    renderActiveAction();
     renderEventBanner();
     renderBuildCounts(m);
     renderGate(m);
@@ -376,6 +419,28 @@
     renderChronicle();
     drawHist();
     advanceTutorial();
+  }
+
+  function renderActiveAction() {
+    if (!sim) return;
+    if (tapCombo && performance.now() - lastTapAt > 1400) tapCombo = 0;
+    const action = sim.activeAction();
+    const gainText = Object.entries(action.gains)
+      .map(([resource, amount]) => `+${fmt(amount, 1)}${RES[resource] ? RES[resource].icon : resource}`)
+      .join(' · ');
+    const active = sim.activeBoostTicks > 0;
+    $('activeActionIcon').textContent = action.icon;
+    $('activeActionName').textContent = action.name;
+    $('activeActionGain').textContent = gainText;
+    $('activeCombo').textContent = tapCombo > 1 ? `x${tapCombo}` : 'x1';
+    $('activeActionBtn').classList.toggle('boosted', active);
+    $('activeActionBtn').setAttribute('aria-label', `${action.name} ${gainText}`);
+    $('goldenAgeLabel').textContent = active ? '황금기 가동' : '황금기 충전';
+    $('goldenAgeCount').textContent = active ? `${Math.ceil(sim.activeBoostTicks / TICKS_PER_SEC)}초` : `${Math.round(sim.actionCharge)}%`;
+    $('goldenAgeFill').style.width = `${active ? 100 : Math.min(100, sim.actionCharge)}%`;
+    $('idleStatus').textContent = active
+      ? '모든 자동 생산 1.8배 · 이전 시대 생산도 함께 가속'
+      : '자동 생산 중 · 빠른 연속 행동으로 더 빨리 충전';
   }
 
   // ── 연대기 ───────────────────────────────────────────────────────────────
@@ -817,6 +882,7 @@
     $('pauseBtn').addEventListener('click', togglePause);
     $('restartBtn').addEventListener('click', () => reset());
     $('ovBtn').addEventListener('click', () => reset());
+    $('activeActionBtn').addEventListener('click', runActiveAction);
     $('helpBtn').addEventListener('click', () => $('helpModal').classList.toggle('hidden'));
     $('helpClose').addEventListener('click', () => $('helpModal').classList.add('hidden'));
     $('startBtn').addEventListener('click', () => { Sound.resume(); challenge = $('challengeToggle').checked; reset(); });
@@ -855,6 +921,8 @@
       if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
       if (e.code === 'Space') {
         if (state === 'playing') { e.preventDefault(); togglePause(); }
+      } else if (e.key === 'f' || e.key === 'F') {
+        runActiveAction();
       } else if (e.key >= '1' && e.key <= '4') {
         if (state === 'playing') { speed = [1, 2, 4, 8][+e.key - 1]; paused = false; lastTime = performance.now(); setSpeedButtons(); }
       } else if (e.key === '?' || e.key === 'h' || e.key === 'H') {
@@ -873,6 +941,8 @@
 
   function fillHelp() {
     $('helpBody').innerHTML = `
+      <h4>클릭하고 방치하며 키우기</h4>
+      시대별 큰 행동 버튼을 누르면 즉시 자원을 얻고 <b>황금기</b>가 충전됩니다. 빠르게 연속 행동하면 콤보가 올라 충전이 빨라지고, 황금기 동안 모든 자동 생산이 <b>1.8배</b>가 됩니다. 문명을 떠났다가 이어하면 최대 4시간의 휴식 시간으로 황금기 충전을 일부 회복합니다. <b>F</b> 키로도 직접 행동할 수 있습니다.
       <h4>핵심 사상 — 루프로 자라는 문명</h4>
       다음 시대는 자원 누적이 아니라 <b>현재 시대의 자급 루프를 안정적으로 닫았을 때</b> 열립니다.
       각 시대 게이트의 <b>모든 조건을 연속 유지</b>해야 통과합니다(돌진 방지).
@@ -903,7 +973,7 @@
       <b>추이 그래프</b>가 인구·식량의 흐름을 보여줍니다.
       <h4>저장·단축키</h4>
       진행은 <b>25틱마다 자동 저장</b>되어 다음 방문 때 이어할 수 있습니다(승리·붕괴 시 초기화).
-      <b>Space</b> 일시정지 · <b>1–4</b> 배속 · <b>H</b> 도움말. 승리 시 소요 틱에 따라 ★ 등급과 최고 기록이 남습니다.`;
+      <b>F</b> 직접 행동 · <b>Space</b> 일시정지 · <b>1–4</b> 배속 · <b>H</b> 도움말. 승리 시 소요 틱에 따라 ★ 등급과 최고 기록이 남습니다.`;
   }
 
   init();

@@ -8,7 +8,7 @@
 // 캐시 무효화:
 //   activate 시 /api/version 호출 → commit 해시가 바뀌면 캐시 전체 삭제
 
-const CACHE_NAME   = 'boardgame-v9';   // v9: 디렉터리 URL(/arcade/x/)이 cacheFirst로 오분류돼 HTML이 영구 캐시되던 버그 — 전체 퍼지
+const CACHE_NAME   = 'boardgame-v10';
 const COMMIT_KEY   = 'sw_last_commit';
 
 // 사전 캐시 — HTML 제외, 진짜 정적 자산만 (icons/ 미존재 시 phantom 경로 제외)

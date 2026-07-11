@@ -107,6 +107,16 @@ See `docs/launch-readiness.md` for the current security, deployment, and manual 
 
 ---
 
+## Solo progression identities
+
+- **산업의 시대** (`/arcade/factory/`) is the spatial automation game. Build and preserve production chains, diagnose bottlenecks, discover one historical breakthrough per industrial phase, then hold the full production gate long enough to advance. Saves include deposits, RP, building tiers, breakthroughs, and the industrial chronicle.
+- **문명 키우기** (`/arcade/bootstrap/`) is the civilization clicker/idle game. Use the large era action (or `F`) for immediate resources and combo charge; a full meter starts a Golden Age that multiplies passive production. Continuing a save grants a bounded rest charge without simulating an unattended collapse.
+- **식물 키우기** (`/arcade/plant/`) remains the lighter organism-growth clicker with upgrades, bursts, and offline progress.
+
+The factory breakthrough definitions live in `public/arcade/factory/evolution.js`; save migration helpers live in `public/arcade/factory/state.js`. The civilization economy remains headless-testable in `public/arcade/bootstrap/sim.js`.
+
+---
+
 ## 주요 기능
 
 - 12가지 게임 지원

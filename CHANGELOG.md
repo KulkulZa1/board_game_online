@@ -23,6 +23,7 @@
 - `docs/loop-progression-technical-spec.md` with programmer-facing data structures, simulation variables, update rules, era-loop stability checks, breakthrough rules, and MVP implementation scope for the civilization-scale progression system.
 - Bootstrap civilization-loop arcade MVP at `/arcade/bootstrap/`, with data-driven eras/processes, bottleneck diagnostics, stability-gated era unlocks, mobile-friendly DOM UI, and smoke-check coverage.
 - Plant Growing idle loop: growth burst action, data-driven breakthrough bonuses, loop summary panel, and mobile-friendly progression UI for `/arcade/plant/`.
+- NEON CASCADE at `/arcade/neon-cascade/`: a 45-second one-touch chain-reaction game with deterministic simulation, assisted pulse targeting, rechargeable actions, special cores, wave goals, and score-tripling Overdrive.
 
 ### Changed
 - Vampire Survivors enemy spawn pressure, enemy stats, boss interval, and rewards now scale from the selected difficulty, selected map, and daily modifier.
@@ -31,6 +32,16 @@
 - `scripts/check.sh` now matches the dev-only sandbox policy by expecting `/sandbox/` to return 404 and checking the production Tower Defense runtime path instead.
 - Factory arcade now prevents dead miner placements, highlights valid resource/connection tiles, auto-connects nearby factory outputs while preserving manual rotation, adds delivery milestone feedback, autosaves/restores factory layouts, improves mobile palette/tool layout, and is covered by the deep smoke-check route/policy assertions.
 - Factory arcade era changes now use civilization-style stability gates: target deliveries, required production lines, throughput, and power stability must hold briefly before the next industrial phase unlocks.
+- Factory industrial phases now resolve a historical bottleneck through a data-driven breakthrough (`standardization`, `grid coordination`, `programmable control`, and `autonomous optimization`). Each discovery changes the running factory, becomes a required era-gate condition, and is recorded in the industrial chronicle.
+- Factory saves now preserve deposit quantities, research points, building tiers, breakthroughs, and chronicle history. Version 1 saves with resource-only deposits migrate safely instead of restoring mines with invalid quantities.
+- Bootstrap is now presented as `문명 키우기`, with era-specific direct actions, rapid-tap combos, a Golden Age that boosts all passive production, bounded rest charging on continue, mobile touch controls, and an `F` keyboard command.
+- Production WebSocket transitive dependencies were refreshed to `engine.io 6.6.9`, `socket.io-adapter 2.5.8`, and `ws 8.21.0` after the dependency audit reported the older `ws` denial-of-service advisory.
+- Snake now rewards fast food chains with multipliers, rare golden food, and a six-second RUSH state; Breakout now tracks destruction combos and triggers score-tripling FEVER every 12 bricks.
+- Changed Factory, Bootstrap, Snake, and Breakout asset URLs now carry release versions, and the service-worker cache namespace advances to `boardgame-v10`, preventing an offline fallback from pinning pre-deploy gameplay or CSS after the server returns.
+- Bootstrap mobile layout now places onboarding and pause/speed controls before the long build dashboard, keeps Korean guidance words intact, and gives both toolbar and building actions 42px touch targets. Factory save actions and the Neon mute control use the same minimum.
+
+### Documentation
+- Added `DESIGN.md`, extracted from the existing platform and arcade visual patterns, to define shared game-shell tokens, responsive rules, feedback states, and reusable progress/action components.
 
 이 프로젝트의 모든 주요 변경사항을 기록합니다.
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.0.0/) 를 따릅니다.

@@ -3,6 +3,9 @@
 (function () {
   'use strict';
 
+  const FactoryState = window.FactoryState;
+  const FactoryEvolution = window.FactoryEvolution;
+
   const canvas  = document.getElementById('c');
   const ctx     = canvas.getContext('2d');
   const wrapper = document.getElementById('gameWrapper');
@@ -232,6 +235,10 @@
   let bottleneck = '';        // 현재 병목 진단 텍스트
   let bottleneckAccum = 0;    // 병목 계산 throttle
   let warnState = { text: '', until: 0 };
+  let breakthroughs = new Set();
+  let chronicle = [];
+  let breakthroughAccum = 0;
+  let evolutionMods = FactoryEvolution.modifiers([]);
 
   // 입력/툴
   let selected = 'belt';      // 선택 건물 id
@@ -273,6 +280,8 @@
     powerProd = powerDemand = 0; powerRatio = 1;
     bottleneck = ''; bottleneckAccum = 0;
     warnState = { text: '', until: 0 };
+    breakthroughs = new Set(); chronicle = []; breakthroughAccum = 0;
+    evolutionMods = FactoryEvolution.modifiers(breakthroughs);
     selected = 'belt'; rot = 0; tool = 'build';
     tut.active = false;
     const _tp = document.getElementById('tutPanel'); if (_tp) _tp.classList.add('hidden');
@@ -526,6 +535,9 @@
     if (research < goal && research % 5 === 0) {
       showToast(`${ITEMS[item].name} ${research}/${goal}`, `${goal - research}개 더 납품하면 다음 시대로 진화합니다`);
     }
+    if (research === 1 || research === Math.ceil(goal / 2) || research === goal) {
+      addChronicle(ERAS[era].icon, `${ITEMS[item].name} ${research}/${goal} 납품`);
+    }
     updateEraGate(0);
     if (tut.active && TUT_STEPS[tut.step] && TUT_STEPS[tut.step].event === 'delivery') advanceTut();
   }
@@ -536,6 +548,53 @@
 
   function countBuilt(ids) {
     return buildings.filter((b) => ids.includes(b.id)).length;
+  }
+
+  function upgradedCount() {
+    return buildings.filter((building) => (building.tier || 1) > 1).length;
+  }
+
+  function evolutionSnapshot() {
+    return {
+      research,
+      throughput: throughputPerMin(),
+      upgraded: upgradedCount(),
+      powerRatio,
+      generatorCount: buildings.filter((building) => building.id === 'generator' && building.fuel > 0).length,
+    };
+  }
+
+  function currentBreakthroughStatus() {
+    const definition = FactoryEvolution.forEra(era);
+    return definition ? FactoryEvolution.evaluate(definition, evolutionSnapshot()) : null;
+  }
+
+  function evolutionModifiers() {
+    return evolutionMods;
+  }
+
+  function addChronicle(icon, text) {
+    chronicle.unshift({ time: Math.round(simTime), icon, text });
+    if (chronicle.length > 30) chronicle.pop();
+  }
+
+  function unlockBreakthrough(status) {
+    const definition = status.definition;
+    if (breakthroughs.has(definition.id)) return;
+    breakthroughs.add(definition.id);
+    evolutionMods = FactoryEvolution.modifiers(breakthroughs);
+    addChronicle(definition.icon, `${definition.name} 발견 — ${definition.effect}`);
+    showToast(`${definition.icon} ${definition.name} 발견!`, definition.effect);
+    flashFx = Math.max(flashFx, 0.45);
+    saveRun();
+  }
+
+  function updateBreakthrough(dt) {
+    breakthroughAccum += dt;
+    if (breakthroughAccum < 0.25) return;
+    breakthroughAccum = 0;
+    const status = currentBreakthroughStatus();
+    if (status && !breakthroughs.has(status.definition.id) && status.ready) unlockBreakthrough(status);
   }
 
   function phaseLineReady(ids) {
@@ -553,6 +612,10 @@
     const conditions = [
       { label: `${targetName} ${research}/${e.count}`, ok: research >= e.count },
     ];
+    const breakthrough = FactoryEvolution.forEra(era);
+    if (breakthrough) {
+      conditions.push({ label: `${breakthrough.name} 돌파`, ok: breakthroughs.has(breakthrough.id) });
+    }
 
     if (era === 1) {
       conditions.push(
@@ -606,6 +669,7 @@
 
   function onEraUp() {
     const e = ERAS[era];
+    addChronicle(e.icon, `${e.name} 진입 — ${e.sub}`);
     showToast(`${e.icon} ${e.name} 진입!`, e.sub + ' — 새 기술 해금');
     flashFx = 0.7;
     saveHigh();
@@ -616,6 +680,7 @@
   }
 
   function onSingularity() {
+    addChronicle('◇', '자율 산업 특이점 도달');
     showToast('🌌 특이점 도달!', 'AI 시대 개막 — 무한 가동으로 최고 점수에 도전!');
     flashFx = 1.0;
     saveHigh();
@@ -644,6 +709,7 @@
     // 병목 진단 (0.5초마다)
     bottleneckAccum += dt;
     if (bottleneckAccum >= 0.5) { bottleneckAccum = 0; computeBottleneck(); }
+    updateBreakthrough(dt);
     updateEraGate(dt);
   }
 
@@ -698,11 +764,12 @@
 
   function computePower(dt) {
     let prod = 0, demand = 0;
+    const mods = evolutionModifiers();
     for (const b of buildings) {
       const def = B[b.id];
-      if (def.kind === 'generator') { if (b.fuel > 0) prod += GEN_OUTPUT * tierMult(b); }
+      if (def.kind === 'generator') { if (b.fuel > 0) prod += GEN_OUTPUT * tierMult(b) * mods.generatorOutput; }
       else if (def.kind === 'machine' && def.power > 0) {
-        if (b.craft || canStart(b)) demand += def.power;
+        if (b.craft || canStart(b)) demand += def.power * mods.powerDemand;
       }
     }
     powerProd = prod; powerDemand = demand;
@@ -757,7 +824,7 @@
       b.craft = { out: r.out, t: 0, total: def.time };
     }
     if (b.craft) {
-      const spd = (def.power > 0 ? powerRatio : 1) * tierMult(b);
+      const spd = (def.power > 0 ? powerRatio : 1) * tierMult(b) * evolutionModifiers().machineSpeed;
       b.craft.t += dt * spd;
       if (b.craft.t >= b.craft.total) {
         for (const it in b.craft.out) b.outBuf[it] = (b.outBuf[it] || 0) + b.craft.out[it];
@@ -772,7 +839,7 @@
 
   function updateBelt(b, dt) {
     if (b.item == null) return;
-    if (b.prog < 1) b.prog = Math.min(1, b.prog + BELT_SPEED * dt);
+    if (b.prog < 1) b.prog = Math.min(1, b.prog + BELT_SPEED * evolutionModifiers().beltSpeed * dt);
     if (b.prog >= 1) {
       if (tryDeposit(b, b.item)) { b.item = null; b.prog = 0; }
     }
@@ -783,7 +850,7 @@
   let chevT = 0;               // 컨베이어 셰브론 애니메이션
 
   function draw(dt) {
-    chevT = (chevT + dt * BELT_SPEED) % 1;
+    chevT = (chevT + dt * BELT_SPEED * evolutionModifiers().beltSpeed) % 1;
     const e = ERAS[Math.min(era, 4)];
     const minerMode = selected === 'miner' && tool === 'build';
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -1095,6 +1162,7 @@
       chip.textContent = (cond.ok ? '✓ ' : '• ') + cond.label;
       checklist.appendChild(chip);
     }
+    renderBreakthroughHUD();
     // RP (연구포인트)
     document.getElementById('rpDisplay').textContent = `🔩 RP ${rp}`;
     // 병목 진단
@@ -1102,6 +1170,29 @@
     bn.textContent = bottleneck ? `병목: ${bottleneck}` : '';
     bn.classList.toggle('ok', bottleneck === '✅ 원활');
     bn.classList.toggle('hidden', !bottleneck);
+  }
+
+  function formatEvolutionValue(metric, value) {
+    if (metric === 'powerRatio') return `${Math.round(value * 100)}%`;
+    return Number.isInteger(value) ? String(value) : value.toFixed(1);
+  }
+
+  function renderBreakthroughHUD() {
+    const status = currentBreakthroughStatus();
+    if (!status) return;
+    const definition = status.definition;
+    const unlocked = breakthroughs.has(definition.id);
+    const progress = unlocked ? 1 : status.progress;
+    document.getElementById('breakthroughName').textContent =
+      unlocked ? `${definition.icon} ${definition.name} 활성` : `${definition.icon} ${definition.name}`;
+    document.getElementById('breakthroughCount').textContent = unlocked ? '완료' : `${Math.round(progress * 100)}%`;
+    document.getElementById('breakthroughFill').style.width = `${progress * 100}%`;
+    const next = status.conditions.find((condition) => !condition.ok);
+    document.getElementById('breakthroughHint').textContent = unlocked
+      ? definition.effect
+      : next
+        ? `${next.label} ${formatEvolutionValue(next.metric, next.current)} / ${formatEvolutionValue(next.metric, next.target)}`
+        : '돌파 조건이 무르익었습니다';
   }
 
   // 빌드 팔레트 렌더
@@ -1175,7 +1266,17 @@
     const g = ERA_GUIDES[Math.min(eraNum, 4)];
     if (!g) return;
     document.getElementById('eraGuideTitle').innerHTML = g.title;
-    document.getElementById('eraGuideBody').innerHTML = g.body;
+    const definition = FactoryEvolution.forEra(Math.min(eraNum, 4));
+    const evolution = definition ? `
+      <h4>시대의 병목과 돌파</h4>
+      <div class="evolution-story"><b>병목</b><span>${definition.bottleneck}</span></div>
+      <div class="evolution-story"><b>${definition.icon} ${definition.name}</b><span>${definition.narrative}</span><em>${definition.effect}</em></div>` : '';
+    const history = chronicle.length ? `
+      <h4>산업 연대기</h4>
+      <div class="factory-chronicle">${chronicle.slice(0, 8).map((entry) =>
+        `<div><span>${entry.time}초</span><b>${entry.icon}</b><span>${entry.text}</span></div>`
+      ).join('')}</div>` : '';
+    document.getElementById('eraGuideBody').innerHTML = g.body + evolution + history;
     document.getElementById('eraGuideModal').classList.remove('hidden');
   }
   function closeEraGuide() { document.getElementById('eraGuideModal').classList.add('hidden'); }
@@ -1193,6 +1294,7 @@
     tutGuaranteeOre();
     tut.active = true; tut.step = 0;
     state = 'playing'; paused = false; speed = 1;
+    addChronicle('🔥', '증기 시대 공장 건설 시작');
     document.querySelectorAll('.speed-btn').forEach((b) => b.classList.toggle('active', b.dataset.speed === '1'));
     document.getElementById('pauseBtn').classList.remove('paused');
     document.getElementById('overlay').classList.remove('visible');
@@ -1390,7 +1492,7 @@
   }
 
   function serializeBuilding(b) {
-    const data = { id: b.id, x: b.x, y: b.y, dir: b.dir };
+    const data = { id: b.id, x: b.x, y: b.y, dir: b.dir, tier: b.tier || 1 };
     if (b.id === 'belt') {
       data.item = ITEMS[b.item] ? b.item : null;
       data.prog = clampNum(b.prog, 0, 1, 0);
@@ -1415,9 +1517,11 @@
   function saveRun() {
     if (state !== 'playing') return;
     const data = {
-      version: 1,
+      version: FactoryState.SAVE_VERSION,
       savedAt: Date.now(),
-      era, research, score, won, eraStable,
+      era, research, score, won, eraStable, rp,
+      breakthroughs: Array.from(breakthroughs),
+      chronicle: chronicle.slice(0, 30),
       simTime: Math.round(simTime * 1000) / 1000,
       speed, paused,
       selected, rot, tool,
@@ -1426,7 +1530,7 @@
         y: Math.round(camera.y * 100) / 100,
         zoom: Math.round(camera.zoom * 1000) / 1000,
       },
-      deposits: grid.map((cell) => cell.deposit ? cell.deposit.resource : null),
+      deposits: grid.map((cell) => FactoryState.serializeDeposit(cell.deposit)),
       buildings: buildings.map(serializeBuilding),
     };
     try {
@@ -1440,7 +1544,7 @@
       const raw = localStorage.getItem(SAVE_KEY);
       if (!raw) return null;
       const data = JSON.parse(raw);
-      if (!data || data.version !== 1 || !Array.isArray(data.deposits) || !Array.isArray(data.buildings)) return null;
+      if (!FactoryState.supportsSave(data)) return null;
       return data;
     } catch (_e) {
       return null;
@@ -1452,6 +1556,7 @@
     const x = Math.floor(data.x), y = Math.floor(data.y);
     if (!inBounds(x, y) || cellAt(x, y).b) return null;
     const b = makeBuilding(data.id, x, y, clampNum(data.dir, 0, 3, 0) | 0);
+    b.tier = clampNum(data.tier, 1, MAX_TIER, 1) | 0;
     const def = B[b.id];
     if (b.id === 'belt') {
       b.item = ITEMS[data.item] ? data.item : null;
@@ -1477,13 +1582,16 @@
   function restoreRun(data) {
     grid = new Array(GRID_W * GRID_H);
     for (let i = 0; i < grid.length; i++) {
-      const res = data.deposits[i];
-      grid[i] = { deposit: ITEMS[res] ? { resource: res } : null, b: null };
+      grid[i] = {
+        deposit: FactoryState.restoreDeposit(data.deposits[i], (resource) => Boolean(ITEMS[resource]), DEPOSIT_MIN),
+        b: null,
+      };
     }
     buildings = [];
     era = clampNum(data.era, 1, 4, 1) | 0;
     research = clampNum(data.research, 0, ERAS[era].count * 3, 0) | 0;
     score = clampNum(data.score, 0, 9999999, 0) | 0;
+    rp = clampNum(data.rp, 0, 9999999, 0) | 0;
     won = Boolean(data.won);
     eraStable = clampNum(data.eraStable, 0, ERA_STABILITY_SEC, 0);
     simTime = clampNum(data.simTime, 0, 999999, 0);
@@ -1491,12 +1599,17 @@
     paused = Boolean(data.paused);
     selected = B[data.selected] && B[data.selected].era <= era ? data.selected : 'belt';
     rot = clampNum(data.rot, 0, 3, 0) | 0;
-    tool = ['build', 'erase', 'pan'].includes(data.tool) ? data.tool : 'build';
+    tool = ['build', 'erase', 'pan', 'upgrade'].includes(data.tool) ? data.tool : 'build';
     camera.x = clampNum(data.camera && data.camera.x, -TILE, GRID_W * TILE, GRID_W * TILE / 2);
     camera.y = clampNum(data.camera && data.camera.y, -TILE, GRID_H * TILE, GRID_H * TILE / 2);
     camera.zoom = clampNum(data.camera && data.camera.zoom, 0.5, 2.2, 1);
     powerProd = powerDemand = 0; powerRatio = 1;
     deliveries = []; floaties = []; warnState = { text: '', until: 0 };
+    breakthroughs = new Set((Array.isArray(data.breakthroughs) ? data.breakthroughs : [])
+      .filter((id) => FactoryEvolution.BREAKTHROUGHS.some((definition) => definition.id === id)));
+    chronicle = Array.isArray(data.chronicle) ? data.chronicle.slice(0, 30) : [];
+    evolutionMods = FactoryEvolution.modifiers(breakthroughs);
+    breakthroughAccum = 0;
     tut.active = false;
     for (const item of data.buildings) {
       const b = restoreBuilding(item);
@@ -1525,7 +1638,8 @@
     const savedAt = data.savedAt ? new Date(data.savedAt).toLocaleString('ko-KR', {
       month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
     }) : '저장 시간 없음';
-    return `저장된 공장 · ${e.name} · 연구 ${data.research || 0}/${goal} · 점수 ${data.score || 0} · 건물 ${data.buildings.length}개 · ${savedAt}`;
+    const discovered = Array.isArray(data.breakthroughs) ? data.breakthroughs.length : 0;
+    return `저장된 공장 · ${e.name} · 연구 ${data.research || 0}/${goal} · 돌파 ${discovered}/4 · RP ${data.rp || 0} · 건물 ${data.buildings.length}개 · ${savedAt}`;
   }
 
   let saveAccum = 0;
@@ -1541,6 +1655,7 @@
     tool = 'build';
     rot = 0;
     state = 'playing'; paused = false; speed = 1;
+    addChronicle('🔥', '증기 시대 공장 건설 시작');
     document.querySelectorAll('.speed-btn').forEach((b) => b.classList.toggle('active', b.dataset.speed === '1'));
     document.getElementById('pauseBtn').classList.remove('paused');
     document.getElementById('overlay').classList.remove('visible');
@@ -1559,7 +1674,7 @@
     savedRunMeta = readSavedRun();
     document.getElementById('overlayTitle').textContent = '🏭 산업의 시대';
     document.getElementById('overlayMsg').innerHTML =
-      '자원을 캐고 컨베이어로 잇고 가공해 <b>연구소</b>에 납품하세요.<br>1차 증기 → 2차 전기 → 3차 디지털 → 4차 AI 시대로 공장을 진화시킵니다.';
+      '자원을 캐고 컨베이어로 잇고 가공해 <b>연구소</b>에 납품하세요.<br>각 시대의 병목을 해결해 <b>핵심 돌파</b>를 발견하고, 1차 증기 → 2차 전기 → 3차 디지털 → 4차 AI 시대로 공장을 진화시킵니다.';
     document.getElementById('overlayHow').innerHTML = `
       <b>🎯 첫 목표 (1차 · 증기):</b> 톱니바퀴 30개 납품<br>
       ① <b>채굴기⛏</b>를 <b>철광석</b> 위에 → ② <b>화로🔥</b>로 철판 제련 →<br>
@@ -1612,6 +1727,8 @@
     각 광맥 타일은 <b>매장량이 정해져</b> 있어 채굴할수록 줄어듭니다(타일 하단 게이지). 고갈되면 채굴기가 멈추므로(붉은 테두리), 새 광맥으로 채굴기를 옮기거나 증설하며 <b>확장</b>해야 합니다. 채굴은 끝까지 중요합니다.
     <h4>🧭 병목 진단</h4>
     우측 상단 <b>병목</b> 표시가 지금 생산을 가로막는 구속 조건(전력·채굴·특정 기계의 입력/출력)을 알려줍니다. 그곳을 넓히는 것이 생산성 향상의 지름길입니다.
+    <h4>핵심 돌파와 시대 진화</h4>
+    각 시대는 납품량만 채워서는 끝나지 않습니다. 처리량·전력·설비 개량 압력이 함께 쌓이면 <b>표준화 부품 → 계통 조정 → 프로그램 제어 → 자율 최적화</b>가 자동 발견됩니다. 돌파 효과는 이전 생산선에도 계속 적용되며, 납품·생산선·전력·돌파 조건을 동시에 유지해야 다음 시대로 넘어갑니다. 📖 시대 가이드에서 병목의 역사와 산업 연대기를 확인할 수 있습니다.
     <h4>전력 (2차~)</h4>
     발전기⚡가 석탄을 태워 전력을 만듭니다. 전기 기계(조립기·회로공장 등)는 전력을 소비하며, <b>수요 > 생산</b>이면 모든 전기 기계가 느려집니다. 발전기를 늘리거나 업그레이드해 균형을 맞추세요. (채굴기·화로·작업대는 전력이 필요 없습니다.)
     <h4>시대별 목표</h4>
@@ -1621,7 +1738,7 @@
       <li>💾 3차: 로봇 30 (실리콘→회로, 모터+회로)</li>
       <li>🧠 4차: AI 코어 20 (로봇+회로+데이터)</li>
     </ul>
-    이후에는 무한 가동으로 <b>산업 점수</b> 최고 기록에 도전!`;
+    이후에는 무한 가동으로 <b>산업 점수</b> 최고 기록에 도전! 진행은 광맥 잔량·RP·설비 티어·돌파까지 자동 저장됩니다.`;
 
   // ── 부트스트랩 ─────────────────────────────────────────────────
   resize();

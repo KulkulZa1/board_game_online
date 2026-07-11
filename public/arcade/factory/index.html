@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>산업의 시대 — 보드게임 온라인</title>
   <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=3.1">
 </head>
 <body>
   <div id="container">
@@ -39,6 +39,11 @@
           <div class="bar-label"><span id="stabilityLabel">페이즈 안정도</span><span id="stabilityCount">0 / 5초</span></div>
           <div class="bar-track"><div id="stabilityFill"></div></div>
           <div id="phaseChecklist"></div>
+          <div id="breakthroughMini">
+            <div class="breakthrough-line"><span id="breakthroughName">핵심 돌파 탐색</span><span id="breakthroughCount">0%</span></div>
+            <div class="breakthrough-track"><div id="breakthroughFill"></div></div>
+            <div id="breakthroughHint"></div>
+          </div>
         </div>
         <div id="powerWrap" class="hidden">
           <div class="bar-label"><span>⚡ 전력</span><span id="powerCount">0 / 0</span></div>
@@ -122,7 +127,9 @@
   </div>
 
   <script src="/js/admob.js?v=1.0"></script>
-  <script src="game.js?v=1.2"></script>
+  <script src="state.js?v=3.0"></script>
+  <script src="evolution.js?v=3.0"></script>
+  <script src="game.js?v=3.0"></script>
   <script src="/js/sw-update.js?v=20260520b"></script>
 </body>
 </html>
