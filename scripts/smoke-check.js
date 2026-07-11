@@ -271,6 +271,9 @@ async function checkDeploymentCachePolicy() {
   if (sw.body.includes('stale-while-revalidate') || !sw.body.includes('networkFirst(request)')) {
     throw new Error('Service worker should use network-first JS/CSS so deployed game logic appears immediately');
   }
+  if (!sw.body.includes("CACHE_NAME   = 'boardgame-v10'")) {
+    throw new Error('Service worker cache namespace should invalidate pre-progression arcade assets');
+  }
 
   const chat = await checkUrl('/js/chat.js');
   assertNoStoreHeader(chat, '/js/chat.js');
@@ -342,6 +345,22 @@ function checkProductionArcadeAssetPolicy() {
   if (offenders.length) {
     throw new Error(`Public arcade pages must not request /sandbox/ assets: ${offenders.join(', ')}`);
   }
+
+  const versionedAssets = {
+    'public/arcade/factory/index.html': ['style.css?v=3.0', 'state.js?v=3.0', 'evolution.js?v=3.0', 'game.js?v=3.0'],
+    'public/arcade/bootstrap/index.html': ['style.css?v=4.0', 'sim.js?v=4.0', 'game.js?v=4.0'],
+    'public/arcade/snake/index.html': ['style.css?v=2.0', 'game.js?v=2.0'],
+    'public/arcade/breakout/index.html': ['style.css?v=2.0', 'game.js?v=2.0'],
+    'public/arcade/neon-cascade/index.html': ['style.css?v=1.0', 'sim.js?v=1.0', 'game.js?v=1.0'],
+  };
+  Object.entries(versionedAssets).forEach(([file, assets]) => {
+    const page = fs.readFileSync(path.join(root, file), 'utf8');
+    assets.forEach((asset) => {
+      if (!page.includes(asset)) {
+        throw new Error(`${file} should cache-bust changed arcade asset ${asset}`);
+      }
+    });
+  });
 
   const towerPage = fs.readFileSync(path.join(root, 'public/arcade/tower-defense/index.html'), 'utf8');
   if (!towerPage.includes('/arcade/tower-defense/runtime/config.js') || !towerPage.includes('/arcade/tower-defense/runtime/game.js')) {
@@ -481,6 +500,9 @@ function checkNeonCascadeCoverage() {
   if (!style.includes('@media (max-width: 420px)') || !style.includes('prefers-reduced-motion')) {
     throw new Error('Neon Cascade should include mobile and reduced-motion presentation rules');
   }
+  if (!style.includes('--accent: #35f2ff') || style.includes('--cyan:') || style.includes('--gold:')) {
+    throw new Error('Neon Cascade should map its palette to the shared interface token names');
+  }
 
   const context = { window: {} };
   vm.createContext(context);
@@ -553,6 +575,9 @@ function checkBootstrapArcadeCoverage() {
   if (!style.includes('#idleActionPanel') || !style.includes('touch-action: manipulation') ||
       !style.includes('prefers-reduced-motion') || !style.includes('flex: none')) {
     throw new Error('Civilization clicker controls should include mobile touch and reduced-motion rules');
+  }
+  if (!style.includes('#tutBox { order: 1') || !style.includes('order: 2;') || !style.includes('order: 3;')) {
+    throw new Error('Civilization mobile layout should keep tutorial and controls before the long dashboard');
   }
 
   const context = { window: {} };

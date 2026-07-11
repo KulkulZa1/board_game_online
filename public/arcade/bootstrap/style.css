@@ -326,13 +326,23 @@ html, body {
     height: auto;
     min-height: 0;
     overflow: visible;
+    order: 3;
   }
   #board .panel, #buildPanel, #dash, #buildList { height: auto; min-height: 0; overflow: visible; }
   #dash { flex: none; }
   #hdrStats { gap: 8px; font-size: 0.68rem; }
   #idleActionPanel { grid-template-columns: 1fr; }
   #activeActionBtn, #goldenAgeWrap { min-height: 58px; }
-  #controls { flex-wrap: wrap; }
+  #tutBox { order: 1; margin: 0 0 2px; }
+  #controls {
+    order: 2;
+    flex-wrap: nowrap;
+    gap: 5px;
+    justify-content: center;
+    overflow-x: auto;
+    padding: 5px 0;
+  }
+  #controls button { min-width: 38px; min-height: 42px; padding: 6px 9px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

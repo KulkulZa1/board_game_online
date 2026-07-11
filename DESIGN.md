@@ -30,6 +30,9 @@ that always communicate an action, resource, warning, or reward.
 Game-specific phase accents are data, not general UI colors. New interface
 elements must use the tokens above instead of adding decorative colors.
 
+NEON CASCADE keeps its world palette within the same roles: `--accent`
+`#35f2ff`, `--accent2` `#ffd166`, `--bad` `#ff5d8f`, and `--ok` `#8cff66`.
+
 ## 3. Typography
 
 ### Scale
