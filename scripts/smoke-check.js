@@ -347,11 +347,11 @@ function checkProductionArcadeAssetPolicy() {
   }
 
   const versionedAssets = {
-    'public/arcade/factory/index.html': ['style.css?v=3.0', 'state.js?v=3.0', 'evolution.js?v=3.0', 'game.js?v=3.0'],
-    'public/arcade/bootstrap/index.html': ['style.css?v=4.0', 'sim.js?v=4.0', 'game.js?v=4.0'],
+    'public/arcade/factory/index.html': ['style.css?v=3.1', 'state.js?v=3.0', 'evolution.js?v=3.0', 'game.js?v=3.0'],
+    'public/arcade/bootstrap/index.html': ['style.css?v=4.1', 'sim.js?v=4.0', 'game.js?v=4.0'],
     'public/arcade/snake/index.html': ['style.css?v=2.0', 'game.js?v=2.0'],
     'public/arcade/breakout/index.html': ['style.css?v=2.0', 'game.js?v=2.0'],
-    'public/arcade/neon-cascade/index.html': ['style.css?v=1.0', 'sim.js?v=1.0', 'game.js?v=1.0'],
+    'public/arcade/neon-cascade/index.html': ['style.css?v=1.1', 'sim.js?v=1.0', 'game.js?v=1.0'],
   };
   Object.entries(versionedAssets).forEach(([file, assets]) => {
     const page = fs.readFileSync(path.join(root, file), 'utf8');
@@ -419,6 +419,9 @@ function checkFactoryArcadeCoverage() {
   }
   if (!style.includes('@media (max-width: 520px)') || !style.includes('#palette')) {
     throw new Error('Factory CSS should include mobile-specific palette/tool layout rules');
+  }
+  if (!style.includes('min-height: 42px') || !style.includes('word-break: keep-all')) {
+    throw new Error('Factory save actions and Korean overlay guidance should remain touchable and readable');
   }
 
   const context = { window: {} };
@@ -503,6 +506,9 @@ function checkNeonCascadeCoverage() {
   if (!style.includes('--accent: #35f2ff') || style.includes('--cyan:') || style.includes('--gold:')) {
     throw new Error('Neon Cascade should map its palette to the shared interface token names');
   }
+  if (!style.includes('width: 42px') || !style.includes('height: 42px')) {
+    throw new Error('Neon Cascade header controls should meet the mobile touch target minimum');
+  }
 
   const context = { window: {} };
   vm.createContext(context);
@@ -578,6 +584,9 @@ function checkBootstrapArcadeCoverage() {
   }
   if (!style.includes('#tutBox { order: 1') || !style.includes('order: 2;') || !style.includes('order: 3;')) {
     throw new Error('Civilization mobile layout should keep tutorial and controls before the long dashboard');
+  }
+  if (!style.includes('.bld-btn { width: 42px; height: 42px; }') || !style.includes('word-break: keep-all')) {
+    throw new Error('Civilization mobile controls and Korean guidance should remain touchable and readable');
   }
 
   const context = { window: {} };

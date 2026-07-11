@@ -38,7 +38,7 @@
 - Production WebSocket transitive dependencies were refreshed to `engine.io 6.6.9`, `socket.io-adapter 2.5.8`, and `ws 8.21.0` after the dependency audit reported the older `ws` denial-of-service advisory.
 - Snake now rewards fast food chains with multipliers, rare golden food, and a six-second RUSH state; Breakout now tracks destruction combos and triggers score-tripling FEVER every 12 bricks.
 - Changed Factory, Bootstrap, Snake, and Breakout asset URLs now carry release versions, and the service-worker cache namespace advances to `boardgame-v10`, preventing an offline fallback from pinning pre-deploy gameplay or CSS after the server returns.
-- Bootstrap mobile layout now places onboarding and pause/speed controls before the long build dashboard, keeping guidance and 42px touch controls available without overlaying game content.
+- Bootstrap mobile layout now places onboarding and pause/speed controls before the long build dashboard, keeps Korean guidance words intact, and gives both toolbar and building actions 42px touch targets. Factory save actions and the Neon mute control use the same minimum.
 
 ### Documentation
 - Added `DESIGN.md`, extracted from the existing platform and arcade visual patterns, to define shared game-shell tokens, responsive rules, feedback states, and reusable progress/action components.

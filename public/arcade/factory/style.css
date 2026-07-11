@@ -267,10 +267,11 @@ html, body {
 }
 #overlayIcon { font-size: 3rem; }
 #overlayTitle { font-size: 1.3rem; }
-#overlayMsg { color: var(--muted); font-size: 0.86rem; line-height: 1.6; }
+#overlayMsg { color: var(--muted); font-size: 0.86rem; line-height: 1.6; word-break: keep-all; overflow-wrap: break-word; }
 #overlayHow {
   text-align: left; font-size: 0.76rem; color: var(--text); line-height: 1.7;
   background: var(--panel2); border-radius: 10px; padding: 12px 14px; width: 100%;
+  word-break: keep-all; overflow-wrap: break-word;
 }
 #overlayHow b { color: var(--accent); }
 #saveSummary {
@@ -296,6 +297,7 @@ html, body {
   color: var(--muted);
   cursor: pointer;
   font-size: 0.82rem;
+  min-height: 42px;
   padding: 8px 22px;
 }
 #newRunBtn:hover, #discardSaveBtn:hover {

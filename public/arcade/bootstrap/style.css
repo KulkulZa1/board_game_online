@@ -216,7 +216,7 @@ html, body {
   max-width: 440px; width: 94%; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 12px; }
 .ov-icon { font-size: 3rem; }
 .ov-box h2 { font-size: 1.3rem; }
-.ov-msg { font-size: 0.84rem; color: var(--muted); line-height: 1.6; }
+.ov-msg { font-size: 0.84rem; color: var(--muted); line-height: 1.6; word-break: keep-all; overflow-wrap: break-word; }
 .ov-msg b { color: var(--accent2); }
 .challenge-row { font-size: 0.78rem; color: var(--text); display: flex; align-items: center; gap: 7px; cursor: pointer; }
 #startBtn, #ovBtn { background: linear-gradient(135deg, var(--accent), #aef0c4); color: #06140c; border: none;
@@ -280,7 +280,7 @@ html, body {
 #tutBox { background: linear-gradient(135deg, rgba(28,56,38,0.97), rgba(18,38,25,0.97));
   border: 1px solid rgba(111,207,151,0.35); border-radius: 10px;
   padding: 9px 13px; margin: 0 0 4px; color: var(--text); font-size: 0.8rem; line-height: 1.55;
-  box-shadow: 0 2px 14px rgba(0,0,0,0.45); flex-shrink: 0; }
+  box-shadow: 0 2px 14px rgba(0,0,0,0.45); flex-shrink: 0; word-break: keep-all; overflow-wrap: break-word; }
 #tutBox b { color: var(--accent); }
 .tut-foot { display: flex; justify-content: space-between; align-items: center; margin-top: 5px; }
 .tut-prog { color: var(--muted); font-size: 0.68rem; }
@@ -333,6 +333,7 @@ html, body {
   #hdrStats { gap: 8px; font-size: 0.68rem; }
   #idleActionPanel { grid-template-columns: 1fr; }
   #activeActionBtn, #goldenAgeWrap { min-height: 58px; }
+  .bld-btn { width: 42px; height: 42px; }
   #tutBox { order: 1; margin: 0 0 2px; }
   #controls {
     order: 2;
