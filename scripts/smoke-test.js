@@ -121,6 +121,8 @@ setTimeout(() => {
     { path: '/arcade/bootstrap/', label: '/arcade/bootstrap/ → 200', expect: 200 },
     { path: '/arcade/bootstrap/sim.js', label: '/arcade/bootstrap/sim.js → 200', expect: 200 },
     { path: '/arcade/jackpot/', label: '/arcade/jackpot/ → 200', expect: 200 },
+    { path: '/mahjong.html', label: '/mahjong.html → 200', expect: 200 },
+    { path: '/js/mahjong-client.js', label: '/js/mahjong-client.js → 200', expect: 200 },
     { path: '/arcade/jackpot/sim.js', label: '/arcade/jackpot/sim.js → 200', expect: 200 },
   ];
 
