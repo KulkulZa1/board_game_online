@@ -207,3 +207,28 @@ html, body {
   .opp { min-height: 76px; }
   #myRiver .tile { width: 21px; height: 30px; }
 }
+
+/* ── 🧭 초심자 도우미 ── */
+#assistBtn { opacity: 0.55; }
+#assistBtn.on { opacity: 1; border-color: var(--gold); color: var(--gold); box-shadow: 0 0 8px rgba(255,209,102,0.3); }
+#assistBar {
+  flex-shrink: 0; text-align: center; font-size: 0.76rem; line-height: 1.5;
+  background: rgba(255,209,102,0.08); border: 1px solid rgba(255,209,102,0.35);
+  border-radius: 9px; padding: 5px 10px; color: var(--text);
+}
+#assistBar .good { color: var(--ok); }
+#assistBar .dim2 { color: var(--muted); font-size: 0.68rem; }
+.tile.best-discard {
+  outline: 2px solid var(--ok);
+  box-shadow: 0 2px 0 #b7ae93, 0 0 12px rgba(81,207,102,0.75);
+  position: relative;
+}
+.tile.best-discard::after {
+  content: '추천'; position: absolute; top: -14px; left: 50%; transform: translateX(-50%);
+  font-size: 0.5rem; font-weight: 900; color: var(--ok); letter-spacing: 0.05em;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+}
+.tile.selected { transform: translateY(-8px); outline: 2px solid var(--gold);
+  box-shadow: 0 2px 0 #b7ae93, 0 0 14px rgba(255,209,102,0.9); }
+.my-turn .hand-tile.selected:hover, .my-turn .hand-tile.selected:active { transform: translateY(-8px); }
+#myHand { padding-top: 16px; }   /* 추천 배지 공간 */

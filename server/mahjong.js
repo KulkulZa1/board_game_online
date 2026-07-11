@@ -122,7 +122,48 @@ function gameStateFor(room, seat) {
     seatWinds: [0, 1, 2, 3].map((i) => (i - g.dealer + 4) % 4),   // 0=동 1=남 2=서 3=북
     offers: g.phase === 'calls' && g.pending && g.pending.offers[seat] ? g.pending.offers[seat] : null,
     canActions: g.phase === 'turn' && g.turn === seat ? turnActions(room, seat) : null,
+    // 초심자 도우미 — 타패별 샹텐/수용/대기 (본인 턴에만, 사람에게만)
+    hint: g.phase === 'turn' && g.turn === seat && room.seats[seat] && room.seats[seat].type === 'human'
+      ? computeHint(g, seat) : null,
   };
+}
+
+// 타패 후보별 효율 분석 — 클라이언트 도우미(🧭)가 표시한다.
+// 남은 장수는 내 손패+모든 강+공개 멜드+도라 표시패를 제외해 추정.
+function computeHint(g, seat) {
+  const hand = g.hands[seat];
+  const meldCount = g.melds[seat].length;
+  if (hand.length % 3 !== 2) return null;   // 타패 국면(14-3n장)이 아니면 없음
+  const visible = E.toCounts(hand);
+  for (const r of g.rivers) for (const d of r) visible[d.tile]++;
+  for (const ms of g.melds) for (const m of ms) for (const t of m.tiles) visible[t]++;
+  for (let i = 0; i < g.doraRevealed; i++) visible[g.doraIndicators[i]]++;
+
+  const discards = [];
+  const tried = new Set();
+  let bestSh = 99, bestUke = -1;
+  for (let i = 0; i < hand.length; i++) {
+    const t = hand[i];
+    if (tried.has(t)) continue;
+    tried.add(t);
+    const rest = hand.slice(); rest.splice(i, 1);
+    const counts = E.toCounts(rest);
+    const sh = E.shanten(counts, meldCount);
+    let uke = 0;
+    for (let k = 0; k < E.KIND_COUNT; k++) {
+      if (counts[k] >= 4) continue;
+      counts[k]++;
+      if (E.shanten(counts, meldCount) < sh) uke += Math.max(0, 4 - visible[k]);
+      counts[k]--;
+    }
+    const waits = sh === 0
+      ? E.waitingTiles(counts, meldCount).map((w) => ({ t: w, n: Math.max(0, 4 - visible[w]) }))
+      : null;
+    discards.push({ t, shanten: sh, ukeire: uke, waits });
+    if (sh < bestSh || (sh === bestSh && uke > bestUke)) { bestSh = sh; bestUke = uke; }
+  }
+  for (const d of discards) d.best = d.shanten === bestSh && d.ukeire === bestUke;
+  return { shanten: bestSh, discards };
 }
 
 function pushState(room) {

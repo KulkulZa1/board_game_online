@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>리치 마작 — 보드게임 온라인</title>
   <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/css/games/mahjong.css?v=1.0">
+  <link rel="stylesheet" href="/css/games/mahjong.css?v=1.1">
 </head>
 <body>
   <div id="container">
@@ -13,6 +13,7 @@
       <a href="/" class="back-btn">← 로비</a>
       <span class="game-title">🀄 리치 마작</span>
       <div id="hdrRight">
+        <button id="assistBtn" class="hdr-btn" title="초심자 도우미 — 추천 타패·샹텐·대기 표시">🧭 도우미</button>
         <span id="roomChip" class="hidden"></span>
       </div>
     </header>
@@ -49,6 +50,9 @@
         <div id="myInfo"><b id="myName"></b><span id="myWind"></span><span id="myScore"></span><span id="myRiichi" class="hidden">리치!</span></div>
         <div id="actionBar"></div>
       </div>
+
+      <!-- 도우미 정보 바 -->
+      <div id="assistBar" class="hidden"></div>
 
       <!-- 내 멜드 + 손패 -->
       <div id="myMelds"></div>
@@ -109,6 +113,6 @@
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
-  <script src="/js/mahjong-client.js?v=1.0"></script>
+  <script src="/js/mahjong-client.js?v=1.1"></script>
 </body>
 </html>

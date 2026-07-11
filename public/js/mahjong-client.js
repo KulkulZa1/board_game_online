@@ -32,6 +32,10 @@
   let cur = null;          // 마지막 mahjong:state
   let riichiMode = false;  // 리치 선언용 타일 선택 중
   let resultTimer = null;
+  let selectedTile = null; // 도우미 ON: 첫 탭 미리보기 → 둘째 탭 확정
+  // 🧭 초심자 도우미 — 기본 ON (처음 오는 사람을 위해), 저장됨
+  let assist = true;
+  try { assist = localStorage.getItem('mahjong_assist') !== '0'; } catch (e) {}
 
   const store = {
     get token() { try { return localStorage.getItem('mahjong_token'); } catch (e) { return null; } },
@@ -136,6 +140,7 @@
     if (!st) return;
     cur = st;
     riichiMode = false;
+    selectedTile = null;
     renderTable(st);
   });
 
@@ -182,7 +187,43 @@
     document.body.classList.toggle('my-turn', myTurn);
     $('turnHint').textContent = st.phase === 'calls'
       ? (st.offers ? '콜 하시겠습니까?' : '다른 플레이어 응답 대기...')
-      : myTurn ? (st.riichi[mySeat] ? '리치 중 — 쯔모기리' : '버릴 패를 선택하세요') : `${st.names[st.turn]} 차례`;
+      : myTurn ? (st.riichi[mySeat] ? '리치 중 — 쯔모기리' : (assist ? '패를 탭해 확인 → 한 번 더 탭해 버리기' : '버릴 패를 선택하세요')) : `${st.names[st.turn]} 차례`;
+    renderAssist(st);
+  }
+
+  // ── 🧭 도우미 정보 바 ─────────────────────────────────────────────
+  function renderAssist(st) {
+    const bar = $('assistBar');
+    if (!bar) return;
+    if (!assist) { bar.classList.add('hidden'); return; }
+    const myTurn = st.turn === mySeat && st.phase === 'turn';
+    let html = '';
+    if (st.phase === 'calls' && st.offers) {
+      // 콜 교육 힌트
+      if (st.offers.ron) html = '<b class="good">론!</b> 상대가 버린 패로 완성했습니다 — 화료하세요';
+      else html = '펑·치를 하면 <b>멘젠이 깨져 리치를 걸 수 없습니다</b>. 확신이 없으면 패스가 안전해요';
+    } else if (myTurn && st.hint) {
+      const h = st.hint;
+      const info = selectedTile != null ? h.discards.find((d) => d.t === selectedTile) : null;
+      if (info) {
+        // 선택한 패 미리보기
+        const after = info.shanten === 0
+          ? `<b class="good">텐파이!</b> 대기 ${info.waits.map((w) => tileText(w.t) + '(' + w.n + '장)').join(' · ')}`
+          : `${info.shanten}샹텐 · 받는 패 ${info.ukeire}장`;
+        html = `${tileText(selectedTile)} 버리면 → ${after} <span class="dim2">· 한 번 더 탭하면 버립니다</span>`;
+      } else if (h.shanten === 0) {
+        const best = h.discards.filter((d) => d.best);
+        html = `<b class="good">텐파이까지 왔어요!</b> 추천: ${best.map((d) => tileText(d.t)).join(' / ')}` +
+          (st.canActions && st.canActions.riichi ? ' — <b class="good">리치</b>를 걸 수 있습니다' : '');
+      } else {
+        const best = h.discards.filter((d) => d.best);
+        html = `${h.shanten}샹텐 (완성까지 ${h.shanten}걸음) · 추천 타패: <b>${best.map((d) => tileText(d.t)).join(' / ')}</b>`;
+      }
+    } else if (myTurn && st.riichi[mySeat]) {
+      html = '리치 중 — 쯔모 패를 자동으로 버립니다. 대기패가 나오면 론/쯔모!';
+    }
+    bar.innerHTML = html;
+    bar.classList.toggle('hidden', !html);
   }
 
   function renderHand(st) {
@@ -197,11 +238,17 @@
     const myTurn = st.turn === mySeat && st.phase === 'turn';
     const riichiTiles = riichiMode && st.canActions && st.canActions.riichi ? st.canActions.riichi : null;
     const locked = st.riichi[mySeat];
+    const bestSet = new Set(
+      assist && st.hint ? st.hint.discards.filter((d) => d.best).map((d) => d.t) : []
+    );
     const cls = (t) => {
+      let c = '';
       if (!myTurn) return 'idle';
-      if (riichiTiles) return riichiTiles.includes(t) ? 'riichi-pick' : 'dim';
-      if (locked) return t === st.drawnTile ? '' : 'dim';
-      return '';
+      if (riichiTiles) c = riichiTiles.includes(t) ? 'riichi-pick' : 'dim';
+      else if (locked) c = t === st.drawnTile ? '' : 'dim';
+      if (assist && bestSet.has(t) && !locked && !c.includes('dim')) c += ' best-discard';
+      if (selectedTile === t) c += ' selected';
+      return c;
     };
     wrap.innerHTML = tilesHTML(hand.map((t) => t), '').replace(/class="tile/g, 'class="tile hand-tile');
     // 클래스 개별 적용을 위해 다시 구성
@@ -252,13 +299,14 @@
     if (cur.turn !== mySeat || cur.phase !== 'turn') return;
     const t = +el.dataset.t;
     if (riichiMode) {
-      if (cur.canActions && cur.canActions.riichi && cur.canActions.riichi.includes(t)) {
-        socket.emit('mahjong:action', { a: 'riichi', t });
-        riichiMode = false;
-      }
+      if (!(cur.canActions && cur.canActions.riichi && cur.canActions.riichi.includes(t))) return;
+      if (assist && selectedTile !== t) { selectedTile = t; renderTable(cur); return; }   // 1차 탭: 대기 미리보기
+      socket.emit('mahjong:action', { a: 'riichi', t });
+      riichiMode = false;
       return;
     }
     if (cur.riichi[mySeat] && t !== cur.drawnTile) return;   // 리치 중 쯔모기리 강제
+    if (assist && selectedTile !== t) { selectedTile = t; renderTable(cur); return; }     // 1차 탭: 정보 미리보기
     socket.emit('mahjong:action', { a: 'discard', t });
   });
 
@@ -318,6 +366,18 @@
     if (roomParam) {
       $('codeInput').value = roomParam.toUpperCase();
       $('entryError').textContent = '닉네임을 입력하고 참가를 누르세요';
+    }
+    const ab = $('assistBtn');
+    if (ab) {
+      ab.classList.toggle('on', assist);
+      ab.addEventListener('click', () => {
+        assist = !assist;
+        try { localStorage.setItem('mahjong_assist', assist ? '1' : '0'); } catch (e) {}
+        ab.classList.toggle('on', assist);
+        toast(assist ? '🧭 도우미 켜짐 — 추천 타패와 샹텐을 표시합니다' : '도우미 꺼짐 — 한 번 탭으로 바로 버립니다');
+        selectedTile = null;
+        if (cur) renderTable(cur);
+      });
     }
     try {
       const saved = localStorage.getItem('mahjong_nick');
