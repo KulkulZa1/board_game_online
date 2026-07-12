@@ -128,6 +128,8 @@ setTimeout(() => {
     { path: '/arcade/jackpot/sim.js', label: '/arcade/jackpot/sim.js → 200', expect: 200 },
     { path: '/arcade/neon-cascade/', label: '/arcade/neon-cascade/ → 200', expect: 200 },
     { path: '/arcade/neon-cascade/sim.js', label: '/arcade/neon-cascade/sim.js → 200', expect: 200 },
+    { path: '/bang.html', label: '/bang.html → 200', expect: 200 },
+    { path: '/js/bang-client.js', label: '/js/bang-client.js → 200', expect: 200 },
   ];
 
   const regularRoutes = ROUTES.filter(({ path }) => path !== '/api/status');
