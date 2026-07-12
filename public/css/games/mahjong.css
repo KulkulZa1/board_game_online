@@ -64,46 +64,108 @@ html, body {
 .tile.drawn { margin-left: 4px; }
 .tile.riichi-pick { outline: 2px solid var(--gold); box-shadow: 0 0 12px rgba(255,209,102,0.8); }
 
-/* ── 테이블 ── */
-#table { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 6px; }
+/* ── 테이블 — 작혼 스타일: 위에서 본 정사각 탁자 ── */
+#table { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 5px; }
 
-#oppRow { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px; flex-shrink: 0; }
-.opp { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 5px 7px; min-height: 96px; }
-.opp.active { border-color: var(--gold); box-shadow: 0 0 10px rgba(255,209,102,0.35); }
-.opp-head { display: flex; align-items: baseline; gap: 5px; }
-.opp-name { font-size: 0.72rem; max-width: 70%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.opp-wind { font-size: 0.62rem; color: var(--gold); font-weight: 800; }
-.opp-info { display: flex; gap: 6px; font-size: 0.62rem; color: var(--muted); align-items: center; }
-.opp-riichi { color: var(--bad); font-weight: 900; animation: riichiPulse 0.8s infinite alternate; }
-@keyframes riichiPulse { to { text-shadow: 0 0 10px rgba(255,107,107,0.9); } }
-.opp-melds { display: flex; gap: 3px; margin-top: 2px; flex-wrap: wrap; }
-.meld { display: inline-flex; gap: 1px; background: rgba(255,255,255,0.06); border-radius: 4px; padding: 1px 2px; }
-.opp-river { display: flex; flex-wrap: wrap; gap: 1px; margin-top: 3px; max-height: 62px; overflow: hidden; }
-
-/* 중앙 정보 */
-#centerBar {
-  display: flex; align-items: center; gap: 10px; flex-shrink: 0; flex-wrap: wrap;
-  background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 5px 12px;
-  font-size: 0.76rem; font-weight: 700;
+#board {
+  position: relative;
+  width: min(100%, 54dvh);
+  aspect-ratio: 1;
+  margin: 0 auto;
+  flex-shrink: 0;
+  background:
+    radial-gradient(closest-side, #17795b, transparent 90%),
+    linear-gradient(160deg, #0f5741, #0b4433);
+  border: 3px solid #083527;
+  border-radius: 14px;
+  box-shadow: inset 0 0 40px rgba(0,0,0,0.45), 0 6px 18px rgba(0,0,0,0.4);
+  display: grid;
+  grid-template-areas: "tl top tr" "left center right" "bl bottom br";
+  grid-template-columns: 1fr 1.45fr 1fr;
+  grid-template-rows: 1fr 1.45fr 1fr;
+  padding: 4px;
+  gap: 2px;
 }
-#honbaInfo, #stickInfo, #wallInfo { color: var(--muted); font-weight: 600; font-size: 0.7rem; }
-#doraBox { margin-left: auto; display: flex; align-items: center; gap: 5px; }
-.dora-label { font-size: 0.64rem; color: var(--gold); font-weight: 800; }
-#doraTiles { display: flex; gap: 2px; }
 
-/* 내 강 */
-#myRiverWrap { flex: 1; min-height: 40px; display: flex; align-items: flex-start; justify-content: center; overflow: hidden; }
-#myRiver { display: flex; flex-wrap: wrap; gap: 2px; justify-content: center; max-width: 420px; }
-#myRiver .tile { width: 24px; height: 34px; font-size: 0.82rem; }
-#myRiver .tile i { font-size: 0.44rem; }
+.zone { min-width: 0; min-height: 0; overflow: hidden; }
+.z-top    { grid-area: top;    display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.z-bottom { grid-area: bottom; display: flex; justify-content: center; align-items: flex-start; }
+.z-left   { grid-area: left;   display: flex; gap: 2px; }
+.z-right  { grid-area: right;  display: flex; gap: 2px; justify-content: flex-end; }
+.zside { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.z-left .zside { align-items: flex-end; }
+.z-right .zside { align-items: flex-start; }
 
-/* 내 정보/액션 */
-#myBar { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-shrink: 0; min-height: 44px; }
-#myInfo { display: flex; align-items: baseline; gap: 7px; font-size: 0.8rem; }
-#myWind { color: var(--gold); font-weight: 900; }
-#myScore { color: var(--muted); font-size: 0.74rem; }
-#myRiichi { color: var(--bad); font-weight: 900; animation: riichiPulse 0.8s infinite alternate; }
-#actionBar { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+/* 상대 손패 뒷면 */
+.backs.h { display: flex; gap: 1px; justify-content: center; flex-wrap: nowrap; }
+.backs.v { display: flex; flex-direction: column; gap: 1px; flex-shrink: 0; }
+.back {
+  display: inline-block; width: 11px; height: 16px; border-radius: 2px;
+  background: linear-gradient(160deg, #2e6da8, #1c4a77);
+  border: 1px solid #123a5e;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.5);
+  flex-shrink: 0;
+}
+.backs.v .back { width: 16px; height: 11px; }
+
+/* 강(버림패) — 중앙을 향해 쌓인다 */
+.zriver { display: flex; flex-wrap: wrap; gap: 1px; align-content: flex-start; min-width: 0; }
+.z-top .zriver { justify-content: center; flex-direction: row; }
+.z-bottom .zriver { justify-content: center; max-width: 100%; }
+.z-left .zriver, .z-right .zriver { max-width: 100%; }
+.z-left .zriver { justify-content: flex-end; }
+.zriver .tile.mini { width: 17px; height: 24px; font-size: 0.6rem; }
+.zriver .tile.mini i { font-size: 0.34rem; }
+.zriver .tile.mini.honor { font-size: 0.68rem; }
+.zriver .tile.riichi-tile { margin: 0 4px; }
+.zmelds { display: flex; gap: 2px; flex-wrap: wrap; justify-content: center; }
+.zmelds .tile.mini { width: 14px; height: 20px; font-size: 0.52rem; }
+.zmelds .tile.mini i { font-size: 0.3rem; }
+
+/* 중앙 정보 사각형 */
+#centerSq {
+  grid-area: center;
+  position: relative;
+  background: linear-gradient(160deg, #0a2f24, #082419);
+  border: 2px solid #1d5f4a;
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  min-width: 0; min-height: 0;
+}
+.cmid { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+#roundInfo { font-weight: 900; font-size: 0.95rem; color: var(--gold); }
+#subInfo { font-size: 0.58rem; color: var(--muted); font-weight: 600; }
+#doraTiles { display: flex; gap: 2px; margin-top: 1px; }
+#doraTiles .tile.mini { width: 15px; height: 21px; font-size: 0.55rem; }
+#doraTiles .tile.mini i { font-size: 0.32rem; }
+#doraTiles .tile.mini.honor { font-size: 0.62rem; }
+
+/* 플레이어 스트립 — 중앙 사각형 4변 */
+.pinfo {
+  position: absolute;
+  display: flex; align-items: center; gap: 4px;
+  font-size: 0.56rem; line-height: 1;
+  background: rgba(0,0,0,0.35);
+  border: 1px solid transparent;
+  border-radius: 6px; padding: 2px 5px;
+  white-space: nowrap; max-width: 96%;
+  overflow: hidden;
+}
+.p-bottom { bottom: 2px; left: 50%; transform: translateX(-50%); }
+.p-top    { top: 2px;    left: 50%; transform: translateX(-50%); }
+.p-left   { left: 2px;   top: 50%;  transform: translateY(-50%) ; flex-direction: column; padding: 4px 2px; gap: 2px; }
+.p-right  { right: 2px;  top: 50%;  transform: translateY(-50%); flex-direction: column; padding: 4px 2px; gap: 2px; }
+.pinfo.active { border-color: var(--gold); box-shadow: 0 0 8px rgba(255,209,102,0.55); background: rgba(255,209,102,0.12); }
+.pinfo .pw { color: var(--gold); font-weight: 900; }
+.pinfo .pn { max-width: 64px; overflow: hidden; text-overflow: ellipsis; }
+.pinfo .ps { color: var(--muted); }
+.pinfo .pt { color: #9fd8c0; font-weight: 700; }
+.pinfo .pt.low { color: var(--bad); animation: riichiPulse 0.7s infinite alternate; }
+.pinfo .rstick { color: var(--bad); font-weight: 900; }
+.pinfo.riichi-on { border-color: rgba(255,107,107,0.6); }
+
+/* 액션 바 */
+#actionBar { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; flex-shrink: 0; min-height: 0; }
 .act-btn {
   border: none; border-radius: 9px; padding: 9px 14px;
   font-size: 0.88rem; font-weight: 900; cursor: pointer; color: #14251c;
@@ -115,6 +177,8 @@ html, body {
 .act-btn.riichi { background: linear-gradient(135deg, var(--gold), #f4a836); }
 .act-btn.call { background: #a5d8ff; }
 .act-btn.pass { background: rgba(255,255,255,0.16); color: var(--text); }
+@keyframes riichiPulse { to { text-shadow: 0 0 10px rgba(255,107,107,0.9); } }
+.meld { display: inline-flex; gap: 1px; background: rgba(255,255,255,0.06); border-radius: 4px; padding: 1px 2px; }
 
 /* 내 멜드/손패 */
 #myMelds { display: flex; gap: 6px; flex-shrink: 0; min-height: 0; justify-content: flex-end; }
@@ -201,11 +265,10 @@ html, body {
 
 .hidden { display: none !important; }
 
-/* 좁은 화면 — 상대 강 축소 */
+/* 좁은 화면 — 보드 축소 */
 @media (max-height: 700px) {
-  .opp-river { max-height: 34px; }
-  .opp { min-height: 76px; }
-  #myRiver .tile { width: 21px; height: 30px; }
+  #board { width: min(100%, 47dvh); }
+  .zriver .tile.mini { width: 15px; height: 21px; }
 }
 
 /* ── 🧭 초심자 도우미 ── */
