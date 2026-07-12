@@ -12,6 +12,7 @@ This is a real-time multiplayer board game platform built with Node.js + Express
 
 Layer A supports **12 games**: Chess, Omok, Connect4, Othello, Checkers, Indian Poker, Apple Game, Battleship, Backgammon, Texas Hold'em, Dots & Boxes, Mancala.  
 **Special case — Riichi Mahjong (4-player)**: lives OUTSIDE the 2-player room system as a self-contained module (`server/mahjong.js` + `server/handlers/mahjong-engine.js` + `/mahjong.html` + `public/js/mahjong-client.js`, socket events `mahjong:*`). Do NOT try to fit 4-player games into the host/guest RoomState.  
+**Special case — BANG! (4-7 players)**: same self-contained pattern (`server/bang.js` + `server/handlers/bang-engine.js` + `/bang.html` + `public/js/bang-client.js`, socket events `bang:*`).  
 Layer B supports **4 arcade games**: Snake, Breakout, Vampire Survivors, Plant Growing.  
 Layer C has **3 design sandboxes**: vampire-survivors, plant-growing, tower-defense.
 

@@ -13,6 +13,7 @@ const { handleIndianPokerAction } = require('./handlers/indianpoker');
 const { getValidCheckersMovesForPiece, getAllCheckersValidMoves } = require('./handlers/checkers');
 const { Chess } = require('chess.js');
 const mahjong = require('./mahjong');
+const bang = require('./bang');
 
 function registerEvents(io) {
   io.on('connection', (socket) => {
@@ -25,6 +26,8 @@ function registerEvents(io) {
 
     // 4인 리치 마작 — 자립형 모듈 (전용 이벤트 mahjong:*, 기존 방 시스템과 분리)
     mahjong.register(io, socket);
+    // BANG! (4~7인) — 자립형 모듈 (전용 이벤트 bang:*)
+    bang.register(io, socket);
 
     // --- Room: Create ---
     socket.on('room:create', ({ hostColor, timeControl, gameType, boardSize, indianPokerOpts }) => {

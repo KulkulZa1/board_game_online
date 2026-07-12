@@ -124,6 +124,8 @@ setTimeout(() => {
     { path: '/mahjong.html', label: '/mahjong.html → 200', expect: 200 },
     { path: '/js/mahjong-client.js', label: '/js/mahjong-client.js → 200', expect: 200 },
     { path: '/arcade/jackpot/sim.js', label: '/arcade/jackpot/sim.js → 200', expect: 200 },
+    { path: '/bang.html', label: '/bang.html → 200', expect: 200 },
+    { path: '/js/bang-client.js', label: '/js/bang-client.js → 200', expect: 200 },
   ];
 
   let pending = ROUTES.length + 1; // +1 for JSON structure check
