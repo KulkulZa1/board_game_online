@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>리치 마작 — 보드게임 온라인</title>
   <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/css/games/mahjong.css?v=1.1">
+  <link rel="stylesheet" href="/css/games/mahjong.css?v=1.2">
 </head>
 <body>
   <div id="container">
@@ -18,38 +18,52 @@
       </div>
     </header>
 
-    <!-- 게임 화면 -->
+    <!-- 게임 화면 — 작혼 스타일: 위에서 본 정사각 탁자, 중앙 정보 + 4방향 강 -->
     <main id="table" class="hidden">
-      <!-- 상대 3인 (상가 · 대면 · 하가) -->
-      <div id="oppRow">
-        <div class="opp" data-rel="1"><div class="opp-head"><b class="opp-name"></b><span class="opp-wind"></span></div>
-          <div class="opp-info"><span class="opp-score"></span><span class="opp-tiles"></span><span class="opp-riichi hidden">리치!</span></div>
-          <div class="opp-melds"></div><div class="opp-river"></div></div>
-        <div class="opp" data-rel="2"><div class="opp-head"><b class="opp-name"></b><span class="opp-wind"></span></div>
-          <div class="opp-info"><span class="opp-score"></span><span class="opp-tiles"></span><span class="opp-riichi hidden">리치!</span></div>
-          <div class="opp-melds"></div><div class="opp-river"></div></div>
-        <div class="opp" data-rel="3"><div class="opp-head"><b class="opp-name"></b><span class="opp-wind"></span></div>
-          <div class="opp-info"><span class="opp-score"></span><span class="opp-tiles"></span><span class="opp-riichi hidden">리치!</span></div>
-          <div class="opp-melds"></div><div class="opp-river"></div></div>
+      <div id="board">
+        <!-- 대면(위) -->
+        <div class="zone z-top" data-rel="2">
+          <div class="backs h"></div>
+          <div class="zmelds"></div>
+          <div class="zriver"></div>
+        </div>
+        <!-- 상가(왼쪽) -->
+        <div class="zone z-left" data-rel="3">
+          <div class="backs v"></div>
+          <div class="zside">
+            <div class="zmelds"></div>
+            <div class="zriver"></div>
+          </div>
+        </div>
+        <!-- 하가(오른쪽) -->
+        <div class="zone z-right" data-rel="1">
+          <div class="zside">
+            <div class="zmelds"></div>
+            <div class="zriver"></div>
+          </div>
+          <div class="backs v"></div>
+        </div>
+        <!-- 나(아래) — 강만, 손패는 탁자 밖 -->
+        <div class="zone z-bottom" data-rel="0">
+          <div class="zriver"></div>
+        </div>
+
+        <!-- 중앙 정보 사각형 -->
+        <div id="centerSq">
+          <div class="pinfo p-top" data-rel="2"></div>
+          <div class="pinfo p-left" data-rel="3"></div>
+          <div class="pinfo p-right" data-rel="1"></div>
+          <div class="pinfo p-bottom" data-rel="0"></div>
+          <div class="cmid">
+            <div id="roundInfo">동1국</div>
+            <div id="subInfo"></div>
+            <div id="doraTiles"></div>
+          </div>
+        </div>
       </div>
 
-      <!-- 중앙 정보 -->
-      <div id="centerBar">
-        <span id="roundInfo">동1국</span>
-        <span id="honbaInfo"></span>
-        <span id="stickInfo"></span>
-        <span id="wallInfo"></span>
-        <div id="doraBox"><span class="dora-label">도라</span><span id="doraTiles"></span></div>
-      </div>
-
-      <!-- 내 강(버림패) -->
-      <div id="myRiverWrap"><div id="myRiver"></div></div>
-
-      <!-- 내 정보 + 액션 -->
-      <div id="myBar">
-        <div id="myInfo"><b id="myName"></b><span id="myWind"></span><span id="myScore"></span><span id="myRiichi" class="hidden">리치!</span></div>
-        <div id="actionBar"></div>
-      </div>
+      <!-- 액션(론/쯔모/리치/펑/치/깡/패스) -->
+      <div id="actionBar"></div>
 
       <!-- 도우미 정보 바 -->
       <div id="assistBar" class="hidden"></div>
@@ -113,6 +127,6 @@
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
-  <script src="/js/mahjong-client.js?v=1.1"></script>
+  <script src="/js/mahjong-client.js?v=1.2"></script>
 </body>
 </html>

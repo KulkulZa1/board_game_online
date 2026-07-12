@@ -147,39 +147,54 @@
   function rel(seat) { return (seat - mySeat + 4) % 4; }   // 0=나, 1=하가(우), 2=대면, 3=상가(좌)
 
   function renderTable(st) {
-    // 중앙 정보
+    // 중앙 사각형 — 국·잔여·본장·공탁·도라
     $('roundInfo').textContent = `동${Math.min(st.round, 4)}국`;
-    $('honbaInfo').textContent = st.honba ? `${st.honba}본장` : '';
-    $('stickInfo').textContent = st.riichiSticks ? `공탁 ${st.riichiSticks}` : '';
-    $('wallInfo').textContent = `잔여 ${st.wallCount}`;
+    const sub = [];
+    sub.push(`잔여 ${st.wallCount}`);
+    if (st.honba) sub.push(`${st.honba}본장`);
+    if (st.riichiSticks) sub.push(`공탁 ${st.riichiSticks}`);
+    $('subInfo').textContent = sub.join(' · ');
     $('doraTiles').innerHTML = tilesHTML(st.doraIndicators, 'mini');
 
-    // 상대 3인 — data-rel 1(하가) 2(대면) 3(상가)
-    document.querySelectorAll('.opp').forEach((el) => {
+    // 4방향 존 — 강/멜드/패 뒷면
+    document.querySelectorAll('#board .zone').forEach((el) => {
       const r = +el.dataset.rel;
       const seat = (mySeat + r) % 4;
-      el.querySelector('.opp-name').textContent = st.names[seat];
-      el.querySelector('.opp-wind').textContent = WIND_KO[st.seatWinds[seat]];
-      el.querySelector('.opp-score').textContent = st.scores[seat].toLocaleString();
-      el.querySelector('.opp-tiles').textContent = `패 ${st.handCounts[seat]}`;
-      el.querySelector('.opp-riichi').classList.toggle('hidden', !st.riichi[seat]);
-      el.classList.toggle('active', st.turn === seat && st.phase === 'turn');
-      el.querySelector('.opp-melds').innerHTML = st.melds[seat]
-        .map((m) => `<span class="meld">${tilesHTML(m.tiles, 'mini')}</span>`).join('');
-      el.querySelector('.opp-river').innerHTML = st.rivers[seat]
-        .map((r2) => tileHTML(r2.tile, 'mini' + (r2.riichi ? ' riichi-tile' : '') + (r2.called ? ' called' : ''))).join('');
+      const riverEl = el.querySelector('.zriver');
+      if (riverEl) {
+        riverEl.innerHTML = st.rivers[seat]
+          .map((d) => tileHTML(d.tile, 'mini' + (d.riichi ? ' riichi-tile' : '') + (d.called ? ' called' : ''))).join('');
+      }
+      const meldsEl = el.querySelector('.zmelds');
+      if (meldsEl) {
+        meldsEl.innerHTML = st.melds[seat]
+          .map((m) => `<span class="meld">${tilesHTML(m.tiles, 'mini')}</span>`).join('');
+      }
+      const backsEl = el.querySelector('.backs');
+      if (backsEl) {
+        const n = Math.max(0, Math.min(st.handCounts[seat], 14));
+        backsEl.innerHTML = '<span class="back"></span>'.repeat(n);
+      }
     });
 
-    // 내 정보
-    $('myName').textContent = st.names[mySeat];
-    $('myWind').textContent = WIND_KO[st.seatWinds[mySeat]];
-    $('myScore').textContent = st.scores[mySeat].toLocaleString();
-    $('myRiichi').classList.toggle('hidden', !st.riichi[mySeat]);
-    $('myRiver').innerHTML = st.rivers[mySeat]
-      .map((r2) => tileHTML(r2.tile, (r2.riichi ? 'riichi-tile' : '') + (r2.called ? ' called' : ''))).join('');
+    // 중앙 플레이어 스트립 — 이름·풍·점수·시간은행·리치
+    document.querySelectorAll('#centerSq .pinfo').forEach((el) => {
+      const r = +el.dataset.rel;
+      const seat = (mySeat + r) % 4;
+      const active = st.turn === seat && st.phase === 'turn';
+      el.classList.toggle('active', active);
+      el.classList.toggle('riichi-on', !!st.riichi[seat]);
+      el.innerHTML =
+        `<span class="pw">${WIND_KO[st.seatWinds[seat]]}</span>` +
+        `<b class="pn">${st.names[seat]}</b>` +
+        `<span class="ps">${st.scores[seat].toLocaleString()}</span>` +
+        `<span class="pt" data-seat="${seat}">${fmtBank(bankRemain(st, seat))}</span>` +
+        (st.riichi[seat] ? '<span class="rstick" title="리치">▮</span>' : '');
+    });
+
+    // 내 멜드/손패
     $('myMelds').innerHTML = st.melds[mySeat]
       .map((m) => `<span class="meld">${tilesHTML(m.tiles)}</span>`).join('');
-
     renderHand(st);
     renderActions(st);
 
@@ -187,8 +202,41 @@
     document.body.classList.toggle('my-turn', myTurn);
     $('turnHint').textContent = st.phase === 'calls'
       ? (st.offers ? '콜 하시겠습니까?' : '다른 플레이어 응답 대기...')
-      : myTurn ? (st.riichi[mySeat] ? '리치 중 — 쯔모기리' : (assist ? '패를 탭해 확인 → 한 번 더 탭해 버리기' : '버릴 패를 선택하세요')) : `${st.names[st.turn]} 차례`;
+      : myTurn ? (st.riichi[mySeat] ? '리치 중 — 잠시 후 자동으로 버립니다' : (assist ? '패를 탭해 확인 → 한 번 더 탭해 버리기' : '버릴 패를 선택하세요')) : `${st.names[st.turn]} 차례`;
     renderAssist(st);
+    startClockTick(st);
+  }
+
+  // ── 체스식 시간 은행 표시 — 유예(5초) 초과분만 은행에서 차감 ──────
+  let clockIv = null;
+  let clockSkew = 0;   // serverNow - Date.now()
+  function bankRemain(st, seat) {
+    if (!st.timeBanks) return null;
+    let ms = st.timeBanks[seat];
+    if (st.turn === seat && st.phase === 'turn' && st.turnStartedAt && !st.riichi[seat]) {
+      const elapsed = (Date.now() + clockSkew) - st.turnStartedAt;
+      ms -= Math.max(0, elapsed - (st.graceMs || 0));
+    }
+    return Math.max(0, ms);
+  }
+  function fmtBank(ms) {
+    if (ms == null) return '';
+    const s2 = Math.ceil(ms / 1000);
+    return `⏱${Math.floor(s2 / 60)}:${String(s2 % 60).padStart(2, '0')}`;
+  }
+  function startClockTick(st) {
+    clearInterval(clockIv);
+    if (st.serverNow) clockSkew = st.serverNow - Date.now();
+    if (!(st.phase === 'turn' && st.timeBanks)) return;
+    clockIv = setInterval(() => {
+      if (!cur) return;
+      const seat = cur.turn;
+      const el = document.querySelector(`.pt[data-seat="${seat}"]`);
+      if (!el) return;
+      const rem = bankRemain(cur, seat);
+      el.textContent = fmtBank(rem);
+      el.classList.toggle('low', rem != null && rem < 15000);
+    }, 300);
   }
 
   // ── 🧭 도우미 정보 바 ─────────────────────────────────────────────

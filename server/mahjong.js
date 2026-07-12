@@ -16,8 +16,11 @@ const tokenMap = new Map();   // token → { code, seat }
 
 // 타이밍 설정 — 테스트에서 축소 가능하도록 노출
 const CFG = {
-  turnMs: 25000,        // 사람 턴 제한 (초과 시 쯔모기리)
-  callMs: 10000,        // 콜 응답 제한 (초과 시 패스)
+  graceMs: 5000,        // 턴당 무료 고민 시간 (은행 소모 없음)
+  bankMs: 90000,        // 플레이어별 총 시간 은행 (대국 전체, 체스식 — 트롤링 방지)
+  callMs: 8000,         // 콜 응답 제한 (초과 시 패스, 은행 미적용)
+  riichiAutoMs: 900,    // 리치 중 쯔모/깡 불가 시 자동 쯔모기리 딜레이
+  discAutoMs: 4000,     // 접속 끊긴 좌석 자동 진행
   aiDelay: () => 550 + Math.random() * 650,
   handGapMs: 6500,      // 국 결과 표시 후 다음 국까지
 };
@@ -120,6 +123,11 @@ function gameStateFor(room, seat) {
     phase: g.phase,
     names: room.seats.map((s) => s ? s.name : '—'),
     seatWinds: [0, 1, 2, 3].map((i) => (i - g.dealer + 4) % 4),   // 0=동 1=남 2=서 3=북
+    // 체스식 시간 은행 — 클라이언트가 로컬로 카운트다운
+    timeBanks: g.timeBank,
+    graceMs: CFG.graceMs,
+    turnStartedAt: g.turnStartedAt,
+    serverNow: now(),
     offers: g.phase === 'calls' && g.pending && g.pending.offers[seat] ? g.pending.offers[seat] : null,
     canActions: g.phase === 'turn' && g.turn === seat ? turnActions(room, seat) : null,
     // 초심자 도우미 — 타패별 샹텐/수용/대기 (본인 턴에만, 사람에게만)
@@ -181,6 +189,8 @@ function startMatch(room) {
   clearTimeout(room.cleanupTimer);
   room.game = {
     scores: [START_SCORE, START_SCORE, START_SCORE, START_SCORE],
+    timeBank: [CFG.bankMs, CFG.bankMs, CFG.bankMs, CFG.bankMs],
+    turnStartedAt: null,
     dealer: 0, round: 1,        // 동1국부터 (round=국 번호 1..4)
     honba: 0, riichiSticks: 0,
     // 아래는 startHand에서 채움
@@ -231,8 +241,8 @@ function drawTile(room, seat, fromDead) {
   g.rinshan = !!fromDead;
   g.turn = seat;
   g.phase = 'turn';
+  armTurnTimer(room, seat);   // turnStartedAt 기록 후 상태 전송(클라 카운트다운 동기화)
   pushState(room);
-  armTurnTimer(room, seat);
   maybeAiTurn(room, seat);
 }
 
@@ -294,12 +304,38 @@ function armTurnTimer(room, seat) {
   clearTimeout(room.actionTimer);
   const s = room.seats[seat];
   if (s.type === 'ai') return;
-  const ms = s.connected ? CFG.turnMs : 5000;   // 접속 끊긴 사람은 빠르게 자동 진행
-  room.actionTimer = setTimeout(() => {
-    const g = room.game;
-    if (!g || g.phase !== 'turn' || g.turn !== seat) return;
+  const g = room.game;
+  g.turnStartedAt = now();
+  const autoDiscard = () => {
+    if (!rooms.has(room.code) || !room.game) return;
+    if (g.phase !== 'turn' || g.turn !== seat) return;
     doDiscard(room, seat, g.drawnTile, false);   // 쯔모기리
-  }, ms);
+  };
+  if (!s.connected) { room.actionTimer = setTimeout(autoDiscard, CFG.discAutoMs); return; }
+  // 리치 중 — 쯔모/깡이 없으면 짧은 딜레이 후 자동 쯔모기리 (작혼 스타일)
+  if (g.riichiDeclared[seat]) {
+    const acts = turnActions(room, seat);
+    if (!acts.tsumo && !(acts.ankan && acts.ankan.length)) {
+      room.actionTimer = setTimeout(autoDiscard, CFG.riichiAutoMs);
+      return;
+    }
+  }
+  // 체스식: 무료 유예 + 남은 은행. 소진 시 자동 쯔모기리.
+  const limit = CFG.graceMs + (g.timeBank ? g.timeBank[seat] : 0);
+  room.actionTimer = setTimeout(() => {
+    if (g.timeBank) g.timeBank[seat] = 0;
+    autoDiscard();
+  }, limit);
+}
+
+// 턴 소비 행동 시 은행 차감 (유예 초과분만)
+function chargeTime(room, seat) {
+  const g = room.game;
+  const s = room.seats[seat];
+  if (!g || !g.timeBank || !s || s.type !== 'human' || !g.turnStartedAt) return;
+  const over = Math.max(0, (now() - g.turnStartedAt) - CFG.graceMs);
+  g.timeBank[seat] = Math.max(0, g.timeBank[seat] - over);
+  g.turnStartedAt = null;
 }
 
 function armCallTimer(room) {
@@ -323,6 +359,7 @@ function doDiscard(room, seat, tile, declareRiichi) {
   if (idx < 0) return false;
   // 리치 중엔 쯔모기리만
   if (g.riichiDeclared[seat] && tile !== g.drawnTile) return false;
+  chargeTime(room, seat);
   if (declareRiichi) {
     // 리치 유효성: 멘젠 + 버린 후 텐파이
     const rest = hand.slice(); rest.splice(idx, 1);
@@ -462,8 +499,8 @@ function applyCall(room, seat, p, kind, chiTiles) {
   g.turn = seat;
   g.phase = 'turn';
   g.drawnTile = null;   // 콜 후엔 뽑지 않고 버린다
-  pushState(room);
   armTurnTimer(room, seat);
+  pushState(room);
   maybeAiTurn(room, seat);
 }
 
@@ -477,6 +514,7 @@ function doAnkan(room, seat, tile) {
   const g = room.game;
   if (g.phase !== 'turn' || g.turn !== seat) return false;
   const hand = g.hands[seat];
+  if (E.toCounts(hand)[tile] === 4 && !g.riichiDeclared[seat]) chargeTime(room, seat);
   if (E.toCounts(hand)[tile] !== 4) return false;
   if (g.riichiDeclared[seat]) return false;   // 단순화: 리치 후 안깡 금지
   for (let k = 0; k < 4; k++) hand.splice(hand.indexOf(tile), 1);
@@ -490,6 +528,7 @@ function doAnkan(room, seat, tile) {
 function doTsumo(room, seat) {
   const g = room.game;
   if (g.phase !== 'turn' || g.turn !== seat) return false;
+  chargeTime(room, seat);
   const counts = E.toCounts(g.hands[seat]);
   if (!E.isWinningHand(counts, g.melds[seat].length)) return false;
   const r = evalFor(room, seat, g.drawnTile, true, null);
@@ -585,6 +624,7 @@ function endMatch(room) {
   room.status = 'finished';
   const g = room.game;
   g.scores = g.scores.map((s, i) => s + (i === g.dealer ? g.riichiSticks * 1000 : 0));   // 남은 공탁은 편의상 친에게
+  g.riichiSticks = 0;   // 지급 완료 — 이중 계상 방지
   const ranking = [0, 1, 2, 3]
     .map((i) => ({ seat: i, name: room.seats[i].name, score: g.scores[i], ai: room.seats[i].type === 'ai' }))
     .sort((a, b) => b.score - a.score);
@@ -780,5 +820,5 @@ function findBySocket(socketId) {
 
 module.exports = { register, rooms, startMatch, createRoom, seatHuman, CFG, _internal: {
   startHand, doDiscard, doTsumo, doAnkan, resolveCalls, collectOffers, aiChooseDiscard,
-  gameStateFor, exhaustiveDraw, liveWall, turnActions,
+  gameStateFor, exhaustiveDraw, liveWall, turnActions, armTurnTimer, chargeTime, drawTile,
 } };

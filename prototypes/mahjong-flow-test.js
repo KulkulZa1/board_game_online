@@ -8,8 +8,11 @@ const E = require('../server/handlers/mahjong-engine.js');
 // 테스트용 고속 타이밍
 MJ.CFG.aiDelay = () => 1;
 MJ.CFG.handGapMs = 5;
-MJ.CFG.turnMs = 50;
+MJ.CFG.graceMs = 40;
+MJ.CFG.bankMs = 100;
 MJ.CFG.callMs = 30;
+MJ.CFG.riichiAutoMs = 10;
+MJ.CFG.discAutoMs = 50;
 
 let pass = 0, fail = 0;
 const ok = (c, label, detail) => {
