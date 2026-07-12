@@ -64,6 +64,64 @@ html, body {
 .res-cap { font-size: 0.66rem; color: var(--muted); }
 .res-flow { font-size: 0.68rem; color: var(--muted); }
 
+#idleActionPanel {
+  display: grid;
+  grid-template-columns: minmax(240px, 0.8fr) minmax(220px, 1.2fr);
+  gap: 8px;
+  flex-shrink: 0;
+}
+#activeActionBtn {
+  min-height: 54px;
+  display: grid;
+  grid-template-columns: 34px 1fr 44px;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  padding: 7px 12px;
+  background: linear-gradient(135deg, var(--panel2), var(--panelbg));
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+  touch-action: manipulation;
+  transition: transform 0.12s ease-out, border-color 0.2s ease-in-out, filter 0.2s ease-in-out;
+}
+#activeActionBtn:hover { filter: brightness(1.12); }
+#activeActionBtn:active { transform: scale(0.98); }
+#activeActionBtn:focus-visible { outline: 2px solid var(--accent2); outline-offset: 2px; }
+#activeActionBtn.boosted { border-color: var(--accent2); filter: brightness(1.16); }
+#activeActionIcon { font-size: 1.45rem; text-align: center; }
+.active-action-copy { display: flex; flex-direction: column; min-width: 0; }
+.active-action-copy b { font-size: 0.86rem; }
+.active-action-copy small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.66rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#activeCombo {
+  color: var(--accent2);
+  font-size: 1rem;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+#goldenAgeWrap {
+  min-height: 54px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 7px 12px;
+  background: var(--panelbg);
+}
+.golden-age-line { display: flex; justify-content: space-between; gap: 8px; font-size: 0.72rem; font-weight: 700; }
+#goldenAgeCount { color: var(--accent2); font-variant-numeric: tabular-nums; }
+.golden-age-track { height: 7px; margin: 5px 0 3px; overflow: hidden; border-radius: 4px; background: var(--bg); }
+#goldenAgeFill { width: 0; height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2)); transition: width 0.25s ease-in-out; }
+#idleStatus { color: var(--muted); font-size: 0.65rem; }
+
 #eventBanner { background: rgba(120,30,30,0.4); border: 1px solid var(--bad); color: #ffb3a0;
   border-radius: 8px; padding: 5px 12px; font-size: 0.78rem; text-align: center; flex-shrink: 0; }
 #eventBanner.good { background: rgba(40,90,45,0.35); border-color: var(--ok); color: #b8f0c0; }
@@ -158,7 +216,7 @@ html, body {
   max-width: 440px; width: 94%; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 12px; }
 .ov-icon { font-size: 3rem; }
 .ov-box h2 { font-size: 1.3rem; }
-.ov-msg { font-size: 0.84rem; color: var(--muted); line-height: 1.6; }
+.ov-msg { font-size: 0.84rem; color: var(--muted); line-height: 1.6; word-break: keep-all; overflow-wrap: break-word; }
 .ov-msg b { color: var(--accent2); }
 .challenge-row { font-size: 0.78rem; color: var(--text); display: flex; align-items: center; gap: 7px; cursor: pointer; }
 #startBtn, #ovBtn { background: linear-gradient(135deg, var(--accent), #aef0c4); color: #06140c; border: none;
@@ -222,7 +280,7 @@ html, body {
 #tutBox { background: linear-gradient(135deg, rgba(28,56,38,0.97), rgba(18,38,25,0.97));
   border: 1px solid rgba(111,207,151,0.35); border-radius: 10px;
   padding: 9px 13px; margin: 0 0 4px; color: var(--text); font-size: 0.8rem; line-height: 1.55;
-  box-shadow: 0 2px 14px rgba(0,0,0,0.45); flex-shrink: 0; }
+  box-shadow: 0 2px 14px rgba(0,0,0,0.45); flex-shrink: 0; word-break: keep-all; overflow-wrap: break-word; }
 #tutBox b { color: var(--accent); }
 .tut-foot { display: flex; justify-content: space-between; align-items: center; margin-top: 5px; }
 .tut-prog { color: var(--muted); font-size: 0.68rem; }
@@ -261,7 +319,33 @@ html, body {
 @media (max-width: 760px) {
   html, body { overflow: auto; }
   #container { height: auto; min-height: 100dvh; overflow: visible; }
-  #board { grid-template-columns: 1fr; min-height: 0; overflow: visible; }
-  #board .panel, #buildPanel, #dash, #buildList { overflow: visible; }
+  #board {
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+    order: 3;
+  }
+  #board .panel, #buildPanel, #dash, #buildList { height: auto; min-height: 0; overflow: visible; }
+  #dash { flex: none; }
   #hdrStats { gap: 8px; font-size: 0.68rem; }
+  #idleActionPanel { grid-template-columns: 1fr; }
+  #activeActionBtn, #goldenAgeWrap { min-height: 58px; }
+  .bld-btn { width: 42px; height: 42px; }
+  #tutBox { order: 1; margin: 0 0 2px; }
+  #controls {
+    order: 2;
+    flex-wrap: nowrap;
+    gap: 5px;
+    justify-content: center;
+    overflow-x: auto;
+    padding: 5px 0;
+  }
+  #controls button { min-width: 38px; min-height: 42px; padding: 6px 9px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #activeActionBtn, #goldenAgeFill { transition: none; }
 }

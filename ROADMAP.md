@@ -23,9 +23,9 @@ All three layers are **intentional**. Arcade games and sandbox are not scope cre
 ## Live Games
 
 **Board games (12):** 체스, 오목, 사목, 오셀로, 인디언 포커, 체커, 사과게임, 배틀십, 백가몬, 텍사스 홀덤, 도트앤박스, 만칼라  
-**Arcade games:** 스네이크, 벽돌깨기, 뱀파이어 서바이버, 식물 키우기, 타워 디펜스, 산업의 시대, 문명 루프
+**Arcade games:** 스네이크, 벽돌깨기, 뱀파이어 서바이버, 식물 키우기, 타워 디펜스, 산업의 시대, 문명 루프, 월세 잭팟, NEON CASCADE
 
-**Current solo-game direction:** `산업의 시대` is the main automation game and should carry the satisfying civilization-style phase transition feeling through stable factory loops, throughput, power, and bottleneck diagnosis. `식물 키우기` is the clearer clicker/idle track and should reuse loop ideas as breakthroughs, passive growth, and resource-spending bursts rather than becoming another factory simulator.
+**Current solo-game direction:** `산업의 시대` is the main spatial automation game. Its civilization feeling comes from historically motivated bottlenecks, emergent breakthroughs, stable production gates, and old supply chains remaining useful in later eras. `문명 키우기` is the management clicker/idle track: direct era actions charge a Golden Age while buildings continue passive production. `식물 키우기` remains the lighter single-organism clicker rather than carrying civilization-scale systems.
 **Platform:** Web (PWA) — https://board-game-online.onrender.com  
 **Deployment:** Render.com, Node.js + Socket.io, no database
 
@@ -54,7 +54,7 @@ Full Japanese riichi mahjong is tracked as a future candidate, but should start 
 - **Frontend:** `game-registry.js` as central metadata store; per-game CSS files
 - **Docs:** `ADDING_A_GAME.md` — 10-step checklist; AI agent token cost per game: 3k (was 52k)
 - **New board games:** 배틀십, 백가몬, 텍사스 홀덤, 도트앤박스, 만칼라 — 5 games added (12 total)
-- **Arcade layer:** solo games at `/arcade/*` (snake, breakout, vampire, plant, tower-defense, factory, bootstrap)
+- **Arcade layer:** solo games at `/arcade/*` (snake, breakout, vampire, plant, tower-defense, factory, bootstrap, jackpot, neon-cascade)
 - **Sandbox layer:** 3 config-driven design tools (vampire-survivors, plant-growing, tower-defense)
 - **Smoke tests:** `scripts/smoke-test.js` — 70+ assertions covering board game handlers + HTTP routes
 
@@ -217,7 +217,7 @@ are scope management issues, not language/framework deficiencies.
 1. Validate all 12 board games manually on mobile (reconnect + rematch edge cases)
 2. Add per-game handler unit tests for at least 3 of the newer games (backgammon, texasholdem, dotsboxes)
 3. Replace AdMob placeholder IDs if targeting Android release
-4. Tune Bootstrap civilization loop balance after manual playtests and decide the next era slice.
+4. Tune `문명 키우기` action charge, Golden Age duration, and era pacing after mobile playtests; only then decide the next civilization era slice.
 5. Keep arcade additions focused on reusable systems and avoid new disconnected prototypes until current solo games are stable.
 
 *Last updated: 2026-05-19*

@@ -16,6 +16,13 @@
     A: '야생에서 칼로리를 줍는다', B: '땅을 길들여 잉여를 만든다',
     C: '저장과 행정으로 도시가 선다', D: '분업이 금속을 벼린다', E: '문명이 땅속으로 들어간다',
   };
+  const ACTIVE_ACTIONS = {
+    A: { id: 'forage', icon: '✋', name: '채집 돕기', gains: { food: 2.4 }, ecology: 0.003 },
+    B: { id: 'cultivate', icon: '🌾', name: '밭 일구기', gains: { food: 3.2 }, fertility: 0.002 },
+    C: { id: 'settle', icon: '🏺', name: '정착 지원', gains: { food: 1.2, clay: 1.4 } },
+    D: { id: 'craft', icon: '🔨', name: '장인 격려', gains: { wood: 1.8, copper: 1.0 } },
+    E: { id: 'refine', icon: '⚒', name: '야금 정련', gains: { tools: 0.9, bronze: 0.4 } },
+  };
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
   const lerp = (a, b, t) => a + (b - a) * t;
   const eraIdxOf = (letter) => ERA_LETTERS.indexOf(letter);
@@ -335,6 +342,9 @@
       this.eventCooldown = {};           // name → tick available
       this.lastEventLog = null;
       this.mods = this._freshMods();
+      this.actionCharge = 0;
+      this.activeBoostTicks = 0;
+      this.totalActions = 0;
     }
 
     _freshMods() {
@@ -349,8 +359,39 @@
     eraLetter() { return ERA_LETTERS[this.eraIndex] || 'E'; }
     eraName() { return ERA_NAMES[this.eraLetter()]; }
     eraSub() { return ERA_SUBS[this.eraLetter()]; }
+    activeAction() { return ACTIVE_ACTIONS[this.eraLetter()] || ACTIVE_ACTIONS.A; }
     isUnlocked(id) { return eraIdxOf(this.bdefs[id].era) <= this.eraIndex; }
     won() { return this.eraIndex >= ERA_LETTERS.length - 1; } // 시대 E 도달
+
+    performActiveAction(chain) {
+      const action = this.activeAction();
+      const combo = clamp(Math.floor(Number(chain) || 1), 1, 20);
+      const multiplier = 1 + Math.min(combo - 1, 12) * 0.06;
+      const gains = {};
+      for (const resource in action.gains) {
+        const amount = action.gains[resource] * multiplier;
+        this.stock[resource] = (this.stock[resource] || 0) + amount;
+        gains[resource] = amount;
+      }
+      if (action.ecology) this.ecologicalKnowledge = clamp(this.ecologicalKnowledge + action.ecology * multiplier, 0, this.cfg.ecologyKnowledgeMax);
+      if (action.fertility) this.fertility = clamp(this.fertility + action.fertility * multiplier, 0, 1);
+      this.totalActions++;
+      this.actionCharge += 8 + Math.min(combo, 10) * 0.6;
+      let boostTriggered = false;
+      if (this.actionCharge >= 100) {
+        this.actionCharge -= 100;
+        this.activeBoostTicks = Math.max(this.activeBoostTicks, 30);
+        boostTriggered = true;
+      }
+      return { action, gains, combo, multiplier, boostTriggered };
+    }
+
+    applyRestBonus(seconds) {
+      const safeSeconds = clamp(Number(seconds) || 0, 0, 4 * 60 * 60);
+      const before = this.actionCharge;
+      this.actionCharge = Math.min(100, this.actionCharge + Math.min(60, safeSeconds / 30 * 2));
+      return { seconds: safeSeconds, charge: this.actionCharge - before };
+    }
 
     housingCap() {
       let h = 0;
@@ -384,6 +425,7 @@
     // 출력 배수: 도구·비옥도·관개·가뭄 보정을 합성
     outputMult(def) {
       let m = 1;
+      if (this.activeBoostTicks > 0) m *= 1.8;
       if (def.usesTools) m *= (1 + this.cfg.toolBonus * this.toolCoverage);
       if (def.scaleFert) m *= this.fertility;
       if (def.cropAffected) {
@@ -553,6 +595,8 @@
       // 10) 현재 시대 게이트 평가 → 통과 시 시대 전진
       this._stepGate();
 
+      this.activeBoostTicks = Math.max(0, this.activeBoostTicks - dt);
+
       this.t += dt;
     }
 
@@ -649,7 +693,7 @@
   }
 
   const api = {
-    Sim, RES, BLD, SCENARIO, BREAKTHROUGHS, EVENTS, TIERS,
+    Sim, RES, BLD, SCENARIO, BREAKTHROUGHS, EVENTS, ACTIVE_ACTIONS, TIERS,
     ERA_LETTERS, ERA_NAMES, ERA_SUBS,
     clone: (o) => JSON.parse(JSON.stringify(o)),
   };

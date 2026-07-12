@@ -8,6 +8,7 @@ These notes capture the current launch-readiness checks for the Node/Express sta
 - Local start: `npm start` or `npm run dev`.
 - Render start command: `node server.js`.
 - Render build command: `npm install`.
+- Render auto-deploy trigger: every commit on `main` (`autoDeployTrigger: commit`).
 - Health endpoint: `/api/status`.
 - Render deploys from `main`, so branch changes are not visible on production until the PR is merged and Render redeploys.
 
@@ -43,17 +44,24 @@ This launch-readiness pass found and fixed:
 - Tower Defense sandbox now has a validated `Publish` action. Published configs save under `td_published_config`, export as `td-published-config.json`, and `/arcade/tower-defense/` prefers that published key before falling back to draft/default config.
 - Tower Defense arcade now exposes game-first controls: `Play Stage 1`, quick Cannon/Frost/Tesla/Amplifier placement, and a Meteor panic ability. The editor remains available, but the route is no longer dependent on the Stages tab for the first playable action.
 - Service worker caching no longer serves old JS/CSS before checking the network; this prevents deployed game logic from appearing stale after Render deploys.
+- Arcade pages with changed gameplay or CSS use versioned asset URLs, and `boardgame-v10` invalidates the previous runtime cache. This also recovers correctly after an offline fallback served an older cached page.
+- `render.yaml` explicitly enables commit-triggered deployment. Existing Render services retain their dashboard auto-deploy value when this field is omitted, which allowed the service to remain on an older `main` commit after PR #53 merged.
 - All HTML pages now load `/js/sw-update.js`, which registers the service worker consistently and reloads controlled pages once after an updated worker takes control.
 - Server responses for HTML, `sw.js`, JS, CSS, and `manifest.json` now send `Cache-Control: no-cache, no-store, must-revalidate`.
 - Public `/api/status` no longer exposes room ids, room detail snapshots, or tunnel URLs to proxied/non-local traffic.
 - Chat spam now emits a clear rate-limit message after 8 messages in 10 seconds instead of silently dropping messages.
+- The production lockfile now resolves `ws` to 8.21.0 through updated Engine.IO/Socket.io adapter packages; `npm audit fix` reported zero remaining vulnerabilities in the successful audit run.
 
 Current production observations before this branch is merged and Render redeploys:
 
-- Production home and arcade routes loaded on current `main`; `/sandbox/` is expected to return 404.
+- On 2026-07-11, `/api/version` reported production commit `b0f8b94` on `main`, matching `origin/main`. Render is currently deploying the selected branch correctly; branch-only changes remain absent until merge and redeploy.
+- The deployed Factory and Bootstrap routes both started successfully with no captured console warnings/errors at desktop size. Factory did not contain the new breakthrough HUD and Bootstrap did not contain the new active-action control, as expected before this branch is merged and redeployed.
+- At a 390x844 production viewport, both routes avoided horizontal page overflow. Bootstrap's dashboard content overflowed its mobile grid height and visually collided with the tutorial/control region; this branch changes the mobile board to content-height document flow.
+- Factory's production mobile HUD placed the throughput/speed box over the phase-stability panel. This branch moves that box above the bottom build controls on narrow screens so the expanded breakthrough panel remains readable.
+- Production home and arcade routes loaded on the deployed `main` commit; `/sandbox/` is expected to return 404.
 - Branch changes that move Tower Defense runtime files off `/sandbox/...` require merge and Render redeploy before they are visible on production.
 - The new chat speech-bubble behavior is not visible on production until this branch is merged and Render redeploys.
-- Production currently still serves `sw.js` with the old JS/CSS stale-while-revalidate policy until this branch is merged and Render redeploys.
+- Production `sw.js` uses network-first handling for HTML, JS, and CSS. This branch additionally versions every changed arcade asset URL and advances the cache namespace so recovered offline tabs cannot keep pre-change runtime files.
 - Production asset headers checked on 2026-05-20 showed `/sw.js` and `/api/version` were no-store, but `/js/chat.js` and `/manifest.json` still used `Cache-Control: public, max-age=0`; this branch changes JS/CSS/manifest to no-store too.
 - Shell-based `Invoke-WebRequest` to the HTTPS production status endpoint failed in this Windows environment with a receive error, but the in-app browser loaded the production app successfully.
 

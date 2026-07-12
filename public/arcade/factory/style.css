@@ -125,6 +125,42 @@ html, body {
   border-color: rgba(231,76,60,0.35);
   color: #ffb38a;
 }
+#breakthroughMini {
+  border-top: 1px solid var(--border);
+  margin-top: 6px;
+  padding-top: 5px;
+}
+.breakthrough-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--text);
+  font-size: 0.66rem;
+  font-weight: 700;
+}
+.breakthrough-line span:last-child { color: var(--accent); }
+.breakthrough-track {
+  height: 4px;
+  margin-top: 4px;
+  overflow: hidden;
+  background: var(--bg);
+  border-radius: 2px;
+}
+#breakthroughFill {
+  width: 0;
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.25s ease-in-out;
+}
+#breakthroughHint {
+  margin-top: 3px;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.6rem;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 /* ── Stat box ───────────────────────────────────── */
 #statBox {
@@ -231,10 +267,11 @@ html, body {
 }
 #overlayIcon { font-size: 3rem; }
 #overlayTitle { font-size: 1.3rem; }
-#overlayMsg { color: var(--muted); font-size: 0.86rem; line-height: 1.6; }
+#overlayMsg { color: var(--muted); font-size: 0.86rem; line-height: 1.6; word-break: keep-all; overflow-wrap: break-word; }
 #overlayHow {
   text-align: left; font-size: 0.76rem; color: var(--text); line-height: 1.7;
   background: var(--panel2); border-radius: 10px; padding: 12px 14px; width: 100%;
+  word-break: keep-all; overflow-wrap: break-word;
 }
 #overlayHow b { color: var(--accent); }
 #saveSummary {
@@ -260,6 +297,7 @@ html, body {
   color: var(--muted);
   cursor: pointer;
   font-size: 0.82rem;
+  min-height: 42px;
   padding: 8px 22px;
 }
 #newRunBtn:hover, #discardSaveBtn:hover {
@@ -312,6 +350,28 @@ html, body {
   display: inline-flex; align-items: center; gap: 6px; font-weight: 700;
   background: rgba(255,255,255,0.06); border-radius: 8px; padding: 4px 10px; margin-bottom: 8px;
 }
+.evolution-story {
+  display: grid;
+  grid-template-columns: minmax(72px, auto) 1fr;
+  gap: 4px 10px;
+  border-left: 3px solid var(--accent);
+  padding: 7px 10px;
+  margin: 6px 0;
+  background: var(--panel2);
+  border-radius: 0 8px 8px 0;
+}
+.evolution-story b { grid-row: 1 / span 2; }
+.evolution-story span { color: var(--muted); font-size: 0.74rem; }
+.evolution-story em { color: var(--ok); font-size: 0.7rem; font-style: normal; }
+.factory-chronicle { display: flex; flex-direction: column; gap: 4px; }
+.factory-chronicle > div {
+  display: grid;
+  grid-template-columns: 40px 18px 1fr;
+  gap: 6px;
+  color: var(--text);
+  font-size: 0.7rem;
+}
+.factory-chronicle > div > span:first-child { color: var(--muted); text-align: right; }
 
 /* ── Tutorial Panel ────────────────────────────── */
 #tutPanel {
@@ -389,10 +449,12 @@ html, body {
     max-height: 40px;
     overflow: hidden;
   }
+  #breakthroughHint { max-width: 100%; }
 
   #statBox {
-    top: 64px;
-    right: 10px;
+    top: auto;
+    right: 60px;
+    bottom: 145px;
     gap: 5px;
   }
 
@@ -433,4 +495,9 @@ html, body {
     bottom: 84px;
     width: auto;
   }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #researchFill, #powerFill, #stabilityFill, #breakthroughFill { transition: none; }
+  .toast-msg, .pal-btn.tut-focus { animation: none; }
 }

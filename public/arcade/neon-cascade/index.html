@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>NEON CASCADE — 연쇄 폭발</title>
+  <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css?v=1.1">
+</head>
+<body>
+  <div id="container">
+    <header id="hdr">
+      <a href="/" class="back-btn">← 로비</a>
+      <span class="game-title">⚛ NEON CASCADE</span>
+      <button id="muteBtn" class="icon-btn" type="button" title="음소거">🔊</button>
+    </header>
+
+    <main id="gameWrapper">
+      <canvas id="c" width="720" height="1000" tabindex="0" aria-label="움직이는 코어를 눌러 연쇄 폭발을 만드세요"></canvas>
+
+      <div id="topHud">
+        <div class="hud-stat"><span>SCORE</span><strong id="scoreDisplay">0</strong></div>
+        <div class="hud-stat"><span>BEST</span><strong id="highDisplay">0</strong></div>
+        <div class="hud-stat timer"><span>TIME</span><strong id="timeDisplay">45.0</strong></div>
+      </div>
+
+      <div id="waveHud">
+        <span id="waveDisplay">WAVE 1</span>
+        <span id="targetDisplay">0 / 12</span>
+      </div>
+
+      <div id="chargeHud">
+        <div id="chargePips"></div>
+        <div id="chargeTrack"><div id="chargeFill"></div></div>
+      </div>
+
+      <div id="overdriveHud">
+        <span id="overdriveLabel">OVERDRIVE</span>
+        <div id="overdriveTrack"><div id="overdriveFill"></div></div>
+      </div>
+
+      <div id="chainBanner" aria-live="polite"></div>
+      <div id="toast" aria-live="polite"></div>
+
+      <div id="overlay" class="visible">
+        <div id="overlayBox">
+          <div id="overlayIcon">⚛</div>
+          <h1 id="overlayTitle">NEON CASCADE</h1>
+          <p id="overlayMsg">움직이는 코어가 가까워지는 순간을 노려 한 번 터치하세요. 8연쇄마다 펄스를 되찾고, 오버드라이브가 차면 점수가 3배가 됩니다.</p>
+          <div id="legend">
+            <span><i class="core"></i>코어</span>
+            <span><i class="gold"></i>×5</span>
+            <span><i class="nova"></i>광역</span>
+            <span><i class="time"></i>+시간</span>
+          </div>
+          <button id="startBtn" type="button">점화</button>
+        </div>
+      </div>
+    </main>
+
+    <button id="smartPulseBtn" type="button">
+      <span>◎</span>
+      <b>AUTO PULSE</b>
+      <small>SPACE</small>
+    </button>
+  </div>
+
+  <script src="/js/admob.js?v=1.0"></script>
+  <script src="sim.js?v=1.0"></script>
+  <script src="game.js?v=1.0"></script>
+  <script src="/js/sw-update.js?v=20260520b"></script>
+</body>
+</html>
