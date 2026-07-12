@@ -20,7 +20,34 @@
   const SUIT = { s: '♠', h: '♥', d: '♦', c: '♣' };
   const VAL = (v) => v <= 10 ? v : ['J', 'Q', 'K', 'A'][v - 11];
   const ROLE_KO = { sheriff: '⭐보안관', deputy: '🛡️부관', outlaw: '🔫무법자', renegade: '🐍배신자' };
+  const ROLE_ICON = { sheriff: '⭐', deputy: '🛡️', outlaw: '🔫', renegade: '🐍' };
+  const CHAR_ICON = {
+    bart: '🤠', blackjack: '🎩', calamity: '💃', gringo: '🌵', lucky: '🍀',
+    paul: '🕶️', rose: '🎯', slab: '💀', suzy: '🌷', willy: '⚡',
+  };
   const NEED_TARGET = ['bang', 'panic', 'catbalou', 'duel', 'jail'];
+
+  // 원탁 좌석 좌표 — 내 좌석(하단) 기준으로 상대를 뒤쪽 호(弧)를 따라 배치.
+  // 가장자리(인접 좌석)는 크고 아래쪽에, 맞은편 좌석은 작고 위쪽에 — 원근감 = 거리감.
+  function seatPositions(nOpp) {
+    const pts = [];
+    for (let j = 0; j < nOpp; j++) {
+      const t = nOpp === 1 ? 0.5 : j / (nOpp - 1);
+      const arc = Math.sin(Math.PI * t);
+      pts.push({ left: 8 + t * 84, top: 60 - 46 * arc, scale: 1.04 - 0.24 * arc });
+    }
+    return pts;
+  }
+  function cardFanHTML(n) {
+    if (!n) return '';
+    const shown = Math.min(n, 5);
+    let html = '';
+    for (let k = 0; k < shown; k++) {
+      html += `<span class="fan-card" style="--r:${((k - (shown - 1) / 2) * 11).toFixed(0)}deg; --z:${k}"></span>`;
+    }
+    if (n > 5) html += `<span class="fan-count">+${n - 5}</span>`;
+    return html;
+  }
 
   function cardHTML(c, extra, idx) {
     if (!c) return '';
@@ -133,6 +160,7 @@
   // ── 게임 렌더 ─────────────────────────────────────────────────────
   socket.on('bang:state', (st) => {
     if (!st) return;
+    maybeAnimateDiscard(cur, st);
     cur = st;
     targetMode = null;
     reactSel = new Set();
@@ -147,43 +175,140 @@
     renderHand(st);
     renderPrompt(st);
     startClock(st);
+    updateRangeLines();
   }
 
-  function playerPanelHTML(st, i) {
+  function playerPanelHTML(st, i, pos) {
     const p = st.players[i];
-    const me = i === st.seat;
     const active = st.turn === i && st.phase === 'turn';
     const acting = st.pending && st.pending.actor === i;
     const dead = !p.alive;
-    const role = p.role ? ROLE_KO[p.role] : '❔';
+    const icon = CHAR_ICON[p.character] || '🤠';
+    const inRange = p.dist != null && st.myRange != null && p.dist <= st.myRange;
+    const rangeCls = p.dist == null ? '' : (inRange ? ' in-range' : ' out-range');
     const equip = p.equip.map((c) => `<span title="${(CARDS[c.id] || [c.id])[0]}">${(CARDS[c.id] || ['', '❓'])[1]}</span>`).join('');
-    const marks = `${p.jail ? '⛓️' : ''}${p.dynamite ? '🧨' : ''}`;
-    return `<div class="pp${me ? ' me' : ''}${active ? ' active' : ''}${acting ? ' acting' : ''}${dead ? ' dead' : ''}" data-seat="${i}">
-      <div class="pp-top"><b>${p.name}</b><span class="pp-role">${role}</span></div>
-      <div class="pp-char" title="${p.characterDesc || ''}">${p.characterName}</div>
-      <div class="pp-hp">${dead ? '☠️' : hearts(p.hp, p.maxHp)}</div>
-      <div class="pp-sub">
-        <span title="손패">🂠${p.handCount}</span>
-        ${p.dist != null ? `<span class="pp-dist" title="거리">📏${p.dist}</span>` : ''}
+    const style = pos ? ` style="left:${pos.left}%; top:${pos.top}%; --sc:${pos.scale.toFixed(2)}"` : '';
+    return `<div class="pp${active ? ' active' : ''}${acting ? ' acting' : ''}${dead ? ' dead' : ''}${rangeCls}" data-seat="${i}"${style}>
+      <div class="pp-fan">${dead ? '' : cardFanHTML(p.handCount)}</div>
+      <div class="pp-avatar" title="${p.characterName}${p.characterDesc ? ' — ' + p.characterDesc : ''}">
+        <span>${dead ? '☠️' : icon}</span>
+        ${p.role ? `<span class="pp-role-badge">${ROLE_ICON[p.role]}</span>` : ''}
+        ${p.jail ? '<span class="badge-mark jail" title="감옥">⛓️</span>' : ''}
+        ${p.dynamite ? '<span class="badge-mark dyn" title="다이너마이트">🧨</span>' : ''}
+      </div>
+      <div class="pp-name">${p.name}${p.ai ? ' 🤖' : ''}</div>
+      <div class="pp-hp">${dead ? '' : hearts(p.hp, p.maxHp)}</div>
+      <div class="pp-meta">
+        ${p.dist != null ? `<span class="pp-dist-chip${rangeCls}">📏${p.dist}</span>` : ''}
         <span class="pp-bank" data-seat="${i}"></span>
       </div>
-      <div class="pp-equip">${equip}${marks}</div>
+      <div class="pp-equip">${equip}</div>
     </div>`;
   }
   function renderPlayers(st) {
     const others = [];
     for (let k = 1; k < st.players.length; k++) others.push((st.seat + k) % st.players.length);
-    $('playersGrid').innerHTML = others.map((i) => playerPanelHTML(st, i)).join('');
+    const pts = seatPositions(others.length);
+    $('playersGrid').innerHTML = others.map((i, j) => playerPanelHTML(st, i, pts[j])).join('');
   }
   function renderMe(st) {
-    $('myPanel').innerHTML = playerPanelHTML(st, st.seat);
+    const p = st.players[st.seat];
+    const icon = CHAR_ICON[p.character] || '🤠';
+    const equip = p.equip.map((c) => `<span title="${(CARDS[c.id] || [c.id])[0]}">${(CARDS[c.id] || ['', '❓'])[1]}</span>`).join('');
+    $('myPanel').innerHTML = `
+      <div class="me-avatar" title="${p.characterName}${p.characterDesc ? ' — ' + p.characterDesc : ''}">
+        <span>${p.alive ? icon : '☠️'}</span>
+        ${p.jail ? '<span class="badge-mark jail" title="감옥">⛓️</span>' : ''}
+        ${p.dynamite ? '<span class="badge-mark dyn" title="다이너마이트">🧨</span>' : ''}
+      </div>
+      <div class="me-info">
+        <div class="me-top"><b>${p.name} (나)</b>${p.role ? `<span class="me-role">${ROLE_ICON[p.role]} ${ROLE_KO[p.role]}</span>` : ''}</div>
+        <div class="me-hp">${p.alive ? hearts(p.hp, p.maxHp) : '☠️ 탈락'}</div>
+        <div class="me-sub">
+          <span class="me-equip">${equip}</span>
+          <span class="pp-bank me-bank" data-seat="${st.seat}"></span>
+        </div>
+      </div>`;
   }
   function renderCenter(st) {
-    $('deckCount').textContent = `🂠 산 ${st.deckCount}`;
-    $('discardTop').innerHTML = st.discardTop ? '버림: ' + cardHTML(st.discardTop, 'mini') : '';
-    $('logBox').innerHTML = st.log.map((l) => `<div>${l}</div>`).join('');
-    $('logBox').scrollTop = $('logBox').scrollHeight;
+    $('deckCount').textContent = st.deckCount;
+    $('deckPile').classList.toggle('hidden', st.deckCount === 0);
+    $('discardTop').innerHTML = st.discardTop ? cardHTML(st.discardTop, 'mini') : '<div class="pile-empty">—</div>';
+    const last = st.log[st.log.length - 1] || '';
+    $('logTicker').textContent = last;
+    $('logDrawer').innerHTML = st.log.map((l) => `<div>${l}</div>`).join('');
+    if (!$('logDrawer').classList.contains('hidden')) $('logDrawer').scrollTop = $('logDrawer').scrollHeight;
   }
+
+  // ── 카드 버림 애니메이션 ─────────────────────────────────────────
+  function sameCard(a, b) { return !!a && !!b && a.id === b.id && a.suit === b.suit && a.v === b.v; }
+  function maybeAnimateDiscard(prev, st) {
+    if (!prev || !st.discardTop) return;
+    if (sameCard(prev.discardTop, st.discardTop)) return;
+    const originSeat = (prev.pending && prev.pending.actor != null) ? prev.pending.actor
+      : (st.pending && st.pending.actor != null) ? st.pending.actor
+      : prev.turn;
+    spawnFlyCard(originSeat, st.discardTop);
+  }
+  function spawnFlyCard(originSeat, card) {
+    const layer = $('flyLayer');
+    const target = $('discardPile');
+    if (!layer || !target) return;
+    const originEl = (originSeat === (cur ? cur.seat : mySeat))
+      ? $('myPanel')
+      : document.querySelector(`.pp[data-seat="${originSeat}"] .pp-avatar`);
+    if (!originEl) return;
+    const oRect = originEl.getBoundingClientRect();
+    const tRect = target.getBoundingClientRect();
+    const lRect = layer.getBoundingClientRect();
+    if (!oRect.width || !lRect.width) return;
+    const startX = oRect.left + oRect.width / 2 - lRect.left;
+    const startY = oRect.top + oRect.height / 2 - lRect.top;
+    const endX = tRect.left + tRect.width / 2 - lRect.left;
+    const endY = tRect.top + tRect.height / 2 - lRect.top;
+    const el = document.createElement('div');
+    el.className = 'fly-card';
+    el.innerHTML = cardHTML(card, 'mini');
+    el.style.left = startX + 'px';
+    el.style.top = startY + 'px';
+    layer.appendChild(el);
+    requestAnimationFrame(() => {
+      el.style.left = endX + 'px';
+      el.style.top = endY + 'px';
+      el.style.transform = `translate(-50%,-50%) rotate(${(Math.random() * 50 - 25).toFixed(0)}deg) scale(0.8)`;
+      el.style.opacity = '0.15';
+    });
+    setTimeout(() => el.remove(), 560);
+  }
+
+  // ── 거리선 (원탁 위 SVG 오버레이) ───────────────────────────────────
+  function updateRangeLines() {
+    const svg = $('rangeSvg');
+    if (!svg) return;
+    if (!targetMode || !cur) { svg.innerHTML = ''; return; }
+    const wrap = $('tableWrap');
+    const rect = wrap.getBoundingClientRect();
+    if (!rect.width) return;
+    const originX = rect.width / 2;
+    const originY = rect.height;
+    let html = '';
+    document.querySelectorAll('#playersGrid .pp:not(.dead)').forEach((el) => {
+      const seat = +el.dataset.seat;
+      const avatar = el.querySelector('.pp-avatar') || el;
+      const r = avatar.getBoundingClientRect();
+      const x = (r.left + r.width / 2 - rect.left).toFixed(1);
+      const y = (r.top + r.height / 2 - rect.top).toFixed(1);
+      const p = cur.players[seat];
+      const ok = p.dist != null && cur.myRange != null && p.dist <= cur.myRange;
+      html += `<line x1="${originX}" y1="${originY}" x2="${x}" y2="${y}" class="range-line ${ok ? 'in' : 'out'}" />`;
+      if (p.dist != null) html += `<text x="${x}" y="${(+y - 16).toFixed(1)}" class="dist-tag ${ok ? 'in' : 'out'}">${p.dist}</text>`;
+    });
+    svg.innerHTML = html;
+  }
+  window.addEventListener('resize', updateRangeLines);
+
+  // ── 로그 서랍 ─────────────────────────────────────────────────────
+  $('logToggle').addEventListener('click', () => $('logDrawer').classList.toggle('hidden'));
 
   function renderHand(st) {
     const wrap = $('myHand');
@@ -301,13 +426,13 @@
     if (targetMode && targetMode.idx === i) {
       targetMode = null;
       document.body.classList.remove('targeting');
-      renderHand(cur); renderPrompt(cur);
+      renderHand(cur); renderPrompt(cur); updateRangeLines();
       return;
     }
     if (needsTarget) {
       targetMode = { idx: i };
       document.body.classList.add('targeting');
-      renderHand(cur); renderPrompt(cur);
+      renderHand(cur); renderPrompt(cur); updateRangeLines();
       return;
     }
     socket.emit('bang:action', { a: 'play', idx: i });
@@ -322,6 +447,7 @@
     socket.emit('bang:action', { a: 'play', idx: targetMode.idx, target: seat });
     targetMode = null;
     document.body.classList.remove('targeting');
+    updateRangeLines();
   });
 
   $('endTurnBtn').addEventListener('click', () => socket.emit('bang:action', { a: 'end' }));

@@ -17,20 +17,35 @@
 
     <!-- 게임 화면 -->
     <main id="table" class="hidden">
-      <!-- 플레이어 패널들 -->
-      <div id="playersGrid"></div>
-
-      <!-- 중앙: 덱/버림/로그 -->
-      <div id="centerBar">
-        <div id="deckInfo"><span id="deckCount"></span><span id="discardTop"></span></div>
-        <div id="logBox"></div>
+      <!-- 원탁: 상대 좌석은 좌표로 배치, 거리선/카드 애니메이션 레이어 포함 -->
+      <div id="tableWrap">
+        <div id="feltBg"></div>
+        <svg id="rangeSvg"></svg>
+        <div id="playersGrid"></div>
+        <div id="centerPile">
+          <div class="pile-group" id="deckPile">
+            <span class="pile-shadow s2"></span><span class="pile-shadow s1"></span>
+            <div class="card mini back"></div>
+            <b id="deckCount">0</b>
+          </div>
+          <div class="pile-group" id="discardPile">
+            <span class="pile-shadow s2"></span><span class="pile-shadow s1"></span>
+            <div id="discardTop"></div>
+          </div>
+        </div>
+        <div id="logStrip">
+          <span id="logTicker"></span>
+          <button id="logToggle" title="기록 보기">📜</button>
+        </div>
+        <div id="logDrawer" class="hidden"></div>
+        <div id="flyLayer"></div>
       </div>
 
       <!-- 리액션/타겟 안내 -->
       <div id="promptBar" class="hidden"></div>
       <div id="reactArea" class="hidden"></div>
 
-      <!-- 내 패널 -->
+      <!-- 내 좌석 -->
       <div id="myPanel"></div>
 
       <!-- 내 손패 -->
