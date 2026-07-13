@@ -359,13 +359,15 @@ function doDiscard(room, seat, tile, declareRiichi) {
   if (idx < 0) return false;
   // 리치 중엔 쯔모기리만
   if (g.riichiDeclared[seat] && tile !== g.drawnTile) return false;
-  chargeTime(room, seat);
   if (declareRiichi) {
     // 리치 유효성: 멘젠 + 버린 후 텐파이
     const rest = hand.slice(); rest.splice(idx, 1);
     if (g.riichiDeclared[seat] || g.scores[seat] < 1000 || liveWall(g) < 4) return false;
     if (!g.melds[seat].every((m) => m.type === 'ankan')) return false;
     if (E.shanten(E.toCounts(rest), g.melds[seat].length) !== 0) return false;
+  }
+  chargeTime(room, seat);
+  if (declareRiichi) {
     g.riichiDeclared[seat] = true;
     g.ippatsu[seat] = true;
     g.scores[seat] -= 1000;
@@ -514,9 +516,9 @@ function doAnkan(room, seat, tile) {
   const g = room.game;
   if (g.phase !== 'turn' || g.turn !== seat) return false;
   const hand = g.hands[seat];
-  if (E.toCounts(hand)[tile] === 4 && !g.riichiDeclared[seat]) chargeTime(room, seat);
   if (E.toCounts(hand)[tile] !== 4) return false;
   if (g.riichiDeclared[seat]) return false;   // 단순화: 리치 후 안깡 금지
+  chargeTime(room, seat);
   for (let k = 0; k < 4; k++) hand.splice(hand.indexOf(tile), 1);
   g.melds[seat].push({ type: 'ankan', tile, tiles: [tile, tile, tile, tile] });
   g.ippatsu = [false, false, false, false];
@@ -528,11 +530,11 @@ function doAnkan(room, seat, tile) {
 function doTsumo(room, seat) {
   const g = room.game;
   if (g.phase !== 'turn' || g.turn !== seat) return false;
-  chargeTime(room, seat);
   const counts = E.toCounts(g.hands[seat]);
   if (!E.isWinningHand(counts, g.melds[seat].length)) return false;
   const r = evalFor(room, seat, g.drawnTile, true, null);
   if (!r) return false;
+  chargeTime(room, seat);
   handWin(room, seat, { tsumo: true, winTile: g.drawnTile });
   return true;
 }

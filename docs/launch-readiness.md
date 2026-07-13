@@ -22,7 +22,7 @@ These notes capture the current launch-readiness checks for the Node/Express sta
 ## Current audit snapshot
 
 This launch-readiness pass found and fixed:
-
+- BANG! and Mahjong reject invalid gameplay actions before charging the shared turn-time bank, and their engine/full-match/timer suites are enforced by `npm run check` through `npm run test:games`.
 - Hostname-based local/admin trust in `/api/status`; it now uses loopback remote address checks.
 - Admin shutdown/terminate routes were always registered; they now reject non-loopback access unless `ENABLE_ADMIN_ROUTES=true`.
 - Plant Growing sandbox saved `sandbox_pg_config`, but the main Plant game ignored it; the main game now uses saved sandbox stages on the same origin.

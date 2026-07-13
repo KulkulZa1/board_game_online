@@ -549,14 +549,13 @@ function playCard(room, seat, handIdx, targetSeat) {
   const aliveN = alivePlayers(g).length;
   const isBangCard = card.id === 'bang' || (card.id === 'missed' && p.character === 'calamity');
 
-  chargeTime(room, seat);
-
   // 발포 계열 (BANG! / 캘러미티의 빗나감!)
   if (isBangCard) {
     if (!target || target.hp <= 0 || targetSeat === seat) return false;
     const unlimited = p.character === 'willy' || p.equip.some((c) => c.id === 'volcanic');
     if (g.bangsPlayed >= 1 && !unlimited) return fail(room, seat, 'BANG!은 턴당 1장입니다');
     if (E.distance(g.players, seat, targetSeat) > E.weaponRange(p)) return fail(room, seat, '사거리가 닿지 않습니다');
+    chargeTime(room, seat);
     spend(g, p, handIdx);
     g.bangsPlayed++;
     if (p.role !== 'sheriff' && target.role === 'sheriff') g.aggroVsSheriff[seat]++;
@@ -570,24 +569,28 @@ function playCard(room, seat, handIdx, targetSeat) {
     case 'beer': {
       if (aliveN <= 2) return fail(room, seat, '생존자 2인 — 맥주 효과 없음');
       if (p.hp >= p.maxHp) return fail(room, seat, '이미 최대 체력입니다');
+      chargeTime(room, seat);
       spend(g, p, handIdx);
       p.hp++;
       addLog(room, `🍺 ${p.name} 맥주 (HP ${p.hp})`);
       break;
     }
     case 'saloon': {
+      chargeTime(room, seat);
       spend(g, p, handIdx);
       for (const q of alivePlayers(g)) q.hp = Math.min(q.maxHp, q.hp + 1);
       addLog(room, `🥃 살룬! 전원 회복`);
       break;
     }
     case 'stagecoach': {
+      chargeTime(room, seat);
       spend(g, p, handIdx);
       p.hand.push(draw(g), draw(g));
       addLog(room, `🚃 ${p.name} 역마차 (+2)`);
       break;
     }
     case 'wellsfargo': {
+      chargeTime(room, seat);
       spend(g, p, handIdx);
       p.hand.push(draw(g), draw(g), draw(g));
       addLog(room, `💰 ${p.name} 웰스파고 (+3)`);
@@ -597,6 +600,7 @@ function playCard(room, seat, handIdx, targetSeat) {
       if (!target || target.hp <= 0 || targetSeat === seat) return false;
       if (E.distance(g.players, seat, targetSeat) > 1) return fail(room, seat, '패닉!은 거리 1만 가능합니다');
       if (!target.hand.length && !target.equip.length) return fail(room, seat, '가져올 카드가 없습니다');
+      chargeTime(room, seat);
       spend(g, p, handIdx);
       stealCard(g, p, target, false);
       addLog(room, `😱 ${p.name} → ${target.name} 패닉!`);
@@ -605,6 +609,7 @@ function playCard(room, seat, handIdx, targetSeat) {
     case 'catbalou': {
       if (!target || target.hp <= 0 || targetSeat === seat) return false;
       if (!target.hand.length && !target.equip.length) return fail(room, seat, '버릴 카드가 없습니다');
+      chargeTime(room, seat);
       spend(g, p, handIdx);
       stealCard(g, p, target, true);
       addLog(room, `🐈 ${p.name} → ${target.name} 캣 발루`);
@@ -612,6 +617,7 @@ function playCard(room, seat, handIdx, targetSeat) {
     }
     case 'duel': {
       if (!target || target.hp <= 0 || targetSeat === seat) return false;
+      chargeTime(room, seat);
       spend(g, p, handIdx);
       if (p.role !== 'sheriff' && target.role === 'sheriff') g.aggroVsSheriff[seat]++;
       addLog(room, `⚔️ ${p.name} → ${target.name} 결투!`);
@@ -619,6 +625,7 @@ function playCard(room, seat, handIdx, targetSeat) {
       return true;
     }
     case 'indians': {
+      chargeTime(room, seat);
       spend(g, p, handIdx);
       addLog(room, `🏹 ${p.name} 인디언 습격!`);
       let s2 = nextAlive(g, seat);
@@ -629,6 +636,7 @@ function playCard(room, seat, handIdx, targetSeat) {
       return true;
     }
     case 'gatling': {
+      chargeTime(room, seat);
       spend(g, p, handIdx);
       addLog(room, `🔫 ${p.name} 개틀링 난사!`);
       let s3 = nextAlive(g, seat);
@@ -639,6 +647,7 @@ function playCard(room, seat, handIdx, targetSeat) {
       return true;
     }
     case 'store': {
+      chargeTime(room, seat);
       spend(g, p, handIdx);
       const cards = [];
       for (let k = 0; k < aliveN; k++) cards.push(draw(g));
@@ -651,6 +660,7 @@ function playCard(room, seat, handIdx, targetSeat) {
     }
     case 'jail': {
       if (!target || target.hp <= 0 || target.role === 'sheriff' || target.jail) return fail(room, seat, '감옥 대상이 아닙니다');
+      chargeTime(room, seat);
       spend(g, p, handIdx, true);
       target.jail = card;
       addLog(room, `⛓️ ${p.name} → ${target.name} 감옥!`);
@@ -658,6 +668,7 @@ function playCard(room, seat, handIdx, targetSeat) {
     }
     case 'dynamite': {
       if (p.dynamite) return fail(room, seat, '이미 다이너마이트가 있습니다');
+      chargeTime(room, seat);
       spend(g, p, handIdx, true);
       p.dynamite = card;
       addLog(room, `🧨 ${p.name} 다이너마이트 점화`);
@@ -667,12 +678,14 @@ function playCard(room, seat, handIdx, targetSeat) {
       // 장비 (술통/무스탕/조준경/무기)
       if (def.kind === 'weapon') {
         const old = p.equip.findIndex((c) => E.CARD_DEFS[c.id].kind === 'weapon');
+        chargeTime(room, seat);
         if (old >= 0) discardCard(g, p.equip.splice(old, 1)[0]);
         spend(g, p, handIdx, true);
         p.equip.push(card);
         addLog(room, `${def.icon} ${p.name} ${def.name} 장착 (사거리 ${def.range})`);
       } else if (def.kind === 'blue') {
         if (p.equip.some((c) => c.id === card.id)) return fail(room, seat, '이미 장착된 카드입니다');
+        chargeTime(room, seat);
         spend(g, p, handIdx, true);
         p.equip.push(card);
         addLog(room, `${def.icon} ${p.name} ${def.name} 장착`);

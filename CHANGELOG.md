@@ -26,6 +26,7 @@
 - NEON CASCADE at `/arcade/neon-cascade/`: a 45-second one-touch chain-reaction game with deterministic simulation, assisted pulse targeting, rechargeable actions, special cores, wave goals, and score-tripling Overdrive.
 
 ### Changed
+- BANG! and Mahjong now charge turn time only after a server-validated action succeeds; invalid targets, riichi declarations, and tsumo claims no longer consume a player's time bank. Their 97 headless engine, full-match, and timer assertions now run as part of `npm run check`.
 - Lobby board-game cards now use a wider desktop selection surface and a mobile grid action row, preventing vertical `플레이` labels and 390px horizontal overflow while preserving 42px touch targets.
 - BANG! and Mahjong now normalize nicknames on the server and escape server-provided names and logs before `innerHTML` rendering, preventing nickname markup injection without weakening their room or solo flows.
 - BANG! and Mahjong now load the shared service-worker update helper, so newly deployed clients participate in the same cache refresh flow as the rest of the platform.

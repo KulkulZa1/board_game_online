@@ -111,6 +111,31 @@ function playMatch(n) {
     cleanup(room);
   }
 
+  console.log('\n[무효 행동 시간 은행 보호]');
+  {
+    const room = BG.createRoom('P0', 4);
+    room.seats[0].connected = true;
+    BG.startMatch(room);
+    clearTimeout(room.aiTimer); clearTimeout(room.actionTimer);
+    const g = room.game;
+    const P = BG._internal;
+    g.queue = [];
+    g.turn = 0; g.phase = 'turn'; g.bangsPlayed = 0;
+    for (const p of g.players) { p.character = 'x'; p.equip = []; }
+    g.players[0].hand = [{ id: 'bang', suit: 'c', v: 5 }];
+    g.timeBank[0] = 1000;
+    g.turnStartedAt = Date.now() - (BG.CFG.graceMs + 50);
+    const bankBefore = g.timeBank[0];
+    const turnStartBefore = g.turnStartedAt;
+    ok(P.playCard(room, 0, 0, 0) === false, '자기 자신을 향한 BANG! 거부');
+    ok(g.timeBank[0] === bankBefore && g.turnStartedAt === turnStartBefore,
+       '거부된 행동은 시간 은행과 기준 시각을 유지');
+    ok(P.playCard(room, 0, 0, 1) === true, '유효한 BANG! 허용');
+    ok(g.timeBank[0] < bankBefore && g.turnStartedAt > turnStartBefore,
+       '유효한 행동만 시간 은행 차감');
+    cleanup(room);
+  }
+
   console.log('\n[슬랩 더 킬러 / 캘러미티]');
   {
     const room = allAiRoom(4);

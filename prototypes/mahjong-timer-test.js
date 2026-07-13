@@ -83,6 +83,28 @@ function cleanup(room) {
     cleanup(room);
   }
 
+  console.log('\n[무효 행동 시간 은행 보호]');
+  {
+    const room = mkFrozenRoom();
+    const g = room.game;
+    room.seats[0].connected = true;
+    g.hands[0] = [0, 0, 0, 0, 1, 3, 5, 7, 9, 11, 18, 22, 27, 33];
+    g.turn = 0; g.phase = 'turn'; g.drawnTile = 33;
+    g.timeBank[0] = 500;
+    g.turnStartedAt = Date.now() - (MJ.CFG.graceMs + 150);
+    const bankBefore = g.timeBank[0];
+    const turnStartBefore = g.turnStartedAt;
+    ok(MJ._internal.doDiscard(room, 0, 33, true) === false, '텐파이가 아닌 리치 선언 거부');
+    ok(g.timeBank[0] === bankBefore && g.turnStartedAt === turnStartBefore,
+       '거부된 리치 선언은 시간 은행 유지');
+    ok(MJ._internal.doTsumo(room, 0) === false, '화료형이 아닌 쯔모 선언 거부');
+    ok(g.timeBank[0] === bankBefore && g.turnStartedAt === turnStartBefore,
+       '거부된 쯔모 선언은 시간 은행 유지');
+    ok(MJ._internal.doDiscard(room, 0, 33, false) === true, '유효한 타패 허용');
+    ok(g.timeBank[0] < bankBefore, '유효한 타패만 시간 은행 차감');
+    cleanup(room);
+  }
+
   console.log('\n[은행 소진 → 자동 쯔모기리]');
   {
     const room = mkFrozenRoom();
