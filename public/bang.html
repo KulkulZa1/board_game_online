@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>BANG! — 보드게임 온라인</title>
   <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/css/games/bang.css?v=1.0">
+  <link rel="stylesheet" href="/css/games/bang.css?v=1.1">
 </head>
 <body>
   <div id="container">
@@ -57,7 +57,7 @@
     </main>
 
     <!-- 대기실 / 시작 오버레이 -->
-    <div id="lobbyOverlay" class="overlay visible">
+    <div id="lobbyOverlay" class="overlay visible" aria-hidden="false">
       <div class="ov-box">
         <div class="ov-icon">🤠</div>
         <h2>BANG! <span class="sub">서부의 무법자 사냥 · 4~7인</span></h2>
@@ -112,7 +112,7 @@
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
-  <script src="/js/bang-client.js?v=1.1"></script>
+  <script src="/js/bang-client.js?v=1.2"></script>
   <script src="/js/sw-update.js?v=20260520b"></script>
 </body>
 </html>

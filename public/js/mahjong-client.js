@@ -34,6 +34,7 @@
   let cur = null;          // 마지막 mahjong:state
   let riichiMode = false;  // 리치 선언용 타일 선택 중
   let resultTimer = null;
+  let reconnectPending = false;
   let selectedTile = null; // 도우미 ON: 첫 탭 미리보기 → 둘째 탭 확정
   // 🧭 초심자 도우미 — 기본 ON (처음 오는 사람을 위해), 저장됨
   let assist = true;
@@ -51,6 +52,12 @@
     el.classList.remove('hidden', 'show'); void el.offsetWidth; el.classList.add('show');
     clearTimeout(toast._t);
     toast._t = setTimeout(() => el.classList.add('hidden'), 2600);
+  }
+  function setLobbyVisible(visible) {
+    const overlay = $('lobbyOverlay');
+    overlay.classList.toggle('visible', visible);
+    overlay.setAttribute('aria-hidden', visible ? 'false' : 'true');
+    overlay.inert = !visible;
   }
 
   // ── 입장 흐름 ─────────────────────────────────────────────────────
@@ -87,8 +94,12 @@
     showWaitPane();
   });
   socket.on('mahjong:error', ({ message, fatal }) => {
-    $('entryError').textContent = message || '오류';
-    toast(message || '오류');
+    const resumeFailed = fatal && reconnectPending;
+    reconnectPending = false;
+    if (!resumeFailed) {
+      $('entryError').textContent = message || '오류';
+      toast(message || '오류');
+    }
     if (fatal) { store.clear(); showEntryPane(); }
   });
   socket.on('mahjong:room', (ls) => {
@@ -96,15 +107,16 @@
     if (ls.status === 'waiting') $('startBtn').classList.toggle('hidden', !isHost);
   });
   socket.on('mahjong:begin', () => {
-    $('lobbyOverlay').classList.remove('visible');
+    setLobbyVisible(false);
     $('table').classList.remove('hidden');
   });
   socket.on('mahjong:reconnected', ({ code, seat, status }) => {
+    reconnectPending = false;
     roomCode = code; mySeat = seat;
     $('roomChip').textContent = code;
     $('roomChip').classList.remove('hidden');
     if (status === 'active') {
-      $('lobbyOverlay').classList.remove('visible');
+      setLobbyVisible(false);
       $('table').classList.remove('hidden');
     } else {
       showWaitPane();
@@ -114,7 +126,7 @@
   function showEntryPane() {
     $('entryPane').classList.remove('hidden');
     $('waitPane').classList.add('hidden');
-    $('lobbyOverlay').classList.add('visible');
+    setLobbyVisible(true);
   }
   function showWaitPane() {
     $('entryPane').classList.add('hidden');
@@ -124,6 +136,7 @@
     $('roomChip').classList.remove('hidden');
     $('startBtn').classList.toggle('hidden', !isHost);
     $('waitHint').classList.toggle('hidden', isHost);
+    setLobbyVisible(true);
   }
   function renderSeats(ls) {
     const wrap = $('seatList'); wrap.innerHTML = '';
@@ -408,11 +421,12 @@
   function init() {
     const params = new URLSearchParams(location.search);
     const roomParam = params.get('room');
-    const token = store.token;
-    if (token) {
-      socket.on('connect', () => socket.emit('mahjong:reconnect', { token }));
-      // 실패(fatal) 시 mahjong:error 핸들러가 entryPane으로 되돌린다
-    }
+    socket.on('connect', () => {
+      const token = store.token;
+      if (!token) return;
+      reconnectPending = true;
+      socket.emit('mahjong:reconnect', { token });
+    });
     if (roomParam) {
       $('codeInput').value = roomParam.toUpperCase();
       $('entryError').textContent = '닉네임을 입력하고 참가를 누르세요';

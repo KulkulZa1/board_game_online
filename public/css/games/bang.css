@@ -252,8 +252,9 @@ body.my-turn #myHand .card:not(.dim):not(.idle):hover { transform: translateY(-6
 /* ── 오버레이 (마작과 동일 패턴) ── */
 .overlay { position: fixed; inset: 0; z-index: 40; background: rgba(15,8,2,0.9);
   display: flex; align-items: center; justify-content: center; padding: 16px;
-  opacity: 0; pointer-events: none; transition: opacity 0.25s; }
-.overlay.visible { opacity: 1; pointer-events: all; }
+  opacity: 0; visibility: hidden; pointer-events: none;
+  transition: opacity 0.25s, visibility 0s linear 0.25s; }
+.overlay.visible { opacity: 1; visibility: visible; pointer-events: all; transition-delay: 0s; }
 .ov-box { background: var(--panel); border: 1px solid var(--border); border-radius: 18px;
   padding: 24px 20px; max-width: 400px; width: 96%; text-align: center;
   display: flex; flex-direction: column; gap: 12px; max-height: 92dvh; overflow-y: auto; }

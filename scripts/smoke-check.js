@@ -126,8 +126,51 @@ function checkMultiplayerNicknameSafety() {
 
   const mahjongPage = fs.readFileSync(path.join(root, 'public/mahjong.html'), 'utf8');
   const mahjongStyle = fs.readFileSync(path.join(root, 'public/css/games/mahjong.css'), 'utf8');
-  if (!mahjongPage.includes('mahjong.css?v=1.3') || !mahjongStyle.includes('justify-content: flex-start')) {
+  if (!mahjongPage.includes('mahjong.css?v=1.4') || !mahjongStyle.includes('justify-content: flex-start')) {
     throw new Error('Mahjong mobile hand should expose every tile through a left-aligned scroll area');
+  }
+}
+
+function checkMultiplayerResumeAndOverlaySafety() {
+  const cases = [
+    {
+      page: 'public/bang.html',
+      client: 'public/js/bang-client.js',
+      style: 'public/css/games/bang.css',
+      versions: ['bang.css?v=1.1', 'bang-client.js?v=1.2'],
+    },
+    {
+      page: 'public/mahjong.html',
+      client: 'public/js/mahjong-client.js',
+      style: 'public/css/games/mahjong.css',
+      versions: ['mahjong.css?v=1.4', 'mahjong-client.js?v=1.4'],
+    },
+  ];
+  const clientMarkers = [
+    'let reconnectPending = false;',
+    'const resumeFailed = fatal && reconnectPending;',
+    'const token = store.token;',
+    'reconnectPending = true;',
+    'setLobbyVisible(false);',
+    'overlay.inert = !visible;',
+  ];
+
+  for (const item of cases) {
+    const page = fs.readFileSync(path.join(root, item.page), 'utf8');
+    const client = fs.readFileSync(path.join(root, item.client), 'utf8');
+    const style = fs.readFileSync(path.join(root, item.style), 'utf8');
+    const missing = clientMarkers.filter((marker) => !client.includes(marker));
+    if (missing.length) {
+      throw new Error(`${item.client} should silently retire stale reconnect tokens and hide inactive lobby controls: ${missing.join(', ')}`);
+    }
+    if (!page.includes('id="lobbyOverlay" class="overlay visible" aria-hidden="false"')
+        || item.versions.some((version) => !page.includes(version))) {
+      throw new Error(`${item.page} should expose an accessible initial lobby and version the updated assets`);
+    }
+    if (!style.includes('visibility: hidden; pointer-events: none;')
+        || !style.includes('visibility: visible; pointer-events: all;')) {
+      throw new Error(`${item.style} should remove inactive overlays from keyboard navigation`);
+    }
   }
 }
 
@@ -1248,6 +1291,7 @@ async function main() {
     checkHandlers();
     checkSecurityHelpers();
     checkMultiplayerNicknameSafety();
+    checkMultiplayerResumeAndOverlaySafety();
     checkLobbyMobileLayoutCoverage();
 
     const gameIds = [
