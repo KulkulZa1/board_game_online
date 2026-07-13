@@ -22,6 +22,7 @@ These notes capture the current launch-readiness checks for the Node/Express sta
 ## Current audit snapshot
 
 This launch-readiness pass found and fixed:
+- Active BANG! and Mahjong rooms no longer retain the two-minute empty-room cleanup timer after a player reconnects. The socket smoke suite verifies that the room survives the old deadline and is still removed after the final player disconnects again.
 - Expired BANG! and Mahjong reconnect tokens are cleared silently on entry, while real room errors remain visible. Inactive lobby overlays are now hidden from keyboard and assistive-technology navigation during active games.
 - BANG! and Mahjong reject invalid gameplay actions before charging the shared turn-time bank, and their engine/full-match/timer suites are enforced by `npm run check` through `npm run test:games`.
 - Hostname-based local/admin trust in `/api/status`; it now uses loopback remote address checks.

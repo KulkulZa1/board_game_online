@@ -1186,6 +1186,13 @@ async function emitSocketEvent(socket, eventName, payload) {
   }
 }
 
+async function closePollingSocket(socket) {
+  const res = await httpRequest('POST', socketPath(socket), '41');
+  if (res.statusCode !== 200) {
+    throw new Error(`Socket.io disconnect failed: HTTP ${res.statusCode}`);
+  }
+}
+
 async function waitForSocketEvent(socket, eventName, timeoutMs = 5000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -1266,6 +1273,55 @@ async function runVampireCoopSocketSmokeCheck() {
   const stateEvent = await waitForSocketEvent(guest, 'vps:state');
   if (!stateEvent.snapshot || stateEvent.snapshot.kills !== 3 || !stateEvent.snapshot.guest) {
     throw new Error('Vampire co-op host state was not relayed to guest');
+  }
+}
+
+async function runReconnectCleanupSmokeCheck(gameName, createPayload) {
+  const gameModule = require(path.join(root, 'server', `${gameName}.js`));
+  const event = (suffix) => `${gameName}:${suffix}`;
+  const originalCleanupMs = gameModule.CFG.disconnectCleanupMs;
+  const cleanupMs = 1000;
+  gameModule.CFG.disconnectCleanupMs = cleanupMs;
+
+  try {
+    const host = await openPollingSocket();
+    const replacement = await openPollingSocket();
+    await emitSocketEvent(host, event('create'), createPayload);
+    const created = await waitForSocketEvent(host, event('created'));
+    await emitSocketEvent(host, event('start'), {});
+    await waitForSocketEvent(host, event('begin'));
+
+    const room = gameModule.rooms.get(created.code);
+    if (!room || room.status !== 'active') {
+      throw new Error(`${gameName} room should be active before reconnect cleanup test`);
+    }
+
+    await closePollingSocket(host);
+    if (!room.cleanupTimer) {
+      throw new Error(`${gameName} should schedule cleanup after its final human disconnects`);
+    }
+
+    await emitSocketEvent(replacement, event('reconnect'), { token: created.token });
+    const reconnected = await waitForSocketEvent(replacement, event('reconnected'));
+    if (reconnected.code !== created.code || reconnected.status !== 'active') {
+      throw new Error(`${gameName} reconnect returned the wrong active room`);
+    }
+    if (room.cleanupTimer !== null) {
+      throw new Error(`${gameName} reconnect should cancel the pending room cleanup timer`);
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, cleanupMs + 100));
+    if (!gameModule.rooms.has(created.code)) {
+      throw new Error(`${gameName} room was destroyed after a successful reconnect`);
+    }
+
+    await closePollingSocket(replacement);
+    await new Promise((resolve) => setTimeout(resolve, cleanupMs + 100));
+    if (gameModule.rooms.has(created.code)) {
+      throw new Error(`${gameName} room should still clean up after everyone disconnects again`);
+    }
+  } finally {
+    gameModule.CFG.disconnectCleanupMs = originalCleanupMs;
   }
 }
 
@@ -1357,6 +1413,8 @@ async function main() {
 
     await runSocketSmokeCheck();
     await runVampireCoopSocketSmokeCheck();
+    await runReconnectCleanupSmokeCheck('bang', { nickname: 'QA', size: 4 });
+    await runReconnectCleanupSmokeCheck('mahjong', { nickname: 'QA' });
     checkChatBubbleUi();
     await checkDeploymentCachePolicy();
     checkServiceWorkerUpdateCoverage();

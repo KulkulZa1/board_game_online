@@ -20,6 +20,7 @@ const CFG = {
   bankMs: 60000,       // 시간 은행 (대국 전체)
   reactMs: 10000,      // 리액션 창 (고정)
   discAutoMs: 4000,    // 접속 끊긴 좌석 자동 진행
+  disconnectCleanupMs: 2 * 60 * 1000,
   aiDelay: () => 500 + Math.random() * 600,
   aiReactDelay: () => 350 + Math.random() * 400,
 };
@@ -57,12 +58,16 @@ function seatHuman(room, seat, nickname) {
   tokenMap.set(token, { code: room.code, seat });
   return room.seats[seat];
 }
-function scheduleCleanup(room, ms) {
+function cancelCleanup(room) {
   clearTimeout(room.cleanupTimer);
+  room.cleanupTimer = null;
+}
+function scheduleCleanup(room, ms) {
+  cancelCleanup(room);
   room.cleanupTimer = setTimeout(() => destroyRoom(room), ms);
 }
 function destroyRoom(room) {
-  clearTimeout(room.cleanupTimer); clearTimeout(room.actionTimer); clearTimeout(room.aiTimer);
+  cancelCleanup(room); clearTimeout(room.actionTimer); clearTimeout(room.aiTimer);
   for (const s of room.seats) if (s && s.token) tokenMap.delete(s.token);
   rooms.delete(room.code);
   log(`[뱅] 방 정리 — ${room.code}`);
@@ -142,7 +147,7 @@ function startMatch(room) {
     if (!room.seats[i]) room.seats[i] = { type: 'ai', name: AI_NAMES[ai++] || 'AI', socketId: null, token: null, connected: true };
   }
   room.status = 'active';
-  clearTimeout(room.cleanupTimer);
+  cancelCleanup(room);
   const n = room.seats.length;
   const rng = Math.random;
   const roles = E.shuffled(E.rolesFor(n), rng);
@@ -903,6 +908,7 @@ function register(io, socket) {
     if (!ref) return socket.emit('bang:error', { message: '만료된 세션입니다', fatal: true });
     const room = rooms.get(ref.code);
     if (!room) return socket.emit('bang:error', { message: '방이 사라졌습니다', fatal: true });
+    if (room.status === 'active') cancelCleanup(room);
     const s = room.seats[ref.seat];
     s.socketId = socket.id;
     s.connected = true;
@@ -957,7 +963,7 @@ function register(io, socket) {
         if (item && item.actor === seat) armReactTimer(room, item);
         else if (g.phase === 'turn' && g.turn === seat) armTurnTimer(room, seat);
       }
-      if (!room.seats.some((x) => x && x.type === 'human' && x.connected)) scheduleCleanup(room, 2 * 60 * 1000);
+      if (!room.seats.some((x) => x && x.type === 'human' && x.connected)) scheduleCleanup(room, CFG.disconnectCleanupMs);
     }
   });
 }
