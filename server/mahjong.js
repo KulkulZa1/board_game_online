@@ -8,7 +8,7 @@
 
 const { v4: uuidv4 } = require('uuid');
 const state = require('./state');
-const { log, rateCheck } = require('./utils');
+const { log, rateCheck, sanitizeNickname } = require('./utils');
 const E = require('./handlers/mahjong-engine');
 
 const rooms = new Map();      // code → room
@@ -60,7 +60,7 @@ function seatHuman(room, seat, nickname) {
   const token = uuidv4();
   room.seats[seat] = {
     type: 'human',
-    name: String(nickname || '플레이어').slice(0, 12),
+    name: sanitizeNickname(nickname),
     socketId: null, token, connected: false,
   };
   tokenMap.set(token, { code: room.code, seat });

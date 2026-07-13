@@ -44,7 +44,7 @@ This launch-readiness pass found and fixed:
 - Tower Defense sandbox now has a validated `Publish` action. Published configs save under `td_published_config`, export as `td-published-config.json`, and `/arcade/tower-defense/` prefers that published key before falling back to draft/default config.
 - Tower Defense arcade now exposes game-first controls: `Play Stage 1`, quick Cannon/Frost/Tesla/Amplifier placement, and a Meteor panic ability. The editor remains available, but the route is no longer dependent on the Stages tab for the first playable action.
 - Service worker caching no longer serves old JS/CSS before checking the network; this prevents deployed game logic from appearing stale after Render deploys.
-- Arcade pages with changed gameplay or CSS use versioned asset URLs, and `boardgame-v10` invalidates the previous runtime cache. This also recovers correctly after an offline fallback served an older cached page.
+- Gameplay and CSS pages use versioned asset URLs, and `boardgame-v11` invalidates the previous runtime cache. Network-first HTML, JavaScript, CSS, and manifest requests also use `cache: 'no-store'`, so an online reload cannot silently reuse the browser HTTP cache after a deploy.
 - `render.yaml` explicitly enables commit-triggered deployment. Existing Render services retain their dashboard auto-deploy value when this field is omitted, which allowed the service to remain on an older `main` commit after PR #53 merged.
 - All HTML pages now load `/js/sw-update.js`, which registers the service worker consistently and reloads controlled pages once after an updated worker takes control.
 - Server responses for HTML, `sw.js`, JS, CSS, and `manifest.json` now send `Cache-Control: no-cache, no-store, must-revalidate`.

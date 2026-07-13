@@ -9,7 +9,7 @@
 
 const { v4: uuidv4 } = require('uuid');
 const state = require('./state');
-const { log, rateCheck } = require('./utils');
+const { log, rateCheck, sanitizeNickname } = require('./utils');
 const E = require('./handlers/bang-engine');
 
 const rooms = new Map();
@@ -53,7 +53,7 @@ function createRoom(nickname, size) {
 }
 function seatHuman(room, seat, nickname) {
   const token = uuidv4();
-  room.seats[seat] = { type: 'human', name: String(nickname || '플레이어').slice(0, 12), socketId: null, token, connected: false };
+  room.seats[seat] = { type: 'human', name: sanitizeNickname(nickname), socketId: null, token, connected: false };
   tokenMap.set(token, { code: room.code, seat });
   return room.seats[seat];
 }

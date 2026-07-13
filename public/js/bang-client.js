@@ -4,6 +4,8 @@
   'use strict';
 
   const $ = (id) => document.getElementById(id);
+  const HTML_ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+  const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => HTML_ESCAPES[char]);
   const socket = io();
 
   // 카드 메타 (서버 CARD_DEFS와 동일한 표시용 사본)
@@ -150,7 +152,7 @@
       const d = document.createElement('div');
       d.className = 'seat-row' + (i === mySeat ? ' me' : '');
       d.innerHTML = s
-        ? `<span>${s.type === 'ai' ? '🤖' : '🙂'} ${s.name}${i === ls.hostSeat ? ' 👑' : ''}</span><span class="${s.connected ? 'on' : 'off'}">${s.connected ? '접속' : '대기'}</span>`
+        ? `<span>${s.type === 'ai' ? '🤖' : '🙂'} ${escapeHtml(s.name)}${i === ls.hostSeat ? ' 👑' : ''}</span><span class="${s.connected ? 'on' : 'off'}">${s.connected ? '접속' : '대기'}</span>`
         : `<span class="dim">빈 자리 — 시작 시 AI</span><span></span>`;
       wrap.appendChild(d);
     });
@@ -196,7 +198,7 @@
         ${p.jail ? '<span class="badge-mark jail" title="감옥">⛓️</span>' : ''}
         ${p.dynamite ? '<span class="badge-mark dyn" title="다이너마이트">🧨</span>' : ''}
       </div>
-      <div class="pp-name">${p.name}${p.ai ? ' 🤖' : ''}</div>
+      <div class="pp-name">${escapeHtml(p.name)}${p.ai ? ' 🤖' : ''}</div>
       <div class="pp-hp">${dead ? '' : hearts(p.hp, p.maxHp)}</div>
       <div class="pp-meta">
         ${p.dist != null ? `<span class="pp-dist-chip${rangeCls}">📏${p.dist}</span>` : ''}
@@ -222,7 +224,7 @@
         ${p.dynamite ? '<span class="badge-mark dyn" title="다이너마이트">🧨</span>' : ''}
       </div>
       <div class="me-info">
-        <div class="me-top"><b>${p.name} (나)</b>${p.role ? `<span class="me-role">${ROLE_ICON[p.role]} ${ROLE_KO[p.role]}</span>` : ''}</div>
+        <div class="me-top"><b>${escapeHtml(p.name)} (나)</b>${p.role ? `<span class="me-role">${ROLE_ICON[p.role]} ${ROLE_KO[p.role]}</span>` : ''}</div>
         <div class="me-hp">${p.alive ? hearts(p.hp, p.maxHp) : '☠️ 탈락'}</div>
         <div class="me-sub">
           <span class="me-equip">${equip}</span>
@@ -236,7 +238,7 @@
     $('discardTop').innerHTML = st.discardTop ? cardHTML(st.discardTop, 'mini') : '<div class="pile-empty">—</div>';
     const last = st.log[st.log.length - 1] || '';
     $('logTicker').textContent = last;
-    $('logDrawer').innerHTML = st.log.map((l) => `<div>${l}</div>`).join('');
+    $('logDrawer').innerHTML = st.log.map((l) => `<div>${escapeHtml(l)}</div>`).join('');
     if (!$('logDrawer').classList.contains('hidden')) $('logDrawer').scrollTop = $('logDrawer').scrollHeight;
   }
 
@@ -485,7 +487,7 @@
     $('overTitle').textContent = `🏆 ${label} 승리!`;
     $('roleReveal').innerHTML = players.map((p) => `
       <div class="rank-row${p.won ? ' me' : ''}">
-        <span>${p.alive ? '🙂' : '☠️'} ${p.name}${p.ai ? ' 🤖' : ''}</span>
+        <span>${p.alive ? '🙂' : '☠️'} ${escapeHtml(p.name)}${p.ai ? ' 🤖' : ''}</span>
         <span>${ROLE_KO[p.role]}</span>
         <b>${p.won ? '승리' : ''}</b>
       </div>`).join('');

@@ -102,6 +102,50 @@ function checkSecurityHelpers() {
   }
 }
 
+function checkMultiplayerNicknameSafety() {
+  const { sanitizeNickname } = require('../server/utils');
+  const sanitized = sanitizeNickname('  <b>홍길동</b>\n<script>  ');
+  if (/[<>&"'\x60\r\n]/.test(sanitized) || Array.from(sanitized).length > 12) {
+    throw new Error(`sanitizeNickname left unsafe or oversized content: "${sanitized}"`);
+  }
+  if (sanitizeNickname('', '손님') !== '손님') {
+    throw new Error('sanitizeNickname should use its fallback for empty input');
+  }
+
+  const requiredEscapes = {
+    'public/js/bang-client.js': ['escapeHtml(s.name)', 'escapeHtml(p.name)', 'escapeHtml(l)'],
+    'public/js/mahjong-client.js': ['escapeHtml(s.name)', 'escapeHtml(st.names[seat])', 'escapeHtml(r.name)'],
+  };
+  for (const [file, fragments] of Object.entries(requiredEscapes)) {
+    const source = fs.readFileSync(path.join(root, file), 'utf8');
+    const missing = fragments.filter((fragment) => !source.includes(fragment));
+    if (missing.length) {
+      throw new Error(`${file} should escape server-provided names before innerHTML rendering: ${missing.join(', ')}`);
+    }
+  }
+
+  const mahjongPage = fs.readFileSync(path.join(root, 'public/mahjong.html'), 'utf8');
+  const mahjongStyle = fs.readFileSync(path.join(root, 'public/css/games/mahjong.css'), 'utf8');
+  if (!mahjongPage.includes('mahjong.css?v=1.3') || !mahjongStyle.includes('justify-content: flex-start')) {
+    throw new Error('Mahjong mobile hand should expose every tile through a left-aligned scroll area');
+  }
+}
+
+function checkLobbyMobileLayoutCoverage() {
+  const page = fs.readFileSync(path.join(root, 'public/index.html'), 'utf8');
+  const style = fs.readFileSync(path.join(root, 'public/css/lobby.css'), 'utf8');
+  const required = [
+    'grid-template-columns: auto minmax(0, 1fr)',
+    'grid-column: 1 / -1',
+    'grid-template-columns: repeat(3, minmax(0, 1fr))',
+    'min-height: 42px',
+  ];
+  const missing = required.filter((fragment) => !style.includes(fragment));
+  if (missing.length || !page.includes('css/lobby.css?v=1.5')) {
+    throw new Error(`Mobile lobby cards should keep actions inside the viewport: ${missing.join(', ') || 'asset version'}`);
+  }
+}
+
 function runSyntaxCheck() {
   if (!checkJavaScriptSyntax()) {
     throw new Error('JS syntax check failed');
@@ -276,8 +320,11 @@ async function checkDeploymentCachePolicy() {
   if (sw.body.includes('stale-while-revalidate') || !sw.body.includes('networkFirst(request)')) {
     throw new Error('Service worker should use network-first JS/CSS so deployed game logic appears immediately');
   }
-  if (!sw.body.includes("CACHE_NAME   = 'boardgame-v10'")) {
+  if (!sw.body.includes("CACHE_NAME   = 'boardgame-v11'")) {
     throw new Error('Service worker cache namespace should invalidate pre-progression arcade assets');
+  }
+  if (!sw.body.includes("fetch(request, { cache: 'no-store' })")) {
+    throw new Error('Service worker network-first fetches should bypass the browser HTTP cache');
   }
 
   const chat = await checkUrl('/js/chat.js');
@@ -1200,6 +1247,8 @@ async function main() {
 
     checkHandlers();
     checkSecurityHelpers();
+    checkMultiplayerNicknameSafety();
+    checkLobbyMobileLayoutCoverage();
 
     const gameIds = [
       'chess', 'omok', 'connect4', 'othello', 'checkers', 'indianpoker',
@@ -1218,6 +1267,12 @@ async function main() {
       '/js/game.js',
       '/js/admob.js',
       '/js/sandbox-config.js',
+      '/bang.html',
+      '/js/bang-client.js',
+      '/css/games/bang.css',
+      '/mahjong.html',
+      '/js/mahjong-client.js',
+      '/css/games/mahjong.css',
       '/arcade/snake/',
       '/arcade/snake/game.js',
       '/arcade/breakout/',

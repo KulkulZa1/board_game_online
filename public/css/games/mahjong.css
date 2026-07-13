@@ -295,3 +295,12 @@ html, body {
   box-shadow: 0 2px 0 #b7ae93, 0 0 14px rgba(255,209,102,0.9); }
 .my-turn .hand-tile.selected:hover, .my-turn .hand-tile.selected:active { transform: translateY(-8px); }
 #myHand { padding-top: 16px; }   /* 추천 배지 공간 */
+
+@media (max-width: 520px) {
+  #myHand {
+    justify-content: flex-start;
+    padding-inline: 8px;
+    scroll-padding-inline: 8px;
+  }
+  .hand-tile { flex: 0 0 auto; }
+}

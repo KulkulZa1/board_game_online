@@ -26,6 +26,11 @@
 - NEON CASCADE at `/arcade/neon-cascade/`: a 45-second one-touch chain-reaction game with deterministic simulation, assisted pulse targeting, rechargeable actions, special cores, wave goals, and score-tripling Overdrive.
 
 ### Changed
+- Lobby board-game cards now use a wider desktop selection surface and a mobile grid action row, preventing vertical `플레이` labels and 390px horizontal overflow while preserving 42px touch targets.
+- BANG! and Mahjong now normalize nicknames on the server and escape server-provided names and logs before `innerHTML` rendering, preventing nickname markup injection without weakening their room or solo flows.
+- BANG! and Mahjong now load the shared service-worker update helper, so newly deployed clients participate in the same cache refresh flow as the rest of the platform.
+- The service worker now bypasses the browser HTTP cache for HTML, JavaScript, CSS, and manifest network-first requests; `boardgame-v11` removes older cached assets during activation.
+- Mahjong mobile hands now start from the left edge of their horizontal scroll area, making every tile reachable and tappable instead of stranding the first tiles at negative coordinates.
 - Vampire Survivors enemy spawn pressure, enemy stats, boss interval, and rewards now scale from the selected difficulty, selected map, and daily modifier.
 - Public `/api/status` now keeps detailed room lists and tunnel URLs loopback-only, and Socket.io no longer defaults to wildcard CORS in production.
 - Multiplayer chat now shows real shared-shell speech bubbles on current main and gives visible feedback when chat is rate limited.

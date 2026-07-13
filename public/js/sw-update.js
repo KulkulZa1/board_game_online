@@ -2,7 +2,7 @@
 (function () {
   if (!('serviceWorker' in navigator)) return;
 
-  var SW_SCRIPT_URL = '/sw.js?v=20260520b';
+  var SW_SCRIPT_URL = '/sw.js?v=20260713a';
   var hadController = Boolean(navigator.serviceWorker.controller);
   var refreshing = false;
 
