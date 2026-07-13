@@ -8,7 +8,7 @@ These notes capture the current launch-readiness checks for the Node/Express sta
 - Local start: `npm start` or `npm run dev`.
 - Render start command: `node server.js`.
 - Render build command: `npm install`.
-- Render auto-deploy trigger: every commit on `main` (`autoDeployTrigger: commit`).
+- Render auto-deploy trigger: every commit on `main` (`On Commit`), verified and restored in the live dashboard on 2026-07-13.
 - Health endpoint: `/api/status`.
 - Render deploys from `main`, so branch changes are not visible on production until the PR is merged and Render redeploys.
 
@@ -54,7 +54,7 @@ This launch-readiness pass found and fixed:
 
 Current production observations before this branch is merged and Render redeploys:
 
-- On 2026-07-11, `/api/version` reported production commit `b0f8b94` on `main`, matching `origin/main`. Render is currently deploying the selected branch correctly; branch-only changes remain absent until merge and redeploy.
+- On 2026-07-13, `/api/version` and the Render event log reported production commit `8fc549d` on `main`. The service source, build command (`npm install`), and start command (`node server.js`) were correct, but dashboard auto-deploy was `Off`; it was restored to `On Commit`. Branch-only changes remain absent until merge and redeploy.
 - The deployed Factory and Bootstrap routes both started successfully with no captured console warnings/errors at desktop size. Factory did not contain the new breakthrough HUD and Bootstrap did not contain the new active-action control, as expected before this branch is merged and redeployed.
 - At a 390x844 production viewport, both routes avoided horizontal page overflow. Bootstrap's dashboard content overflowed its mobile grid height and visually collided with the tutorial/control region; this branch changes the mobile board to content-height document flow.
 - Factory's production mobile HUD placed the throughput/speed box over the phase-stability panel. This branch moves that box above the bottom build controls on narrow screens so the expanded breakthrough panel remains readable.
