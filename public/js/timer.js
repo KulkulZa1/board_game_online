@@ -1,7 +1,7 @@
 // timer.js — Clock display with client-side interpolation
 window.Timer = (function () {
   let _white = null, _black = null, _activeColor = null;
-  let _myColor = null, _isUnlimited = false;
+  let _myColor = null, _isUnlimited = false, _isPaused = false;
   let _syncedAt = null;  // performance.now() at last server tick
   let _rafId = null;
 
@@ -32,6 +32,7 @@ window.Timer = (function () {
     _activeColor = timers.activeColor;
     _myColor    = myColor;
     _isUnlimited = isUnlimited;
+    if (typeof timers.paused === 'boolean') _isPaused = timers.paused;
     _syncedAt   = performance.now();
     render(); // Immediate render on server tick
   }
@@ -53,7 +54,7 @@ window.Timer = (function () {
     }
 
     const opponentColor = _myColor === 'white' ? 'black' : 'white';
-    const elapsed = _syncedAt !== null ? performance.now() - _syncedAt : 0;
+    const elapsed = !_isPaused && _syncedAt !== null ? performance.now() - _syncedAt : 0;
 
     // Interpolate only the currently active color
     const whiteMs = _white !== null
@@ -94,6 +95,12 @@ window.Timer = (function () {
     }
   }
 
+  function setPaused(paused) {
+    _isPaused = !!paused;
+    _syncedAt = performance.now();
+    render();
+  }
+
   function setTime(color, seconds) {
     const ms = Math.max(0, Number(seconds) || 0) * 1000;
     if (color === 'white') _white = ms;
@@ -105,5 +112,5 @@ window.Timer = (function () {
     if (target) target.textContent = formatTime(ms);
   }
 
-  return { update, setTime, formatTime, startLoop, stopLoop };
+  return { update, setTime, setPaused, formatTime, startLoop, stopLoop };
 })();

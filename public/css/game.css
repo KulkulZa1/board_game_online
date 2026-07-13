@@ -83,7 +83,7 @@ html, body {
   right: 0;
   background: rgba(224,85,85,0.9);
   color: #fff;
-  padding: 10px 16px;
+  padding: calc(10px + env(safe-area-inset-top)) 16px 10px;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -670,6 +670,10 @@ html, body {
     height: auto;
     min-height: 100svh;
     overflow: auto;
+  }
+
+  body.has-disconnect-banner #game-layout {
+    padding-top: calc(48px + env(safe-area-inset-top));
   }
 
   #chat-panel {

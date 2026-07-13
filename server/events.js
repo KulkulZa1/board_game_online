@@ -183,8 +183,32 @@ function registerEvents(io) {
       room.players[role].ip        = socket._clientIp;
       socket.join(roomId);
 
-      // Resume timer if both connected
-      if (room.status === 'active' && room.timers.lastTickAt === null) {
+      const bothPlayersConnected = room.players.host.connected && room.players.guest.connected;
+
+      if (room.status === 'active') {
+        clearTimeout(room.cleanupTimer);
+        room.cleanupTimer = null;
+
+        if (!bothPlayersConnected) {
+          const missingRole = role === 'host' ? 'guest' : 'host';
+          room.cleanupTimer = setTimeout(() => {
+            if (room.status !== 'active' || room.players[missingRole].connected) return;
+            const missingColor = getRoleColor(room, missingRole);
+            const winner = missingColor === 'white' ? 'black' : 'white';
+            endGame(room, winner, 'disconnect');
+          }, 10 * 60 * 1000);
+        }
+      } else if (room.status === 'waiting') {
+        clearTimeout(room.cleanupTimer);
+        room.cleanupTimer = setTimeout(() => {
+          if (room.status !== 'waiting') return;
+          state.tokenMap.delete(room.hostToken);
+          state.rooms.delete(room.id);
+          log(`Waiting room cleanup - ${room.id.slice(0, 8)}`);
+        }, 30 * 60 * 1000);
+      }
+
+      if (room.status === 'active' && bothPlayersConnected && room.timers.lastTickAt === null) {
         room.timers.lastTickAt = Date.now();
       }
 
@@ -202,8 +226,10 @@ function registerEvents(io) {
         timers: {
           white:       room.timers.white,
           black:       room.timers.black,
-          activeColor: room.timers.activeColor
+          activeColor: room.timers.activeColor,
+          paused:      room.timers.lastTickAt === null,
         },
+        peerConnected: room.players[getOpponentRole(role)].connected,
         yourColor,
         hostColor:   room.hostColor,
         timeControl: room.timeControl,

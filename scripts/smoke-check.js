@@ -172,6 +172,80 @@ function checkMultiplayerResumeAndOverlaySafety() {
       throw new Error(`${item.style} should remove inactive overlays from keyboard navigation`);
     }
   }
+
+}
+
+function checkConnectionBannerBehavior() {
+  const classes = new Set();
+  const rootElement = {
+    classList: {
+      add: (value) => classes.add(value),
+      remove: (value) => classes.delete(value),
+    },
+  };
+  const banner = { style: { display: 'none' } };
+  const message = { textContent: '' };
+  const context = { window: {}, document: { body: rootElement } };
+  vm.createContext(context);
+  vm.runInContext(fs.readFileSync(path.join(root, 'public/js/connection-banner.js'), 'utf8'), context);
+
+  const ui = context.window.ConnectionBanner.create({ banner, message, root: rootElement });
+  ui.showPeerOffline();
+  if (banner.style.display !== 'flex'
+      || message.textContent !== '상대방 연결이 끊겼습니다. 재접속 대기 중...'
+      || !classes.has('has-disconnect-banner')) {
+    throw new Error('Offline peer should show the reconnect banner and reserve layout space');
+  }
+
+  ui.hide();
+  if (banner.style.display !== 'none' || classes.has('has-disconnect-banner')) {
+    throw new Error('Peer reconnect should hide the banner and release layout space');
+  }
+
+  ui.show('서버 연결 중...');
+  if (message.textContent !== '서버 연결 중...') {
+    throw new Error('Connection banner should replace stale status text');
+  }
+
+  const style = fs.readFileSync(path.join(root, 'public/css/game.css'), 'utf8');
+  if (!style.includes('body.has-disconnect-banner #game-layout')
+      || !style.includes('env(safe-area-inset-top)')) {
+    throw new Error('Mobile reconnect banner should reserve safe-area-aware layout space');
+  }
+}
+
+function checkPausedTimerInterpolation() {
+  const elements = new Map(['my-timer', 'opponent-timer', 'my-bar', 'opponent-bar'].map((id) => [id, {
+    textContent: '',
+    classList: { toggle: () => {} },
+  }]));
+  let now = 0;
+  let frame = null;
+  const context = {
+    window: {},
+    document: { getElementById: (id) => elements.get(id) || null },
+    performance: { now: () => now },
+    requestAnimationFrame: (callback) => { frame = callback; return 1; },
+    cancelAnimationFrame: () => {},
+  };
+  vm.createContext(context);
+  vm.runInContext(fs.readFileSync(path.join(root, 'public/js/timer.js'), 'utf8'), context);
+
+  context.window.Timer.update({ white: 600000, black: 600000, activeColor: 'white', paused: true }, 'white', false);
+  context.window.Timer.startLoop();
+  now = 2000;
+  frame();
+  if (elements.get('my-timer').textContent !== '10:00') {
+    throw new Error('Paused reconnect timer should not interpolate on the client');
+  }
+
+  context.window.Timer.update({ white: 600000, black: 600000, activeColor: 'white', paused: false }, 'white', false);
+  now = 4000;
+  frame();
+  if (elements.get('my-timer').textContent !== '9:58') {
+    throw new Error('Reconnected timer should resume client interpolation');
+  }
+  context.window.Timer.stopLoop();
 }
 
 function checkLobbyMobileLayoutCoverage() {
@@ -1230,6 +1304,64 @@ async function runSocketSmokeCheck() {
   }
 }
 
+async function runCommonReconnectTimerSmokeCheck() {
+  const state = require(path.join(root, 'server', 'state.js'));
+  const host = await openPollingSocket();
+  const guest = await openPollingSocket();
+  const replacementHost = await openPollingSocket();
+  const replacementGuest = await openPollingSocket();
+
+  await emitSocketEvent(host, 'room:create', {
+    hostColor: 'white',
+    timeControl: { type: 'timed', minutes: 1 },
+    gameType: 'connect4',
+    boardSize: { rows: 6, cols: 7 },
+  });
+  const created = await waitForSocketEvent(host, 'room:created');
+  await emitSocketEvent(guest, 'room:join', { roomId: created.roomId });
+  const joined = await waitForSocketEvent(guest, 'room:joined');
+  await waitForSocketEvent(host, 'game:start');
+
+  const room = state.rooms.get(created.roomId);
+  if (!room || room.status !== 'active' || !room.timers.activeColor) {
+    throw new Error('Timed reconnect test room did not start with an active clock');
+  }
+
+  await closePollingSocket(host);
+  await closePollingSocket(guest);
+  const pausedValue = room.timers[room.timers.activeColor];
+  const emptyRoomCleanup = room.cleanupTimer;
+  if (room.timers.lastTickAt !== null) {
+    throw new Error('Timed room should pause after both players disconnect');
+  }
+
+  await emitSocketEvent(replacementHost, 'room:reconnect', { playerToken: created.playerToken });
+  const hostReconnectState = await waitForSocketEvent(replacementHost, 'game:state');
+  if (!hostReconnectState.timers.paused || hostReconnectState.peerConnected !== false) {
+    throw new Error('Single-player reconnect should report a paused timer and offline peer');
+  }
+  await new Promise((resolve) => setTimeout(resolve, 650));
+
+  if (room.timers.lastTickAt !== null || room.timers[room.timers.activeColor] !== pausedValue) {
+    throw new Error('Timed room clock resumed before both players reconnected');
+  }
+  if (!room.cleanupTimer || room.cleanupTimer === emptyRoomCleanup) {
+    throw new Error('Single-player reconnect should replace empty-room cleanup with peer reconnect grace');
+  }
+
+  await emitSocketEvent(replacementGuest, 'room:reconnect', { playerToken: joined.playerToken });
+  const guestReconnectState = await waitForSocketEvent(replacementGuest, 'game:state');
+  if (guestReconnectState.timers.paused || guestReconnectState.peerConnected !== true) {
+    throw new Error('Two-player reconnect should report a resumed timer and connected peer');
+  }
+  if (room.timers.lastTickAt === null || room.cleanupTimer !== null) {
+    throw new Error('Timed room should resume and cancel cleanup after both players reconnect');
+  }
+
+  await closePollingSocket(replacementHost);
+  await closePollingSocket(replacementGuest);
+}
+
 async function runVampireCoopSocketSmokeCheck() {
   const host = await openPollingSocket();
   const guest = await openPollingSocket();
@@ -1348,6 +1480,8 @@ async function main() {
     checkSecurityHelpers();
     checkMultiplayerNicknameSafety();
     checkMultiplayerResumeAndOverlaySafety();
+    checkConnectionBannerBehavior();
+    checkPausedTimerInterpolation();
     checkLobbyMobileLayoutCoverage();
 
     const gameIds = [
@@ -1412,6 +1546,7 @@ async function main() {
     }
 
     await runSocketSmokeCheck();
+    await runCommonReconnectTimerSmokeCheck();
     await runVampireCoopSocketSmokeCheck();
     await runReconnectCleanupSmokeCheck('bang', { nickname: 'QA', size: 4 });
     await runReconnectCleanupSmokeCheck('mahjong', { nickname: 'QA' });

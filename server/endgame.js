@@ -60,7 +60,8 @@ function startGame(room) {
     timers: {
       white:       room.timers.white,
       black:       room.timers.black,
-      activeColor: room.timers.activeColor
+      activeColor: room.timers.activeColor,
+      paused:      false,
     },
     pits:           room.pits           || null,
     edges:          room.edges          || null,
@@ -107,6 +108,7 @@ function approveSpectator(room, spectatorSocketId) {
       white:       room.timers.white,
       black:       room.timers.black,
       activeColor: room.timers.activeColor,
+      paused:      room.timers.lastTickAt === null,
     },
     hostColor:      room.hostColor,
     timeControl:    room.timeControl,
