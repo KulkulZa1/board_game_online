@@ -26,6 +26,8 @@
 - NEON CASCADE at `/arcade/neon-cascade/`: a 45-second one-touch chain-reaction game with deterministic simulation, assisted pulse targeting, rechargeable actions, special cores, wave goals, and score-tripling Overdrive.
 
 ### Changed
+- BANG! now completes a lethal dynamite reaction before advancing the turn. A player saved by Beer resumes the original turn-start draw, while a defeated player advances cleanly to the next survivor; deterministic regression coverage prevents the former AI match deadlock.
+- Timed 1:1 rooms now keep the server and displayed game clocks paused until both players reconnect. A lone returning player receives a fresh peer-reconnect grace period and an explicit offline-peer banner; the pending cleanup is cancelled and the clock resumes once both players are back. The banner reserves safe-area-aware space on mobile, and behavioral smoke coverage verifies its display lifecycle plus the complete disconnect and resume transition.
 - Active BANG! and Mahjong rooms now cancel their pending empty-room cleanup timer after a successful reconnect, preventing a resumed match from disappearing at the original two-minute deadline. Socket smoke coverage verifies reconnect survival and cleanup after everyone leaves again.
 - BANG! and Mahjong now retire expired reconnect tokens without showing a false startup error, and hidden lobby overlays no longer leave invisible enabled controls in the keyboard or assistive-technology path during play.
 - BANG! and Mahjong now charge turn time only after a server-validated action succeeds; invalid targets, riichi declarations, and tsumo claims no longer consume a player's time bank. Their 97 headless engine, full-match, and timer assertions now run as part of `npm run check`.
