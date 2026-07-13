@@ -15,6 +15,10 @@ const { Chess } = require('chess.js');
 const mahjong = require('./mahjong');
 const bang = require('./bang');
 
+function payloadObject(value) {
+  return value && typeof value === 'object' ? value : {};
+}
+
 function registerEvents(io) {
   io.on('connection', (socket) => {
     // 실제 클라이언트 IP (Cloudflare 경유 시 CF-Connecting-IP 헤더 사용)
@@ -30,7 +34,8 @@ function registerEvents(io) {
     bang.register(io, socket);
 
     // --- Room: Create ---
-    socket.on('room:create', ({ hostColor, timeControl, gameType, boardSize, indianPokerOpts }) => {
+    socket.on('room:create', (payload) => {
+      let { hostColor, timeControl, gameType, boardSize, indianPokerOpts } = payloadObject(payload);
       // Rate limit: 1분 내 5회
       if (!rateCheck(socket.id, 'create', 5, 60 * 1000)) {
         socket.emit('room:error', { code: 'RATE_LIMIT', message: '요청이 너무 많습니다. 잠시 후 다시 시도하세요.' });
@@ -113,7 +118,8 @@ function registerEvents(io) {
     });
 
     // --- Room: Join (guest) ---
-    socket.on('room:join', ({ roomId }) => {
+    socket.on('room:join', (payload) => {
+      const { roomId } = payloadObject(payload);
       // Rate limit: 1분에 10회
       if (!rateCheck(socket.id, 'join', 10, 60 * 1000)) return;
       // 입력 검증
@@ -153,7 +159,8 @@ function registerEvents(io) {
     });
 
     // --- Room: Reconnect ---
-    socket.on('room:reconnect', ({ playerToken }) => {
+    socket.on('room:reconnect', (payload) => {
+      const { playerToken } = payloadObject(payload);
       // Rate limit: 1분에 5회
       if (!rateCheck(socket.id, 'reconnect', 5, 60 * 1000)) return;
       if (!playerToken || typeof playerToken !== 'string') return;
@@ -248,6 +255,15 @@ function registerEvents(io) {
         pot:            room.pot !== undefined ? room.pot : null,
         phase:          room.phase          || null,
         hands:          null, // reconnect시 인디언 포커 손패는 재발급 필요
+        hand:           room.gameType === 'texasholdem' && room.hands ? room.hands[role] || null : null,
+        roundNum:       room.roundNum       || 0,
+        roundBet:       room.roundBet       || 0,
+        betTurn:        room.betTurn        || null,
+        raiseCount:     room.raiseCount     || 0,
+        button:         room.button         || null,
+        toCall:         room.gameType === 'texasholdem' && room.betTurn
+                          ? Math.max(0, (room.roundBet || 0) - (room.bets[room.betTurn] || 0))
+                          : 0,
         pits:           room.pits           || null,
         edges:          room.edges          || null,
         boxes:          room.boxes          || null,
@@ -267,6 +283,7 @@ function registerEvents(io) {
 
     // --- Game: Move ---
     socket.on('game:move', (data) => {
+      if (!data || typeof data !== 'object') return;
       // Rate limit: 10초 내 30회
       if (!rateCheck(socket.id, 'move', 30, 10 * 1000)) return;
 
@@ -281,6 +298,7 @@ function registerEvents(io) {
 
     // --- Indian Poker: Action ---
     socket.on('indianpoker:action', (data) => {
+      if (!data || typeof data !== 'object') return;
       if (!rateCheck(socket.id, 'ipaction', 10, 30 * 1000)) return;
       const found = getRoomBySocketId(socket.id);
       if (!found) return;
@@ -316,7 +334,8 @@ function registerEvents(io) {
       if (opponentSocketId) io.to(opponentSocketId).emit('game:draw:offered');
     });
 
-    socket.on('game:draw:respond', ({ accept }) => {
+    socket.on('game:draw:respond', (payload) => {
+      const { accept } = payloadObject(payload);
       if (!rateCheck(socket.id, 'draw_respond', 5, 60 * 1000)) return;
       const found = getRoomBySocketId(socket.id);
       if (!found) return;
@@ -352,7 +371,8 @@ function registerEvents(io) {
       }
     });
 
-    socket.on('game:rematch:respond', ({ accept }) => {
+    socket.on('game:rematch:respond', (payload) => {
+      const { accept } = payloadObject(payload);
       if (!rateCheck(socket.id, 'rematch_res', 3, 60 * 1000)) return;
       const found = getRoomBySocketId(socket.id);
       if (!found) return;
@@ -373,7 +393,8 @@ function registerEvents(io) {
     });
 
     // --- Spectator: Join ---
-    socket.on('spectator:join', ({ roomId, nickname }) => {
+    socket.on('spectator:join', (payload) => {
+      let { roomId, nickname } = payloadObject(payload);
       if (!roomId || typeof roomId !== 'string' || roomId.length > 36) return;
       if (!nickname || typeof nickname !== 'string') nickname = '관전자';
       nickname = nickname.trim().slice(0, 20) || '관전자';
@@ -409,7 +430,8 @@ function registerEvents(io) {
     });
 
     // --- Spectator: Approve/Deny (host only) ---
-    socket.on('spectator:approve', ({ socketId }) => {
+    socket.on('spectator:approve', (payload) => {
+      const { socketId } = payloadObject(payload);
       if (!rateCheck(socket.id, 'spec_approve', 10, 60 * 1000)) return;
       const found = getRoomBySocketId(socket.id);
       if (!found || found.role !== 'host') return;
@@ -418,7 +440,8 @@ function registerEvents(io) {
       approveSpectator(room, socketId);
     });
 
-    socket.on('spectator:deny', ({ socketId }) => {
+    socket.on('spectator:deny', (payload) => {
+      const { socketId } = payloadObject(payload);
       if (!rateCheck(socket.id, 'spec_deny', 10, 60 * 1000)) return;
       const found = getRoomBySocketId(socket.id);
       if (!found || found.role !== 'host') return;
@@ -436,7 +459,8 @@ function registerEvents(io) {
     });
 
     // --- Spectator: Hint ---
-    socket.on('spectator:hint', ({ from, to, row, col }) => {
+    socket.on('spectator:hint', (payload) => {
+      const { from, to, row, col } = payloadObject(payload);
       if (!rateCheck(socket.id, 'hint', 3, 60 * 1000)) {
         socket.emit('spectator:hint:ratelimit', { message: '훈수는 1분에 3회로 제한됩니다.' });
         return;
@@ -492,7 +516,8 @@ function registerEvents(io) {
     });
 
     // --- Chat ---
-    socket.on('chat:send', ({ text }) => {
+    socket.on('chat:send', (payload) => {
+      const { text } = payloadObject(payload);
       // 타입 검증
       if (typeof text !== 'string') return;
       if (!text.trim().length) return;
@@ -554,7 +579,8 @@ function registerEvents(io) {
       socket.emit('vps:room:created', { roomId });
     });
 
-    socket.on('vps:room:join', ({ roomId }) => {
+    socket.on('vps:room:join', (payload) => {
+      const { roomId } = payloadObject(payload);
       if (!rateCheck(socket.id, 'vps_join', 8, 60 * 1000)) return;
       if (!roomId || typeof roomId !== 'string' || !/^[a-f0-9-]{4,36}$/i.test(roomId)) {
         socket.emit('vps:error', { code: 'INVALID_ROOM', message: 'Invalid co-op room.' });
@@ -580,7 +606,8 @@ function registerEvents(io) {
       io.to(room.hostSocketId).emit('vps:guest:joined', { roomId });
     });
 
-    socket.on('vps:guest:input', ({ roomId, input }) => {
+    socket.on('vps:guest:input', (payload) => {
+      const { roomId, input } = payloadObject(payload);
       if (!rateCheck(socket.id, 'vps_input', 40, 5 * 1000)) return;
       const room = state.arcadeVampireRooms.get(roomId);
       if (!room || room.guestSocketId !== socket.id) return;
@@ -593,7 +620,8 @@ function registerEvents(io) {
       io.to(room.hostSocketId).emit('vps:guest:input', { roomId, input: safe });
     });
 
-    socket.on('vps:host:state', ({ roomId, snapshot }) => {
+    socket.on('vps:host:state', (payload) => {
+      const { roomId, snapshot } = payloadObject(payload);
       const room = state.arcadeVampireRooms.get(roomId);
       if (!room || room.hostSocketId !== socket.id || !room.guestSocketId) return;
       const now = Date.now();

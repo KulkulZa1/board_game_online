@@ -9,6 +9,12 @@ window.GameHandlers.texasholdem = (function () {
       onAction:     handleAction,
       spectatorMode,
     });
+    if (st) {
+      TexasHoldemBoard.update(st);
+      if (!spectatorMode && Array.isArray(st.hand)) {
+        TexasHoldemBoard.showDeal({ hand: st.hand, roundNum: st.roundNum || 0 });
+      }
+    }
     return { board: TexasHoldemBoard };
   }
 

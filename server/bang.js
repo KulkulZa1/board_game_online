@@ -886,7 +886,8 @@ function maybeAiReact(room, item) {
 
 // ── 소켓 등록 ─────────────────────────────────────────────────────
 function register(io, socket) {
-  socket.on('bang:create', ({ nickname, size } = {}) => {
+  socket.on('bang:create', (payload) => {
+    const { nickname, size } = payload && typeof payload === 'object' ? payload : {};
     if (!rateCheck(socket.id, 'bg-create', 5, 60 * 1000)) return;
     const room = createRoom(nickname, size);
     const seat = room.seats[0];
@@ -898,7 +899,8 @@ function register(io, socket) {
     log(`[뱅] 방 생성 — ${room.code} (${room.size}인)`);
   });
 
-  socket.on('bang:join', ({ code, nickname } = {}) => {
+  socket.on('bang:join', (payload) => {
+    const { code, nickname } = payload && typeof payload === 'object' ? payload : {};
     if (!rateCheck(socket.id, 'bg-join', 10, 60 * 1000)) return;
     const room = rooms.get(String(code || '').toUpperCase().trim());
     if (!room) return socket.emit('bang:error', { message: '방을 찾을 수 없습니다' });
@@ -920,7 +922,8 @@ function register(io, socket) {
     startMatch(found.room);
   });
 
-  socket.on('bang:reconnect', ({ token } = {}) => {
+  socket.on('bang:reconnect', (payload) => {
+    const { token } = payload && typeof payload === 'object' ? payload : {};
     if (!rateCheck(socket.id, 'bg-rec', 8, 60 * 1000)) return;
     const ref = tokenMap.get(token);
     if (!ref) return socket.emit('bang:error', { message: '만료된 세션입니다', fatal: true });
@@ -936,7 +939,8 @@ function register(io, socket) {
     if (room.status === 'active') emitSeat(room, ref.seat, 'bang:state', gameStateFor(room, ref.seat));
   });
 
-  socket.on('bang:action', (data = {}) => {
+  socket.on('bang:action', (payload) => {
+    const data = payload && typeof payload === 'object' ? payload : {};
     if (!rateCheck(socket.id, 'bg-act', 40, 10 * 1000)) return;
     const found = findBySocket(socket.id);
     if (!found || found.room.status !== 'active') return;

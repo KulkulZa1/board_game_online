@@ -614,6 +614,45 @@ function checkFactoryArcadeCoverage() {
   }
 }
 
+function checkTexasHoldemReconnectUi() {
+  const calls = [];
+  const board = {
+    init(options) { calls.push({ type: 'init', options }); },
+    update(state) { calls.push({ type: 'update', state }); },
+    showDeal(data) { calls.push({ type: 'deal', data }); },
+  };
+  const context = {
+    window: { GameHandlers: {} },
+    TexasHoldemBoard: board,
+  };
+  vm.runInNewContext(
+    fs.readFileSync(path.join(root, 'public/js/game-texasholdem.js'), 'utf8'),
+    context,
+    { filename: 'public/js/game-texasholdem.js' }
+  );
+
+  const state = {
+    phase: 'preflop',
+    community: [],
+    pot: 30,
+    chips: { host: 990, guest: 980 },
+    bets: { host: 10, guest: 20 },
+    roundBet: 20,
+    betTurn: 'host',
+    raiseCount: 0,
+    hand: [{ rank: 14, suit: 's' }, { rank: 13, suit: 's' }],
+    roundNum: 2,
+  };
+  context.window.GameHandlers.texasholdem.initBoard(state, 'white', () => {}, 'host');
+  if (!calls.some((call) => call.type === 'update' && call.state === state)) {
+    throw new Error('Texas Holdem reconnect should restore public table state');
+  }
+  const deal = calls.find((call) => call.type === 'deal');
+  if (!deal || deal.data.hand !== state.hand || deal.data.roundNum !== 2) {
+    throw new Error('Texas Holdem reconnect should restore the requesting player private hand');
+  }
+}
+
 function checkPlantArcadeCoverage() {
   const page = fs.readFileSync(path.join(root, 'public/arcade/plant/index.html'), 'utf8');
   const game = fs.readFileSync(path.join(root, 'public/arcade/plant/game.js'), 'utf8');
@@ -1304,6 +1343,113 @@ async function runSocketSmokeCheck() {
   }
 }
 
+async function runMalformedSocketPayloadSmokeCheck() {
+  const socket = await openPollingSocket();
+  const guardedEvents = [
+    'room:create', 'room:join', 'room:reconnect',
+    'game:draw:respond', 'game:rematch:respond',
+    'spectator:join', 'spectator:approve', 'spectator:deny', 'spectator:hint',
+    'chat:send', 'vps:room:join', 'vps:guest:input', 'vps:host:state',
+    'bang:join', 'bang:reconnect', 'bang:action',
+    'mahjong:join', 'mahjong:reconnect', 'mahjong:action',
+  ];
+
+  for (const eventName of guardedEvents) {
+    await emitSocketEvent(socket, eventName, null);
+  }
+
+  const status = await request('/api/status');
+  if (status.statusCode !== 200) {
+    throw new Error('Server stopped responding after malformed Socket.io payloads');
+  }
+
+  await emitSocketEvent(socket, 'room:create', {
+    hostColor: 'white',
+    timeControl: { type: 'unlimited', minutes: null },
+    gameType: 'connect4',
+    boardSize: { rows: 6, cols: 7 },
+  });
+  const created = await waitForSocketEvent(socket, 'room:created');
+  if (!created.roomId) {
+    throw new Error('Socket did not recover after malformed payloads');
+  }
+  await closePollingSocket(socket);
+}
+
+async function runTexasSpectatorPrivacySmokeCheck() {
+  const host = await openPollingSocket();
+  const guest = await openPollingSocket();
+  const spectator = await openPollingSocket();
+  let replacementHost = null;
+  let replacementGuest = null;
+
+  try {
+    await emitSocketEvent(host, 'room:create', {
+      hostColor: 'white',
+      timeControl: { type: 'timed', minutes: 1 },
+      gameType: 'texasholdem',
+      boardSize: null,
+    });
+    const created = await waitForSocketEvent(host, 'room:created');
+    await emitSocketEvent(guest, 'room:join', { roomId: created.roomId });
+    const joined = await waitForSocketEvent(guest, 'room:joined');
+    await waitForSocketEvent(host, 'game:start');
+    await waitForSocketEvent(guest, 'game:start');
+    await waitForSocketEvent(host, 'texasholdem:dealt');
+    await waitForSocketEvent(guest, 'texasholdem:dealt');
+
+    await emitSocketEvent(spectator, 'spectator:join', {
+      roomId: created.roomId,
+      nickname: 'Privacy QA',
+    });
+    const requestPayload = await waitForSocketEvent(host, 'spectator:request');
+    await waitForSocketEvent(spectator, 'spectator:pending');
+    await emitSocketEvent(host, 'spectator:approve', { socketId: requestPayload.socketId });
+    const approval = await waitForSocketEvent(spectator, 'spectator:approved');
+    if (approval.hands !== null) {
+      throw new Error('Active Texas Holdem spectator received private hands');
+    }
+
+    await emitSocketEvent(host, 'game:move', { action: 'fold' });
+    const hostShowdown = await waitForSocketEvent(host, 'texasholdem:showdown');
+    const spectatorShowdown = await waitForSocketEvent(spectator, 'texasholdem:showdown');
+    for (const result of [hostShowdown, spectatorShowdown]) {
+      if (!result.timers || result.timers.activeColor !== null || result.timers.paused !== true) {
+        throw new Error('Texas Holdem result did not broadcast a stopped clock');
+      }
+    }
+
+    await Promise.all([
+      closePollingSocket(host),
+      closePollingSocket(guest),
+      closePollingSocket(spectator),
+    ]);
+    await new Promise((resolve) => setTimeout(resolve, 3700));
+
+    replacementHost = await openPollingSocket();
+    await emitSocketEvent(replacementHost, 'room:reconnect', { playerToken: created.playerToken });
+    const hostState = await waitForSocketEvent(replacementHost, 'game:state');
+    if (!Array.isArray(hostState.hand) || hostState.hand.length !== 2 || !hostState.timers.paused) {
+      throw new Error('Lone Texas Holdem reconnect should restore its hand with the clock paused');
+    }
+
+    replacementGuest = await openPollingSocket();
+    await emitSocketEvent(replacementGuest, 'room:reconnect', { playerToken: joined.playerToken });
+    const guestState = await waitForSocketEvent(replacementGuest, 'game:state');
+    if (!Array.isArray(guestState.hand) || guestState.hand.length !== 2 || guestState.timers.paused) {
+      throw new Error('Second Texas Holdem reconnect should restore its hand and resume the clock');
+    }
+  } finally {
+    await Promise.allSettled([
+      closePollingSocket(host),
+      closePollingSocket(guest),
+      closePollingSocket(spectator),
+      replacementHost ? closePollingSocket(replacementHost) : Promise.resolve(),
+      replacementGuest ? closePollingSocket(replacementGuest) : Promise.resolve(),
+    ]);
+  }
+}
+
 async function runCommonReconnectTimerSmokeCheck() {
   const state = require(path.join(root, 'server', 'state.js'));
   const host = await openPollingSocket();
@@ -1546,11 +1692,14 @@ async function main() {
     }
 
     await runSocketSmokeCheck();
+    await runMalformedSocketPayloadSmokeCheck();
+    await runTexasSpectatorPrivacySmokeCheck();
     await runCommonReconnectTimerSmokeCheck();
     await runVampireCoopSocketSmokeCheck();
     await runReconnectCleanupSmokeCheck('bang', { nickname: 'QA', size: 4 });
     await runReconnectCleanupSmokeCheck('mahjong', { nickname: 'QA' });
     checkChatBubbleUi();
+    checkTexasHoldemReconnectUi();
     await checkDeploymentCachePolicy();
     checkServiceWorkerUpdateCoverage();
     checkVersionBadgeCoverage();

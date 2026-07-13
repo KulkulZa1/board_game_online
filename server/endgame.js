@@ -115,7 +115,7 @@ function approveSpectator(room, spectatorSocketId) {
     chat:           room.chat,
     winner:         room.winner,
     spectatorCount: approvedCount,
-    hands:          room.hands          || null, // 인디언 포커: 관전자는 두 카드 모두 공개
+    hands:          _spectatorHands(room),
     chips:          room.chips          || null,
     pot:            room.pot   !== undefined ? room.pot : null,
     phase:          room.phase          || null,
@@ -138,6 +138,12 @@ function approveSpectator(room, spectatorSocketId) {
   });
 
   log(`관전자 승인 — ${spec.nickname} → 방 ${room.id.slice(0,8)}`);
+}
+
+function _spectatorHands(room) {
+  if (!room.hands) return null;
+  if (room.gameType !== 'texasholdem') return room.hands;
+  return room.phase === 'showdown' || room.status === 'finished' ? room.hands : null;
 }
 
 module.exports = { endGame, startGame, approveSpectator };

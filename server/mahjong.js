@@ -710,7 +710,8 @@ function aiRespondCall(room, seat, offer) {
 
 // ── 소켓 등록 ─────────────────────────────────────────────────────
 function register(io, socket) {
-  socket.on('mahjong:create', ({ nickname } = {}) => {
+  socket.on('mahjong:create', (payload) => {
+    const { nickname } = payload && typeof payload === 'object' ? payload : {};
     if (!rateCheck(socket.id, 'mj-create', 5, 60 * 1000)) return;
     const room = createRoom(nickname);
     const seat = room.seats[0];
@@ -722,7 +723,8 @@ function register(io, socket) {
     log(`[마작] 방 생성 — ${room.code}`);
   });
 
-  socket.on('mahjong:join', ({ code, nickname } = {}) => {
+  socket.on('mahjong:join', (payload) => {
+    const { code, nickname } = payload && typeof payload === 'object' ? payload : {};
     if (!rateCheck(socket.id, 'mj-join', 10, 60 * 1000)) return;
     const room = rooms.get(String(code || '').toUpperCase().trim());
     if (!room) return socket.emit('mahjong:error', { message: '방을 찾을 수 없습니다' });
@@ -746,7 +748,8 @@ function register(io, socket) {
     startMatch(room);
   });
 
-  socket.on('mahjong:reconnect', ({ token } = {}) => {
+  socket.on('mahjong:reconnect', (payload) => {
+    const { token } = payload && typeof payload === 'object' ? payload : {};
     if (!rateCheck(socket.id, 'mj-rec', 8, 60 * 1000)) return;
     const ref = tokenMap.get(token);
     if (!ref) return socket.emit('mahjong:error', { message: '만료된 세션입니다', fatal: true });
@@ -762,7 +765,8 @@ function register(io, socket) {
     if (room.status === 'active') emitSeat(room, ref.seat, 'mahjong:state', gameStateFor(room, ref.seat));
   });
 
-  socket.on('mahjong:action', (data = {}) => {
+  socket.on('mahjong:action', (payload) => {
+    const data = payload && typeof payload === 'object' ? payload : {};
     if (!rateCheck(socket.id, 'mj-act', 40, 10 * 1000)) return;
     const found = findBySocket(socket.id);
     if (!found || found.room.status !== 'active') return;

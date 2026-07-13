@@ -30,7 +30,9 @@ function resetRoom(room) {
   room.currentTurn = room.hostColor;
 }
 
-function handleMove(socket, room, role, { edge }) {
+function handleMove(socket, room, role, data) {
+  if (!data || typeof data !== 'object') return;
+  const { edge } = data;
   if (!edge) return;
   const { type, row, col } = edge;
   if (!['h', 'v'].includes(type)) return;

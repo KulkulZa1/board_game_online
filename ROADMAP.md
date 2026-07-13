@@ -2,7 +2,7 @@
 
 ## Current Status: v1.4.0
 
-**Last reviewed: 2026-05-19 — three-layer model confirmed. See Architecture section below.**
+**Last reviewed: 2026-07-14 — three-layer model confirmed. See Architecture section below.**
 
 ---
 
@@ -57,6 +57,7 @@ Full Japanese riichi mahjong is tracked as a future candidate, but should start 
 - **Arcade layer:** solo games at `/arcade/*` (snake, breakout, vampire, plant, tower-defense, factory, bootstrap, jackpot, neon-cascade)
 - **Sandbox layer:** 3 config-driven design tools (vampire-survivors, plant-growing, tower-defense)
 - **Smoke tests:** `scripts/smoke-test.js` — 70+ assertions covering board game handlers + HTTP routes
+- **Newer game rule tests:** execution-level Backgammon, Texas Hold'em, and Dots and Boxes checks run through `npm run test:games`
 
 ---
 
@@ -174,6 +175,7 @@ Real-time action games, 3D/physics games → Unity spin-off (v2)
 | `ADDING_AN_ARCADE_GAME.md` | Guide to add a new arcade game (Layer B) |
 | `CLAUDE.md` | Architecture + conventions for AI assistants |
 | `server/handlers/index.js` | Game registry — one line per game |
+| `server/rules/backgammon.js` | Pure Backgammon legal-move and bearing-off rules |
 | `public/js/game-registry.js` | Frontend game metadata — one entry per game |
 | `server/events.js` | All socket event handlers |
 | `public/js/game.js` | Frontend orchestrator |
@@ -215,9 +217,9 @@ are scope management issues, not language/framework deficiencies.
 
 ### Next 5 tasks (in priority order)
 1. Validate all 12 board games manually on mobile (reconnect + rematch edge cases)
-2. Add per-game handler unit tests for at least 3 of the newer games (backgammon, texasholdem, dotsboxes)
+2. ✅ Add per-game handler rule tests for Backgammon, Texas Hold'em, and Dots and Boxes
 3. Replace AdMob placeholder IDs if targeting Android release
 4. Tune `문명 키우기` action charge, Golden Age duration, and era pacing after mobile playtests; only then decide the next civilization era slice.
 5. Keep arcade additions focused on reusable systems and avoid new disconnected prototypes until current solo games are stable.
 
-*Last updated: 2026-05-19*
+*Last updated: 2026-07-14*

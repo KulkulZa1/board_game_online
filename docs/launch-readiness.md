@@ -18,10 +18,21 @@ These notes capture the current launch-readiness checks for the Node/Express sta
 - Admin routes are available to loopback requests by default. Set `ENABLE_ADMIN_ROUTES=true` only if a controlled deployment intentionally needs remote admin shutdown endpoints.
 - Socket.io defaults to the Render production origin plus local/LAN development origins. Set `ALLOWED_ORIGINS` to a comma-separated list when adding a tunnel or alternate production domain.
 - Do not commit `.env`, `.shutdown-key`, server logs, or pid files.
+- Treat every Socket.io payload as untrusted. Shared, BANG!, Mahjong, and Vampire co-op listeners now normalize null/non-object values before destructuring, with an actual polling-socket crash regression in `npm run test:full`.
 
 ## Current audit snapshot
 
 This launch-readiness pass found and fixed:
+- Backgammon now rejects legal-looking first moves that waste another playable die, including the standard higher-die priority when only one distinct die can be used.
+- Texas Hold'em now derives timers and winners from the current host/guest color mapping, settles unmatched chips before short-all-in showdowns, runs out the board without waiting for an impossible action, and pauses the clock while results are visible.
+- Texas Hold'em and Dots and Boxes reject null move payloads before destructuring them, preventing malformed socket input from throwing in the handler.
+- Active Texas Hold'em spectator approval no longer exposes either player's private cards; hands are included only after showdown starts or the game is finished.
+- Socket.io event boundaries now normalize malformed payloads before destructuring. The live polling smoke sends null room, rematch, spectator, chat, co-op, BANG!, and Mahjong events, then creates a valid room to prove the process stayed healthy.
+- Texas Hold'em reconnect state now includes only the requesting player's hand plus round/bet/button data. Its client rebuilds the public table and private cards, while a round dealt during a disconnect remains timer-paused until both players return.
+- The polling-socket smoke now runs a complete Texas Hold'em host/guest/spectator flow, verifies active-hand redaction and stopped result clocks, disconnects both players between rounds, and verifies private-hand restoration plus timer resume on two-player reconnect.
+- Hold'em fold and showdown paths publish the stopped timer through the shared `timer:tick` channel as well as the result payload, so browser clocks do not keep interpolating during the result delay.
+- Backgammon's recursive legal-sequence calculation is isolated in `server/rules/backgammon.js` and remains available through the existing handler API.
+- `npm run test:games` now executes 36 rule and privacy assertions for Backgammon, Texas Hold'em, and Dots and Boxes in addition to the existing Mahjong and BANG! suites.
 - BANG! no longer deadlocks when dynamite causes lethal damage at turn start. The lethal response resolves before turn advancement, Beer survival resumes the interrupted draw, and the game-flow suite captures a timeout state snapshot if any future full match stops progressing.
 - Active BANG! and Mahjong rooms no longer retain the two-minute empty-room cleanup timer after a player reconnects. The socket smoke suite verifies that the room survives the old deadline and is still removed after the final player disconnects again.
 - Timed 1:1 rooms keep both the authoritative server clock and the displayed client clock paused while either player is offline. Reconnecting one player replaces empty-room cleanup with the peer's reconnect grace period and shows a mobile-safe offline banner; reconnecting both clears the reservation, hides the banner, and resumes the clock without a backward time jump.
