@@ -174,6 +174,7 @@ function startMatch(room) {
     turnStartedAt: null,
     winners: null,
     aggroVsSheriff: new Array(n).fill(0),
+    pendingTurnResume: null,
   };
   room.game = g;
   // 배패: 체력만큼
@@ -216,7 +217,17 @@ function beginTurn(room, seat) {
       addLog(room, `🧨 ${p.name} 앞에서 다이너마이트 폭발! (피해 3)`);
       discardCard(g, p.dynamite); p.dynamite = null;
       applyDamage(room, seat, 3, null);
-      if (g.winners || p.hp <= 0) { if (!g.winners) endTurnCore(room); return; }
+      if (g.winners) return;
+      if (p.hp <= 0) {
+        const lethal = g.queue[0];
+        if (lethal && lethal.type === 'lethal' && lethal.actor === seat) {
+          g.pendingTurnResume = seat;
+          processQueue(room);
+        } else {
+          beginTurn(room, nextAlive(g, seat));
+        }
+        return;
+      }
     } else {
       addLog(room, `🧨 다이너마이트가 ${p.name}을(를) 지나쳐 왼쪽으로`);
       const nx = nextAlive(g, seat);
@@ -303,6 +314,13 @@ function processQueue(room) {
   const item = g.queue[0];
   if (!item) { // 큐 소진 — 턴 주인에게 제어 반환
     g.phase = 'turn';
+    if (g.pendingTurnResume !== null) {
+      const resumeSeat = g.pendingTurnResume;
+      g.pendingTurnResume = null;
+      const nextSeat = g.players[resumeSeat].hp > 0 ? resumeSeat : nextAlive(g, resumeSeat);
+      beginTurn(room, nextSeat);
+      return;
+    }
     if (g.pendingEndTurn) { g.pendingEndTurn = false; endTurnCore(room); return; }
     armTurnTimer(room, g.turn);
     pushState(room);
