@@ -507,6 +507,7 @@ h2 {
   cursor: pointer;
   transition: all 0.2s;
   flex: 1;
+  white-space: nowrap;
 }
 
 .btn-play:disabled {
@@ -545,7 +546,16 @@ h2 {
 
 /* 로비 컨테이너 더 넓게 (게임 카드 3개) */
 .lobby-container {
+  max-width: 840px;
+}
+
+#create-section,
+#waiting-section,
+#join-section,
+#error-section {
+  width: 100%;
   max-width: 560px;
+  margin-inline: auto;
 }
 
 @media (max-width: 480px) {
@@ -553,20 +563,36 @@ h2 {
     grid-template-columns: repeat(1, 1fr);
   }
   .game-card {
-    flex-direction: row;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
     text-align: left;
     padding: 16px;
   }
   .game-card-icon {
+    grid-column: 1;
+    grid-row: 1 / span 2;
     font-size: 32px;
     margin-bottom: 0;
   }
+  .game-card-name,
   .game-card-desc {
-    flex: none;
+    grid-column: 2;
+    min-width: 0;
   }
+  .card-actions {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    min-width: 0;
+  }
+  .btn-rules,
+  .btn-solo,
   .btn-play {
-    width: auto;
-    flex-shrink: 0;
+    width: 100%;
+    min-width: 0;
+    min-height: 42px;
+    padding: 8px 6px;
   }
 }
 

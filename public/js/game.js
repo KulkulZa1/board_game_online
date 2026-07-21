@@ -56,6 +56,10 @@
   const spectatorRequestToast   = document.getElementById('spectator-request-toast');
   const disconnectBanner        = document.getElementById('disconnect-banner');
   const disconnectMsg           = document.getElementById('disconnect-msg');
+  const connectionBanner        = window.ConnectionBanner.create({
+    banner: disconnectBanner,
+    message: disconnectMsg,
+  });
   const turnIndicator           = document.getElementById('turn-indicator');
   const gameoverModal           = document.getElementById('gameover-modal');
   const drawModal               = document.getElementById('draw-modal');
@@ -98,6 +102,7 @@
 
   socket.on('disconnect', () => {
     if (ActiveBoard) ActiveBoard.setMyTurn(false);
+    Timer.setPaused(true);
   });
 
   socket.on('reconnect', () => {
@@ -177,6 +182,7 @@
       updateTurnIndicator(state.currentTurn || (state.timers && state.timers.activeColor));
       Timer.update(state.timers, myColor, isUnlimited);
       Timer.startLoop();
+      if (state.peerConnected === false) connectionBanner.showPeerOffline();
       if (state.moves && state.moves.length > 0) {
         state.moves.forEach(m => appendMoveToList(m));
       }
@@ -310,7 +316,8 @@
   // ========== Disconnect / reconnect ==========
   socket.on('player:disconnected', ({ role }) => {
     if (role !== myRole) {
-      showBanner('상대방 연결이 끊겼습니다. 재접속 대기 중...', true);
+      Timer.setPaused(true);
+      connectionBanner.showPeerOffline();
     }
   });
 
@@ -855,12 +862,11 @@
   }
 
   function showBanner(msg, persistent) {
-    disconnectBanner.style.display = 'flex';
-    disconnectMsg.textContent = msg;
+    connectionBanner.show(msg);
   }
 
   function hideBanner() {
-    disconnectBanner.style.display = 'none';
+    connectionBanner.hide();
   }
 
   function showToastMsg(msg) {

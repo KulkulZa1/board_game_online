@@ -102,6 +102,167 @@ function checkSecurityHelpers() {
   }
 }
 
+function checkMultiplayerNicknameSafety() {
+  const { sanitizeNickname } = require('../server/utils');
+  const sanitized = sanitizeNickname('  <b>홍길동</b>\n<script>  ');
+  if (/[<>&"'\x60\r\n]/.test(sanitized) || Array.from(sanitized).length > 12) {
+    throw new Error(`sanitizeNickname left unsafe or oversized content: "${sanitized}"`);
+  }
+  if (sanitizeNickname('', '손님') !== '손님') {
+    throw new Error('sanitizeNickname should use its fallback for empty input');
+  }
+
+  const requiredEscapes = {
+    'public/js/bang-client.js': ['escapeHtml(s.name)', 'escapeHtml(p.name)', 'escapeHtml(l)'],
+    'public/js/mahjong-client.js': ['escapeHtml(s.name)', 'escapeHtml(st.names[seat])', 'escapeHtml(r.name)'],
+  };
+  for (const [file, fragments] of Object.entries(requiredEscapes)) {
+    const source = fs.readFileSync(path.join(root, file), 'utf8');
+    const missing = fragments.filter((fragment) => !source.includes(fragment));
+    if (missing.length) {
+      throw new Error(`${file} should escape server-provided names before innerHTML rendering: ${missing.join(', ')}`);
+    }
+  }
+
+  const mahjongPage = fs.readFileSync(path.join(root, 'public/mahjong.html'), 'utf8');
+  const mahjongStyle = fs.readFileSync(path.join(root, 'public/css/games/mahjong.css'), 'utf8');
+  if (!mahjongPage.includes('mahjong.css?v=1.4') || !mahjongStyle.includes('justify-content: flex-start')) {
+    throw new Error('Mahjong mobile hand should expose every tile through a left-aligned scroll area');
+  }
+}
+
+function checkMultiplayerResumeAndOverlaySafety() {
+  const cases = [
+    {
+      page: 'public/bang.html',
+      client: 'public/js/bang-client.js',
+      style: 'public/css/games/bang.css',
+      versions: ['bang.css?v=1.1', 'bang-client.js?v=1.2'],
+    },
+    {
+      page: 'public/mahjong.html',
+      client: 'public/js/mahjong-client.js',
+      style: 'public/css/games/mahjong.css',
+      versions: ['mahjong.css?v=1.4', 'mahjong-client.js?v=1.4'],
+    },
+  ];
+  const clientMarkers = [
+    'let reconnectPending = false;',
+    'const resumeFailed = fatal && reconnectPending;',
+    'const token = store.token;',
+    'reconnectPending = true;',
+    'setLobbyVisible(false);',
+    'overlay.inert = !visible;',
+  ];
+
+  for (const item of cases) {
+    const page = fs.readFileSync(path.join(root, item.page), 'utf8');
+    const client = fs.readFileSync(path.join(root, item.client), 'utf8');
+    const style = fs.readFileSync(path.join(root, item.style), 'utf8');
+    const missing = clientMarkers.filter((marker) => !client.includes(marker));
+    if (missing.length) {
+      throw new Error(`${item.client} should silently retire stale reconnect tokens and hide inactive lobby controls: ${missing.join(', ')}`);
+    }
+    if (!page.includes('id="lobbyOverlay" class="overlay visible" aria-hidden="false"')
+        || item.versions.some((version) => !page.includes(version))) {
+      throw new Error(`${item.page} should expose an accessible initial lobby and version the updated assets`);
+    }
+    if (!style.includes('visibility: hidden; pointer-events: none;')
+        || !style.includes('visibility: visible; pointer-events: all;')) {
+      throw new Error(`${item.style} should remove inactive overlays from keyboard navigation`);
+    }
+  }
+
+}
+
+function checkConnectionBannerBehavior() {
+  const classes = new Set();
+  const rootElement = {
+    classList: {
+      add: (value) => classes.add(value),
+      remove: (value) => classes.delete(value),
+    },
+  };
+  const banner = { style: { display: 'none' } };
+  const message = { textContent: '' };
+  const context = { window: {}, document: { body: rootElement } };
+  vm.createContext(context);
+  vm.runInContext(fs.readFileSync(path.join(root, 'public/js/connection-banner.js'), 'utf8'), context);
+
+  const ui = context.window.ConnectionBanner.create({ banner, message, root: rootElement });
+  ui.showPeerOffline();
+  if (banner.style.display !== 'flex'
+      || message.textContent !== '상대방 연결이 끊겼습니다. 재접속 대기 중...'
+      || !classes.has('has-disconnect-banner')) {
+    throw new Error('Offline peer should show the reconnect banner and reserve layout space');
+  }
+
+  ui.hide();
+  if (banner.style.display !== 'none' || classes.has('has-disconnect-banner')) {
+    throw new Error('Peer reconnect should hide the banner and release layout space');
+  }
+
+  ui.show('서버 연결 중...');
+  if (message.textContent !== '서버 연결 중...') {
+    throw new Error('Connection banner should replace stale status text');
+  }
+
+  const style = fs.readFileSync(path.join(root, 'public/css/game.css'), 'utf8');
+  if (!style.includes('body.has-disconnect-banner #game-layout')
+      || !style.includes('env(safe-area-inset-top)')) {
+    throw new Error('Mobile reconnect banner should reserve safe-area-aware layout space');
+  }
+}
+
+function checkPausedTimerInterpolation() {
+  const elements = new Map(['my-timer', 'opponent-timer', 'my-bar', 'opponent-bar'].map((id) => [id, {
+    textContent: '',
+    classList: { toggle: () => {} },
+  }]));
+  let now = 0;
+  let frame = null;
+  const context = {
+    window: {},
+    document: { getElementById: (id) => elements.get(id) || null },
+    performance: { now: () => now },
+    requestAnimationFrame: (callback) => { frame = callback; return 1; },
+    cancelAnimationFrame: () => {},
+  };
+  vm.createContext(context);
+  vm.runInContext(fs.readFileSync(path.join(root, 'public/js/timer.js'), 'utf8'), context);
+
+  context.window.Timer.update({ white: 600000, black: 600000, activeColor: 'white', paused: true }, 'white', false);
+  context.window.Timer.startLoop();
+  now = 2000;
+  frame();
+  if (elements.get('my-timer').textContent !== '10:00') {
+    throw new Error('Paused reconnect timer should not interpolate on the client');
+  }
+
+  context.window.Timer.update({ white: 600000, black: 600000, activeColor: 'white', paused: false }, 'white', false);
+  now = 4000;
+  frame();
+  if (elements.get('my-timer').textContent !== '9:58') {
+    throw new Error('Reconnected timer should resume client interpolation');
+  }
+  context.window.Timer.stopLoop();
+}
+
+function checkLobbyMobileLayoutCoverage() {
+  const page = fs.readFileSync(path.join(root, 'public/index.html'), 'utf8');
+  const style = fs.readFileSync(path.join(root, 'public/css/lobby.css'), 'utf8');
+  const required = [
+    'grid-template-columns: auto minmax(0, 1fr)',
+    'grid-column: 1 / -1',
+    'grid-template-columns: repeat(3, minmax(0, 1fr))',
+    'min-height: 42px',
+  ];
+  const missing = required.filter((fragment) => !style.includes(fragment));
+  if (missing.length || !page.includes('css/lobby.css?v=1.5')) {
+    throw new Error(`Mobile lobby cards should keep actions inside the viewport: ${missing.join(', ') || 'asset version'}`);
+  }
+}
+
 function runSyntaxCheck() {
   if (!checkJavaScriptSyntax()) {
     throw new Error('JS syntax check failed');
@@ -276,8 +437,11 @@ async function checkDeploymentCachePolicy() {
   if (sw.body.includes('stale-while-revalidate') || !sw.body.includes('networkFirst(request)')) {
     throw new Error('Service worker should use network-first JS/CSS so deployed game logic appears immediately');
   }
-  if (!sw.body.includes("CACHE_NAME   = 'boardgame-v10'")) {
+  if (!sw.body.includes("CACHE_NAME   = 'boardgame-v11'")) {
     throw new Error('Service worker cache namespace should invalidate pre-progression arcade assets');
+  }
+  if (!sw.body.includes("fetch(request, { cache: 'no-store' })")) {
+    throw new Error('Service worker network-first fetches should bypass the browser HTTP cache');
   }
 
   const chat = await checkUrl('/js/chat.js');
@@ -447,6 +611,45 @@ function checkFactoryArcadeCoverage() {
   const savedDeposit = stateApi.restoreDeposit({ resource: 'copper_ore', amount: 321, max: 900 }, () => true, 600);
   if (!legacyDeposit || legacyDeposit.amount !== 600 || !savedDeposit || savedDeposit.amount !== 321) {
     throw new Error('Factory save migration should restore legacy and quantity-aware deposits');
+  }
+}
+
+function checkTexasHoldemReconnectUi() {
+  const calls = [];
+  const board = {
+    init(options) { calls.push({ type: 'init', options }); },
+    update(state) { calls.push({ type: 'update', state }); },
+    showDeal(data) { calls.push({ type: 'deal', data }); },
+  };
+  const context = {
+    window: { GameHandlers: {} },
+    TexasHoldemBoard: board,
+  };
+  vm.runInNewContext(
+    fs.readFileSync(path.join(root, 'public/js/game-texasholdem.js'), 'utf8'),
+    context,
+    { filename: 'public/js/game-texasholdem.js' }
+  );
+
+  const state = {
+    phase: 'preflop',
+    community: [],
+    pot: 30,
+    chips: { host: 990, guest: 980 },
+    bets: { host: 10, guest: 20 },
+    roundBet: 20,
+    betTurn: 'host',
+    raiseCount: 0,
+    hand: [{ rank: 14, suit: 's' }, { rank: 13, suit: 's' }],
+    roundNum: 2,
+  };
+  context.window.GameHandlers.texasholdem.initBoard(state, 'white', () => {}, 'host');
+  if (!calls.some((call) => call.type === 'update' && call.state === state)) {
+    throw new Error('Texas Holdem reconnect should restore public table state');
+  }
+  const deal = calls.find((call) => call.type === 'deal');
+  if (!deal || deal.data.hand !== state.hand || deal.data.roundNum !== 2) {
+    throw new Error('Texas Holdem reconnect should restore the requesting player private hand');
   }
 }
 
@@ -1096,6 +1299,13 @@ async function emitSocketEvent(socket, eventName, payload) {
   }
 }
 
+async function closePollingSocket(socket) {
+  const res = await httpRequest('POST', socketPath(socket), '41');
+  if (res.statusCode !== 200) {
+    throw new Error(`Socket.io disconnect failed: HTTP ${res.statusCode}`);
+  }
+}
+
 async function waitForSocketEvent(socket, eventName, timeoutMs = 5000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -1131,6 +1341,171 @@ async function runSocketSmokeCheck() {
   if (hostStart.gameType !== 'connect4' || guestStart.gameType !== 'connect4') {
     throw new Error('Connect4 game:start was not delivered to both players');
   }
+}
+
+async function runMalformedSocketPayloadSmokeCheck() {
+  const socket = await openPollingSocket();
+  const guardedEvents = [
+    'room:create', 'room:join', 'room:reconnect',
+    'game:draw:respond', 'game:rematch:respond',
+    'spectator:join', 'spectator:approve', 'spectator:deny', 'spectator:hint',
+    'chat:send', 'vps:room:join', 'vps:guest:input', 'vps:host:state',
+    'bang:join', 'bang:reconnect', 'bang:action',
+    'mahjong:join', 'mahjong:reconnect', 'mahjong:action',
+  ];
+
+  for (const eventName of guardedEvents) {
+    await emitSocketEvent(socket, eventName, null);
+  }
+
+  const status = await request('/api/status');
+  if (status.statusCode !== 200) {
+    throw new Error('Server stopped responding after malformed Socket.io payloads');
+  }
+
+  await emitSocketEvent(socket, 'room:create', {
+    hostColor: 'white',
+    timeControl: { type: 'unlimited', minutes: null },
+    gameType: 'connect4',
+    boardSize: { rows: 6, cols: 7 },
+  });
+  const created = await waitForSocketEvent(socket, 'room:created');
+  if (!created.roomId) {
+    throw new Error('Socket did not recover after malformed payloads');
+  }
+  await closePollingSocket(socket);
+}
+
+async function runTexasSpectatorPrivacySmokeCheck() {
+  const host = await openPollingSocket();
+  const guest = await openPollingSocket();
+  const spectator = await openPollingSocket();
+  let replacementHost = null;
+  let replacementGuest = null;
+
+  try {
+    await emitSocketEvent(host, 'room:create', {
+      hostColor: 'white',
+      timeControl: { type: 'timed', minutes: 1 },
+      gameType: 'texasholdem',
+      boardSize: null,
+    });
+    const created = await waitForSocketEvent(host, 'room:created');
+    await emitSocketEvent(guest, 'room:join', { roomId: created.roomId });
+    const joined = await waitForSocketEvent(guest, 'room:joined');
+    await waitForSocketEvent(host, 'game:start');
+    await waitForSocketEvent(guest, 'game:start');
+    await waitForSocketEvent(host, 'texasholdem:dealt');
+    await waitForSocketEvent(guest, 'texasholdem:dealt');
+
+    await emitSocketEvent(spectator, 'spectator:join', {
+      roomId: created.roomId,
+      nickname: 'Privacy QA',
+    });
+    const requestPayload = await waitForSocketEvent(host, 'spectator:request');
+    await waitForSocketEvent(spectator, 'spectator:pending');
+    await emitSocketEvent(host, 'spectator:approve', { socketId: requestPayload.socketId });
+    const approval = await waitForSocketEvent(spectator, 'spectator:approved');
+    if (approval.hands !== null) {
+      throw new Error('Active Texas Holdem spectator received private hands');
+    }
+
+    await emitSocketEvent(host, 'game:move', { action: 'fold' });
+    const hostShowdown = await waitForSocketEvent(host, 'texasholdem:showdown');
+    const spectatorShowdown = await waitForSocketEvent(spectator, 'texasholdem:showdown');
+    for (const result of [hostShowdown, spectatorShowdown]) {
+      if (!result.timers || result.timers.activeColor !== null || result.timers.paused !== true) {
+        throw new Error('Texas Holdem result did not broadcast a stopped clock');
+      }
+    }
+
+    await Promise.all([
+      closePollingSocket(host),
+      closePollingSocket(guest),
+      closePollingSocket(spectator),
+    ]);
+    await new Promise((resolve) => setTimeout(resolve, 3700));
+
+    replacementHost = await openPollingSocket();
+    await emitSocketEvent(replacementHost, 'room:reconnect', { playerToken: created.playerToken });
+    const hostState = await waitForSocketEvent(replacementHost, 'game:state');
+    if (!Array.isArray(hostState.hand) || hostState.hand.length !== 2 || !hostState.timers.paused) {
+      throw new Error('Lone Texas Holdem reconnect should restore its hand with the clock paused');
+    }
+
+    replacementGuest = await openPollingSocket();
+    await emitSocketEvent(replacementGuest, 'room:reconnect', { playerToken: joined.playerToken });
+    const guestState = await waitForSocketEvent(replacementGuest, 'game:state');
+    if (!Array.isArray(guestState.hand) || guestState.hand.length !== 2 || guestState.timers.paused) {
+      throw new Error('Second Texas Holdem reconnect should restore its hand and resume the clock');
+    }
+  } finally {
+    await Promise.allSettled([
+      closePollingSocket(host),
+      closePollingSocket(guest),
+      closePollingSocket(spectator),
+      replacementHost ? closePollingSocket(replacementHost) : Promise.resolve(),
+      replacementGuest ? closePollingSocket(replacementGuest) : Promise.resolve(),
+    ]);
+  }
+}
+
+async function runCommonReconnectTimerSmokeCheck() {
+  const state = require(path.join(root, 'server', 'state.js'));
+  const host = await openPollingSocket();
+  const guest = await openPollingSocket();
+  const replacementHost = await openPollingSocket();
+  const replacementGuest = await openPollingSocket();
+
+  await emitSocketEvent(host, 'room:create', {
+    hostColor: 'white',
+    timeControl: { type: 'timed', minutes: 1 },
+    gameType: 'connect4',
+    boardSize: { rows: 6, cols: 7 },
+  });
+  const created = await waitForSocketEvent(host, 'room:created');
+  await emitSocketEvent(guest, 'room:join', { roomId: created.roomId });
+  const joined = await waitForSocketEvent(guest, 'room:joined');
+  await waitForSocketEvent(host, 'game:start');
+
+  const room = state.rooms.get(created.roomId);
+  if (!room || room.status !== 'active' || !room.timers.activeColor) {
+    throw new Error('Timed reconnect test room did not start with an active clock');
+  }
+
+  await closePollingSocket(host);
+  await closePollingSocket(guest);
+  const pausedValue = room.timers[room.timers.activeColor];
+  const emptyRoomCleanup = room.cleanupTimer;
+  if (room.timers.lastTickAt !== null) {
+    throw new Error('Timed room should pause after both players disconnect');
+  }
+
+  await emitSocketEvent(replacementHost, 'room:reconnect', { playerToken: created.playerToken });
+  const hostReconnectState = await waitForSocketEvent(replacementHost, 'game:state');
+  if (!hostReconnectState.timers.paused || hostReconnectState.peerConnected !== false) {
+    throw new Error('Single-player reconnect should report a paused timer and offline peer');
+  }
+  await new Promise((resolve) => setTimeout(resolve, 650));
+
+  if (room.timers.lastTickAt !== null || room.timers[room.timers.activeColor] !== pausedValue) {
+    throw new Error('Timed room clock resumed before both players reconnected');
+  }
+  if (!room.cleanupTimer || room.cleanupTimer === emptyRoomCleanup) {
+    throw new Error('Single-player reconnect should replace empty-room cleanup with peer reconnect grace');
+  }
+
+  await emitSocketEvent(replacementGuest, 'room:reconnect', { playerToken: joined.playerToken });
+  const guestReconnectState = await waitForSocketEvent(replacementGuest, 'game:state');
+  if (guestReconnectState.timers.paused || guestReconnectState.peerConnected !== true) {
+    throw new Error('Two-player reconnect should report a resumed timer and connected peer');
+  }
+  if (room.timers.lastTickAt === null || room.cleanupTimer !== null) {
+    throw new Error('Timed room should resume and cancel cleanup after both players reconnect');
+  }
+
+  await closePollingSocket(replacementHost);
+  await closePollingSocket(replacementGuest);
 }
 
 async function runVampireCoopSocketSmokeCheck() {
@@ -1179,6 +1554,55 @@ async function runVampireCoopSocketSmokeCheck() {
   }
 }
 
+async function runReconnectCleanupSmokeCheck(gameName, createPayload) {
+  const gameModule = require(path.join(root, 'server', `${gameName}.js`));
+  const event = (suffix) => `${gameName}:${suffix}`;
+  const originalCleanupMs = gameModule.CFG.disconnectCleanupMs;
+  const cleanupMs = 1000;
+  gameModule.CFG.disconnectCleanupMs = cleanupMs;
+
+  try {
+    const host = await openPollingSocket();
+    const replacement = await openPollingSocket();
+    await emitSocketEvent(host, event('create'), createPayload);
+    const created = await waitForSocketEvent(host, event('created'));
+    await emitSocketEvent(host, event('start'), {});
+    await waitForSocketEvent(host, event('begin'));
+
+    const room = gameModule.rooms.get(created.code);
+    if (!room || room.status !== 'active') {
+      throw new Error(`${gameName} room should be active before reconnect cleanup test`);
+    }
+
+    await closePollingSocket(host);
+    if (!room.cleanupTimer) {
+      throw new Error(`${gameName} should schedule cleanup after its final human disconnects`);
+    }
+
+    await emitSocketEvent(replacement, event('reconnect'), { token: created.token });
+    const reconnected = await waitForSocketEvent(replacement, event('reconnected'));
+    if (reconnected.code !== created.code || reconnected.status !== 'active') {
+      throw new Error(`${gameName} reconnect returned the wrong active room`);
+    }
+    if (room.cleanupTimer !== null) {
+      throw new Error(`${gameName} reconnect should cancel the pending room cleanup timer`);
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, cleanupMs + 100));
+    if (!gameModule.rooms.has(created.code)) {
+      throw new Error(`${gameName} room was destroyed after a successful reconnect`);
+    }
+
+    await closePollingSocket(replacement);
+    await new Promise((resolve) => setTimeout(resolve, cleanupMs + 100));
+    if (gameModule.rooms.has(created.code)) {
+      throw new Error(`${gameName} room should still clean up after everyone disconnects again`);
+    }
+  } finally {
+    gameModule.CFG.disconnectCleanupMs = originalCleanupMs;
+  }
+}
+
 async function main() {
   process.env.PORT = String(port);
   require(path.join(root, 'server.js'));
@@ -1200,6 +1624,11 @@ async function main() {
 
     checkHandlers();
     checkSecurityHelpers();
+    checkMultiplayerNicknameSafety();
+    checkMultiplayerResumeAndOverlaySafety();
+    checkConnectionBannerBehavior();
+    checkPausedTimerInterpolation();
+    checkLobbyMobileLayoutCoverage();
 
     const gameIds = [
       'chess', 'omok', 'connect4', 'othello', 'checkers', 'indianpoker',
@@ -1218,6 +1647,12 @@ async function main() {
       '/js/game.js',
       '/js/admob.js',
       '/js/sandbox-config.js',
+      '/bang.html',
+      '/js/bang-client.js',
+      '/css/games/bang.css',
+      '/mahjong.html',
+      '/js/mahjong-client.js',
+      '/css/games/mahjong.css',
       '/arcade/snake/',
       '/arcade/snake/game.js',
       '/arcade/breakout/',
@@ -1257,8 +1692,14 @@ async function main() {
     }
 
     await runSocketSmokeCheck();
+    await runMalformedSocketPayloadSmokeCheck();
+    await runTexasSpectatorPrivacySmokeCheck();
+    await runCommonReconnectTimerSmokeCheck();
     await runVampireCoopSocketSmokeCheck();
+    await runReconnectCleanupSmokeCheck('bang', { nickname: 'QA', size: 4 });
+    await runReconnectCleanupSmokeCheck('mahjong', { nickname: 'QA' });
     checkChatBubbleUi();
+    checkTexasHoldemReconnectUi();
     await checkDeploymentCachePolicy();
     checkServiceWorkerUpdateCoverage();
     checkVersionBadgeCoverage();

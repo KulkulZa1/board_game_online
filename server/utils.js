@@ -24,6 +24,18 @@ function cleanRateLimit(socketId) {
   }
 }
 
+function sanitizeNickname(value, fallback = '플레이어', maxLength = 12) {
+  const raw = typeof value === 'string' ? value : '';
+  const cleaned = raw
+    .normalize('NFKC')
+    .replace(/[\u0000-\u001f\u007f]/g, ' ')
+    .replace(/[<>&"'\x60]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const limit = Math.max(1, Number(maxLength) || 12);
+  return Array.from(cleaned).slice(0, limit).join('') || fallback;
+}
+
 // ========== 타이머 헬퍼 ==========
 function getTimerMs(timeControl) {
   if (!timeControl.minutes) return null;
@@ -61,6 +73,7 @@ module.exports = {
   log,
   rateCheck,
   cleanRateLimit,
+  sanitizeNickname,
   getTimerMs,
   getRoleColor,
   getOpponentRole,

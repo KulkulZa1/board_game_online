@@ -8,7 +8,7 @@
 
 const { v4: uuidv4 } = require('uuid');
 const state = require('./state');
-const { log, rateCheck } = require('./utils');
+const { log, rateCheck, sanitizeNickname } = require('./utils');
 const E = require('./handlers/mahjong-engine');
 
 const rooms = new Map();      // code → room
@@ -21,6 +21,7 @@ const CFG = {
   callMs: 8000,         // 콜 응답 제한 (초과 시 패스, 은행 미적용)
   riichiAutoMs: 900,    // 리치 중 쯔모/깡 불가 시 자동 쯔모기리 딜레이
   discAutoMs: 4000,     // 접속 끊긴 좌석 자동 진행
+  disconnectCleanupMs: 2 * 60 * 1000,
   aiDelay: () => 550 + Math.random() * 650,
   handGapMs: 6500,      // 국 결과 표시 후 다음 국까지
 };
@@ -60,20 +61,25 @@ function seatHuman(room, seat, nickname) {
   const token = uuidv4();
   room.seats[seat] = {
     type: 'human',
-    name: String(nickname || '플레이어').slice(0, 12),
+    name: sanitizeNickname(nickname),
     socketId: null, token, connected: false,
   };
   tokenMap.set(token, { code: room.code, seat });
   return room.seats[seat];
 }
 
-function scheduleCleanup(room, ms) {
+function cancelCleanup(room) {
   clearTimeout(room.cleanupTimer);
+  room.cleanupTimer = null;
+}
+
+function scheduleCleanup(room, ms) {
+  cancelCleanup(room);
   room.cleanupTimer = setTimeout(() => destroyRoom(room), ms);
 }
 
 function destroyRoom(room) {
-  clearTimeout(room.cleanupTimer);
+  cancelCleanup(room);
   clearTimeout(room.actionTimer);
   clearTimeout(room.aiTimer);
   for (const s of room.seats) if (s && s.token) tokenMap.delete(s.token);
@@ -186,7 +192,7 @@ function startMatch(room) {
     if (!room.seats[i]) room.seats[i] = { type: 'ai', name: AI_NAMES[ai++] || 'AI', socketId: null, token: null, connected: true };
   }
   room.status = 'active';
-  clearTimeout(room.cleanupTimer);
+  cancelCleanup(room);
   room.game = {
     scores: [START_SCORE, START_SCORE, START_SCORE, START_SCORE],
     timeBank: [CFG.bankMs, CFG.bankMs, CFG.bankMs, CFG.bankMs],
@@ -359,13 +365,15 @@ function doDiscard(room, seat, tile, declareRiichi) {
   if (idx < 0) return false;
   // 리치 중엔 쯔모기리만
   if (g.riichiDeclared[seat] && tile !== g.drawnTile) return false;
-  chargeTime(room, seat);
   if (declareRiichi) {
     // 리치 유효성: 멘젠 + 버린 후 텐파이
     const rest = hand.slice(); rest.splice(idx, 1);
     if (g.riichiDeclared[seat] || g.scores[seat] < 1000 || liveWall(g) < 4) return false;
     if (!g.melds[seat].every((m) => m.type === 'ankan')) return false;
     if (E.shanten(E.toCounts(rest), g.melds[seat].length) !== 0) return false;
+  }
+  chargeTime(room, seat);
+  if (declareRiichi) {
     g.riichiDeclared[seat] = true;
     g.ippatsu[seat] = true;
     g.scores[seat] -= 1000;
@@ -514,9 +522,9 @@ function doAnkan(room, seat, tile) {
   const g = room.game;
   if (g.phase !== 'turn' || g.turn !== seat) return false;
   const hand = g.hands[seat];
-  if (E.toCounts(hand)[tile] === 4 && !g.riichiDeclared[seat]) chargeTime(room, seat);
   if (E.toCounts(hand)[tile] !== 4) return false;
   if (g.riichiDeclared[seat]) return false;   // 단순화: 리치 후 안깡 금지
+  chargeTime(room, seat);
   for (let k = 0; k < 4; k++) hand.splice(hand.indexOf(tile), 1);
   g.melds[seat].push({ type: 'ankan', tile, tiles: [tile, tile, tile, tile] });
   g.ippatsu = [false, false, false, false];
@@ -528,11 +536,11 @@ function doAnkan(room, seat, tile) {
 function doTsumo(room, seat) {
   const g = room.game;
   if (g.phase !== 'turn' || g.turn !== seat) return false;
-  chargeTime(room, seat);
   const counts = E.toCounts(g.hands[seat]);
   if (!E.isWinningHand(counts, g.melds[seat].length)) return false;
   const r = evalFor(room, seat, g.drawnTile, true, null);
   if (!r) return false;
+  chargeTime(room, seat);
   handWin(room, seat, { tsumo: true, winTile: g.drawnTile });
   return true;
 }
@@ -702,7 +710,8 @@ function aiRespondCall(room, seat, offer) {
 
 // ── 소켓 등록 ─────────────────────────────────────────────────────
 function register(io, socket) {
-  socket.on('mahjong:create', ({ nickname } = {}) => {
+  socket.on('mahjong:create', (payload) => {
+    const { nickname } = payload && typeof payload === 'object' ? payload : {};
     if (!rateCheck(socket.id, 'mj-create', 5, 60 * 1000)) return;
     const room = createRoom(nickname);
     const seat = room.seats[0];
@@ -714,7 +723,8 @@ function register(io, socket) {
     log(`[마작] 방 생성 — ${room.code}`);
   });
 
-  socket.on('mahjong:join', ({ code, nickname } = {}) => {
+  socket.on('mahjong:join', (payload) => {
+    const { code, nickname } = payload && typeof payload === 'object' ? payload : {};
     if (!rateCheck(socket.id, 'mj-join', 10, 60 * 1000)) return;
     const room = rooms.get(String(code || '').toUpperCase().trim());
     if (!room) return socket.emit('mahjong:error', { message: '방을 찾을 수 없습니다' });
@@ -738,12 +748,14 @@ function register(io, socket) {
     startMatch(room);
   });
 
-  socket.on('mahjong:reconnect', ({ token } = {}) => {
+  socket.on('mahjong:reconnect', (payload) => {
+    const { token } = payload && typeof payload === 'object' ? payload : {};
     if (!rateCheck(socket.id, 'mj-rec', 8, 60 * 1000)) return;
     const ref = tokenMap.get(token);
     if (!ref) return socket.emit('mahjong:error', { message: '만료된 세션입니다', fatal: true });
     const room = rooms.get(ref.code);
     if (!room) return socket.emit('mahjong:error', { message: '방이 사라졌습니다', fatal: true });
+    if (room.status === 'active') cancelCleanup(room);
     const s = room.seats[ref.seat];
     s.socketId = socket.id;
     s.connected = true;
@@ -753,7 +765,8 @@ function register(io, socket) {
     if (room.status === 'active') emitSeat(room, ref.seat, 'mahjong:state', gameStateFor(room, ref.seat));
   });
 
-  socket.on('mahjong:action', (data = {}) => {
+  socket.on('mahjong:action', (payload) => {
+    const data = payload && typeof payload === 'object' ? payload : {};
     if (!rateCheck(socket.id, 'mj-act', 40, 10 * 1000)) return;
     const found = findBySocket(socket.id);
     if (!found || found.room.status !== 'active') return;
@@ -803,7 +816,7 @@ function register(io, socket) {
       const g = room.game;
       if (g && g.phase === 'turn' && g.turn === seat) armTurnTimer(room, seat);
       // 모든 인간이 떠나면 방 정리
-      if (!room.seats.some((x) => x && x.type === 'human' && x.connected)) scheduleCleanup(room, 2 * 60 * 1000);
+      if (!room.seats.some((x) => x && x.type === 'human' && x.connected)) scheduleCleanup(room, CFG.disconnectCleanupMs);
     }
   });
 }

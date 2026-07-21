@@ -31,10 +31,40 @@ function playMatch(n) {
   return new Promise((resolve) => {
     const room = allAiRoom(n);
     const t0 = Date.now();
+    let lastSignature = '';
+    let lastProgressAt = t0;
     BG.startMatch(room);
     const iv = setInterval(() => {
+      const g = room.game;
+      const signature = JSON.stringify([
+        g.turn,
+        g.phase,
+        g.queue[0] ? [g.queue[0].type, g.queue[0].actor] : null,
+        g.players.map((p) => [p.hp, p.hand.length, p.equip.length]),
+        g.deck.length,
+        g.discard.length,
+        g.log[g.log.length - 1] || '',
+      ]);
+      if (signature !== lastSignature) {
+        lastSignature = signature;
+        lastProgressAt = Date.now();
+      }
       if (room.status === 'finished') { clearInterval(iv); resolve({ room, ms: Date.now() - t0 }); }
-      else if (Date.now() - t0 > 40000) { clearInterval(iv); resolve({ room, timeout: true }); }
+      else if (Date.now() - t0 > 40000) {
+        clearInterval(iv);
+        resolve({
+          room,
+          timeout: true,
+          snapshot: {
+            stableForMs: Date.now() - lastProgressAt,
+            turn: g.turn,
+            phase: g.phase,
+            queue: g.queue.map((item) => ({ type: item.type, actor: item.actor })),
+            players: g.players.map((p) => ({ seat: p.seat, role: p.role, hp: p.hp, hand: p.hand.length })),
+            recentLog: g.log.slice(-5),
+          },
+        });
+      }
     }, 20);
   });
 }
@@ -42,9 +72,9 @@ function playMatch(n) {
 (async () => {
   console.log('\n[AI 대국 완주 — 4/5/7인]');
   for (const n of [4, 5, 7]) {
-    const { room, timeout, ms } = await playMatch(n);
+    const { room, timeout, ms, snapshot } = await playMatch(n);
     const g = room.game;
-    ok(!timeout, `${n}인 대국 정상 종료 (${ms}ms)`);
+    ok(!timeout, `${n}인 대국 정상 종료 (${ms}ms)`, timeout ? JSON.stringify(snapshot) : '');
     ok(['sheriff', 'outlaw', 'renegade'].includes(g.winners), `${n}인 승자 진영 유효: ${g.winners}`);
     // 승리 조건 정합
     const sheriffAlive = g.players.some((p) => p.role === 'sheriff' && p.hp > 0);
@@ -108,6 +138,63 @@ function playMatch(n) {
     g.queue = []; g.turn = 0; g.phase = 'turn'; g.bangsPlayed = 1;
     g.players[0].hand = [{ id: 'bang', suit: 'c', v: 5 }];
     ok(P.playCard(room, 0, 0, 1) === false, 'BANG! 턴당 1장 제한');
+    cleanup(room);
+  }
+
+  console.log('\n[다이너마이트 치명상 턴 재개]');
+  {
+    const room = allAiRoom(4);
+    BG.startMatch(room);
+    clearTimeout(room.aiTimer); clearTimeout(room.actionTimer);
+    const g = room.game;
+    const P = BG._internal;
+    const seat = g.turn;
+    const p = g.players[seat];
+    room.seats[seat].type = 'human';
+    room.seats[seat].connected = true;
+    p.character = 'x';
+    p.hp = 3;
+    p.maxHp = 4;
+    p.hand = [{ id: 'beer', suit: 'h', v: 6 }];
+    p.dynamite = { id: 'dynamite', suit: 's', v: 2 };
+    g.deck.unshift(
+      { id: 'bang', suit: 's', v: 5 },
+      { id: 'missed', suit: 'c', v: 4 },
+      { id: 'bang', suit: 'd', v: 8 },
+    );
+
+    P.beginTurn(room, seat);
+    P.resolveReact(room, seat, { cards: [0] });
+    clearTimeout(room.aiTimer); clearTimeout(room.actionTimer);
+
+    ok(p.hp === 1, '다이너마이트 치명상에서 맥주로 생존');
+    ok(g.queue.length === 0, '치명상 응답 큐 정상 종료');
+    ok(g.turn === seat && p.hand.length === 2, '생존 후 원래 턴의 카드 드로우 재개');
+    cleanup(room);
+  }
+
+  console.log('\n[무효 행동 시간 은행 보호]');
+  {
+    const room = BG.createRoom('P0', 4);
+    room.seats[0].connected = true;
+    BG.startMatch(room);
+    clearTimeout(room.aiTimer); clearTimeout(room.actionTimer);
+    const g = room.game;
+    const P = BG._internal;
+    g.queue = [];
+    g.turn = 0; g.phase = 'turn'; g.bangsPlayed = 0;
+    for (const p of g.players) { p.character = 'x'; p.equip = []; }
+    g.players[0].hand = [{ id: 'bang', suit: 'c', v: 5 }];
+    g.timeBank[0] = 1000;
+    g.turnStartedAt = Date.now() - (BG.CFG.graceMs + 50);
+    const bankBefore = g.timeBank[0];
+    const turnStartBefore = g.turnStartedAt;
+    ok(P.playCard(room, 0, 0, 0) === false, '자기 자신을 향한 BANG! 거부');
+    ok(g.timeBank[0] === bankBefore && g.turnStartedAt === turnStartBefore,
+       '거부된 행동은 시간 은행과 기준 시각을 유지');
+    ok(P.playCard(room, 0, 0, 1) === true, '유효한 BANG! 허용');
+    ok(g.timeBank[0] < bankBefore && g.turnStartedAt > turnStartBefore,
+       '유효한 행동만 시간 은행 차감');
     cleanup(room);
   }
 

@@ -22,7 +22,8 @@ function startTimerTick() {
       state.io.to(room.id).emit('timer:tick', {
         white:       room.timers.white,
         black:       room.timers.black,
-        activeColor: room.timers.activeColor
+        activeColor: room.timers.activeColor,
+        paused:      false,
       });
 
       if (room.timers[color] <= 0) {

@@ -94,8 +94,25 @@ async function main() {
   const serviceWorker = await request('/sw.js');
   assertOk(serviceWorker, '/sw.js');
   assertNoStore(serviceWorker, '/sw.js');
-  if (!serviceWorker.body.includes('networkFirst(request)')) {
-    throw new Error('/sw.js should use network-first handling for deploy-sensitive assets');
+  if (
+    !serviceWorker.body.includes('networkFirst(request)') ||
+    !serviceWorker.body.includes("CACHE_NAME   = 'boardgame-v11'") ||
+    !serviceWorker.body.includes("fetch(request, { cache: 'no-store' })")
+  ) {
+    throw new Error('/sw.js is missing the v11 network-first HTTP-cache bypass');
+  }
+
+  const multiplayerPages = [
+    ['/bang.html', '/js/bang-client.js?v=1.1'],
+    ['/mahjong.html', '/js/mahjong-client.js?v=1.3'],
+  ];
+  for (const [pathname, clientAsset] of multiplayerPages) {
+    const page = await request(pathname);
+    assertOk(page, pathname);
+    assertNoStore(page, pathname);
+    if (!page.body.includes(clientAsset) || !page.body.includes('/js/sw-update.js')) {
+      throw new Error(`${pathname} is missing its current client asset or service-worker update helper`);
+    }
   }
 
   console.log('Production/version verification passed');

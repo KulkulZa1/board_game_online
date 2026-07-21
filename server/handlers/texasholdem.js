@@ -1,6 +1,6 @@
 // server/handlers/texasholdem.js — 텍사스 홀덤 핸들러
 const state = require('../state');
-const { log } = require('../utils');
+const { getRoleColor, log } = require('../utils');
 
 const SMALL_BLIND  = 10;
 const BIG_BLIND    = 20;
@@ -64,7 +64,7 @@ function startTHRound(room) {
 
   // 칩 확인
   if (room.chips.host <= 0 || room.chips.guest <= 0) {
-    const winner = room.chips.host > 0 ? 'white' : 'black';
+    const winner = _remainingStackColor(room);
     endGame(room, winner, 'chips-depleted');
     return;
   }
@@ -74,7 +74,7 @@ function startTHRound(room) {
   room.community   = [];
   room.pot         = 0;
   room.bets        = { host: 0, guest: 0 };
-  room.roundBet    = BIG_BLIND;
+  room.roundBet    = 0;
   room.raiseCount  = 0;
   room.acted       = { host: false, guest: false };
 
@@ -92,16 +92,27 @@ function startTHRound(room) {
   room.bets[sb]   = sbAmount;
   room.bets[bb]   = bbAmount;
   room.pot        = sbAmount + bbAmount;
+  room.roundBet   = Math.max(sbAmount, bbAmount);
+  room.acted      = {
+    host: room.chips.host === 0,
+    guest: room.chips.guest === 0,
+  };
+  _settleUncalledBet(room);
 
   // 프리플랍: 헤즈업에서 버튼(SB)이 먼저 행동
-  room.betTurn = sb;
+  room.betTurn = room.bets.host === room.bets.guest
+    ? null
+    : (room.bets.host < room.bets.guest ? 'host' : 'guest');
+  if (!room.betTurn && room.chips.host > 0 && room.chips.guest > 0) room.betTurn = sb;
   room.phase   = 'preflop';
 
   // 타이머: 베팅 시 30초
-  room.timers.activeColor = sb === 'host' ? 'white' : 'black';
+  room.timers.activeColor = room.betTurn ? getRoleColor(room, room.betTurn) : null;
   room.timers.white       = Math.max(room.timers.white, 30 * 1000);
   room.timers.black       = Math.max(room.timers.black, 30 * 1000);
-  room.timers.lastTickAt  = Date.now();
+  room.timers.lastTickAt  = room.players.host.connected && room.players.guest.connected
+    ? Date.now()
+    : null;
 
   // 각 플레이어에게 본인 홀 카드만 전송
   const hostSockId  = room.players.host.socketId;
@@ -112,10 +123,14 @@ function startTHRound(room) {
   // 공개 상태 브로드캐스트
   state.io.to(room.id).emit('game:move:made', _publicState(room, { type: 'deal', roundNum: room.roundNum }));
   log(`텍사스홀덤 라운드 ${room.roundNum} 시작 — 방 ${room.id.slice(0,8)}, pot=${room.pot}`);
+  if ((room.chips.host === 0 || room.chips.guest === 0) && room.bets.host === room.bets.guest) {
+    _runOutToShowdown(room);
+  }
 }
 
 // ── 베팅 액션 처리 ────────────────────────────────────────────────
 function handleMove(socket, room, role, data) {
+  if (!data || typeof data !== 'object') return;
   if (room.phase === 'waiting' || room.phase === 'showdown') return;
   if (room.betTurn !== role) {
     socket.emit('game:move:invalid', { reason: '아직 당신의 차례가 아닙니다.' });
@@ -149,6 +164,7 @@ function handleMove(socket, room, role, data) {
     room.bets[role]  += callAmt;
     room.pot         += callAmt;
     room.acted[role]  = true;
+    _settleUncalledBet(room);
     state.io.to(room.id).emit('game:move:made', _publicState(room, { type: 'call', role, amount: callAmt }));
     _maybeAdvanceStreet(room);
     return;
@@ -181,22 +197,24 @@ function handleMove(socket, room, role, data) {
 }
 
 function _doFold(room, role) {
-  const winner = role === 'host' ? 'black' : 'white';
   const winnerRole = role === 'host' ? 'guest' : 'host';
+  const winner = getRoleColor(room, winnerRole);
   room.chips[winnerRole] += room.pot;
   room.pot = 0;
   room.phase = 'showdown';
+  _stopBettingClock(room);
   state.io.to(room.id).emit('texasholdem:showdown', {
     hands:     room.hands,
     community: room.community,
     winner, reason: 'fold',
     chips:     room.chips,
     roundNum:  room.roundNum,
+    timers:    _timerState(room),
   });
   log(`텍사스홀덤 폴드 — ${role} 폴드, 방 ${room.id.slice(0,8)}`);
   const { endGame } = require('../endgame');
   if (room.chips.host <= 0 || room.chips.guest <= 0) {
-    setTimeout(() => endGame(room, room.chips.host <= 0 ? 'black' : 'white', 'chips-depleted'), 3000);
+    setTimeout(() => endGame(room, _remainingStackColor(room), 'chips-depleted'), 3000);
   } else {
     setTimeout(() => _nextRound(room), 3500);
   }
@@ -216,6 +234,11 @@ function _maybeAdvanceStreet(room) {
   }
 
   // 스트리트 진행
+  if (room.chips.host === 0 || room.chips.guest === 0) {
+    _runOutToShowdown(room);
+    return;
+  }
+
   if (room.phase === 'preflop') {
     _dealCommunity(room, 3); // 플랍
     room.phase = 'flop';
@@ -247,9 +270,32 @@ function _dealCommunity(room, n) {
   for (let i = 0; i < n; i++) room.community.push(room.deck.pop());
 }
 
+function _settleUncalledBet(room) {
+  if (room.bets.host === room.bets.guest) return;
+
+  const lowerRole = room.bets.host < room.bets.guest ? 'host' : 'guest';
+  if (room.chips[lowerRole] > 0) return;
+
+  const higherRole = lowerRole === 'host' ? 'guest' : 'host';
+  const excess = room.bets[higherRole] - room.bets[lowerRole];
+  room.bets[higherRole] -= excess;
+  room.chips[higherRole] += excess;
+  room.pot -= excess;
+  room.roundBet = room.bets[lowerRole];
+}
+
+function _runOutToShowdown(room) {
+  _dealCommunity(room, Math.max(0, 5 - room.community.length));
+  state.io.to(room.id).emit('texasholdem:community', {
+    community: room.community,
+    phase: 'river',
+  });
+  _doShowdown(room);
+}
+
 function _doShowdown(room) {
   room.phase = 'showdown';
-  room.timers.activeColor = null;
+  _stopBettingClock(room);
 
   const hostCards  = [...room.hands.host,  ...room.community];
   const guestCards = [...room.hands.guest, ...room.community];
@@ -259,9 +305,9 @@ function _doShowdown(room) {
 
   let winner, reason;
   if (cmp > 0) {
-    winner = 'white'; room.chips.host  += room.pot; reason = hostVal.name;
+    winner = getRoleColor(room, 'host'); room.chips.host  += room.pot; reason = hostVal.name;
   } else if (cmp < 0) {
-    winner = 'black'; room.chips.guest += room.pot; reason = guestVal.name;
+    winner = getRoleColor(room, 'guest'); room.chips.guest += room.pot; reason = guestVal.name;
   } else {
     // 타이: 반반
     const half = Math.floor(room.pot / 2);
@@ -287,12 +333,13 @@ function _doShowdown(room) {
     winner, reason,
     chips:          room.chips,
     roundNum:       room.roundNum,
+    timers:         _timerState(room),
   });
   log(`텍사스홀덤 쇼다운 — host:${hostVal.name} vs guest:${guestVal.name}, 승자:${winner}, 방 ${room.id.slice(0,8)}`);
 
   const { endGame } = require('../endgame');
   if (room.chips.host <= 0 || room.chips.guest <= 0) {
-    setTimeout(() => endGame(room, room.chips.host <= 0 ? 'black' : 'white', 'chips-depleted'), 4000);
+    setTimeout(() => endGame(room, _remainingStackColor(room), 'chips-depleted'), 4000);
   } else {
     setTimeout(() => _nextRound(room), 4500);
   }
@@ -306,8 +353,29 @@ function _nextRound(room) {
 }
 
 function _setTimer(room, role) {
-  room.timers.activeColor = role === 'host' ? 'white' : 'black';
+  room.timers.activeColor = getRoleColor(room, role);
   room.timers.lastTickAt  = Date.now();
+}
+
+function _stopBettingClock(room) {
+  room.betTurn = null;
+  room.timers.activeColor = null;
+  room.timers.lastTickAt = null;
+  state.io.to(room.id).emit('timer:tick', _timerState(room));
+}
+
+function _timerState(room) {
+  return {
+    white: room.timers.white,
+    black: room.timers.black,
+    activeColor: room.timers.activeColor,
+    paused: room.timers.lastTickAt === null,
+  };
+}
+
+function _remainingStackColor(room) {
+  const winnerRole = room.chips.host > 0 ? 'host' : 'guest';
+  return getRoleColor(room, winnerRole);
 }
 
 function _publicState(room, move) {
@@ -326,7 +394,7 @@ function _publicState(room, move) {
     betTurn:       room.betTurn,
     raiseCount:    room.raiseCount || 0,
     toCall,
-    timers:        { white: room.timers.white, black: room.timers.black, activeColor: room.timers.activeColor },
+    timers:        _timerState(room),
     turn:          room.betTurn,
   };
 }

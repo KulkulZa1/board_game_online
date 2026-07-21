@@ -7,11 +7,12 @@
     "start": "node server.js",
     "dev": "node server.js",
     "test": "node scripts/smoke-test.js",
+    "test:games": "node scripts/run-game-flow-tests.js",
     "test:full": "node scripts/smoke-check.js",
     "sandbox": "npx serve sandbox -l 3001",
     "build": "node scripts/no-build.js",
     "lint": "node scripts/check-js.js",
-    "check": "npm run lint && npm test && npm run test:full",
+    "check": "npm run lint && npm test && npm run test:games && npm run test:full",
     "verify:production": "node scripts/verify-production-version.js"
   },
   "engines": {

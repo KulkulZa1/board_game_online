@@ -26,6 +26,23 @@
 - NEON CASCADE at `/arcade/neon-cascade/`: a 45-second one-touch chain-reaction game with deterministic simulation, assisted pulse targeting, rechargeable actions, special cores, wave goals, and score-tripling Overdrive.
 
 ### Changed
+- Backgammon now validates a move against the complete remaining roll. Players must use the maximum playable dice count and, when only one distinct die can be played, the higher die.
+- Backgammon's pure board and dice rules now live in `server/rules/backgammon.js`, leaving its Socket.io handler focused on room orchestration.
+- Texas Hold'em now respects the host/guest color assignment after color swaps, returns unmatched chips on a short all-in, runs out the remaining board automatically, and broadcasts a stopped shared clock during fold/showdown results.
+- Texas Hold'em and Dots and Boxes now ignore malformed or null move payloads instead of allowing an untrusted socket event to throw inside the server handler.
+- Active Texas Hold'em spectator snapshots now redact both private hands until showdown or game completion.
+- Shared, BANG!, Mahjong, and Vampire co-op Socket.io handlers now normalize malformed payloads before destructuring them; the full smoke suite sends null payloads across these boundaries and confirms the server remains usable.
+- Texas Hold'em reconnect now restores the requesting player's private hand and complete betting state. A new round dealt while either player is offline keeps its clock paused until both reconnect.
+- BANG! now completes a lethal dynamite reaction before advancing the turn. A player saved by Beer resumes the original turn-start draw, while a defeated player advances cleanly to the next survivor; deterministic regression coverage prevents the former AI match deadlock.
+- Timed 1:1 rooms now keep the server and displayed game clocks paused until both players reconnect. A lone returning player receives a fresh peer-reconnect grace period and an explicit offline-peer banner; the pending cleanup is cancelled and the clock resumes once both players are back. The banner reserves safe-area-aware space on mobile, and behavioral smoke coverage verifies its display lifecycle plus the complete disconnect and resume transition.
+- Active BANG! and Mahjong rooms now cancel their pending empty-room cleanup timer after a successful reconnect, preventing a resumed match from disappearing at the original two-minute deadline. Socket smoke coverage verifies reconnect survival and cleanup after everyone leaves again.
+- BANG! and Mahjong now retire expired reconnect tokens without showing a false startup error, and hidden lobby overlays no longer leave invisible enabled controls in the keyboard or assistive-technology path during play.
+- BANG! and Mahjong now charge turn time only after a server-validated action succeeds; invalid targets, riichi declarations, and tsumo claims no longer consume a player's time bank. Their 97 headless engine, full-match, and timer assertions now run as part of `npm run check`.
+- Lobby board-game cards now use a wider desktop selection surface and a mobile grid action row, preventing vertical `플레이` labels and 390px horizontal overflow while preserving 42px touch targets.
+- BANG! and Mahjong now normalize nicknames on the server and escape server-provided names and logs before `innerHTML` rendering, preventing nickname markup injection without weakening their room or solo flows.
+- BANG! and Mahjong now load the shared service-worker update helper, so newly deployed clients participate in the same cache refresh flow as the rest of the platform.
+- The service worker now bypasses the browser HTTP cache for HTML, JavaScript, CSS, and manifest network-first requests; `boardgame-v11` removes older cached assets during activation.
+- Mahjong mobile hands now start from the left edge of their horizontal scroll area, making every tile reachable and tappable instead of stranding the first tiles at negative coordinates.
 - Vampire Survivors enemy spawn pressure, enemy stats, boss interval, and rewards now scale from the selected difficulty, selected map, and daily modifier.
 - Public `/api/status` now keeps detailed room lists and tunnel URLs loopback-only, and Socket.io no longer defaults to wildcard CORS in production.
 - Multiplayer chat now shows real shared-shell speech bubbles on current main and gives visible feedback when chat is rate limited.

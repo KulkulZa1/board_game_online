@@ -9,7 +9,7 @@
 
 const { v4: uuidv4 } = require('uuid');
 const state = require('./state');
-const { log, rateCheck } = require('./utils');
+const { log, rateCheck, sanitizeNickname } = require('./utils');
 const E = require('./handlers/bang-engine');
 
 const rooms = new Map();
@@ -20,6 +20,7 @@ const CFG = {
   bankMs: 60000,       // 시간 은행 (대국 전체)
   reactMs: 10000,      // 리액션 창 (고정)
   discAutoMs: 4000,    // 접속 끊긴 좌석 자동 진행
+  disconnectCleanupMs: 2 * 60 * 1000,
   aiDelay: () => 500 + Math.random() * 600,
   aiReactDelay: () => 350 + Math.random() * 400,
 };
@@ -53,16 +54,20 @@ function createRoom(nickname, size) {
 }
 function seatHuman(room, seat, nickname) {
   const token = uuidv4();
-  room.seats[seat] = { type: 'human', name: String(nickname || '플레이어').slice(0, 12), socketId: null, token, connected: false };
+  room.seats[seat] = { type: 'human', name: sanitizeNickname(nickname), socketId: null, token, connected: false };
   tokenMap.set(token, { code: room.code, seat });
   return room.seats[seat];
 }
-function scheduleCleanup(room, ms) {
+function cancelCleanup(room) {
   clearTimeout(room.cleanupTimer);
+  room.cleanupTimer = null;
+}
+function scheduleCleanup(room, ms) {
+  cancelCleanup(room);
   room.cleanupTimer = setTimeout(() => destroyRoom(room), ms);
 }
 function destroyRoom(room) {
-  clearTimeout(room.cleanupTimer); clearTimeout(room.actionTimer); clearTimeout(room.aiTimer);
+  cancelCleanup(room); clearTimeout(room.actionTimer); clearTimeout(room.aiTimer);
   for (const s of room.seats) if (s && s.token) tokenMap.delete(s.token);
   rooms.delete(room.code);
   log(`[뱅] 방 정리 — ${room.code}`);
@@ -142,7 +147,7 @@ function startMatch(room) {
     if (!room.seats[i]) room.seats[i] = { type: 'ai', name: AI_NAMES[ai++] || 'AI', socketId: null, token: null, connected: true };
   }
   room.status = 'active';
-  clearTimeout(room.cleanupTimer);
+  cancelCleanup(room);
   const n = room.seats.length;
   const rng = Math.random;
   const roles = E.shuffled(E.rolesFor(n), rng);
@@ -169,6 +174,7 @@ function startMatch(room) {
     turnStartedAt: null,
     winners: null,
     aggroVsSheriff: new Array(n).fill(0),
+    pendingTurnResume: null,
   };
   room.game = g;
   // 배패: 체력만큼
@@ -211,7 +217,17 @@ function beginTurn(room, seat) {
       addLog(room, `🧨 ${p.name} 앞에서 다이너마이트 폭발! (피해 3)`);
       discardCard(g, p.dynamite); p.dynamite = null;
       applyDamage(room, seat, 3, null);
-      if (g.winners || p.hp <= 0) { if (!g.winners) endTurnCore(room); return; }
+      if (g.winners) return;
+      if (p.hp <= 0) {
+        const lethal = g.queue[0];
+        if (lethal && lethal.type === 'lethal' && lethal.actor === seat) {
+          g.pendingTurnResume = seat;
+          processQueue(room);
+        } else {
+          beginTurn(room, nextAlive(g, seat));
+        }
+        return;
+      }
     } else {
       addLog(room, `🧨 다이너마이트가 ${p.name}을(를) 지나쳐 왼쪽으로`);
       const nx = nextAlive(g, seat);
@@ -298,6 +314,13 @@ function processQueue(room) {
   const item = g.queue[0];
   if (!item) { // 큐 소진 — 턴 주인에게 제어 반환
     g.phase = 'turn';
+    if (g.pendingTurnResume !== null) {
+      const resumeSeat = g.pendingTurnResume;
+      g.pendingTurnResume = null;
+      const nextSeat = g.players[resumeSeat].hp > 0 ? resumeSeat : nextAlive(g, resumeSeat);
+      beginTurn(room, nextSeat);
+      return;
+    }
     if (g.pendingEndTurn) { g.pendingEndTurn = false; endTurnCore(room); return; }
     armTurnTimer(room, g.turn);
     pushState(room);
@@ -549,14 +572,13 @@ function playCard(room, seat, handIdx, targetSeat) {
   const aliveN = alivePlayers(g).length;
   const isBangCard = card.id === 'bang' || (card.id === 'missed' && p.character === 'calamity');
 
-  chargeTime(room, seat);
-
   // 발포 계열 (BANG! / 캘러미티의 빗나감!)
   if (isBangCard) {
     if (!target || target.hp <= 0 || targetSeat === seat) return false;
     const unlimited = p.character === 'willy' || p.equip.some((c) => c.id === 'volcanic');
     if (g.bangsPlayed >= 1 && !unlimited) return fail(room, seat, 'BANG!은 턴당 1장입니다');
     if (E.distance(g.players, seat, targetSeat) > E.weaponRange(p)) return fail(room, seat, '사거리가 닿지 않습니다');
+    chargeTime(room, seat);
     spend(g, p, handIdx);
     g.bangsPlayed++;
     if (p.role !== 'sheriff' && target.role === 'sheriff') g.aggroVsSheriff[seat]++;
@@ -570,24 +592,28 @@ function playCard(room, seat, handIdx, targetSeat) {
     case 'beer': {
       if (aliveN <= 2) return fail(room, seat, '생존자 2인 — 맥주 효과 없음');
       if (p.hp >= p.maxHp) return fail(room, seat, '이미 최대 체력입니다');
+      chargeTime(room, seat);
       spend(g, p, handIdx);
       p.hp++;
       addLog(room, `🍺 ${p.name} 맥주 (HP ${p.hp})`);
       break;
     }
     case 'saloon': {
+      chargeTime(room, seat);
       spend(g, p, handIdx);
       for (const q of alivePlayers(g)) q.hp = Math.min(q.maxHp, q.hp + 1);
       addLog(room, `🥃 살룬! 전원 회복`);
       break;
     }
     case 'stagecoach': {
+      chargeTime(room, seat);
       spend(g, p, handIdx);
       p.hand.push(draw(g), draw(g));
       addLog(room, `🚃 ${p.name} 역마차 (+2)`);
       break;
     }
     case 'wellsfargo': {
+      chargeTime(room, seat);
       spend(g, p, handIdx);
       p.hand.push(draw(g), draw(g), draw(g));
       addLog(room, `💰 ${p.name} 웰스파고 (+3)`);
@@ -597,6 +623,7 @@ function playCard(room, seat, handIdx, targetSeat) {
       if (!target || target.hp <= 0 || targetSeat === seat) return false;
       if (E.distance(g.players, seat, targetSeat) > 1) return fail(room, seat, '패닉!은 거리 1만 가능합니다');
       if (!target.hand.length && !target.equip.length) return fail(room, seat, '가져올 카드가 없습니다');
+      chargeTime(room, seat);
       spend(g, p, handIdx);
       stealCard(g, p, target, false);
       addLog(room, `😱 ${p.name} → ${target.name} 패닉!`);
@@ -605,6 +632,7 @@ function playCard(room, seat, handIdx, targetSeat) {
     case 'catbalou': {
       if (!target || target.hp <= 0 || targetSeat === seat) return false;
       if (!target.hand.length && !target.equip.length) return fail(room, seat, '버릴 카드가 없습니다');
+      chargeTime(room, seat);
       spend(g, p, handIdx);
       stealCard(g, p, target, true);
       addLog(room, `🐈 ${p.name} → ${target.name} 캣 발루`);
@@ -612,6 +640,7 @@ function playCard(room, seat, handIdx, targetSeat) {
     }
     case 'duel': {
       if (!target || target.hp <= 0 || targetSeat === seat) return false;
+      chargeTime(room, seat);
       spend(g, p, handIdx);
       if (p.role !== 'sheriff' && target.role === 'sheriff') g.aggroVsSheriff[seat]++;
       addLog(room, `⚔️ ${p.name} → ${target.name} 결투!`);
@@ -619,6 +648,7 @@ function playCard(room, seat, handIdx, targetSeat) {
       return true;
     }
     case 'indians': {
+      chargeTime(room, seat);
       spend(g, p, handIdx);
       addLog(room, `🏹 ${p.name} 인디언 습격!`);
       let s2 = nextAlive(g, seat);
@@ -629,6 +659,7 @@ function playCard(room, seat, handIdx, targetSeat) {
       return true;
     }
     case 'gatling': {
+      chargeTime(room, seat);
       spend(g, p, handIdx);
       addLog(room, `🔫 ${p.name} 개틀링 난사!`);
       let s3 = nextAlive(g, seat);
@@ -639,6 +670,7 @@ function playCard(room, seat, handIdx, targetSeat) {
       return true;
     }
     case 'store': {
+      chargeTime(room, seat);
       spend(g, p, handIdx);
       const cards = [];
       for (let k = 0; k < aliveN; k++) cards.push(draw(g));
@@ -651,6 +683,7 @@ function playCard(room, seat, handIdx, targetSeat) {
     }
     case 'jail': {
       if (!target || target.hp <= 0 || target.role === 'sheriff' || target.jail) return fail(room, seat, '감옥 대상이 아닙니다');
+      chargeTime(room, seat);
       spend(g, p, handIdx, true);
       target.jail = card;
       addLog(room, `⛓️ ${p.name} → ${target.name} 감옥!`);
@@ -658,6 +691,7 @@ function playCard(room, seat, handIdx, targetSeat) {
     }
     case 'dynamite': {
       if (p.dynamite) return fail(room, seat, '이미 다이너마이트가 있습니다');
+      chargeTime(room, seat);
       spend(g, p, handIdx, true);
       p.dynamite = card;
       addLog(room, `🧨 ${p.name} 다이너마이트 점화`);
@@ -667,12 +701,14 @@ function playCard(room, seat, handIdx, targetSeat) {
       // 장비 (술통/무스탕/조준경/무기)
       if (def.kind === 'weapon') {
         const old = p.equip.findIndex((c) => E.CARD_DEFS[c.id].kind === 'weapon');
+        chargeTime(room, seat);
         if (old >= 0) discardCard(g, p.equip.splice(old, 1)[0]);
         spend(g, p, handIdx, true);
         p.equip.push(card);
         addLog(room, `${def.icon} ${p.name} ${def.name} 장착 (사거리 ${def.range})`);
       } else if (def.kind === 'blue') {
         if (p.equip.some((c) => c.id === card.id)) return fail(room, seat, '이미 장착된 카드입니다');
+        chargeTime(room, seat);
         spend(g, p, handIdx, true);
         p.equip.push(card);
         addLog(room, `${def.icon} ${p.name} ${def.name} 장착`);
@@ -850,7 +886,8 @@ function maybeAiReact(room, item) {
 
 // ── 소켓 등록 ─────────────────────────────────────────────────────
 function register(io, socket) {
-  socket.on('bang:create', ({ nickname, size } = {}) => {
+  socket.on('bang:create', (payload) => {
+    const { nickname, size } = payload && typeof payload === 'object' ? payload : {};
     if (!rateCheck(socket.id, 'bg-create', 5, 60 * 1000)) return;
     const room = createRoom(nickname, size);
     const seat = room.seats[0];
@@ -862,7 +899,8 @@ function register(io, socket) {
     log(`[뱅] 방 생성 — ${room.code} (${room.size}인)`);
   });
 
-  socket.on('bang:join', ({ code, nickname } = {}) => {
+  socket.on('bang:join', (payload) => {
+    const { code, nickname } = payload && typeof payload === 'object' ? payload : {};
     if (!rateCheck(socket.id, 'bg-join', 10, 60 * 1000)) return;
     const room = rooms.get(String(code || '').toUpperCase().trim());
     if (!room) return socket.emit('bang:error', { message: '방을 찾을 수 없습니다' });
@@ -884,12 +922,14 @@ function register(io, socket) {
     startMatch(found.room);
   });
 
-  socket.on('bang:reconnect', ({ token } = {}) => {
+  socket.on('bang:reconnect', (payload) => {
+    const { token } = payload && typeof payload === 'object' ? payload : {};
     if (!rateCheck(socket.id, 'bg-rec', 8, 60 * 1000)) return;
     const ref = tokenMap.get(token);
     if (!ref) return socket.emit('bang:error', { message: '만료된 세션입니다', fatal: true });
     const room = rooms.get(ref.code);
     if (!room) return socket.emit('bang:error', { message: '방이 사라졌습니다', fatal: true });
+    if (room.status === 'active') cancelCleanup(room);
     const s = room.seats[ref.seat];
     s.socketId = socket.id;
     s.connected = true;
@@ -899,7 +939,8 @@ function register(io, socket) {
     if (room.status === 'active') emitSeat(room, ref.seat, 'bang:state', gameStateFor(room, ref.seat));
   });
 
-  socket.on('bang:action', (data = {}) => {
+  socket.on('bang:action', (payload) => {
+    const data = payload && typeof payload === 'object' ? payload : {};
     if (!rateCheck(socket.id, 'bg-act', 40, 10 * 1000)) return;
     const found = findBySocket(socket.id);
     if (!found || found.room.status !== 'active') return;
@@ -944,7 +985,7 @@ function register(io, socket) {
         if (item && item.actor === seat) armReactTimer(room, item);
         else if (g.phase === 'turn' && g.turn === seat) armTurnTimer(room, seat);
       }
-      if (!room.seats.some((x) => x && x.type === 'human' && x.connected)) scheduleCleanup(room, 2 * 60 * 1000);
+      if (!room.seats.some((x) => x && x.type === 'human' && x.connected)) scheduleCleanup(room, CFG.disconnectCleanupMs);
     }
   });
 }

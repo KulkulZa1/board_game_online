@@ -4,6 +4,8 @@
   'use strict';
 
   const $ = (id) => document.getElementById(id);
+  const HTML_ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+  const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => HTML_ESCAPES[char]);
   const socket = io();
 
   // ── 타일 렌더 ─────────────────────────────────────────────────────
@@ -32,6 +34,7 @@
   let cur = null;          // 마지막 mahjong:state
   let riichiMode = false;  // 리치 선언용 타일 선택 중
   let resultTimer = null;
+  let reconnectPending = false;
   let selectedTile = null; // 도우미 ON: 첫 탭 미리보기 → 둘째 탭 확정
   // 🧭 초심자 도우미 — 기본 ON (처음 오는 사람을 위해), 저장됨
   let assist = true;
@@ -49,6 +52,12 @@
     el.classList.remove('hidden', 'show'); void el.offsetWidth; el.classList.add('show');
     clearTimeout(toast._t);
     toast._t = setTimeout(() => el.classList.add('hidden'), 2600);
+  }
+  function setLobbyVisible(visible) {
+    const overlay = $('lobbyOverlay');
+    overlay.classList.toggle('visible', visible);
+    overlay.setAttribute('aria-hidden', visible ? 'false' : 'true');
+    overlay.inert = !visible;
   }
 
   // ── 입장 흐름 ─────────────────────────────────────────────────────
@@ -85,8 +94,12 @@
     showWaitPane();
   });
   socket.on('mahjong:error', ({ message, fatal }) => {
-    $('entryError').textContent = message || '오류';
-    toast(message || '오류');
+    const resumeFailed = fatal && reconnectPending;
+    reconnectPending = false;
+    if (!resumeFailed) {
+      $('entryError').textContent = message || '오류';
+      toast(message || '오류');
+    }
     if (fatal) { store.clear(); showEntryPane(); }
   });
   socket.on('mahjong:room', (ls) => {
@@ -94,15 +107,16 @@
     if (ls.status === 'waiting') $('startBtn').classList.toggle('hidden', !isHost);
   });
   socket.on('mahjong:begin', () => {
-    $('lobbyOverlay').classList.remove('visible');
+    setLobbyVisible(false);
     $('table').classList.remove('hidden');
   });
   socket.on('mahjong:reconnected', ({ code, seat, status }) => {
+    reconnectPending = false;
     roomCode = code; mySeat = seat;
     $('roomChip').textContent = code;
     $('roomChip').classList.remove('hidden');
     if (status === 'active') {
-      $('lobbyOverlay').classList.remove('visible');
+      setLobbyVisible(false);
       $('table').classList.remove('hidden');
     } else {
       showWaitPane();
@@ -112,7 +126,7 @@
   function showEntryPane() {
     $('entryPane').classList.remove('hidden');
     $('waitPane').classList.add('hidden');
-    $('lobbyOverlay').classList.add('visible');
+    setLobbyVisible(true);
   }
   function showWaitPane() {
     $('entryPane').classList.add('hidden');
@@ -122,6 +136,7 @@
     $('roomChip').classList.remove('hidden');
     $('startBtn').classList.toggle('hidden', !isHost);
     $('waitHint').classList.toggle('hidden', isHost);
+    setLobbyVisible(true);
   }
   function renderSeats(ls) {
     const wrap = $('seatList'); wrap.innerHTML = '';
@@ -129,7 +144,7 @@
       const d = document.createElement('div');
       d.className = 'seat-row' + (i === mySeat ? ' me' : '');
       d.innerHTML = s
-        ? `<span>${s.type === 'ai' ? '🤖' : '🙂'} ${s.name}${i === ls.hostSeat ? ' 👑' : ''}</span><span class="${s.connected ? 'on' : 'off'}">${s.connected ? '접속' : '대기'}</span>`
+        ? `<span>${s.type === 'ai' ? '🤖' : '🙂'} ${escapeHtml(s.name)}${i === ls.hostSeat ? ' 👑' : ''}</span><span class="${s.connected ? 'on' : 'off'}">${s.connected ? '접속' : '대기'}</span>`
         : `<span class="dim">빈 자리 — 시작 시 AI</span><span></span>`;
       wrap.appendChild(d);
     });
@@ -186,7 +201,7 @@
       el.classList.toggle('riichi-on', !!st.riichi[seat]);
       el.innerHTML =
         `<span class="pw">${WIND_KO[st.seatWinds[seat]]}</span>` +
-        `<b class="pn">${st.names[seat]}</b>` +
+        `<b class="pn">${escapeHtml(st.names[seat])}</b>` +
         `<span class="ps">${st.scores[seat].toLocaleString()}</span>` +
         `<span class="pt" data-seat="${seat}">${fmtBank(bankRemain(st, seat))}</span>` +
         (st.riichi[seat] ? '<span class="rstick" title="리치">▮</span>' : '');
@@ -365,12 +380,12 @@
       box.innerHTML = `
         <h3>유국 (황패)</h3>
         <div class="ry-rows">${r.tenpai.map((tp, i) =>
-          `<div class="ry-row"><span>${r.names[i]}</span><span class="${tp ? 'on' : 'off'}">${tp ? '텐파이' : '노텐'}</span>
+          `<div class="ry-row"><span>${escapeHtml(r.names[i])}</span><span class="${tp ? 'on' : 'off'}">${tp ? '텐파이' : '노텐'}</span>
            <span class="${r.movements[i] >= 0 ? 'plus' : 'minus'}">${fmtMove(r.movements[i])}</span></div>`).join('')}
         </div>`;
     } else {
-      const winName = r.names[r.winner];
-      const how = r.type === 'tsumo' ? '쯔모' : `론 (${r.names[r.loser]})`;
+      const winName = escapeHtml(r.names[r.winner]);
+      const how = r.type === 'tsumo' ? '쯔모' : `론 (${escapeHtml(r.names[r.loser])})`;
       box.innerHTML = `
         <h3>${winName} ${how}!</h3>
         <div class="win-hand">${tilesHTML(r.hand, 'mini')}${r.melds.map((m) => `<span class="meld">${tilesHTML(m.tiles, 'mini')}</span>`).join('')}</div>
@@ -378,7 +393,7 @@
         <div class="score-line">${r.yakuman ? `역만${r.yakuman > 1 ? ' ×' + r.yakuman : ''}` : `${r.han}판 ${r.fu}부`}</div>
         ${r.ura && r.ura.length ? `<div class="dora-line">뒷도라 ${tilesHTML(r.ura, 'mini')}</div>` : ''}
         <div class="ry-rows">${r.movements.map((mv, i) =>
-          `<div class="ry-row"><span>${r.names[i]}</span><span></span><span class="${mv >= 0 ? 'plus' : 'minus'}">${fmtMove(mv)}</span></div>`).join('')}
+          `<div class="ry-row"><span>${escapeHtml(r.names[i])}</span><span></span><span class="${mv >= 0 ? 'plus' : 'minus'}">${fmtMove(mv)}</span></div>`).join('')}
         </div>`;
     }
     $('resultModal').classList.remove('hidden');
@@ -394,7 +409,7 @@
     ranking.forEach((r, i) => {
       const d = document.createElement('div');
       d.className = 'rank-row' + (r.seat === mySeat ? ' me' : '');
-      d.innerHTML = `<span>${medals[i]} ${r.name}${r.ai ? ' 🤖' : ''}</span><b>${r.score.toLocaleString()}</b>`;
+      d.innerHTML = `<span>${medals[i]} ${escapeHtml(r.name)}${r.ai ? ' 🤖' : ''}</span><b>${r.score.toLocaleString()}</b>`;
       wrap.appendChild(d);
     });
     $('overOverlay').classList.remove('hidden');
@@ -406,11 +421,12 @@
   function init() {
     const params = new URLSearchParams(location.search);
     const roomParam = params.get('room');
-    const token = store.token;
-    if (token) {
-      socket.on('connect', () => socket.emit('mahjong:reconnect', { token }));
-      // 실패(fatal) 시 mahjong:error 핸들러가 entryPane으로 되돌린다
-    }
+    socket.on('connect', () => {
+      const token = store.token;
+      if (!token) return;
+      reconnectPending = true;
+      socket.emit('mahjong:reconnect', { token });
+    });
     if (roomParam) {
       $('codeInput').value = roomParam.toUpperCase();
       $('entryError').textContent = '닉네임을 입력하고 참가를 누르세요';

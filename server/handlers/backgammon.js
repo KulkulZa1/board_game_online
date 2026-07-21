@@ -1,6 +1,7 @@
 // server/handlers/backgammon.js — 백가몬 핸들러
 const state = require('../state');
 const { getRoleColor } = require('../utils');
+const { applyBoardMove, canBearOff, getValidMoves, isAllInHomeBoard } = require('../rules/backgammon');
 
 // 표준 백가몬 초기 배치 (1-indexed, 0번 미사용)
 function initBGBoard() {
@@ -97,7 +98,7 @@ function handleMove(socket, room, role, data) {
     if (dieIdx === -1) return;
 
     // 서버 측 유효성 검사
-    const valids = getValidMoves(room.board, yourColor, [dieUsed]);
+    const valids = getValidMoves(room.board, yourColor, room.remainingMoves);
     const isValid = valids.some(m => m.from === from && m.to === to && m.dieUsed === dieUsed);
     if (!isValid) {
       socket.emit('game:move:invalid', { reason: '유효하지 않은 수입니다.' });
@@ -106,28 +107,7 @@ function handleMove(socket, room, role, data) {
 
     // 이동 적용
     const bg = room.board;
-    const oppColor = yourColor === 'white' ? 'black' : 'white';
-    let hitPiece = false;
-
-    if (from === 'bar') {
-      bg.bar[yourColor]--;
-    } else {
-      bg.points[from].count--;
-      if (bg.points[from].count === 0) bg.points[from].color = null;
-    }
-
-    if (to === 'off') {
-      bg.borneOff[yourColor]++;
-    } else {
-      if (bg.points[to].color === oppColor && bg.points[to].count === 1) {
-        bg.points[to].count = 0;
-        bg.points[to].color = null;
-        bg.bar[oppColor]++;
-        hitPiece = true;
-      }
-      bg.points[to].count++;
-      bg.points[to].color = yourColor;
-    }
+    const hitPiece = applyBoardMove(bg, yourColor, { from, to });
 
     room.remainingMoves.splice(dieIdx, 1);
 
@@ -188,85 +168,6 @@ function _switchTurn(room) {
 
 function _timers(room) {
   return { white: room.timers.white, black: room.timers.black, activeColor: room.timers.activeColor };
-}
-
-// 주어진 색과 주사위로 가능한 모든 이동 반환
-function getValidMoves(bg, color, remainingMoves) {
-  if (!remainingMoves || remainingMoves.length === 0) return [];
-  const unique   = [...new Set(remainingMoves)];
-  const oppColor = color === 'white' ? 'black' : 'white';
-  const dir      = color === 'white' ? -1 : 1;
-  const moves    = [];
-
-  if (bg.bar[color] > 0) {
-    // 바에서 입장 (최우선)
-    for (const die of unique) {
-      const entry = color === 'white' ? (25 - die) : die;
-      if (entry < 1 || entry > 24) continue;
-      if (_isBlocked(bg, entry, oppColor)) continue;
-      moves.push({ from: 'bar', to: entry, dieUsed: die });
-    }
-    return moves;
-  }
-
-  const allHome = isAllInHomeBoard(bg, color);
-
-  for (let p = 1; p <= 24; p++) {
-    if (bg.points[p].color !== color || bg.points[p].count === 0) continue;
-    for (const die of unique) {
-      const dest = p + dir * die;
-      if (color === 'white' && dest <= 0) {
-        if (allHome && canBearOff(bg, color, p, die)) moves.push({ from: p, to: 'off', dieUsed: die });
-      } else if (color === 'black' && dest >= 25) {
-        if (allHome && canBearOff(bg, color, p, die)) moves.push({ from: p, to: 'off', dieUsed: die });
-      } else if (dest >= 1 && dest <= 24) {
-        if (!_isBlocked(bg, dest, oppColor)) moves.push({ from: p, to: dest, dieUsed: die });
-      }
-    }
-  }
-
-  // 중복 제거
-  const seen = new Set();
-  return moves.filter(m => {
-    const k = `${m.from}|${m.to}|${m.dieUsed}`;
-    if (seen.has(k)) return false;
-    seen.add(k); return true;
-  });
-}
-
-function _isBlocked(bg, point, oppColor) {
-  return bg.points[point].color === oppColor && bg.points[point].count >= 2;
-}
-
-function isAllInHomeBoard(bg, color) {
-  if (bg.bar[color] > 0) return false;
-  const [lo, hi] = color === 'white' ? [1, 6] : [19, 24];
-  for (let p = 1; p <= 24; p++) {
-    if (p >= lo && p <= hi) continue;
-    if (bg.points[p].color === color && bg.points[p].count > 0) return false;
-  }
-  return true;
-}
-
-function canBearOff(bg, color, fromPoint, die) {
-  const dir  = color === 'white' ? -1 : 1;
-  const dest = fromPoint + dir * die;
-  if (color === 'white') {
-    if (dest >= 1) return false; // dest still on board — not bearing off
-    if (dest === 0) return true; // exact
-    // over-bear: no piece on higher home point
-    for (let p = fromPoint + 1; p <= 6; p++) {
-      if (bg.points[p].color === 'white' && bg.points[p].count > 0) return false;
-    }
-    return true;
-  } else {
-    if (dest <= 24) return false;
-    if (dest === 25) return true;
-    for (let p = 19; p < fromPoint; p++) {
-      if (bg.points[p].color === 'black' && bg.points[p].count > 0) return false;
-    }
-    return true;
-  }
 }
 
 module.exports = { initRoom, resetRoom, handleMove, getValidMoves, isAllInHomeBoard, canBearOff };

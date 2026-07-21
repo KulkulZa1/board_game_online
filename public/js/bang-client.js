@@ -4,6 +4,8 @@
   'use strict';
 
   const $ = (id) => document.getElementById(id);
+  const HTML_ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+  const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => HTML_ESCAPES[char]);
   const socket = io();
 
   // 카드 메타 (서버 CARD_DEFS와 동일한 표시용 사본)
@@ -64,6 +66,7 @@
   let targetMode = null;     // { idx } — 대상 선택 중인 손패 인덱스
   let reactSel = new Set();  // 리액션 카드 다중 선택
   let size = 5;
+  let reconnectPending = false;
 
   const store = {
     get token() { try { return localStorage.getItem('bang_token'); } catch (e) { return null; } },
@@ -75,6 +78,12 @@
     el.textContent = msg;
     el.classList.remove('hidden', 'show'); void el.offsetWidth; el.classList.add('show');
     clearTimeout(toast._t); toast._t = setTimeout(() => el.classList.add('hidden'), 2600);
+  }
+  function setLobbyVisible(visible) {
+    const overlay = $('lobbyOverlay');
+    overlay.classList.toggle('visible', visible);
+    overlay.setAttribute('aria-hidden', visible ? 'false' : 'true');
+    overlay.inert = !visible;
   }
 
   // ── 입장 흐름 ─────────────────────────────────────────────────────
@@ -111,21 +120,26 @@
     showWaitPane();
   });
   socket.on('bang:error', ({ message, fatal }) => {
-    if ($('lobbyOverlay').classList.contains('visible')) $('entryError').textContent = message || '오류';
-    toast(message || '오류');
+    const resumeFailed = fatal && reconnectPending;
+    reconnectPending = false;
+    if (!resumeFailed) {
+      if ($('lobbyOverlay').classList.contains('visible')) $('entryError').textContent = message || '오류';
+      toast(message || '오류');
+    }
     if (fatal) { store.clear(); showEntryPane(); }
   });
   socket.on('bang:room', renderSeats);
   socket.on('bang:begin', () => {
-    $('lobbyOverlay').classList.remove('visible');
+    setLobbyVisible(false);
     $('table').classList.remove('hidden');
   });
   socket.on('bang:reconnected', ({ code, seat, status }) => {
+    reconnectPending = false;
     roomCode = code; mySeat = seat;
     $('roomChip').textContent = code;
     $('roomChip').classList.remove('hidden');
     if (status === 'active') {
-      $('lobbyOverlay').classList.remove('visible');
+      setLobbyVisible(false);
       $('table').classList.remove('hidden');
     } else showWaitPane();
   });
@@ -133,7 +147,7 @@
   function showEntryPane() {
     $('entryPane').classList.remove('hidden');
     $('waitPane').classList.add('hidden');
-    $('lobbyOverlay').classList.add('visible');
+    setLobbyVisible(true);
   }
   function showWaitPane() {
     $('entryPane').classList.add('hidden');
@@ -143,6 +157,7 @@
     $('roomChip').classList.remove('hidden');
     $('startBtn').classList.toggle('hidden', !isHost);
     $('waitHint').classList.toggle('hidden', isHost);
+    setLobbyVisible(true);
   }
   function renderSeats(ls) {
     const wrap = $('seatList'); wrap.innerHTML = '';
@@ -150,7 +165,7 @@
       const d = document.createElement('div');
       d.className = 'seat-row' + (i === mySeat ? ' me' : '');
       d.innerHTML = s
-        ? `<span>${s.type === 'ai' ? '🤖' : '🙂'} ${s.name}${i === ls.hostSeat ? ' 👑' : ''}</span><span class="${s.connected ? 'on' : 'off'}">${s.connected ? '접속' : '대기'}</span>`
+        ? `<span>${s.type === 'ai' ? '🤖' : '🙂'} ${escapeHtml(s.name)}${i === ls.hostSeat ? ' 👑' : ''}</span><span class="${s.connected ? 'on' : 'off'}">${s.connected ? '접속' : '대기'}</span>`
         : `<span class="dim">빈 자리 — 시작 시 AI</span><span></span>`;
       wrap.appendChild(d);
     });
@@ -196,7 +211,7 @@
         ${p.jail ? '<span class="badge-mark jail" title="감옥">⛓️</span>' : ''}
         ${p.dynamite ? '<span class="badge-mark dyn" title="다이너마이트">🧨</span>' : ''}
       </div>
-      <div class="pp-name">${p.name}${p.ai ? ' 🤖' : ''}</div>
+      <div class="pp-name">${escapeHtml(p.name)}${p.ai ? ' 🤖' : ''}</div>
       <div class="pp-hp">${dead ? '' : hearts(p.hp, p.maxHp)}</div>
       <div class="pp-meta">
         ${p.dist != null ? `<span class="pp-dist-chip${rangeCls}">📏${p.dist}</span>` : ''}
@@ -222,7 +237,7 @@
         ${p.dynamite ? '<span class="badge-mark dyn" title="다이너마이트">🧨</span>' : ''}
       </div>
       <div class="me-info">
-        <div class="me-top"><b>${p.name} (나)</b>${p.role ? `<span class="me-role">${ROLE_ICON[p.role]} ${ROLE_KO[p.role]}</span>` : ''}</div>
+        <div class="me-top"><b>${escapeHtml(p.name)} (나)</b>${p.role ? `<span class="me-role">${ROLE_ICON[p.role]} ${ROLE_KO[p.role]}</span>` : ''}</div>
         <div class="me-hp">${p.alive ? hearts(p.hp, p.maxHp) : '☠️ 탈락'}</div>
         <div class="me-sub">
           <span class="me-equip">${equip}</span>
@@ -236,7 +251,7 @@
     $('discardTop').innerHTML = st.discardTop ? cardHTML(st.discardTop, 'mini') : '<div class="pile-empty">—</div>';
     const last = st.log[st.log.length - 1] || '';
     $('logTicker').textContent = last;
-    $('logDrawer').innerHTML = st.log.map((l) => `<div>${l}</div>`).join('');
+    $('logDrawer').innerHTML = st.log.map((l) => `<div>${escapeHtml(l)}</div>`).join('');
     if (!$('logDrawer').classList.contains('hidden')) $('logDrawer').scrollTop = $('logDrawer').scrollHeight;
   }
 
@@ -485,7 +500,7 @@
     $('overTitle').textContent = `🏆 ${label} 승리!`;
     $('roleReveal').innerHTML = players.map((p) => `
       <div class="rank-row${p.won ? ' me' : ''}">
-        <span>${p.alive ? '🙂' : '☠️'} ${p.name}${p.ai ? ' 🤖' : ''}</span>
+        <span>${p.alive ? '🙂' : '☠️'} ${escapeHtml(p.name)}${p.ai ? ' 🤖' : ''}</span>
         <span>${ROLE_KO[p.role]}</span>
         <b>${p.won ? '승리' : ''}</b>
       </div>`).join('');
@@ -498,8 +513,12 @@
   (function init() {
     const params = new URLSearchParams(location.search);
     const roomParam = params.get('room');
-    const token = store.token;
-    if (token) socket.on('connect', () => socket.emit('bang:reconnect', { token }));
+    socket.on('connect', () => {
+      const token = store.token;
+      if (!token) return;
+      reconnectPending = true;
+      socket.emit('bang:reconnect', { token });
+    });
     if (roomParam) {
       $('codeInput').value = roomParam.toUpperCase();
       $('entryError').textContent = '닉네임을 입력하고 참가를 누르세요';
