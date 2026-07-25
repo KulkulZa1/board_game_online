@@ -149,6 +149,7 @@ main    ← 안정 배포 버전 (Render.com 자동 배포)
 |------|------|
 | 변경 이력 | `CHANGELOG.md` |
 | 로드맵 | `ROADMAP.md` |
+| AI 에이전트 작업 규약 (모든 도구 공통) | `AGENTS.md` |
 | 게임 추가 가이드 | `ADDING_A_GAME.md` |
 | 신규 게임 후보 검토 | `docs/new-game-candidates.md` |
 | 런칭 준비/배포 검증 | `docs/launch-readiness.md` |
