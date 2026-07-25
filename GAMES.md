@@ -1,9 +1,13 @@
 # GAMES.md — Complete Game Reference
 
-Quick-reference for all games across three layers. An AI agent should read this file
+Quick-reference for every game in the repo. An AI agent should read this file
 before touching any game-specific code.
 
-**Read first:** `CLAUDE.md` (architecture), `ADDING_A_GAME.md` (board), `ADDING_AN_ARCADE_GAME.md` (arcade)
+**Read first:** `AGENTS.md` (working agreement + traps), then `CLAUDE.md` (architecture),
+`ADDING_A_GAME.md` (board), `ADDING_AN_ARCADE_GAME.md` (arcade)
+
+**Sections:** Layer A (12 board games) · Layer A′ (Mahjong, BANG!) · Layer B (9 arcade
+games) · Layer C (3 sandboxes) · Cross-layer reference
 
 ---
 
@@ -437,18 +441,114 @@ Opposite pit: oppIdx = 12 - idx
 
 ---
 
-## Layer B — Arcade Games (4 games)
+## Layer A′ — Multiplayer Specials (Mahjong, BANG!)
 
-All arcade games: standalone IIFE in `public/arcade/<name>/game.js`, no server events.
+These two are **multiplayer but self-contained**. They do **not** use the 2-player
+host/guest `RoomState`, are **not** in `server/handlers/index.js`, and never receive
+`game:move`. Do not try to fold them into the Layer A model — if you add another
+3+ player game, copy this pattern instead.
 
-| Game | Path | Mechanic | Key Constants | High Score Key |
-|------|------|----------|---------------|---------------|
+| | Riichi Mahjong | BANG! |
+|---|---|---|
+| Players | 4 (seats filled with AI) | 4–7 (`size`, clamped) |
+| Lifecycle | `server/mahjong.js` | `server/bang.js` |
+| Rule engine | `server/handlers/mahjong-engine.js` | `server/handlers/bang-engine.js` |
+| Page | `/mahjong.html` | `/bang.html` |
+| Client | `public/js/mahjong-client.js` | `public/js/bang-client.js` |
+| CSS | `public/css/games/mahjong.css` | `public/css/games/bang.css` |
+| Room code | 6-character | 6-character |
+
+> Both generate a 6-character code from the same ambiguity-free alphabet
+> (`ABCDEFGHJKLMNPQRSTUVWXYZ23456789` — no I/O/0/1). Note that the Mahjong helper is
+> **named `code4()` but emits 6 characters** (`server/mahjong.js`); trust the loop bound,
+> not the name.
+
+**Shared socket shape** — both use an identical 5-in / 5-out event set:
+
+```
+client → server:  <ns>:create   <ns>:join   <ns>:start   <ns>:action   <ns>:reconnect
+server → client:  <ns>:created  <ns>:joined <ns>:room    <ns>:reconnected  <ns>:error
+```
+
+where `<ns>` is `mahjong` or `bang`. `<ns>:room` is the full state broadcast — the client
+re-renders from it rather than applying diffs. Both rate-limit actions at 40 per 10s and
+clean up idle rooms after 30 minutes.
+
+**Shared room shape:**
+```
+room.code      — string (4 or 6 chars)
+room.status    — 'waiting' | 'active' | 'finished'
+room.seats[]   — { type:'human'|'ai', name, socketId, token, connected } | null
+room.hostSeat  — seat index of the host
+room.game      — engine state (null until started)
+room.actionTimer / aiTimer / cleanupTimer
+```
+
+### mahjong — `mahjong:action` payloads
+
+`{ a, t, tiles }` — accepted depending on `game.phase`:
+
+| Phase | Actions |
+|-------|---------|
+| `turn` (your turn) | `discard` (`t`=tile), `riichi` (`t`=tile), `tsumo`, `ankan` (`t`=tile) |
+| `calls` (reacting to a discard) | `ron`, `pon`, `chi` (`tiles`=chosen meld), `pass` |
+
+Only offers present in `game.pending.offers[seat]` are honored — the server ignores calls
+the seat was not actually offered. Engine exports include `shanten`, `isWinningHand`,
+`evaluateWin`, `scoreOf`, `countDora`, `buildWall`.
+
+### bang — `bang:action` payloads
+
+`{ a, idx, target, cards, pass, pick }`:
+
+| Situation | Actions |
+|-----------|---------|
+| Your turn, no pending queue | `play` (`idx`=hand index, `target`=seat), `end` |
+| You are the actor of `game.queue[0]` | `react` (`cards`, `pass`, `pick`) |
+
+Roles are sheriff / deputy / outlaw / renegade (`ROLE_KO` for Korean labels). Card effects
+implemented in `server/bang.js` include bang, missed, beer, saloon, duel, indians, gatling,
+panic, catbalou, jail, dynamite, stagecoach, wellsfargo, store. Range/targeting uses
+`distance()` and `weaponRange()` from the engine, which account for seating and
+Mustang/Scope-style modifiers.
+
+**Testing:** covered by `npm run test:games` (part of `npm run check`), which runs
+`prototypes/mahjong-engine-test.js`, `mahjong-flow-test.js`, `mahjong-timer-test.js`, and
+`bang-flow-test.js`. Each is also runnable on its own with `node <path>`. Plain `npm test`
+only asserts that the two pages and their client scripts return 200.
+
+---
+
+## Layer B — Arcade Games (9 games)
+
+All arcade games: standalone IIFE in `public/arcade/<name>/game.js`, no server events,
+no `game-registry.js` entry. Each is reachable at `/arcade/<name>/`.
+
+| Game | Path | Mechanic | Key Constants | Storage Keys |
+|------|------|----------|---------------|--------------|
 | **snake** | `/arcade/snake/` | Grid snake; grow by eating apples | `GRID=20, TICK=120ms` | `arcade_snake_high` |
 | **breakout** | `/arcade/breakout/` | Ball + paddle; power-ups (multi-ball, wide, laser) | `BRICK_ROWS=6, BALL_SPEED_INIT=5` | `arcade_breakout_high` |
-| **vampire** | `/arcade/vampire/` | Top-down survivor; **weapon leveling (1-5) + evolution** (max weapon + passive → evolved super-weapon); 5 base + 5 evolved weapons | `SURVIVE_GOAL=600s, MAX_ENEMIES=120, MAX_WEAPON_LEVEL=5`; `EVOLUTION_DEFS` | — (win/lose only) |
-| **plant** | `/arcade/plant/` | Clicker idle; 9 growth stages; 5 upgrade types | `STAGES[9], UPGRADES[5]` | — (AdMob on stage 9) |
+| **vampire** | `/arcade/vampire/` | Top-down survivor; **weapon leveling (1-5) + evolution** (max weapon + passive → evolved super-weapon); 5 base + 5 evolved weapons | `SURVIVE_GOAL=600s, MAX_ENEMIES=120, MAX_WEAPON_LEVEL=5`; `EVOLUTION_DEFS` | `vps_meta_v2`, `vps_run_snapshot_v1`, `vps_muted` |
+| **plant** | `/arcade/plant/` | 식물 키우기 — clicker idle; 9 growth stages; 5 upgrade types | `STAGES[9], UPGRADES[5]` | `plant_save_v1` |
+| **tower-defense** | `/arcade/tower-defense/` | Center-defense TD; 3 tower types + adjacency synergies. **⚠️ Engine lives in `sandbox/tower-defense/`** — see note below | `TD_CONFIG.*` (see Layer C) | `td_published_config` |
+| **factory** | `/arcade/factory/` | 산업의 시대 — spatial automation; production chains, era breakthroughs, stability gates | `BELT_SPEED=2.2, DEPOSIT_MIN=600, ERA_STABILITY_SEC=5, GEN_FUEL_CAP=20` | `arcade_factory_save_v1`, `arcade_factory_high` |
+| **bootstrap** | `/arcade/bootstrap/` | 문명 키우기 — civilization clicker/idle; era actions charge a Golden Age multiplier | `TICKS_PER_SEC=2` | `civ_save_v2`, `civ_best_v1`, `civ_muted` |
+| **jackpot** | `/arcade/jackpot/` | 월세 잭팟 — slot roguelite; spin to make rent, deck-building between rounds | `ROWS=3, COLS=4, BASE_SPINS_PER_RENT=4, DECK_CAP=30, EVENT_CHANCE=0.10` | `arcade_jackpot_muted` |
+| **neon-cascade** | `/arcade/neon-cascade/` | Chain-explosion arcade; timed rounds, limited charges | `WIDTH=720, HEIGHT=1000, ROUND_SECONDS=45, MAX_CHARGES=4, PULSE_RADIUS=118, RECHARGE_SECONDS=4.5` | `neon_cascade_high_v1`, `neon_cascade_chain_v1`, `neon_cascade_mute_v1` |
 
-**Adding a new arcade game:** See `ADDING_AN_ARCADE_GAME.md`
+Several arcade games ship a headless `sim.js` (`bootstrap`, `jackpot`, `neon-cascade`)
+so their economy can be balanced from Node — see `prototypes/` for the runner scripts.
+These are **not** part of `npm test`.
+
+> **⚠️ tower-defense is the exception to "arcade games are self-contained."**
+> `public/arcade/tower-defense/` holds only `index.html`. It loads the engine from
+> `sandbox/tower-defense/` via an Express alias mounted at `/arcade/tower-defense/runtime/`
+> (`server/index.js`). Editing `sandbox/tower-defense/{config,game,ui}.js` therefore
+> **changes production**. Verify such edits at `/arcade/tower-defense/`, not only in the
+> sandbox editor.
+
+**Adding a new arcade game:** See `ADDING_AN_ARCADE_GAME.md` — and add the new route to
+`ROUTES` in `scripts/smoke-test.js`.
 
 **AdMob:** `window.AdMob.showInterstitial()` (from `/js/admob.js`) — no-op on web, live in Android build.
 
@@ -513,4 +613,5 @@ place/sell/upgrade and stamps each tower's `.synergy` bonus + `.synergyIds`.
 | `public/index.html` | A+B | Lobby — board game cards + arcade section |
 | `public/arcade/*/game.js` | B | Each arcade game — single IIFE, ~300-700 lines |
 | `sandbox/*/config.js` | C | Each sandbox config — `window.*_CONFIG` + `window.*_DEFAULTS` |
-| `scripts/smoke-test.js` | A+B | 65 assertions — handlers, room state, HTTP routes for all layers |
+| `scripts/smoke-test.js` | A+B | 82 assertions — handlers, room state, HTTP routes for all layers |
+| `server/mahjong.js` / `server/bang.js` | A′ | Self-contained table lifecycles — **not** in the handler registry |

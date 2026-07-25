@@ -2,6 +2,11 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+> **Other AI tools:** `AGENTS.md` holds the same guardrails in tool-agnostic form
+> (Codex, Cursor, Gemini CLI, etc. read it; Copilot reads
+> `.github/copilot-instructions.md`). Keep the three in sync when conventions change —
+> `AGENTS.md` §4 "Traps" is the canonical list.
+
 ## Overview
 
 A real-time multiplayer board game platform built with Node.js + Express + Socket.io. It has **three intentional layers**, plus one experimental one:
@@ -51,9 +56,10 @@ npm run sandbox
 | Command | What it does |
 |---------|---------------|
 | `npm run lint` | `scripts/check-js.js` — parses every `.js` file in the repo for syntax errors (no ESLint config) |
-| `npm test` | `scripts/smoke-test.js` — starts the server on port 13001, runs ~70+ assertions (handler registry, room creation, core routes) |
+| `npm test` | `scripts/smoke-test.js` — starts the server on port 13001, runs 82 assertions (handler registry, room creation, core routes) |
 | `npm run test:full` | `scripts/smoke-check.js` — starts the server on port 3100, checks routes/static assets/handlers plus JS syntax across the whole repo (slower, more thorough than `npm test`) |
-| `npm run check` | `lint && test && test:full` — run before considering a change done |
+| `npm run test:games` | `scripts/run-game-flow-tests.js` — runs 5 rule-engine/flow suites from `prototypes/`: Mahjong (engine, flow, timer), BANG! flow, and a 36-assertion backgammon/texasholdem/dotsboxes handler suite. Each is also runnable standalone via `node prototypes/<name>.js` |
+| `npm run check` | `lint && test && test:games && test:full` — run before considering a change done |
 | `npm run build` | `scripts/no-build.js` — no-op that just prints "there is no build step" (there is genuinely no bundler) |
 | `npm run verify:production` | `scripts/verify-production-version.js` — after a Render deploy, hits `/api/version` to confirm the live commit/branch match what you expect. Pass `EXPECTED_COMMIT=<sha>` to check a specific commit. See `docs/render-version-verification.md`. |
 
@@ -105,7 +111,7 @@ board_game_online/
 ├── BUILDING_ANDROID.md         # Capacitor Android build guide
 ├── CHANGELOG.md / ROADMAP.md    # History / forward plan
 ├── docs/                          # Design docs + deploy runbooks (launch-readiness.md, render-version-verification.md, new-game-candidates.md, per-game GDDs, versioned release notes under v1.0/v1.1/v1.2)
-├── prototypes/                     # Headless Node scripts for balancing arcade economies (bootstrap-sim, jackpot-autoplay, civ-mvp-autoplay, mahjong/bang flow tests) — not wired into npm test
+├── prototypes/                     # Two kinds: rule-engine/flow suites (mahjong-*, bang-flow, newer-games-handler) run by `npm run test:games`, AND balance simulators (bootstrap-sim, jackpot-autoplay, civ-mvp-autoplay) that are not wired into any npm script
 ├── sandbox/                         # Layer C design tools, served only by `npm run sandbox` (never in production)
 │
 └── public/                          # Everything served by Express as static files
@@ -291,12 +297,14 @@ See **`ADDING_AN_ARCADE_GAME.md`**. Three files under `public/arcade/<name>/` (`
 2. **Room state creation** — chess and connect4 rooms initialize with correct structure
 3. **Core HTTP routes** — lobby, `/game.html`, `/api/status` (JSON shape), `/mahjong.html`, `/bang.html`, every `/arcade/<name>/` route (including nested runtime assets like `/arcade/tower-defense/runtime/game.js`), and `/sandbox/` → **must be 404** (sandbox must NOT be production-accessible)
 
-**`npm run test:full`** (`scripts/smoke-check.js`) does the same plus a JS syntax pass over the whole repo — slower, run it (via `npm run check`) before considering larger changes done.
+**`npm run test:games`** (`scripts/run-game-flow-tests.js`) runs the rule-engine suites that the smoke tests don't cover: Mahjong engine/flow/timer, BANG! flow, and `newer-games-handler-test.js` (36 assertions across backgammon, texasholdem, dotsboxes). Add new rule-engine suites to the `tests` array in that script.
+
+**`npm run test:full`** (`scripts/smoke-check.js`) does the same route/handler checks as `npm test` plus a JS syntax pass over the whole repo — slower, run it (via `npm run check`) before considering larger changes done.
 
 When adding a new board game handler, add it to `REQUIRED_GAMES` in `scripts/smoke-test.js`. When adding a new arcade route, add it to the `ROUTES` array in the same file.
 
 When making changes:
-- Run `npm run check` (lint + test + test:full) to verify handlers, routes, and JS syntax
+- Run `npm run check` (lint + test + test:games + test:full) to verify handlers, routes, rule engines, and JS syntax
 - Manually test the affected game(s) by running the server and playing locally
 - Test both 2-player (open two browser tabs) and solo (vs AI) modes for board games
 
