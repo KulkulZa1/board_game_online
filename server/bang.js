@@ -91,6 +91,15 @@ function addLog(room, text) {
   if (g.log.length > 60) g.log.shift();
 }
 
+// 연출 이벤트 — 총격/피격/회복/Draw! 판정 등 "무슨 일이 일어났는지"를 클라이언트에 알린다.
+// pushState 가 상태에 실어 보낸 뒤 비운다. 게임 규칙에는 관여하지 않는다.
+function fx(room, ev) {
+  const g = room.game;
+  if (!g || !g.fx) return;
+  g.fx.push(ev);
+  if (g.fx.length > 20) g.fx.shift();
+}
+
 // ── 개인화 상태 ───────────────────────────────────────────────────
 function gameStateFor(room, seat) {
   const g = room.game;
@@ -118,6 +127,7 @@ function gameStateFor(room, seat) {
     bangsPlayed: g.bangsPlayed,
     pending: iAmActor ? publicPending(g) : (pend ? { type: pend.type, actor: pend.actor, waiting: true } : null),
     log: g.log.slice(-10),
+    fx: g.fx,
     timeBanks: g.timeBank, graceMs: CFG.graceMs, turnStartedAt: g.turnStartedAt, serverNow: now(),
     winners: g.winners,
   };
@@ -133,6 +143,7 @@ function publicPending(g) {
 }
 function pushState(room) {
   emitAll(room, 'bang:state', (i) => gameStateFor(room, i));
+  if (room.game) room.game.fx = [];   // 연출 이벤트는 1회 전송 후 소비
 }
 
 // ── 대국 시작 ─────────────────────────────────────────────────────
@@ -165,6 +176,7 @@ function startMatch(room) {
     bangsPlayed: 0,
     queue: [],           // 리액션 큐 [{type, actor, ...}]
     log: [],
+    fx: [],              // 이번 상태 전송에 실어보낼 연출 이벤트 (전송 후 비움)
     timeBank: new Array(n).fill(CFG.bankMs),
     turnStartedAt: null,
     winners: null,
@@ -207,8 +219,10 @@ function beginTurn(room, seat) {
   // 1) 다이너마이트 판정
   if (p.dynamite) {
     const r = E.drawCheck(g, seat, (c) => !(c.suit === 's' && c.v >= 2 && c.v <= 9));
+    fx(room, { k: 'draw', seat, card: r.card, ok: r.ok, tag: 'dynamite' });
     if (!r.ok) {
       addLog(room, `🧨 ${p.name} 앞에서 다이너마이트 폭발! (피해 3)`);
+      fx(room, { k: 'explode', seat });
       discardCard(g, p.dynamite); p.dynamite = null;
       applyDamage(room, seat, 3, null);
       if (g.winners || p.hp <= 0) { if (!g.winners) endTurnCore(room); return; }
@@ -222,6 +236,7 @@ function beginTurn(room, seat) {
   // 2) 감옥 판정
   if (p.jail) {
     const r = E.drawCheck(g, seat, (c) => c.suit === 'h');
+    fx(room, { k: 'draw', seat, card: r.card, ok: r.ok, tag: 'jail' });
     discardCard(g, p.jail); p.jail = null;
     if (!r.ok) {
       addLog(room, `⛓️ ${p.name} 감옥 탈출 실패 — 턴을 건너뛴다`);
@@ -313,6 +328,7 @@ function processQueue(room) {
     item.barrelChecked = true;
     if (p.equip.some((c) => c.id === 'barrel')) {
       const r = E.drawCheck(g, item.actor, (c) => c.suit === 'h');
+      fx(room, { k: 'draw', seat: item.actor, card: r.card, ok: r.ok, tag: 'barrel' });
       if (r.ok) {
         item.needMissed -= 1;
         addLog(room, `🛢️ ${p.name} 술통 판정 성공 — 자동 회피!`);
@@ -446,6 +462,7 @@ function applyDamage(room, seat, amount, srcSeat) {
   const g = room.game;
   const p = g.players[seat];
   p.hp -= amount;
+  fx(room, { k: 'damage', seat, amount, from: srcSeat });
   // 캐릭터 트리거
   if (p.character === 'bart' && p.hp > 0) for (let k = 0; k < amount; k++) p.hand.push(draw(g));
   if (p.character === 'gringo' && srcSeat != null && p.hp > 0) {
@@ -472,6 +489,7 @@ function handleDeath(room, seat, killerSeat) {
   const p = g.players[seat];
   p.hp = 0;
   addLog(room, `☠️ ${p.name} 사망 — 정체는 ${E.ROLE_KO[p.role]}!`);
+  fx(room, { k: 'death', seat, role: p.role });
   // 카드 전부 버림
   for (const c of p.hand) discardCard(g, c);
   for (const c of p.equip) discardCard(g, c);
@@ -561,6 +579,7 @@ function playCard(room, seat, handIdx, targetSeat) {
     g.bangsPlayed++;
     if (p.role !== 'sheriff' && target.role === 'sheriff') g.aggroVsSheriff[seat]++;
     addLog(room, `💥 ${p.name} → ${target.name} BANG!`);
+    fx(room, { k: 'shot', from: seat, to: targetSeat });
     enqueue(room, { type: 'bang', actor: targetSeat, from: seat, needMissed: p.character === 'slab' ? 2 : 1 });
     return true;
   }
@@ -572,12 +591,16 @@ function playCard(room, seat, handIdx, targetSeat) {
       if (p.hp >= p.maxHp) return fail(room, seat, '이미 최대 체력입니다');
       spend(g, p, handIdx);
       p.hp++;
+      fx(room, { k: 'heal', seat });
       addLog(room, `🍺 ${p.name} 맥주 (HP ${p.hp})`);
       break;
     }
     case 'saloon': {
       spend(g, p, handIdx);
-      for (const q of alivePlayers(g)) q.hp = Math.min(q.maxHp, q.hp + 1);
+      for (const q of alivePlayers(g)) {
+        if (q.hp < q.maxHp) fx(room, { k: 'heal', seat: g.players.indexOf(q) });
+        q.hp = Math.min(q.maxHp, q.hp + 1);
+      }
       addLog(room, `🥃 살룬! 전원 회복`);
       break;
     }
@@ -615,6 +638,7 @@ function playCard(room, seat, handIdx, targetSeat) {
       spend(g, p, handIdx);
       if (p.role !== 'sheriff' && target.role === 'sheriff') g.aggroVsSheriff[seat]++;
       addLog(room, `⚔️ ${p.name} → ${target.name} 결투!`);
+      fx(room, { k: 'duel', from: seat, to: targetSeat });
       enqueue(room, { type: 'duel', actor: targetSeat, other: seat, from: seat });
       return true;
     }
@@ -633,6 +657,7 @@ function playCard(room, seat, handIdx, targetSeat) {
       addLog(room, `🔫 ${p.name} 개틀링 난사!`);
       let s3 = nextAlive(g, seat);
       while (s3 !== seat) {
+        fx(room, { k: 'shot', from: seat, to: s3 });
         enqueue(room, { type: 'gatling', actor: s3, from: seat, needMissed: 1 });
         s3 = nextAlive(g, s3);
       }
