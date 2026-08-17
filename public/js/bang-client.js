@@ -40,6 +40,65 @@
     }
     return pts;
   }
+  // ── 서부 사운드 (Web Audio 절차 생성 — 외부 파일 없음) ────────────
+  const Audio = (function () {
+    let ctx = null, master = null;
+    let muted = false;
+    try { muted = localStorage.getItem('bang_muted') === '1'; } catch (e) {}
+    function ensure() {
+      if (ctx) return ctx;
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return null;
+      ctx = new AC();
+      master = ctx.createGain();
+      master.gain.value = muted ? 0 : 0.5;
+      master.connect(ctx.destination);
+      return ctx;
+    }
+    function noise(dur, freq, q, gain, decay) {
+      const c = ensure(); if (!c) return;
+      const n = Math.floor(c.sampleRate * dur);
+      const buf = c.createBuffer(1, n, c.sampleRate);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, decay || 2);
+      const src = c.createBufferSource(); src.buffer = buf;
+      const f = c.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = freq; f.Q.value = q || 1;
+      const g = c.createGain(); g.gain.value = gain == null ? 0.6 : gain;
+      src.connect(f); f.connect(g); g.connect(master);
+      src.start();
+    }
+    function tone(freq, dur, type, gain, slideTo) {
+      const c = ensure(); if (!c) return;
+      const o = c.createOscillator(); o.type = type || 'sine'; o.frequency.value = freq;
+      if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, c.currentTime + dur);
+      const g = c.createGain();
+      g.gain.setValueAtTime(gain == null ? 0.2 : gain, c.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + dur);
+      o.connect(g); g.connect(master);
+      o.start(); o.stop(c.currentTime + dur);
+    }
+    const bank = {
+      shot: () => { noise(0.18, 1400, 0.8, 0.75, 3); tone(180, 0.14, 'square', 0.14, 60); },
+      hit: () => { noise(0.22, 320, 1.2, 0.55, 2); tone(110, 0.2, 'sawtooth', 0.16, 50); },
+      explode: () => { noise(0.7, 180, 0.6, 0.9, 1.4); tone(70, 0.6, 'sawtooth', 0.25, 28); },
+      heal: () => { tone(520, 0.14, 'sine', 0.16); setTimeout(() => tone(780, 0.2, 'sine', 0.14), 90); },
+      flip: () => { noise(0.09, 2600, 2.5, 0.3, 3); },
+      death: () => { tone(300, 0.5, 'sawtooth', 0.2, 60); noise(0.4, 240, 1, 0.35, 2); },
+      duel: () => { tone(880, 0.1, 'square', 0.12); setTimeout(() => tone(660, 0.16, 'square', 0.12), 110); },
+      turn: () => { tone(660, 0.09, 'sine', 0.12); setTimeout(() => tone(990, 0.11, 'sine', 0.1), 80); },
+    };
+    return {
+      play(name) { if (muted) return; try { bank[name] && bank[name](); } catch (e) {} },
+      toggle() {
+        muted = !muted;
+        if (master) master.gain.value = muted ? 0 : 0.5;
+        try { localStorage.setItem('bang_muted', muted ? '1' : '0'); } catch (e) {}
+        return muted;
+      },
+      get muted() { return muted; },
+    };
+  })();
+
   function cardFanHTML(n) {
     if (!n) return '';
     const shown = Math.min(n, 5);
@@ -175,11 +234,16 @@
   // ── 게임 렌더 ─────────────────────────────────────────────────────
   socket.on('bang:state', (st) => {
     if (!st) return;
+    const wasMyTurn = cur && cur.turn === cur.seat && cur.phase === 'turn';
     maybeAnimateDiscard(cur, st);
     cur = st;
     targetMode = null;
     reactSel = new Set();
     render(st);
+    // 렌더 후에 연출을 올린다 — 좌표를 새 배치 기준으로 잡아야 한다
+    playFx(st.fx);
+    const isMyTurn = st.turn === st.seat && st.phase === 'turn' && !st.pending;
+    if (isMyTurn && !wasMyTurn) Audio.play('turn');
   });
 
   function render(st) {
@@ -296,6 +360,127 @@
     setTimeout(() => el.remove(), 560);
   }
 
+  // ── 연출(FX) — 서버가 보낸 "무슨 일이 일어났는지"를 화면에 그린다 ──
+  // 좌석의 화면 좌표 (아바타 중심). 내 좌석은 하단 패널.
+  function seatPoint(seat) {
+    const layer = $('flyLayer');
+    if (!layer) return null;
+    const lRect = layer.getBoundingClientRect();
+    if (!lRect.width) return null;
+    const el = (cur && seat === cur.seat)
+      ? document.querySelector('#myPanel .me-avatar')
+      : document.querySelector(`.pp[data-seat="${seat}"] .pp-avatar`);
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    return { x: r.left + r.width / 2 - lRect.left, y: r.top + r.height / 2 - lRect.top, el };
+  }
+
+  function playFx(list) {
+    if (!list || !list.length) return;
+    list.forEach((ev, i) => setTimeout(() => runFx(ev), i * 260));
+  }
+  function runFx(ev) {
+    if (!ev) return;
+    if (ev.k === 'shot' || ev.k === 'duel') {
+      tracer(ev.from, ev.to, ev.k === 'duel');
+      Audio.play(ev.k === 'duel' ? 'duel' : 'shot');
+    } else if (ev.k === 'damage') {
+      hitSeat(ev.seat, '-' + ev.amount, 'dmg');
+      Audio.play('hit');
+    } else if (ev.k === 'heal') {
+      hitSeat(ev.seat, '+1', 'heal');
+      Audio.play('heal');
+    } else if (ev.k === 'explode') {
+      burst(ev.seat, '💥');
+      Audio.play('explode');
+    } else if (ev.k === 'death') {
+      burst(ev.seat, '☠️');
+      Audio.play('death');
+    } else if (ev.k === 'draw') {
+      drawReveal(ev);
+      Audio.play('flip');
+    }
+  }
+
+  // 총알 궤적 — 쏜 사람에서 맞은 사람으로 선이 뻗고 사라진다
+  function tracer(from, to, isDuel) {
+    const a = seatPoint(from), b = seatPoint(to);
+    if (!a || !b) return;
+    const layer = $('flyLayer');
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    const ang = Math.atan2(dy, dx) * 180 / Math.PI;
+    const el = document.createElement('div');
+    el.className = 'tracer' + (isDuel ? ' duel' : '');
+    el.style.left = a.x + 'px';
+    el.style.top = a.y + 'px';
+    el.style.width = len + 'px';
+    el.style.transform = `rotate(${ang}deg)`;
+    layer.appendChild(el);
+    // 총구 섬광
+    const flash = document.createElement('div');
+    flash.className = 'muzzle';
+    flash.style.left = a.x + 'px';
+    flash.style.top = a.y + 'px';
+    layer.appendChild(flash);
+    setTimeout(() => { el.remove(); flash.remove(); }, 460);
+  }
+
+  // 피격/회복 — 아바타가 흔들리고 숫자가 떠오른다
+  function hitSeat(seat, text, cls) {
+    const pt = seatPoint(seat);
+    if (!pt) return;
+    pt.el.classList.remove('shake', 'flash-dmg', 'flash-heal');
+    void pt.el.offsetWidth;
+    pt.el.classList.add(cls === 'heal' ? 'flash-heal' : 'shake', cls === 'heal' ? 'flash-heal' : 'flash-dmg');
+    setTimeout(() => pt.el.classList.remove('shake', 'flash-dmg', 'flash-heal'), 620);
+    floatText(pt.x, pt.y, text, cls);
+  }
+  function floatText(x, y, text, cls) {
+    const layer = $('flyLayer');
+    const el = document.createElement('div');
+    el.className = 'float-num ' + (cls || '');
+    el.textContent = text;
+    el.style.left = x + 'px';
+    el.style.top = y + 'px';
+    layer.appendChild(el);
+    requestAnimationFrame(() => { el.style.top = (y - 38) + 'px'; el.style.opacity = '0'; });
+    setTimeout(() => el.remove(), 900);
+  }
+  function burst(seat, icon) {
+    const pt = seatPoint(seat);
+    if (!pt) return;
+    const layer = $('flyLayer');
+    const el = document.createElement('div');
+    el.className = 'burst';
+    el.textContent = icon;
+    el.style.left = pt.x + 'px';
+    el.style.top = pt.y + 'px';
+    layer.appendChild(el);
+    requestAnimationFrame(() => el.classList.add('go'));
+    setTimeout(() => el.remove(), 800);
+  }
+
+  // Draw! 판정 — 중앙에 카드가 뒤집히며 성공/실패 도장이 찍힌다
+  const DRAW_LABEL = { dynamite: '🧨 다이너마이트', jail: '⛓️ 감옥', barrel: '🛢️ 술통' };
+  function drawReveal(ev) {
+    const layer = $('flyLayer');
+    if (!layer) return;
+    const lRect = layer.getBoundingClientRect();
+    if (!lRect.width) return;
+    const box = document.createElement('div');
+    box.className = 'draw-reveal';
+    box.style.left = (lRect.width / 2) + 'px';
+    box.style.top = (lRect.height * 0.42) + 'px';
+    box.innerHTML = `
+      <div class="dr-tag">${DRAW_LABEL[ev.tag] || 'Draw!'}</div>
+      <div class="dr-card">${cardHTML(ev.card, 'mini')}</div>
+      <div class="dr-verdict ${ev.ok ? 'ok' : 'no'}">${ev.ok ? '✔ 성공' : '✘ 실패'}</div>`;
+    layer.appendChild(box);
+    requestAnimationFrame(() => box.classList.add('go'));
+    setTimeout(() => box.remove(), 1500);
+  }
+
   // ── 거리선 (원탁 위 SVG 오버레이) ───────────────────────────────────
   function updateRangeLines() {
     const svg = $('rangeSvg');
@@ -322,8 +507,14 @@
   }
   window.addEventListener('resize', updateRangeLines);
 
-  // ── 로그 서랍 ─────────────────────────────────────────────────────
+  // ── 로그 서랍 / 소리 ──────────────────────────────────────────────
   $('logToggle').addEventListener('click', () => $('logDrawer').classList.toggle('hidden'));
+  (function initMute() {
+    const b = $('muteBtn');
+    if (!b) return;
+    b.textContent = Audio.muted ? '🔇' : '🔊';
+    b.addEventListener('click', () => { b.textContent = Audio.toggle() ? '🔇' : '🔊'; });
+  })();
 
   function renderHand(st) {
     const wrap = $('myHand');
