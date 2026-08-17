@@ -148,6 +148,8 @@ function playMatch(n) {
     clearTimeout(room.aiTimer); clearTimeout(room.actionTimer);
     const g = room.game;
     const P = BG._internal;
+    // 시작 좌석이 키트/제시/페드로면 드로우 선택이 큐에 남아 있다 — 시나리오 전제를 맞춘다
+    g.queue = [];
     const seat = g.turn;
     const p = g.players[seat];
     room.seats[seat].type = 'human';
@@ -273,6 +275,143 @@ function playMatch(n) {
       g.discard.push(g.deck.shift());
     }
     ok(g.deck.length + g.discard.length === total, '리셔플 후 카드 총량 보존');
+    cleanup(room);
+  }
+
+  console.log('\n[패닉!/캣 발루 — 노릴 곳 선택]');
+  {
+    const room = allAiRoom(4);
+    BG.startMatch(room);
+    clearTimeout(room.aiTimer); clearTimeout(room.actionTimer);
+    const g = room.game;
+    const P = BG._internal;
+    g.queue = [];
+    for (const p of g.players) { p.equip = []; p.character = 'x'; p.jail = null; p.dynamite = null; }
+    g.turn = 0; g.phase = 'turn'; g.bangsPlayed = 0;
+    room.seats[0].type = 'human'; room.seats[0].connected = true;
+
+    // 손패도 있고 술통도 깔린 상대 → 선택지가 2개 이상이면 고를 수 있어야 한다
+    g.players[1].hand = [{ id: 'bang', suit: 'c', v: 5 }];
+    g.players[1].equip = [{ id: 'barrel', suit: 'h', v: 9 }];
+    g.players[0].hand = [{ id: 'panic', suit: 'd', v: 3 }];
+    P.playCard(room, 0, 0, 1);
+    const it = g.queue[0];
+    ok(it && it.type === 'steal' && it.options.length === 2, '패닉! — 손패/장비 선택지 제시', it && it.type);
+    const barrelIx = it.options.findIndex((o) => o.kind === 'equip' && o.card.id === 'barrel');
+    ok(barrelIx >= 0, '깔린 술통이 선택지에 포함');
+    P.resolveReact(room, 0, { pick: barrelIx });
+    ok(g.players[1].equip.length === 0 && g.players[0].hand.some((c) => c.id === 'barrel'),
+       '지정한 장비를 정확히 빼앗음');
+    ok(g.players[1].hand.length === 1, '손패는 그대로 (지정한 곳만 영향)');
+
+    // 캣 발루로 감옥 제거 — 규칙상 깔린 카드이므로 대상이 된다
+    g.queue = [];
+    g.turn = 0; g.phase = 'turn';
+    g.players[2].hand = []; g.players[2].jail = { id: 'jail', suit: 's', v: 4 };
+    g.players[0].hand = [{ id: 'catbalou', suit: 'c', v: 7 }];
+    P.playCard(room, 0, 0, 2);
+    ok(g.players[2].jail === null, '캣 발루 — 유일 선택지(감옥) 즉시 제거');
+    cleanup(room);
+  }
+
+  console.log('\n[신규 캐릭터]');
+  {
+    ok(E.CHARACTERS.length === 16, '기본판 캐릭터 16인 전원', String(E.CHARACTERS.length));
+    const ids = E.CHARACTERS.map((c) => c.id);
+    ok(['jourdonnais', 'vulture', 'sid', 'kit', 'jesse', 'pedro'].every((i) => ids.includes(i)), '신규 6인 등록');
+
+    // 주르도네 — 술통 없이도 하트 판정으로 회피
+    const room = allAiRoom(4);
+    BG.startMatch(room);
+    clearTimeout(room.aiTimer); clearTimeout(room.actionTimer);
+    const g = room.game;
+    const P = BG._internal;
+    g.queue = [];
+    for (const p of g.players) { p.equip = []; p.character = 'x'; p.jail = null; p.dynamite = null; p.hand = []; }
+    g.players[1].character = 'jourdonnais';
+    g.players[1].hp = 4;
+    g.deck.unshift({ id: 'beer', suit: 'h', v: 9 });   // 하트 → 판정 성공
+    g.turn = 0; g.phase = 'turn'; g.bangsPlayed = 0;
+    g.players[0].hand = [{ id: 'bang', suit: 'c', v: 5 }];
+    P.playCard(room, 0, 0, 1);
+    ok(g.players[1].hp === 4 && !g.queue.length, '주르도네 — 내장 술통으로 BANG! 자동 회피');
+
+    // 벌처 샘 — 탈락자의 카드를 전부 가져간다
+    g.queue = [];
+    g.players[2].character = 'vulture';
+    g.players[2].hand = [];
+    // 맥주를 쥐고 있으면 치명상 회생 창으로 빠지므로 제외한다
+    g.players[3].hand = [{ id: 'bang', suit: 'c', v: 2 }, { id: 'missed', suit: 'd', v: 3 }];
+    g.players[3].equip = [{ id: 'mustang', suit: 's', v: 8 }];
+    g.players[3].hp = 1;
+    P.applyDamage(room, 3, 1, 0);
+    ok(g.players[2].hand.length === 3, '벌처 샘 — 탈락자의 손패+장비 3장 회수', String(g.players[2].hand.length));
+    ok(g.players[3].hand.length === 0 && g.players[3].equip.length === 0, '탈락자 카드 정리');
+    cleanup(room);
+  }
+
+  console.log('\n[시드 케첨 / 드로우 선택 캐릭터]');
+  {
+    const room = allAiRoom(4);
+    BG.startMatch(room);
+    clearTimeout(room.aiTimer); clearTimeout(room.actionTimer);
+    const g = room.game;
+    const P = BG._internal;
+    g.queue = [];
+    for (const p of g.players) { p.equip = []; p.character = 'x'; p.jail = null; p.dynamite = null; }
+    room.seats[0].type = 'human'; room.seats[0].connected = true;
+    g.turn = 0; g.phase = 'turn';
+
+    // 시드 케첨 — 카드 2장 버리고 체력 1 회복
+    g.players[0].character = 'sid';
+    g.players[0].hp = 2; g.players[0].maxHp = 4;
+    g.players[0].hand = [
+      { id: 'bang', suit: 'c', v: 2 }, { id: 'missed', suit: 'd', v: 3 }, { id: 'beer', suit: 'h', v: 4 },
+    ];
+    BG._internal.sidHeal(room, 0, [0, 1]);
+    ok(g.players[0].hp === 3 && g.players[0].hand.length === 1, '시드 케첨 — 2장 버리고 체력 +1');
+    BG._internal.sidHeal(room, 0, [0]);
+    ok(g.players[0].hp === 3, '시드 케첨 — 카드가 부족하면 발동하지 않음');
+
+    // 키트 칼슨 — 3장 중 1장을 산으로 되돌린다
+    g.queue = [];
+    g.players[1].character = 'kit';
+    g.players[1].hand = [];
+    g.players[1].hp = 4; g.players[1].jail = null; g.players[1].dynamite = null;
+    const deckBefore = g.deck.length;
+    P.beginTurn(room, 1);
+    const kitItem = g.queue[0];
+    ok(kitItem && kitItem.type === 'kit' && kitItem.cards.length === 3, '키트 칼슨 — 3장 공개 선택 대기');
+    P.resolveReact(room, 1, { pick: 0 });
+    ok(g.players[1].hand.length === 2, '키트 칼슨 — 2장 획득');
+    ok(g.deck.length === deckBefore - 2, '키트 칼슨 — 1장은 산으로 복귀', `${g.deck.length} vs ${deckBefore - 2}`);
+
+    // 제시 존스 — 첫 장을 상대 손에서
+    g.queue = [];
+    g.players[2].character = 'jesse';
+    g.players[2].hand = []; g.players[2].hp = 4; g.players[2].jail = null; g.players[2].dynamite = null;
+    g.players[3].hand = [{ id: 'wellsfargo', suit: 'd', v: 6 }];
+    P.beginTurn(room, 2);
+    const jItem = g.queue[0];
+    ok(jItem && jItem.type === 'jesse', '제시 존스 — 드로우 출처 선택 대기');
+    const pIx = jItem.options.findIndex((o) => o.kind === 'player' && o.seat === 3);
+    P.resolveReact(room, 2, { pick: pIx });
+    ok(g.players[3].hand.length === 0 && g.players[2].hand.some((c) => c.id === 'wellsfargo'),
+       '제시 존스 — 상대 손에서 1장 + 산에서 1장');
+    ok(g.players[2].hand.length === 2, '제시 존스 — 총 2장 드로우');
+
+    // 페드로 라미레즈 — 첫 장을 버림패에서
+    g.queue = [];
+    g.players[0].character = 'pedro';
+    g.players[0].hand = []; g.players[0].hp = 4; g.players[0].jail = null; g.players[0].dynamite = null;
+    g.discard.push({ id: 'gatling', suit: 'h', v: 10 });
+    P.beginTurn(room, 0);
+    const pItem = g.queue[0];
+    ok(pItem && pItem.type === 'pedro', '페드로 — 버림패/산 선택 대기');
+    const dIx = pItem.options.findIndex((o) => o.kind === 'discard');
+    P.resolveReact(room, 0, { pick: dIx });
+    ok(g.players[0].hand.some((c) => c.id === 'gatling'), '페드로 — 버림패 맨 위 카드 획득');
+    ok(g.players[0].hand.length === 2, '페드로 — 총 2장 드로우');
     cleanup(room);
   }
 

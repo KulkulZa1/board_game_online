@@ -1,10 +1,11 @@
 // BANG! — 자립형 멀티플레이 모듈 (전용 페이지 /bang.html, 이벤트 bang:*)
 // 마작 모듈과 동일한 설계: 방 코드 초대(4~7인), 빈 자리 AI 충원, 좌석별 개인 상태 emit,
 // 체스식 시간 은행(턴), 고정 시간 리액션 창.
-//   구현 범위: 기본판 80장 전체, 역할 4종, 자동/패시브 캐릭터 10인,
-//   리액션(BANG!/개틀링/인디언/결투/치명상 맥주/잡화점 픽/핸드 정리),
-//   Draw!(술통·감옥·다이너마이트), 거리/사거리, 처치 보상·페널티.
-//   단순화(v1): 패닉!·캣 발루는 무작위 카드 대상(손패 우선), 장착 카드 중복 불가.
+//   구현 범위: 기본판 80장 전체, 역할 4종, 캐릭터 16인 전원,
+//   리액션(BANG!/개틀링/인디언/결투/치명상 맥주/잡화점 픽/핸드 정리/패닉·캣 발루 대상 선택/
+//   키트·제시·페드로 드로우 선택), Draw!(술통·감옥·다이너마이트), 거리/사거리, 처치 보상·페널티.
+//   원작과 다른 점: 시드 케첨의 "아무 때나"를 자기 턴으로 제한(치명상 회생은 맥주 전용),
+//   장착 카드 중복 불가.
 'use strict';
 
 const { v4: uuidv4 } = require('uuid');
@@ -144,6 +145,9 @@ function publicPending(g) {
   if (p.type === 'store') o.cards = p.cards;
   if (p.type === 'lethal') o.beersNeeded = 1 - g.players[p.actor].hp;
   if (p.type === 'discard') o.mustDiscard = g.players[p.actor].hand.length - Math.max(0, g.players[p.actor].hp);
+  if (p.type === 'steal') { o.victim = p.victim; o.toDiscard = p.toDiscard; o.options = p.options; }
+  if (p.type === 'kit') o.cards = p.cards;
+  if (p.type === 'jesse' || p.type === 'pedro') o.options = p.options;
   return o;
 }
 function pushState(room) {
@@ -262,18 +266,50 @@ function beginTurn(room, seat) {
     }
     addLog(room, `⛓️ ${p.name} 감옥 탈출!`);
   }
-  // 3) 드로우 2장 (블랙 잭: 2번째 공개, 빨강이면 +1)
-  const c1 = draw(g), c2 = draw(g);
-  p.hand.push(c1, c2);
-  if (p.character === 'blackjack') {
-    if (c2.suit === 'h' || c2.suit === 'd') {
-      p.hand.push(draw(g));
-      addLog(room, `🃏 블랙 잭 — 빨간 카드 공개, 1장 추가 드로우`);
-    }
-  }
+  // 3) 드로우 단계 — 선택이 필요한 캐릭터는 리액션 큐가 이어받는다
+  if (!drawPhase(room, seat)) return;
   armTurnTimer(room, seat);
   pushState(room);
   maybeAiTurn(room, seat);
+}
+
+// 기본 드로우 2장 (블랙 잭: 2번째 공개, 빨강이면 +1)
+function normalDraw(room, seat) {
+  const g = room.game;
+  const p = g.players[seat];
+  const c1 = draw(g), c2 = draw(g);
+  p.hand.push(c1, c2);
+  if (p.character === 'blackjack' && (c2.suit === 'h' || c2.suit === 'd')) {
+    p.hand.push(draw(g));
+    addLog(room, `🃏 블랙 잭 — 빨간 카드 공개, 1장 추가 드로우`);
+  }
+}
+// 드로우 단계. true = 즉시 완료(턴 진행), false = 선택 대기(큐가 이어받음)
+function drawPhase(room, seat) {
+  const g = room.game;
+  const p = g.players[seat];
+  if (p.character === 'kit') {
+    // 키트 칼슨: 산에서 3장을 보고 1장을 되돌려놓는다
+    const three = [draw(g), draw(g), draw(g)];
+    enqueue(room, { type: 'kit', actor: seat, cards: three });
+    return false;
+  }
+  if (p.character === 'jesse') {
+    // 제시 존스: 첫 장을 다른 플레이어 손에서 가져올 수 있다
+    const opts = [{ kind: 'deck' }];
+    g.players.forEach((q, i) => {
+      if (i !== seat && q.hp > 0 && q.hand.length) opts.push({ kind: 'player', seat: i, name: q.name });
+    });
+    if (opts.length > 1) { enqueue(room, { type: 'jesse', actor: seat, options: opts }); return false; }
+  }
+  if (p.character === 'pedro' && g.discard.length) {
+    // 페드로 라미레즈: 첫 장을 버림패 맨 위에서 가져올 수 있다
+    const top = g.discard[g.discard.length - 1];
+    enqueue(room, { type: 'pedro', actor: seat, options: [{ kind: 'discard', card: top }, { kind: 'deck' }] });
+    return false;
+  }
+  normalDraw(room, seat);
+  return true;
 }
 
 function endTurnCore(room) {
@@ -349,7 +385,10 @@ function processQueue(room) {
   // BANG!류: 술통 자동 판정 먼저
   if ((item.type === 'bang' || item.type === 'gatling') && !item.barrelChecked) {
     item.barrelChecked = true;
-    if (p.equip.some((c) => c.id === 'barrel')) {
+    // 술통 판정 횟수 — 장착한 술통과 주르도네의 내장 효과는 각각 1회씩 굴린다
+    let barrels = p.equip.filter((c) => c.id === 'barrel').length;
+    if (p.character === 'jourdonnais') barrels++;
+    for (let t = 0; t < barrels && item.needMissed > 0; t++) {
       const r = E.drawCheck(g, item.actor, (c) => c.suit === 'h');
       fx(room, { k: 'draw', seat: item.actor, card: r.card, ok: r.ok, tag: 'barrel' });
       if (r.ok) {
@@ -444,6 +483,62 @@ function resolveReact(room, seat, use) {
       processQueue(room);
     }
     return;
+  } else if (item.type === 'steal') {
+    // 패닉!/캣 발루 — 노릴 곳 선택 (무응답 시 손패 우선, 없으면 첫 항목)
+    let ix = typeof use.pick === 'number' ? use.pick : -1;
+    if (ix < 0 || ix >= item.options.length) {
+      const h = item.options.findIndex((o) => o.kind === 'hand');
+      ix = h >= 0 ? h : 0;
+    }
+    applySteal(room, seat, item.victim, item.options[ix], item.toDiscard);
+    g.queue.shift();
+    processQueue(room);
+    return;
+  } else if (item.type === 'kit') {
+    // 키트 칼슨 — 3장 중 1장을 산 위로 되돌리고 나머지를 가져간다
+    let back = typeof use.pick === 'number' ? use.pick : -1;
+    if (back < 0 || back >= item.cards.length) back = item.cards.length - 1;
+    const returned = item.cards.splice(back, 1)[0];
+    p.hand.push(...item.cards);
+    g.deck.unshift(returned);
+    addLog(room, `🔭 ${p.name} 키트 칼슨 — 2장 획득, 1장 산으로`);
+    g.queue.shift();
+    processQueue(room);
+    return;
+  } else if (item.type === 'jesse') {
+    // 제시 존스 — 첫 장을 지정한 상대 손에서, 나머지는 산에서
+    let ix = typeof use.pick === 'number' ? use.pick : 0;
+    if (ix < 0 || ix >= item.options.length) ix = 0;
+    const opt = item.options[ix];
+    let got = false;
+    if (opt.kind === 'player') {
+      const victim = g.players[opt.seat];
+      if (victim && victim.hp > 0 && victim.hand.length) {
+        p.hand.push(victim.hand.splice(Math.floor(g.rng() * victim.hand.length), 1)[0]);
+        addLog(room, `🎯 ${p.name} 제시 존스 — ${victim.name}의 손에서 1장`);
+        checkSuzy(g, victim);
+        got = true;
+      }
+    }
+    if (!got) p.hand.push(draw(g));
+    p.hand.push(draw(g));
+    g.queue.shift();
+    processQueue(room);
+    return;
+  } else if (item.type === 'pedro') {
+    // 페드로 라미레즈 — 첫 장을 버림패에서 가져올 수 있다
+    let ix = typeof use.pick === 'number' ? use.pick : 1;
+    if (ix < 0 || ix >= item.options.length) ix = 1;
+    if (item.options[ix].kind === 'discard' && g.discard.length) {
+      p.hand.push(g.discard.pop());
+      addLog(room, `♻️ ${p.name} 페드로 — 버림패에서 1장`);
+    } else {
+      p.hand.push(draw(g));
+    }
+    p.hand.push(draw(g));
+    g.queue.shift();
+    processQueue(room);
+    return;
   } else if (item.type === 'discard') {
     // 핸드 정리 — use.cards 인덱스 버리기 (부족하면 자동으로 앞에서)
     const need = p.hand.length - Math.max(0, p.hp);
@@ -513,7 +608,15 @@ function handleDeath(room, seat, killerSeat) {
   p.hp = 0;
   addLog(room, `☠️ ${p.name} 사망 — 정체는 ${E.ROLE_KO[p.role]}!`);
   fx(room, { k: 'death', seat, role: p.role });
-  // 카드 전부 버림
+  // 벌처 샘이 살아 있으면 손패·장비를 전부 가져간다 (감옥·다이너마이트는 버림)
+  const vulture = g.players.findIndex((q, i) => i !== seat && q.hp > 0 && q.character === 'vulture');
+  if (vulture >= 0 && (p.hand.length || p.equip.length)) {
+    const taken = p.hand.length + p.equip.length;
+    g.players[vulture].hand.push(...p.hand, ...p.equip);
+    p.hand = []; p.equip = [];
+    addLog(room, `🦅 벌처 샘이 ${p.name}의 카드 ${taken}장을 거둬갔다`);
+  }
+  // 남은 카드는 전부 버림
   for (const c of p.hand) discardCard(g, c);
   for (const c of p.equip) discardCard(g, c);
   discardCard(g, p.jail); discardCard(g, p.dynamite);
@@ -645,21 +748,26 @@ function playCard(room, seat, handIdx, targetSeat) {
     case 'panic': {
       if (!target || target.hp <= 0 || targetSeat === seat) return false;
       if (E.distance(g.players, seat, targetSeat) > 1) return fail(room, seat, '패닉!은 거리 1만 가능합니다');
-      if (!target.hand.length && !target.equip.length) return fail(room, seat, '가져올 카드가 없습니다');
+      const pOpts = stealOptions(target);
+      if (!pOpts.length) return fail(room, seat, '가져올 카드가 없습니다');
       chargeTime(room, seat);
       spend(g, p, handIdx);
-      stealCard(g, p, target, false);
       addLog(room, `😱 ${p.name} → ${target.name} 패닉!`);
-      break;
+      // 노릴 곳이 둘 이상이면 규칙대로 플레이어가 고른다
+      if (pOpts.length === 1) { applySteal(room, seat, targetSeat, pOpts[0], false); break; }
+      enqueue(room, { type: 'steal', actor: seat, victim: targetSeat, toDiscard: false, options: pOpts });
+      return true;
     }
     case 'catbalou': {
       if (!target || target.hp <= 0 || targetSeat === seat) return false;
-      if (!target.hand.length && !target.equip.length) return fail(room, seat, '버릴 카드가 없습니다');
+      const cOpts = stealOptions(target);
+      if (!cOpts.length) return fail(room, seat, '버릴 카드가 없습니다');
       chargeTime(room, seat);
       spend(g, p, handIdx);
-      stealCard(g, p, target, true);
       addLog(room, `🐈 ${p.name} → ${target.name} 캣 발루`);
-      break;
+      if (cOpts.length === 1) { applySteal(room, seat, targetSeat, cOpts[0], true); break; }
+      enqueue(room, { type: 'steal', actor: seat, victim: targetSeat, toDiscard: true, options: cOpts });
+      return true;
     }
     case 'duel': {
       if (!target || target.hp <= 0 || targetSeat === seat) return false;
@@ -751,21 +859,71 @@ function spend(g, p, idx, keep) {
   checkSuzy(g, p);
   return c;
 }
-function stealCard(g, taker, victim, toDiscard) {
-  let card = null;
-  if (victim.hand.length) {
-    card = victim.hand.splice(Math.floor(g.rng() * victim.hand.length), 1)[0];
-  } else if (victim.equip.length) {
-    card = victim.equip.splice(Math.floor(g.rng() * victim.equip.length), 1)[0];
+// 패닉!/캣 발루가 노릴 수 있는 곳 — 손패(무작위 1장) 또는 앞에 깔린 카드(지정).
+// 규칙대로 감옥·다이너마이트도 "앞에 깔린 카드"이므로 대상이 된다.
+function stealOptions(victim) {
+  const opts = [];
+  if (victim.hand.length) opts.push({ kind: 'hand' });
+  victim.equip.forEach((c, i) => opts.push({ kind: 'equip', i, card: c }));
+  if (victim.jail) opts.push({ kind: 'jail', card: victim.jail });
+  if (victim.dynamite) opts.push({ kind: 'dynamite', card: victim.dynamite });
+  return opts;
+}
+// 선택된 곳에서 카드 1장을 실제로 빼낸다. 손패는 규칙대로 무작위.
+function takeFrom(g, victim, opt) {
+  if (!opt) return null;
+  if (opt.kind === 'hand') {
+    if (!victim.hand.length) return null;
+    return victim.hand.splice(Math.floor(g.rng() * victim.hand.length), 1)[0];
   }
+  if (opt.kind === 'equip') {
+    const ix = victim.equip.findIndex((c) => c.id === opt.card.id && c.suit === opt.card.suit && c.v === opt.card.v);
+    return ix >= 0 ? victim.equip.splice(ix, 1)[0] : null;
+  }
+  if (opt.kind === 'jail') { const c = victim.jail; victim.jail = null; return c; }
+  if (opt.kind === 'dynamite') { const c = victim.dynamite; victim.dynamite = null; return c; }
+  return null;
+}
+function applySteal(room, takerSeat, victimSeat, opt, toDiscard) {
+  const g = room.game;
+  const taker = g.players[takerSeat];
+  const victim = g.players[victimSeat];
+  const card = takeFrom(g, victim, opt);
   if (!card) return;
-  if (toDiscard) discardCard(g, card);
-  else taker.hand.push(card);
+  const where = opt.kind === 'hand' ? '손패' : E.CARD_DEFS[card.id].name;
+  if (toDiscard) {
+    discardCard(g, card);
+    addLog(room, `🐈 ${taker.name} → ${victim.name}의 ${where} 제거`);
+  } else {
+    taker.hand.push(card);
+    addLog(room, `😱 ${taker.name} → ${victim.name}의 ${where} 획득`);
+  }
   checkSuzy(g, victim);
 }
 function fail(room, seat, msg) {
   emitSeat(room, seat, 'bang:error', { message: msg });
   return false;
+}
+
+// 시드 케첨 — 카드 2장을 버리고 체력 1 회복.
+// 원작은 "아무 때나"지만 여기서는 자기 턴으로 제한한다(치명상 회생 창은 맥주 전용).
+function sidHeal(room, seat, idxs) {
+  const g = room.game;
+  const p = g.players[seat];
+  if (p.character !== 'sid') return fail(room, seat, '시드 케첨 전용 능력입니다');
+  if (p.hp >= p.maxHp) return fail(room, seat, '이미 최대 체력입니다');
+  const uniq = [...new Set(idxs.filter((i) => i >= 0 && i < p.hand.length))];
+  if (uniq.length < 2) return fail(room, seat, '버릴 카드 2장을 고르세요');
+  chargeTime(room, seat);
+  for (const ix of uniq.slice(0, 2).sort((a, b) => b - a)) discardCard(g, p.hand.splice(ix, 1)[0]);
+  p.hp++;
+  fx(room, { k: 'heal', seat });
+  addLog(room, `🩹 ${p.name} 시드 케첨 — 카드 2장으로 체력 회복 (HP ${p.hp})`);
+  checkSuzy(g, p);
+  // playCard 와 동일하게 턴 타이머와 AI 루프를 다시 걸어준다 (빠뜨리면 AI 턴이 멈춘다)
+  armTurnTimer(room, seat);
+  pushState(room);
+  maybeAiTurn(room, seat);
 }
 
 function endTurnAction(room, seat) {
@@ -808,6 +966,15 @@ function aiPlayStep(room, seat) {
   const idxOf = (id) => p.hand.findIndex((c) => c.id === id);
   const enemies = aiEnemies(g, seat);
   const inRange = enemies.filter((e) => E.distance(g.players, seat, e.seat) <= E.weaponRange(p));
+
+  // 0) 시드 케첨 — 위험하고 손패가 넉넉하면 카드 2장으로 체력을 산다
+  if (p.character === 'sid' && p.hp < p.maxHp && p.hp <= 2 && p.hand.length >= 4) {
+    const value = { bang: 6, missed: 5, beer: 5 };
+    const cheap = p.hand.map((c, i) => ({ i, v: value[c.id] || 2 }))
+      .sort((a, b) => a.v - b.v).slice(0, 2).map((x) => x.i);
+    sidHeal(room, seat, cheap);
+    return true;
+  }
 
   // 1) 맥주 (아프면)
   if (p.hp < p.maxHp && p.hp <= 2 && alivePlayers(g).length > 2 && idxOf('beer') >= 0) {
@@ -898,6 +1065,47 @@ function maybeAiReact(room, item) {
       for (const id of pref) { const ix = item.cards.findIndex((c) => c.id === id); if (ix >= 0) { pick = ix; break; } }
       return resolveReact(room, item.actor, { pick });
     }
+    if (item.type === 'steal') {
+      // 방어 장비(술통·무스탕)와 무기를 우선 노린다. 내 감옥이면 풀어버린다.
+      const score = (o) => {
+        if (o.kind === 'jail') return 60;
+        if (o.kind === 'dynamite') return 10;
+        if (o.kind === 'equip') {
+          const id = o.card.id;
+          if (id === 'barrel' || id === 'mustang') return 50;
+          if (id === 'scope') return 30;
+          return 40; // 무기
+        }
+        return 20; // 손패 무작위
+      };
+      let best = 0;
+      item.options.forEach((o, i) => { if (score(o) > score(item.options[best])) best = i; });
+      return resolveReact(room, item.actor, { pick: best });
+    }
+    if (item.type === 'kit') {
+      // 가치가 가장 낮은 카드를 산으로 되돌린다
+      const value = { bang: 6, missed: 5, beer: 5, barrel: 4, mustang: 4, volcanic: 4 };
+      let worst = 0;
+      item.cards.forEach((c, i) => { if ((value[c.id] || 2) < (value[item.cards[worst].id] || 2)) worst = i; });
+      return resolveReact(room, item.actor, { pick: worst });
+    }
+    if (item.type === 'jesse') {
+      // 손패가 가장 많은 상대를 노린다 (없으면 산)
+      let best = 0, most = -1;
+      item.options.forEach((o, i) => {
+        if (o.kind !== 'player') return;
+        const n = g.players[o.seat].hand.length;
+        if (n > most) { most = n; best = i; }
+      });
+      return resolveReact(room, item.actor, { pick: best });
+    }
+    if (item.type === 'pedro') {
+      // 버림패 맨 위가 쓸모 있으면 가져온다
+      const good = ['bang', 'missed', 'beer', 'barrel', 'mustang'];
+      const dIx = item.options.findIndex((o) => o.kind === 'discard');
+      const useDiscard = dIx >= 0 && good.includes(item.options[dIx].card.id);
+      return resolveReact(room, item.actor, { pick: useDiscard ? dIx : item.options.findIndex((o) => o.kind === 'deck') });
+    }
     if (item.type === 'discard') {
       // 가치 낮은 순으로 버림
       const value = { bang: 5, missed: 4, beer: 4 };
@@ -980,6 +1188,7 @@ function register(io, socket) {
     }
     if (g.phase === 'turn' && g.turn === seat && !g.queue.length) {
       if (a === 'play') { if (playCard(room, seat, data.idx | 0, data.target != null ? data.target | 0 : null)) { /* state는 내부에서 push */ } else pushState(room); }
+      else if (a === 'sid') { sidHeal(room, seat, Array.isArray(data.cards) ? data.cards.map((x) => x | 0) : []); }
       else if (a === 'end') endTurnAction(room, seat);
     }
   });
@@ -1027,5 +1236,5 @@ function findBySocket(socketId) {
 
 module.exports = {
   register, rooms, createRoom, seatHuman, startMatch, CFG,
-  _internal: { playCard, resolveReact, endTurnAction, applyDamage, beginTurn, gameStateFor, alivePlayers, checkWin },
+  _internal: { playCard, resolveReact, endTurnAction, applyDamage, beginTurn, gameStateFor, alivePlayers, checkWin, sidHeal, stealOptions },
 };

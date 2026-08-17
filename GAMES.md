@@ -503,7 +503,7 @@ the seat was not actually offered. Engine exports include `shanten`, `isWinningH
 
 | Situation | Actions |
 |-----------|---------|
-| Your turn, no pending queue | `play` (`idx`=hand index, `target`=seat), `end` |
+| Your turn, no pending queue | `play` (`idx`=hand index, `target`=seat), `end`, `sid` (`cards`=2 hand indices) |
 | You are the actor of `game.queue[0]` | `react` (`cards`, `pass`, `pick`) |
 
 Roles are sheriff / deputy / outlaw / renegade (`ROLE_KO` for Korean labels). Card effects
@@ -511,6 +511,42 @@ implemented in `server/bang.js` include bang, missed, beer, saloon, duel, indian
 panic, catbalou, jail, dynamite, stagecoach, wellsfargo, store. Range/targeting uses
 `distance()` and `weaponRange()` from the engine, which account for seating and
 Mustang/Scope-style modifiers.
+
+**Reaction queue (`game.queue`)** — one item at a time; `queue[0].actor` is the only seat
+allowed to send `react`. `publicPending()` exposes the item's detail to that seat only;
+everyone else sees `{type, actor, waiting:true}`. Item types:
+
+| `type` | Who responds | `react` shape | Meaning |
+|--------|--------------|---------------|---------|
+| `bang` / `gatling` | target | `cards` (Missed!) or `pass` | Barrel/Jourdonnais Draw! runs automatically first |
+| `indians` / `duel` | target | `cards` (BANG!) or `pass` | Duel re-queues onto the other player |
+| `lethal` | dying player | `cards` (Beer) or `pass` | Only opens when >2 players are alive |
+| `store` | each player clockwise | `pick` | General Store |
+| `discard` | turn player | `cards` | End-of-turn hand limit = current HP |
+| `steal` | **the card player** | `pick` (index into `options`) | Panic!/Cat Balou target choice — see below |
+| `kit` | turn player | `pick` (card to return) | Kit Carlson draw |
+| `jesse` / `pedro` | turn player | `pick` (index into `options`) | Alternative draw source |
+
+**Panic! / Cat Balou** follow the official rule: you choose *where* to take from, and only
+the hand is random. `stealOptions()` builds `{kind:'hand'} | {kind:'equip',i,card} |
+{kind:'jail',card} | {kind:'dynamite',card}` — Jail and Dynamite are cards in play, so
+Cat Balou can free a prisoner. With only one option the server resolves it immediately and
+never enqueues.
+
+**Characters** — all 16 from the base game live in `bang-engine.js` `CHARACTERS`. Ten are
+passive (Bart Cassidy, Black Jack, Calamity Janet, El Gringo, Lucky Duke, Paul Regret,
+Rose Doolan, Slab the Killer, Suzy Lafayette, Willy the Kid); Jourdonnais (built-in Barrel)
+and Vulture Sam (inherits an eliminated player's hand + equipment) are also automatic. The
+remaining four need input: Kit Carlson, Jesse Jones and Pedro Ramirez each replace the draw
+step with a queue item, and Sid Ketchum uses the separate `sid` action.
+
+> Deviation from the printed rules: Sid Ketchum's ability is "any time" on the card but is
+> restricted here to his own turn — the lethal-damage window stays Beer-only.
+
+**Visual effect stream** — `state.fx` is an array of already-public events describing what
+just happened (`shot`, `duel`, `damage`, `heal`, `draw`, `explode`, `death`), emitted so the
+client can animate rather than only log. It is cleared after every broadcast, so a state
+push never replays stale effects, and it is safe to send identically to every seat.
 
 **Testing:** covered by `npm run test:games` (part of `npm run check`), which runs
 `prototypes/mahjong-engine-test.js`, `mahjong-flow-test.js`, `mahjong-timer-test.js`, and
