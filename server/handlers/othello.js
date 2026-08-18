@@ -140,4 +140,4 @@ function countStones(board) {
   return { white, black };
 }
 
-module.exports = { initRoom, resetRoom, handleMove };
+module.exports = { initRoom, resetRoom, handleMove, getFlippedCells, computeValidMoves, countStones };

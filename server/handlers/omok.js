@@ -113,4 +113,4 @@ function getWinCells(board, row, col, color, size) {
   return [];
 }
 
-module.exports = { initRoom, resetRoom, handleMove };
+module.exports = { initRoom, resetRoom, handleMove, checkOmokWin, getWinCells };

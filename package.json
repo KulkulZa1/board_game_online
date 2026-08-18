@@ -12,7 +12,9 @@
     "sandbox": "npx serve sandbox -l 3001",
     "build": "node scripts/no-build.js",
     "lint": "node scripts/check-js.js",
-    "check": "npm run lint && npm test && npm run test:games && npm run test:full",
+    "test:unit": "jest tests/unit",
+    "test:unit:coverage": "jest tests/unit --coverage",
+    "check": "npm run lint && npm test && npm run test:games && npm run test:full && npm run test:unit",
     "verify:production": "node scripts/verify-production-version.js"
   },
   "engines": {
@@ -23,5 +25,8 @@
     "express": "^4.18.2",
     "socket.io": "^4.7.2",
     "uuid": "^11.1.1"
+  },
+  "devDependencies": {
+    "jest": "^30.4.2"
   }
 }

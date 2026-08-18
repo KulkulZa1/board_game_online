@@ -109,4 +109,4 @@ function getConnect4WinCells(board, row, col, color, rows, cols) {
   return [];
 }
 
-module.exports = { initRoom, resetRoom, handleMove };
+module.exports = { initRoom, resetRoom, handleMove, checkConnect4Win, getConnect4WinCells };
