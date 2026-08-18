@@ -119,7 +119,7 @@ function handleMove(socket, room, role, { row1, col1, row2, col2 }) {
   if (!appleGameHasAnyMove(room.board)) {
     const { white, black } = room.scores;
     const winner = white > black ? 'white' : black > white ? 'black' : 'draw';
-    endGame(room, winner === 'draw' ? null : winner, 'no-moves', { scores: room.scores });
+    endGame(room, winner, 'no-moves', { scores: room.scores }); // 'draw' 그대로 — null이면 패배로 표시된다
   }
 }
 

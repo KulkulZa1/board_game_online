@@ -10,6 +10,7 @@ const tests = [
   'prototypes/mahjong-timer-test.js',
   'prototypes/bang-flow-test.js',
   'prototypes/newer-games-handler-test.js',
+  'prototypes/core-games-handler-test.js',
 ];
 
 for (const test of tests) {

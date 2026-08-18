@@ -29,6 +29,14 @@
 - BANG! round table UI: opponents sit around an oval felt with perspective-scaled seats, dashed range lines and distance labels while targeting, fanned card backs for hand size, deck/discard stacks, and a collapsible log ticker.
 
 ### Fixed
+- Chess no longer depends on a CDN at runtime. `public/game.html` loaded chess.js from cdnjs, so on a network that blocks it — or an offline PWA that never cached it — `Chess` was undefined and the chess page died on load. The already-pinned `chess.js@0.12.0` from `node_modules` is now served same-origin at `/vendor/chess.js` and precached by the service worker.
+- Omok's draw threshold was hardcoded to 225 moves while the board size is selectable (13/15/17/19). A 13×13 game could never end in a draw — the board filled up and every further move was rejected forever — and a 19×19 game was declared drawn with 136 empty points left. It now scales with the board.
+- A tie in Mancala, Dots & Boxes, Apple Game and Indian Poker reported the winner as `null`, which the client rendered as "패배" (defeat) to *both* players, played the losing sound, and recorded a loss in local stats. These now report `'draw'`, and the client treats a missing winner as a draw as well.
+
+### Added (tests)
+- `prototypes/core-games-handler-test.js` — 40 assertions covering the rules of the nine board games that had no rule tests at all (chess, omok, connect4, othello, checkers, mancala, applegame, battleship, indianpoker), wired into `npm run test:games`. Includes regression coverage for the three fixes above.
+
+### Fixed (BANG!)
 - BANG! Panic! and Cat Balou now follow the printed rule: the player chooses whether to take from the target's hand (still random) or from a specific card in play. Previously any card in play was unreachable whenever the target held a single hand card, so Barrels, Mustangs, weapons, Jail and Dynamite could never be removed.
 - BANG! AI no longer stalls the table after using Sid Ketchum's ability — the turn timer and AI loop are re-armed the same way `playCard` does.
 

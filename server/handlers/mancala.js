@@ -95,7 +95,7 @@ function handleMove(socket, room, role, { pit }) {
     let winner;
     if (pits[WHITE_STORE] > pits[BLACK_STORE])        winner = 'white';
     else if (pits[BLACK_STORE] > pits[WHITE_STORE])   winner = 'black';
-    else                                               winner = null;
+    else                                               winner = 'draw'; // null이면 클라이언트가 패배로 표시한다
 
     const moveRecord = { pit, color: yourColor, pits: [...pits], moveNum: room.moves.length+1, timestamp: Date.now() };
     room.moves.push(moveRecord);

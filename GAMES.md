@@ -548,7 +548,18 @@ just happened (`shot`, `duel`, `damage`, `heal`, `draw`, `explode`, `death`), em
 client can animate rather than only log. It is cleared after every broadcast, so a state
 push never replays stale effects, and it is safe to send identically to every seat.
 
-**Testing:** covered by `npm run test:games` (part of `npm run check`), which runs
+**Testing (Layer A):** the 12 two-player board games are covered by two handler suites under
+`prototypes/`, both run by `npm run test:games` — `newer-games-handler-test.js` (backgammon,
+texasholdem, dotsboxes) and `core-games-handler-test.js` (chess, omok, connect4, othello,
+checkers, mancala, applegame, battleship, indianpoker).
+
+> Two cross-cutting rules these suites pin down, because both were once wrong:
+> **(1)** a draw must be reported to `endGame` as the string `'draw'` — passing `null` makes the
+> client show "패배" to both players and record a loss; **(2)** anything derived from board size
+> (draw thresholds, win scans) must read the room's configured size, never a hardcoded constant —
+> omok is 13/15/17/19 and connect4 is 4–9 × 4–10.
+
+**Testing (Layer A′):** covered by `npm run test:games` (part of `npm run check`), which runs
 `prototypes/mahjong-engine-test.js`, `mahjong-flow-test.js`, `mahjong-timer-test.js`, and
 `bang-flow-test.js`. Each is also runnable on its own with `node <path>`. Plain `npm test`
 only asserts that the two pages and their client scripts return 200.

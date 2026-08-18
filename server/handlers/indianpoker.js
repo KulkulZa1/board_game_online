@@ -67,7 +67,7 @@ function startIndianPokerRound(room) {
       // 양측 모두 앤티 부족 → 칩 많은 쪽 승리, 동일하면 무승부(null)
       if (room.chips.host > room.chips.guest) winner = 'white';
       else if (room.chips.guest > room.chips.host) winner = 'black';
-      else winner = null;
+      else winner = 'draw'; // null이면 클라이언트가 패배로 표시한다
     } else {
       winner = room.chips.host < room.ante ? 'black' : 'white';
     }
@@ -88,7 +88,7 @@ function startIndianPokerRound(room) {
       // 덱 소진 → 칩 비교로 승패 결정
       const winner = room.chips.host > room.chips.guest ? 'white'
                    : room.chips.guest > room.chips.host ? 'black'
-                   : null; // 동점 무승부
+                   : 'draw'; // 동점 무승부 — null이면 클라이언트가 패배로 표시한다
       const { endGame } = require('../endgame');
       endGame(room, winner, 'deck-exhausted');
       return;

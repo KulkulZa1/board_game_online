@@ -66,8 +66,9 @@ function handleMove(socket, room, role, { row, col }) {
     return;
   }
 
-  // 무승부 체크 (225수 모두 소진)
-  if (room.moves.length >= 225) {
+  // 무승부 체크 — 보드가 꽉 찼을 때. 크기가 13/15/17/19로 바뀌므로 225 고정이면
+  // 13×13은 영영 끝나지 않고 19×19는 판이 남았는데 무승부가 된다.
+  if (room.moves.length >= omokSize * omokSize) {
     endGame(room, 'draw', 'board-full');
   }
 }
