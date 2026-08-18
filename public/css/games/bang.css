@@ -276,6 +276,22 @@ body.targeting .pp:not(.dead) .pp-avatar { animation: targetPulse 0.7s infinite 
 .rbtn.ok { background: linear-gradient(135deg, var(--sand), #d9a13f); }
 .rbtn.no { background: rgba(255,255,255,0.16); color: var(--text); }
 .store-row { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
+/* 선택지(패닉·캣 발루·키트·제시·페드로) — 카드 밑에 무엇을 고르는지 적는다 */
+.pick-opt {
+  display: flex; flex-direction: column; align-items: center; gap: 2px; cursor: pointer;
+  padding: 4px 5px; border-radius: 9px; border: 1px solid transparent;
+}
+.pick-opt:hover, .pick-opt:active { border-color: var(--sand); background: rgba(232,198,122,0.1); }
+.pick-opt .card { outline: 2px dashed rgba(232,198,122,0.55); }
+.pick-label { font-size: 0.56rem; font-weight: 800; color: var(--sand); max-width: 62px;
+  text-align: center; line-height: 1.2; }
+#sidBtn {
+  border: none; border-radius: 12px; padding: 10px 18px; margin-right: 8px;
+  font-size: 0.86rem; font-weight: 900; cursor: pointer; color: #241403;
+  background: linear-gradient(135deg, #b8d8a0, #7bb85e); box-shadow: 0 3px 0 #4a7038;
+}
+#sidBtn.armed { background: linear-gradient(135deg, var(--sand), #d9a13f); }
+#sidBtn:active { transform: translateY(2px); box-shadow: 0 1px 0 #4a7038; }
 
 /* ── 내 영역 ── */
 #myPanel {

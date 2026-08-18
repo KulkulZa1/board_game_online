@@ -26,6 +26,7 @@
   const CHAR_ICON = {
     bart: '🤠', blackjack: '🎩', calamity: '💃', gringo: '🌵', lucky: '🍀',
     paul: '🕶️', rose: '🎯', slab: '💀', suzy: '🌷', willy: '⚡',
+    jourdonnais: '🛢️', vulture: '🦅', sid: '🩹', kit: '🔭', jesse: '🎯', pedro: '♻️',
   };
   const NEED_TARGET = ['bang', 'panic', 'catbalou', 'duel', 'jail'];
 
@@ -124,6 +125,7 @@
   let mySeat = null, roomCode = null, isHost = false, cur = null;
   let targetMode = null;     // { idx } — 대상 선택 중인 손패 인덱스
   let reactSel = new Set();  // 리액션 카드 다중 선택
+  let sidMode = false;       // 시드 케첨 — 버릴 2장 고르는 중
   let size = 5;
   let reconnectPending = false;
 
@@ -239,6 +241,7 @@
     cur = st;
     targetMode = null;
     reactSel = new Set();
+    sidMode = false;
     render(st);
     // 렌더 후에 연출을 올린다 — 좌표를 새 배치 기준으로 잡아야 한다
     playFx(st.fx);
@@ -525,12 +528,25 @@
       if (reacting) {
         if (reactUsable(st.pending, c)) extra = 'selectable' + (reactSel.has(i) ? ' selected' : '');
         else extra = 'dim';
+      } else if (sidMode && myTurn) {
+        extra = 'selectable' + (reactSel.has(i) ? ' selected' : '');
       } else if (myTurn) {
         if (targetMode && targetMode.idx === i) extra = 'selected';
       } else extra = 'idle';
       return cardHTML(c, extra, i);
     }).join('');
-    $('endTurnBtn').classList.toggle('hidden', !myTurn);
+    $('endTurnBtn').classList.toggle('hidden', !myTurn || sidMode);
+    renderSidBtn(st, myTurn);
+  }
+  // 시드 케첨 전용 버튼 — 조건을 만족할 때만 나타난다
+  function renderSidBtn(st, myTurn) {
+    const b = $('sidBtn');
+    if (!b) return;
+    const me = st.players[st.seat];
+    const usable = myTurn && me.character === 'sid' && me.hp < me.maxHp && st.myHand.length >= 2;
+    b.classList.toggle('hidden', !usable);
+    b.textContent = sidMode ? `🩹 버릴 카드 선택 (${reactSel.size}/2)` : '🩹 카드 2장 → 체력 1';
+    b.classList.toggle('armed', sidMode);
   }
   // 리액션에서 이 카드를 쓸 수 있나 (캘러미티 호환 포함)
   function reactUsable(p, c) {
@@ -541,6 +557,22 @@
     if (p.type === 'lethal') return c.id === 'beer';
     if (p.type === 'discard') return true;
     return false;
+  }
+
+  // 선택지 한 줄 — 앞면 카드 또는 뒷면(비공개/출처)에 설명을 붙여 탭으로 고른다
+  function pickRow(area, items) {
+    const row = document.createElement('div');
+    row.className = 'store-row';
+    row.innerHTML = items.map((it, i) => `
+      <div class="pick-opt" data-i="${i}">
+        ${it.back ? '<div class="card mini back"></div>' : cardHTML(it.card, 'mini')}
+        <span class="pick-label">${escapeHtml(it.label)}</span>
+      </div>`).join('');
+    row.addEventListener('click', (e) => {
+      const el = e.target.closest('.pick-opt');
+      if (el) socket.emit('bang:action', { a: 'react', pick: +el.dataset.i });
+    });
+    area.appendChild(row);
   }
 
   // ── 프롬프트/리액션 UI ────────────────────────────────────────────
@@ -605,6 +637,28 @@
         if (el) socket.emit('bang:action', { a: 'react', pick: +el.dataset.i });
       });
       area.appendChild(row);
+    } else if (p.type === 'steal') {
+      // 패닉!/캣 발루 — 손패(뒷면 = 무작위) 또는 깔린 카드 중에서 고른다
+      const who = st.players[p.victim] ? st.players[p.victim].name : '상대';
+      bar.textContent = p.toDiscard
+        ? `🐈 캣 발루 — ${who}에게서 버리게 할 카드를 고르세요`
+        : `😱 패닉! — ${who}에게서 가져올 카드를 고르세요`;
+      pickRow(area, p.options.map((o) => o.kind === 'hand'
+        ? { back: true, label: '손패 (무작위)' }
+        : { card: o.card, label: o.kind === 'jail' ? '감옥' : o.kind === 'dynamite' ? '다이너마이트' : '장비' }));
+    } else if (p.type === 'kit') {
+      bar.textContent = '🔭 키트 칼슨 — 산으로 되돌릴 카드 1장을 고르세요 (나머지 2장 획득)';
+      pickRow(area, p.cards.map((c) => ({ card: c, label: '되돌리기' })));
+    } else if (p.type === 'jesse') {
+      bar.textContent = '🎯 제시 존스 — 첫 장을 어디서 가져올까요?';
+      pickRow(area, p.options.map((o) => o.kind === 'deck'
+        ? { back: true, label: '산에서' }
+        : { back: true, label: o.name }));
+    } else if (p.type === 'pedro') {
+      bar.textContent = '♻️ 페드로 라미레즈 — 첫 장을 어디서 가져올까요?';
+      pickRow(area, p.options.map((o) => o.kind === 'discard'
+        ? { card: o.card, label: '버림패에서' }
+        : { back: true, label: '산에서' }));
     } else if (p.type === 'discard') {
       bar.textContent = `🃏 손패 정리 — ${p.mustDiscard}장을 버려야 합니다 (손패 한도 = 체력)`;
       btn(`버리기 (${reactSel.size}/${p.mustDiscard})`, 'ok', () => socket.emit('bang:action', { a: 'react', cards: sel() }));
@@ -622,6 +676,12 @@
       if (!reactUsable(cur.pending, cur.myHand[i])) return;
       if (reactSel.has(i)) reactSel.delete(i); else reactSel.add(i);
       renderHand(cur); renderPrompt(cur);
+      return;
+    }
+    if (sidMode) {   // 시드 케첨 — 버릴 카드 2장 고르는 중
+      if (reactSel.has(i)) reactSel.delete(i);
+      else if (reactSel.size < 2) reactSel.add(i);
+      renderHand(cur);
       return;
     }
     if (!(cur.turn === cur.seat && cur.phase === 'turn' && !cur.pending)) return;
@@ -657,6 +717,20 @@
   });
 
   $('endTurnBtn').addEventListener('click', () => socket.emit('bang:action', { a: 'end' }));
+
+  // 시드 케첨 — 1번 탭으로 선택 시작, 2장 고른 뒤 다시 탭하면 발동
+  $('sidBtn').addEventListener('click', () => {
+    if (!cur) return;
+    if (!sidMode) {
+      sidMode = true; targetMode = null; reactSel = new Set();
+      document.body.classList.remove('targeting');
+      renderHand(cur); renderPrompt(cur);
+      return;
+    }
+    if (reactSel.size < 2) { toast('버릴 카드 2장을 고르세요'); return; }
+    socket.emit('bang:action', { a: 'sid', cards: [...reactSel] });
+    sidMode = false; reactSel = new Set();
+  });
 
   // ── 시간 은행 ─────────────────────────────────────────────────────
   let clockIv = null, clockSkew = 0;

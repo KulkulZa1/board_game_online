@@ -24,6 +24,13 @@
 - Bootstrap civilization-loop arcade MVP at `/arcade/bootstrap/`, with data-driven eras/processes, bottleneck diagnostics, stability-gated era unlocks, mobile-friendly DOM UI, and smoke-check coverage.
 - Plant Growing idle loop: growth burst action, data-driven breakthrough bonuses, loop summary panel, and mobile-friendly progression UI for `/arcade/plant/`.
 - NEON CASCADE at `/arcade/neon-cascade/`: a 45-second one-touch chain-reaction game with deterministic simulation, assisted pulse targeting, rechargeable actions, special cores, wave goals, and score-tripling Overdrive.
+- BANG! now ships all 16 base-game characters. Jourdonnais (built-in Barrel) and Vulture Sam (inherits an eliminated player's hand and equipment) resolve automatically; Kit Carlson, Jesse Jones and Pedro Ramirez replace the draw step with a choice, and Sid Ketchum trades two cards for a life through a dedicated `sid` action.
+- BANG! visual effect stream: the server reports what just happened (`shot`, `duel`, `damage`, `heal`, `draw`, `explode`, `death`) in `state.fx`, and the client animates bullet tracers, avatar shake with floating damage numbers, centre-table Draw! reveals, and elimination bursts, with procedural Web Audio sounds and a mute toggle.
+- BANG! round table UI: opponents sit around an oval felt with perspective-scaled seats, dashed range lines and distance labels while targeting, fanned card backs for hand size, deck/discard stacks, and a collapsible log ticker.
+
+### Fixed
+- BANG! Panic! and Cat Balou now follow the printed rule: the player chooses whether to take from the target's hand (still random) or from a specific card in play. Previously any card in play was unreachable whenever the target held a single hand card, so Barrels, Mustangs, weapons, Jail and Dynamite could never be removed.
+- BANG! AI no longer stalls the table after using Sid Ketchum's ability — the turn timer and AI loop are re-armed the same way `playCard` does.
 
 ### Changed
 - Backgammon now validates a move against the complete remaining roll. Players must use the maximum playable dice count and, when only one distinct die can be played, the higher die.
