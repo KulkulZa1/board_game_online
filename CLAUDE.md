@@ -58,7 +58,7 @@ npm run sandbox
 | `npm run lint` | `scripts/check-js.js` — parses every `.js` file in the repo for syntax errors (no ESLint config) |
 | `npm test` | `scripts/smoke-test.js` — starts the server on port 13001, runs 82 assertions (handler registry, room creation, core routes) |
 | `npm run test:full` | `scripts/smoke-check.js` — starts the server on port 3100, checks routes/static assets/handlers plus JS syntax across the whole repo (slower, more thorough than `npm test`) |
-| `npm run test:games` | `scripts/run-game-flow-tests.js` — runs 5 rule-engine/flow suites from `prototypes/`: Mahjong (engine, flow, timer), BANG! flow, and a 36-assertion backgammon/texasholdem/dotsboxes handler suite. Each is also runnable standalone via `node prototypes/<name>.js` |
+| `npm run test:games` | `scripts/run-game-flow-tests.js` — runs 6 rule-engine/flow suites from `prototypes/`: Mahjong (engine, flow, timer), BANG! flow, a 36-assertion backgammon/texasholdem/dotsboxes handler suite, and a 40-assertion suite covering the other 9 board games (`core-games-handler-test.js`). Each is also runnable standalone via `node prototypes/<name>.js` |
 | `npm run check` | `lint && test && test:games && test:full` — run before considering a change done |
 | `npm run build` | `scripts/no-build.js` — no-op that just prints "there is no build step" (there is genuinely no bundler) |
 | `npm run verify:production` | `scripts/verify-production-version.js` — after a Render deploy, hits `/api/version` to confirm the live commit/branch match what you expect. Pass `EXPECTED_COMMIT=<sha>` to check a specific commit. See `docs/render-version-verification.md`. |
@@ -111,7 +111,7 @@ board_game_online/
 ├── BUILDING_ANDROID.md         # Capacitor Android build guide
 ├── CHANGELOG.md / ROADMAP.md    # History / forward plan
 ├── docs/                          # Design docs + deploy runbooks (launch-readiness.md, render-version-verification.md, new-game-candidates.md, per-game GDDs, versioned release notes under v1.0/v1.1/v1.2)
-├── prototypes/                     # Two kinds: rule-engine/flow suites (mahjong-*, bang-flow, newer-games-handler) run by `npm run test:games`, AND balance simulators (bootstrap-sim, jackpot-autoplay, civ-mvp-autoplay) that are not wired into any npm script
+├── prototypes/                     # Two kinds: rule-engine/flow suites (mahjong-*, bang-flow, newer-games-handler, core-games-handler) run by `npm run test:games`, AND balance simulators (bootstrap-sim, jackpot-autoplay, civ-mvp-autoplay) that are not wired into any npm script
 ├── sandbox/                         # Layer C design tools, served only by `npm run sandbox` (never in production)
 │
 └── public/                          # Everything served by Express as static files
@@ -273,7 +273,9 @@ See **`ADDING_AN_ARCADE_GAME.md`**. Three files under `public/arcade/<name>/` (`
 
 ### Dependency Rules
 - **chess.js is pinned to `0.12.0`** (not `^0.12.0`) — the v0.13+ API is incompatible. Do NOT upgrade.
+- The **browser** also needs chess.js (the client validates and previews chess moves). `server/index.js` serves the same installed copy at `/vendor/chess.js`, so `package.json` stays the single source of version truth. Do NOT reintroduce a CDN `<script>` for it — a blocked CDN or an offline PWA leaves `Chess` undefined and chess dies on load.
 - Keep the dependency list minimal — avoid adding new packages unless essential.
+- The only remaining third-party runtime fetch is three.js in `public/games3d/chess3d/` — that page is an isolated prototype with no server integration, and three is not a project dependency.
 
 ### Security Patterns
 - All move validation happens **server-side** — never trust client-side game state
@@ -297,7 +299,9 @@ See **`ADDING_AN_ARCADE_GAME.md`**. Three files under `public/arcade/<name>/` (`
 2. **Room state creation** — chess and connect4 rooms initialize with correct structure
 3. **Core HTTP routes** — lobby, `/game.html`, `/api/status` (JSON shape), `/mahjong.html`, `/bang.html`, every `/arcade/<name>/` route (including nested runtime assets like `/arcade/tower-defense/runtime/game.js`), and `/sandbox/` → **must be 404** (sandbox must NOT be production-accessible)
 
-**`npm run test:games`** (`scripts/run-game-flow-tests.js`) runs the rule-engine suites that the smoke tests don't cover: Mahjong engine/flow/timer, BANG! flow, and `newer-games-handler-test.js` (36 assertions across backgammon, texasholdem, dotsboxes). Add new rule-engine suites to the `tests` array in that script.
+**`npm run test:games`** (`scripts/run-game-flow-tests.js`) runs the rule-engine suites that the smoke tests don't cover: Mahjong engine/flow/timer, BANG! flow, `newer-games-handler-test.js` (36 assertions across backgammon, texasholdem, dotsboxes), and `core-games-handler-test.js` (40 assertions across chess, omok, connect4, othello, checkers, mancala, applegame, battleship, indianpoker). Add new rule-engine suites to the `tests` array in that script.
+
+Between them the two handler suites cover the rules of all 12 Layer A games. They assert real rule edges — forced/multi-jump and king promotion in checkers, Othello's pass-and-continue, Mancala sowing/capture, Battleship placement rejection, size-dependent draw thresholds — and they carry regression coverage for bugs that shipped once (see CHANGELOG).
 
 **`npm run test:full`** (`scripts/smoke-check.js`) does the same route/handler checks as `npm test` plus a JS syntax pass over the whole repo — slower, run it (via `npm run check`) before considering larger changes done.
 

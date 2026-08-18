@@ -320,7 +320,9 @@
     </div>
   </div>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.12.0/chess.min.js"></script>
+  <!-- 같은 오리진에서 제공 (server/index.js 가 node_modules 의 0.12.0 을 그대로 서빙).
+       CDN 을 쓰면 차단망·오프라인 PWA 에서 Chess 전역이 없어 체스가 죽는다. -->
+  <script src="/vendor/chess.js?v=0.12.0"></script>
   <script src="/socket.io/socket.io.js"></script>
   <script src="js/sound.js?v=1.2"></script>
   <script src="js/timer.js?v=1.3"></script>

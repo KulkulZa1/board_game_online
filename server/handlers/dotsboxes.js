@@ -99,7 +99,7 @@ function handleMove(socket, room, role, data) {
     let winner;
     if (room.scores.white > room.scores.black)        winner = 'white';
     else if (room.scores.black > room.scores.white)   winner = 'black';
-    else                                               winner = null; // 무승부
+    else                                               winner = 'draw'; // null이면 클라이언트가 패배로 표시한다
 
     state.io.to(room.id).emit('game:move:made', {
       move: moveRecord, edges: room.edges, boxes: room.boxes,

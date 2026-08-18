@@ -83,6 +83,13 @@ app.use('/.well-known', express.static(
   { setHeaders: (res) => res.set('Content-Type', 'application/json') }
 ));
 app.use(express.static(path.join(__dirname, '..', 'public')));
+// chess.js 는 예전에 cdnjs 에서 받아썼는데, CDN 이 막히거나 오프라인(PWA)이면
+// 전역 Chess 가 없어 체스가 통째로 죽는다. package.json 에 이미 0.12.0 이 고정돼 있으니
+// 같은 파일을 같은 오리진에서 직접 준다 (버전 진실은 package.json 한 곳).
+app.use('/vendor/chess.js', express.static(
+  path.join(__dirname, '..', 'node_modules', 'chess.js', 'chess.js'),
+  { setHeaders: (res) => res.set('Content-Type', 'application/javascript') }
+));
 // sandbox/ is a developer-only design tool — NOT served in production.
 // Local dev: npm run sandbox (serves on port 3001 via npx serve)
 // Tower Defense still reuses the sandbox engine as its production runtime.

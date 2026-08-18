@@ -8,7 +8,7 @@
 // 캐시 무효화:
 //   activate 시 /api/version 호출 → commit 해시가 바뀌면 캐시 전체 삭제
 
-const CACHE_NAME   = 'boardgame-v11';
+const CACHE_NAME   = 'boardgame-v12';   // v12: 체스가 CDN 대신 /vendor/chess.js 를 쓴다 — 옛 캐시 퍼지
 const COMMIT_KEY   = 'sw_last_commit';
 
 // 사전 캐시 — HTML 제외, 진짜 정적 자산만 (icons/ 미존재 시 phantom 경로 제외)
@@ -16,6 +16,7 @@ const PRECACHE_ASSETS = [
   '/css/lobby.css',
   '/css/game.css',
   '/manifest.json',
+  '/vendor/chess.js',   // 체스 규칙 엔진 — 없으면 첫 오프라인 방문에서 체스가 죽는다
 ];
 
 // ── Install ───────────────────────────────────────────────────────

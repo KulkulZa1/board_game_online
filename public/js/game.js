@@ -280,23 +280,27 @@
       Connect4Board.highlightWin(winCells);
     }
 
+    // 승자 없음(null)도 무승부다 — 예전에 일부 게임이 무승부를 null로 보내
+    // 양쪽 모두에게 "패배"가 뜨고 전적까지 패배로 남던 문제를 여기서 막는다.
+    const isDraw = (winner === 'draw' || winner === null || winner === undefined);
+
     if (myRole !== 'spectator') {
       // 개인 전적 저장
       if (typeof Stats !== 'undefined') {
         let result;
-        if (winner === 'draw') result = 'draw';
+        if (isDraw) result = 'draw';
         else result = (winner === myColor) ? 'win' : 'loss';
         Stats.record(gameType, result);
       }
 
       showGameOver(winner, reason);
       if (typeof Sound !== 'undefined') {
-        if (winner === 'draw')        Sound.play('draw');
+        if (isDraw)                   Sound.play('draw');
         else if (winner === myColor)  Sound.play('win');
         else                          Sound.play('lose');
       }
     } else {
-      const winLabel = winner === 'draw' ? '무승부' :
+      const winLabel = isDraw ? '무승부' :
                        (winner === 'black' ? '흑 승리' : '백 승리');
       showToastMsg('게임이 종료되었습니다: ' + winLabel);
     }
@@ -845,7 +849,7 @@
     const title    = document.getElementById('gameover-title');
     const subtitle = document.getElementById('gameover-subtitle');
 
-    if (winner === 'draw') {
+    if (winner === 'draw' || winner === null || winner === undefined) {
       icon.textContent  = '🤝';
       title.textContent = '무승부';
     } else if (winner === myColor) {
