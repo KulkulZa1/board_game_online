@@ -384,6 +384,16 @@
 
   // ⚡ 합성 축하 — 3장이 한 장의 상위 카드로
   function celebrateMerges(merges) {
+    // 전설 조합은 판에서 가장 드문 사건이라 합성보다 먼저·크게 알린다
+    if (run && run.lastLegend) {
+      const L = SYMBOLS.landlord;
+      showMega(`🏙️ 전설 조합! ${L.icon} ${L.name}${run.lastLegend.gold ? ' ✨' : ''}`);
+      Sound.fuse(); Sound.fuse();
+      vibrate([40, 30, 60, 30, 90]);
+      confetti();
+      run.lastLegend = null;
+      return;
+    }
     if (!merges || !merges.length) return;
     const m = merges[merges.length - 1];
     const def = SYMBOLS[m.id];

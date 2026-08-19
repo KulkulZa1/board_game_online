@@ -588,8 +588,23 @@ no `game-registry.js` entry. Each is reachable at `/arcade/<name>/`.
 win rate per ascension tier and per tenant. Run it after touching any number in `meta.js`.
 The tuning targets it checks: ascension 0 lands in **15–55%**, the curve never jumps *up*
 by more than 8 points as tiers rise, and the top tier is a genuine wall. Current shape is
-roughly 33% at tier 0 falling to ~2% at tier 9 and 0% at tier 10, with the six tenants
-inside a 32–43% band so they read as sidegrades rather than a power ranking.
+roughly 33% at tier 0 falling to 3–4% at tiers 9–10, with the six tenants inside a 32–43%
+band so they read as sidegrades rather than a power ranking. Tiers 9–10 are deliberately
+left at single digits *for the bot* — the bot never plans fixtures or synergies, so a
+skilled player clears them comfortably; that gap is the intended skill ceiling.
+
+**Do not raise the top tier by extending the run.** An earlier capstone moved the target
+from 10 rents to 11–12, which looks mild but multiplies against a rent curve that grows
+1.5× per stage — it took the bot to a flat 0%. The capstone squeezes the deck and jackpot
+odds instead, which is hard without being exponential.
+
+**🏙️ 건물주 — the legendary build.** A mythic symbol that never appears in a draft. It is
+born only by holding 용 + 사장님 + 보름달 *all at max level (Lv3)* at once — nine copies of
+three specific rares — at which point the three fuse into it. It pays +40 and **doubles
+every adjacent payout**, so placed centrally with a fixture it flips the whole board.
+Measured: effectively unreachable in a normal run (0% over 400 runs, which end near spin
+35), and reachable around spin 63–129 by a bot deliberately hunting the parts in endless
+mode. That is the intent — a build for people who are already past winning.
 
 Several arcade games ship a headless `sim.js` (`bootstrap`, `jackpot`, `neon-cascade`,
 `snake`, `breakout`, `plant`) so their economy can be balanced from Node. Jackpot adds a

@@ -52,7 +52,20 @@
     king:    { name: '사장님',   icon: '👑', rarity: 'rare',     base: 5, ev: 5.0, desc: '+5. 옆 회사원에게 보너스 +3을 준다' },
     sebae:   { name: '세뱃돈',   icon: '🧧', rarity: 'rare',     base: 0, ev: 5.0, desc: '첫 등장에서 +20 지급 후 소멸 (한 방)' },
     dragon:  { name: '용',       icon: '🐉', rarity: 'rare',     base: 0, ev: 3.5, desc: '옆 8칸이 모두 차 있으면 +25 — 판 가운데(8이웃 칸)에서만 잠에서 깬다' },
+
+    // 신화 — 드래프트에 절대 나오지 않는다. 오직 전설 조합으로만 태어난다.
+    // (offers() 는 common/uncommon/rare 중에서만 고르므로 자동으로 제외된다)
+    landlord: { name: '건물주',  icon: '🏙️', rarity: 'mythic',   base: 40, ev: 20,
+                desc: '+40. 옆 8칸의 지급을 전부 2배로 만든다 — 판 전체를 뒤집는 한 방' },
   };
+
+  // ── 전설 조합 ───────────────────────────────────────────────────
+  // 용 + 사장님 + 보름달을 모두 최대 강화(Lv3)로 모으면 건물주가 태어난다.
+  // Lv2 하나에 같은 심볼 3장이 필요하고, 셋 다 레어(각 등장 가중치 10% 안의 1/7)라
+  // 사실상 특정 레어 9장을 모아야 한다. 의도적으로 극악의 확률이며,
+  // 그만큼 성공하면 판을 통째로 뒤집는다.
+  const LEGEND_PARTS = ['dragon', 'king', 'moon'];
+  const LEGEND_MIN_LV = 3;   // 최대 강화(Lv3) — 재료 한 종에 같은 레어 9장이 필요하다
 
   const RARITY_WEIGHT = { common: 60, uncommon: 30, rare: 10 };
   const RARITY_ORDER = ['common', 'uncommon', 'rare'];
@@ -201,7 +214,32 @@
         }
       }
       if (merges.length) this.lastMerges = (this.lastMerges || []).concat(merges);
+      this._legendCheck();
       return merges;
+    }
+
+    // 전설 조합 성사 여부. 재료 3종을 소모하고 건물주 한 장을 만든다.
+    // 재료 중 하나라도 황금이면 건물주도 황금을 승계한다 (황금 건물주 = 지급 ×3).
+    _legendCheck() {
+      const parts = [];
+      for (const id of LEGEND_PARTS) {
+        const c = this.deck.filter((d) => d.id === id && d.lv >= LEGEND_MIN_LV)
+          .sort((a, b) => (b.gold ? 1 : 0) - (a.gold ? 1 : 0) || b.lv - a.lv)[0];
+        if (!c) return null;
+        parts.push(c);
+      }
+      const uids = parts.map((d) => d.uid);
+      const gold = parts.some((d) => d.gold);
+      const fx = this.fixtures.find((f) => uids.includes(f.uid));
+      this.deck = this.deck.filter((d) => !uids.includes(d.uid));
+      this.fixtures = this.fixtures.filter((f) => !uids.includes(f.uid));
+      const born = this._mk('landlord');
+      born.gold = gold;
+      this.deck.push(born);
+      if (fx) this.fixtures.push({ uid: born.uid, cell: fx.cell });   // 붙박이 자리를 승계
+      this.legendBorn = (this.legendBorn || 0) + 1;
+      this.lastLegend = { id: 'landlord', gold };
+      return born;
     }
 
     _mk(id) { return { uid: ++this._uid, id, bank: 0, tick: 0, lv: 1, gold: false }; }
@@ -313,11 +351,21 @@
       const events = [];
       const destroyed = new Set();
       const bonus = new Array(CELLS).fill(0);
+      // 🏙️ 건물주 — 옆 8칸의 최종 지급을 2배로 만든다. 여러 장이면 곱해진다.
+      const mult = new Array(CELLS).fill(1);
       const at = (i) => (board[i] && !destroyed.has(board[i].uid)) ? board[i] : null;
       // 강화(Lv)·황금(×3) 스케일 — 모든 지급에 일관 적용되는 단일 규칙
       const scaleOf = (item) => (item.lv || 1) * (item.gold ? 3 : 1);
       const adjHas = (i, id) => NEIGHBORS[i].some((n) => { const t = at(n); return t && t.id === id; });
       const adjCount = (i, id) => NEIGHBORS[i].reduce((s, n) => { const t = at(n); return s + (t && t.id === id ? 1 : 0); }, 0);
+
+      // 🏙️ 건물주의 이웃 배율을 먼저 확정한다 (파괴로 사라지기 전 배치 기준).
+      // 여러 장이 겹치면 곱해진다 — 전설을 두 장 만든 사람에게 주는 보상.
+      for (let i = 0; i < CELLS; i++) {
+        const it = board[i];
+        if (!it || it.id !== 'landlord') continue;
+        for (const n of NEIGHBORS[i]) mult[n] *= 2;
+      }
 
       // 2) 파괴 페이즈 — 보드 순서대로, 먼저 선언한 쪽이 가져간다
       for (let i = 0; i < CELLS; i++) {
@@ -444,6 +492,9 @@
           amt = 20;
           destroyed.add(it.uid);
           events.push({ type: 'burst', idx: i, amt });
+        } else if (it.id === 'landlord') {
+          amt = 40;   // 이웃 2배는 아래 mult 로 이미 반영되어 있다
+          events.push({ type: 'legend', idx: i, amt });
         } else if (it.id === 'dragon') {
           // 용 — 8이웃이 모두 차 있어야 깨어난다 (가운데 칸 + 붙박이 빌드어라운드)
           const ns = NEIGHBORS[i];
@@ -455,6 +506,7 @@
 
         amt += bonus[i];
         amt *= scaleOf(it);   // 강화 Lv × 황금 ×3 — 밸런스 파괴 조합의 통로
+        amt *= mult[i];       // 🏙️ 건물주의 이웃 2배 (전설 조합의 본체)
         if (evActive('depression')) amt = Math.max(0, amt - 1);   // 세계 대공황
         if (amt > 0) pays.push({ idx: i, amt });
       }
@@ -632,7 +684,7 @@
 
     skipReward() { return this.has('mart') ? 0 : this.skipCoins(); }
     pick(id, gold) {
-      if (id && SYMBOLS[id] && this.deck.length < DECK_CAP) {
+      if (id && SYMBOLS[id] && this.deck.length < this.deckCap()) {
         const item = this._mk(id);
         item.gold = !!gold;
         this.deck.push(item);
@@ -641,7 +693,7 @@
             const cp = this._mk(id); cp.gold = !!gold;
             this.deck.push(cp);
           }
-          if (this._chance(0.3) && this.deck.length < DECK_CAP) this.deck.push(this._mk('sock'));
+          if (this._chance(0.3) && this.deck.length < this.deckCap()) this.deck.push(this._mk('sock'));
         }
         return this._mergeCheck();
       }

@@ -47,13 +47,16 @@
     { lv: 2,  desc: '시작 코인 -10',                    opts: { startCoins: -10 } },
     { lv: 3,  desc: '덱 상한 -5',                       opts: { deckCapBonus: -5 } },
     { lv: 4,  desc: '유물 선택지가 2개 → 1개로 줄어든다', opts: { relicChoices: -1 } },
-    { lv: 5,  desc: '월세가 또 8% 비싸진다',            opts: { rentMult: 1.08 } },
+    { lv: 5,  desc: '월세가 또 5% 비싸진다',            opts: { rentMult: 1.05 } },
     { lv: 6,  desc: '잭팟 확률이 30% 줄어든다',         opts: { jackpotMult: 0.7 } },
     { lv: 7,  desc: '시작 덱에 빈 양말 2장이 섞인다',   opts: { extraStart: ['sock', 'sock'] } },
     { lv: 8,  desc: '스킵 코인이 없다',                 opts: { skipMult: 0 } },
-    { lv: 9,  desc: '월세 곡선이 더 가파르다',          opts: { rentGrowth: 0.03 } },
-    // 최상단은 결승선 자체를 옮긴다 — 여기까지 온 사람을 위한 벽
-    { lv: 10, desc: '완납 목표가 10회 → 12회로 늘어난다', opts: { winStage: 12 } },
+    { lv: 9,  desc: '월세 곡선이 더 가파르다',          opts: { rentGrowth: 0.015 } },
+    // 최상단 — 덱을 조여 빌드 자체를 어렵게 만든다.
+    // 완납 횟수를 늘리는 건 월세가 스테이지마다 1.5배로 커지는 곡선과 곱해져
+    // 벽이 아니라 절벽이 된다(봇 승률 0%). 지수 곡선을 건드리지 않는 쪽을 택했다.
+    { lv: 10, desc: '덱 상한 -6 (누적 -11) + 잭팟 확률이 또 15% 줄어든다',
+      opts: { deckCapBonus: -6, jackpotMult: 0.85 } },
   ];
 
   // ── 저장값 ─────────────────────────────────────────────────────
