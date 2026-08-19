@@ -4,6 +4,10 @@
 (function () {
   'use strict';
 
+  // 동네 지도 모듈 — 브라우저는 전역, node 는 require
+  const JMAP = (typeof window !== 'undefined' && window.JackpotMap)
+    || (typeof require !== 'undefined' ? (() => { try { return require('./map.js'); } catch (e) { return null; } })() : null);
+
   const COLS = 4, ROWS = 3, CELLS = COLS * ROWS;
   const BASE_SPINS_PER_RENT = 4;   // 월세 주기(연장 계약서 유물로 +1)
   const WIN_STAGE = 10;            // 10번 완납 → 내 집 마련(승리), 이후 무한 모드
@@ -92,6 +96,7 @@
     rich:       { name: '부촌',        icon: '💎', desc: '월세 +35%. 뽑기에 레어가 잘 나온다.',             rentMult: 1.35, rareBoost: true },
     slum:       { name: '달동네',      icon: '🏚️', desc: '월세 -15%. 특수 이벤트가 2배로 잦다.',            rentMult: 0.85, eventMult: 2 },
     relicAlley: { name: '유물 골목',   icon: '🏛️', desc: '월세 +25%. 입주하며 유물을 하나 얻는다.',         rentMult: 1.25, relic: true },
+    market:     { name: '시장',        icon: '🏪', desc: '월세 기본. 입주하며 코인을 조금 받는다.',          rentMult: 1.0, coins: 25 },
   };
 
   // ── 월드 이벤트 — 스핀 중 무작위로 세상이 요동친다 ─────────────
@@ -150,7 +155,11 @@
       this.relics = new Set();
       this.angelUsed = false;
       this.route = 'normal';
-      this.pendingRoutes = null;     // 완납 후 다음 동네 선택지
+      this.pendingRoutes = null;     // 완납 후 다음 동네 선택지 (지도에서 갈 수 있는 노드들)
+      // 슬더스식 동네 지도 — 판 시작 때 통째로 만들어 두고 미리 보여준다.
+      // 층 수는 완납 목표 + 1 (마지막 층이 목표 달성 지점).
+      this.map = (typeof JMAP !== 'undefined' && JMAP)
+        ? JMAP.generate(this.rng, (this.opts.winStage || WIN_STAGE) + 1) : null;
       this.pendingRelics = null;     // 유물 골목 입주 보상 선택지
       this.pendingRemoval = false;   // 이삿짐 정리 — 해소 전엔 스핀 불가
       this.activeEvent = null;       // { id, remaining }
@@ -626,17 +635,36 @@
       this.pendingRoutes = this._routeOptions();   // 분기점 — 다음 동네를 고른다
     }
 
-    // ── 루트 분기 — 유물 골목은 가끔만 나타난다(희소성) ────────────
+    // ── 루트 분기 — 지도에서 지금 갈 수 있는 노드만 제시한다 ────────
+    // 지도가 없으면(구버전 저장·테스트) 예전처럼 무작위 3개를 준다.
     _routeOptions() {
+      if (this.map && typeof JMAP !== 'undefined' && JMAP) {
+        const opts = JMAP.reachable(this.map);
+        if (opts.length) {
+          return opts.map((o) => Object.assign({}, ROUTES[o.id], {
+            id: o.id, floor: o.floor, lane: o.lane,
+          }));
+        }
+        return null;   // 종착점 — 더 고를 것이 없다
+      }
       let pool = ['normal', 'rich', 'slum'];
       if (this._chance(0.45)) pool.push('relicAlley');
       const ids = this._shuffle(pool).slice(0, 3);
       return ids.map((id) => Object.assign({ id }, ROUTES[id]));
     }
-    chooseRoute(id) {
+    // 지도가 있으면 좌표로 고른다 (같은 종류가 여러 갈래에 있을 수 있으므로)
+    chooseRoute(id, floor, lane) {
       if (!this.pendingRoutes || !ROUTES[id]) return;
+      if (this.map && typeof JMAP !== 'undefined' && JMAP) {
+        // 좌표를 안 주면 그 종류의 첫 선택지로 해석한다 (구버전 호출 호환)
+        let target = this.pendingRoutes.find((r) =>
+          r.id === id && (floor == null || (r.floor === floor && r.lane === lane)));
+        if (!target) return;
+        if (!JMAP.move(this.map, target.floor, target.lane)) return;
+      }
       this.route = id;
       this.pendingRoutes = null;
+      if (ROUTES[id].coins) this.coins += ROUTES[id].coins;
       if (ROUTES[id].relic) {
         const unowned = Object.keys(RELICS).filter((r) => !this.relics.has(r) && !(r === 'angel' && this.angelUsed));
         if (unowned.length) {

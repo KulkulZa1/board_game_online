@@ -580,8 +580,23 @@ no `game-registry.js` entry. Each is reachable at `/arcade/<name>/`.
 | **tower-defense** | `/arcade/tower-defense/` | Center-defense TD; 3 tower types + adjacency synergies. **⚠️ Engine lives in `sandbox/tower-defense/`** — see note below | `TD_CONFIG.*` (see Layer C) | `td_published_config` |
 | **factory** | `/arcade/factory/` | 산업의 시대 — spatial automation; production chains, era breakthroughs, stability gates | `BELT_SPEED=2.2, DEPOSIT_MIN=600, ERA_STABILITY_SEC=5, GEN_FUEL_CAP=20` | `arcade_factory_save_v1`, `arcade_factory_high` |
 | **bootstrap** | `/arcade/bootstrap/` | 문명 키우기 — civilization clicker/idle; era actions charge a Golden Age multiplier | `TICKS_PER_SEC=2` | `civ_save_v2`, `civ_best_v1`, `civ_muted` |
-| **jackpot** | `/arcade/jackpot/` | 월세 잭팟 — slot **roguelike**; spin to make rent, deck-build between rounds. Pick a **tenant** (6 starting archetypes, 4 unlockable) and an **ascension** (10 cumulative difficulty tiers, each unlocked by winning the one below). Every run pays 🏠 deeds, win or lose | `ROWS=3, COLS=4, BASE_SPINS_PER_RENT=4, DECK_CAP=30, EVENT_CHANCE=0.10`; `TENANTS(6), ASCENSIONS(10)` in `meta.js` | `arcade_jackpot_muted`, `jackpot_meta_v1` |
+| **jackpot** | `/arcade/jackpot/` | 월세 잭팟 — slot **roguelike**; spin to make rent, deck-build between rounds. Pick a **tenant** (6 starting archetypes, 4 unlockable) and an **ascension** (10 cumulative difficulty tiers, each unlocked by winning the one below). Routes are chosen on a **Slay-the-Spire-style map** generated up front. Every run pays 🏠 deeds, win or lose | `ROWS=3, COLS=4, BASE_SPINS_PER_RENT=4, DECK_CAP=30, EVENT_CHANCE=0.10`; `TENANTS(6), ASCENSIONS(10)` in `meta.js`; `NODE_TYPES(5)` in `map.js` | `arcade_jackpot_muted`, `jackpot_meta_v1` |
 | **neon-cascade** | `/arcade/neon-cascade/` | Chain-explosion arcade; timed rounds, limited charges. **Amplifiers** are drafted *before* each round (never mid-round — the clock is the game) and stack up to `MAX_AMPS=4` across consecutive rounds; 3 fusions | `ROUND_SECONDS=45, MAX_CHARGES=4, PULSE_RADIUS=118, RECHARGE_SECONDS=4.5`; `AMPS(10), AMP_FUSIONS(3)` in `sim.js` | `neon_cascade_high_v1`, `neon_cascade_chain_v1`, `neon_cascade_mute_v1` |
+
+**Jackpot's route map** (`map.js`) is generated once at run start — `winStage + 1` floors,
+2–4 lanes per floor, a single start and a single finish so every path converges. Edges only
+connect adjacent lanes, and generation guarantees **no node is ever orphaned**: every node
+has at least one exit and at least one entrance, which the test suite checks across 300
+generated maps. `_routeOptions()` returns only the nodes reachable from the current
+position, and `chooseRoute(id, floor, lane)` takes coordinates because the same node type
+can appear on several branches. Calling it without coordinates still works (it resolves to
+the first option of that type) so older callers and the balance bots keep running.
+
+The point of the map is **planning, not just picking** — the client draws the connecting
+edges with an SVG overlay measured from real node positions, because without visible edges
+you cannot see past the next floor and the choice collapses back into a blind pick. Render
+the map *after* its modal is visible; a hidden element has a zero-size rect and the edges
+silently come out empty.
 
 **Jackpot balance is measured, not guessed.** `prototypes/jackpot-balance-sweep.js`
 (not in any npm script) reuses the tuned greedy bot from `jackpot-autoplay.js` to report

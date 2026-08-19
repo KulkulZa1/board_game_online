@@ -416,3 +416,40 @@ button.deck-item { color: var(--text); cursor: pointer; font-family: inherit; }
 /* 해금 모달은 시작 오버레이(z-index 40) 위에서 열리는 유일한 모달이라 더 높이 둔다.
    (다른 모달들은 오버레이가 닫힌 플레이 중에만 뜨므로 30 으로 충분하다) */
 #unlockModal { z-index: 50; }
+
+/* ═══ 동네 지도 (슬더스식 경로 선택) ════════════════════════════ */
+#mapView, #mapFull {
+  display: flex; flex-direction: column; gap: 3px;
+  max-height: 46vh; overflow-y: auto; margin-bottom: 10px;
+  padding: 6px; border-radius: 10px; background: rgba(0,0,0,0.25);
+}
+#mapFull { max-height: 70vh; }
+.map-floor { display: flex; align-items: center; gap: 8px; }
+.map-floor.now { background: rgba(244,168,54,0.10); border-radius: 8px; }
+.mf-no {
+  width: 18px; text-align: right; font-size: 0.6rem; opacity: 0.45; flex-shrink: 0;
+}
+.mf-nodes { display: flex; gap: 6px; flex: 1; justify-content: center; flex-wrap: wrap; }
+.map-node {
+  width: 34px; height: 34px; border-radius: 9px; font-size: 1.05rem; line-height: 1;
+  border: 1.5px solid var(--border, #3a2b16); background: rgba(255,255,255,0.04);
+  color: inherit; font-family: inherit; cursor: default; opacity: 0.4;
+  display: flex; align-items: center; justify-content: center; padding: 0;
+}
+.map-node.been { opacity: 0.72; border-color: rgba(255,255,255,0.22); }
+.map-node.here {
+  opacity: 1; border-color: var(--gold, #f4a836); background: rgba(244,168,54,0.20);
+  box-shadow: 0 0 10px rgba(244,168,54,0.5);
+}
+.map-node.open {
+  opacity: 1; cursor: pointer; border-color: var(--gold, #f4a836);
+  animation: mapPulse 1.1s infinite alternate;
+}
+.map-node.open:active { transform: scale(0.94); }
+@keyframes mapPulse { to { box-shadow: 0 0 12px rgba(244,168,54,0.7); } }
+/* 연결선 — 노드 뒤에 깔린다 */
+#mapView, #mapFull { position: relative; }
+.map-edges { position: absolute; left: 0; top: 0; pointer-events: none; z-index: 0; overflow: visible; }
+.map-edge { stroke: rgba(255,255,255,0.16); stroke-width: 2; }
+.map-edge.open { stroke: var(--gold, #f4a836); stroke-width: 2.5; opacity: 0.9; }
+.map-floor { position: relative; z-index: 1; }
