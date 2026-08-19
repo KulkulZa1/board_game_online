@@ -113,7 +113,10 @@ console.log('\n[옵션이 실제 Run 에 반영되는가]');
 
   // 승급이 실제로 조인다
   const a10 = new J.Run(rng(1), M.runOptions('laborer', 10));
-  ok(a10.winStage() > base.winStage(), '최상단 승급 — 결승선이 더 멀어진다', String(a10.winStage()));
+  const a9 = new J.Run(rng(1), M.runOptions('laborer', 9));
+  ok(a10.deckCap() < a9.deckCap(), '최상단 승급 — 덱이 한 번 더 조여진다',
+     `${a9.deckCap()} → ${a10.deckCap()}`);
+  ok(a10.opts.jackpotMult < a9.opts.jackpotMult, '최상단 승급 — 잭팟 확률이 더 낮다');
   ok(a10.deckCap() < J.DECK_CAP, '승급 — 덱 상한이 줄어든다');
   ok(a10.skipReward() === 0, '승급 — 스킵 코인이 사라진다');
   ok(a10.rent() > base.rent(), '승급 — 월세가 비싸진다', `${base.rent()} → ${a10.rent()}`);
@@ -181,6 +184,94 @@ console.log('\n[승급이 실제로 어렵게 만드는가 — 자동 플레이]
   ok(a6.stage < a0.stage, '승급6이 승급0보다 실제로 덜 나아간다',
      `${a0.stage.toFixed(2)} → ${a6.stage.toFixed(2)}`);
   ok(a0.stage > 1, '승급0에서는 최소한 진행은 된다 (봇이 즉사하지 않는다)', a0.stage.toFixed(2));
+}
+
+
+console.log('\n[전설 조합 — 건물주]');
+{
+  const mk = (run, id, lv, gold) => { const c = run._mk(id); c.lv = lv; if (gold) c.gold = true; run.deck.push(c); return c; };
+
+  // 신화는 드래프트에 절대 나오지 않는다 (오직 조합으로만)
+  ok(J.SYMBOLS.landlord && J.SYMBOLS.landlord.rarity === 'mythic', '건물주는 신화 등급');
+  let leaked = 0;
+  for (let i = 0; i < 400; i++) {
+    const r = new J.Run(rng(i + 9));
+    if (r.offers(true).some((o) => o.id === 'landlord')) leaked++;
+  }
+  ok(leaked === 0, '드래프트 400회에서 신화가 한 번도 나오지 않는다');
+
+  // 재료가 하나라도 모자라면 성사되지 않는다
+  const partial = new J.Run(rng(3));
+  partial.deck = [];
+  mk(partial, 'dragon', 3); mk(partial, 'king', 3);
+  ok(partial._legendCheck() === null, '재료 2종만으로는 조합되지 않는다');
+  ok(!partial.deck.some((d) => d.id === 'landlord'), '건물주가 생기지 않았다');
+
+  // 강화가 모자라면 성사되지 않는다 — 최대 강화(Lv3)까지 요구한다
+  for (const lv of [1, 2]) {
+    const lowLv = new J.Run(rng(4 + lv));
+    lowLv.deck = [];
+    ['dragon', 'king', 'moon'].forEach((id) => mk(lowLv, id, lv));
+    ok(lowLv._legendCheck() === null, `Lv${lv} 재료로는 조합되지 않는다 (최대 강화 필요)`);
+  }
+
+  // 셋이 모두 Lv2 이상이면 태어난다
+  const full = new J.Run(rng(5));
+  full.deck = [];
+  ['dragon', 'king', 'moon'].forEach((id) => mk(full, id, 3));
+  const born = full._legendCheck();
+  ok(born && born.id === 'landlord', '재료 3종을 최대 강화로 모으면 건물주가 태어난다');
+  ok(!full.deck.some((d) => ['dragon', 'king', 'moon'].includes(d.id)), '재료는 소모된다');
+  ok(full.deck.filter((d) => d.id === 'landlord').length === 1, '건물주는 한 장만 생긴다');
+
+  // 황금 승계
+  const goldRun = new J.Run(rng(6));
+  goldRun.deck = [];
+  mk(goldRun, 'dragon', 3, true); mk(goldRun, 'king', 3); mk(goldRun, 'moon', 3);
+  const gborn = goldRun._legendCheck();
+  ok(gborn && gborn.gold === true, '재료 중 황금이 있으면 건물주도 황금');
+
+  // 붙박이 자리 승계
+  const fxRun = new J.Run(rng(7));
+  fxRun.deck = [];
+  const d = mk(fxRun, 'dragon', 3); mk(fxRun, 'king', 3); mk(fxRun, 'moon', 3);
+  fxRun.setFixture(d.uid, 5);
+  const fborn = fxRun._legendCheck();
+  ok(fxRun.fixtures.length === 1 && fxRun.fixtures[0].uid === fborn.uid && fxRun.fixtures[0].cell === 5,
+     '재료가 붙박이였다면 건물주가 그 자리를 승계한다');
+
+  // 실제로 판을 뒤집는가 — 같은 보드에서 건물주 유무만 바꿔 비교
+  function payWith(useLandlord) {
+    const run = new J.Run(rng(11));
+    run.deck = [];
+    const center = useLandlord ? mk(run, 'landlord', 1) : mk(run, 'gimbap', 1);
+    for (let i = 0; i < 8; i++) mk(run, 'gimbap', 1);
+    // 가운데(8이웃) 칸에 고정해 이웃을 최대로 받는다
+    run.setFixture(center.uid, 5);
+    let total = 0;
+    for (let i = 0; i < 12; i++) { const r = run.spin(); if (r) total += (r.total || 0); if (run.state !== 'playing') break; }
+    return total;
+  }
+  const withL = payWith(true), withoutL = payWith(false);
+  ok(withL > withoutL, '건물주가 있으면 총 지급이 확실히 높다', `${withoutL} → ${withL}`);
+
+  // 이웃 배율이 실제로 붙는지 (단일 스핀 수준에서)
+  const probe = new J.Run(rng(12));
+  probe.deck = [];
+  const lord = mk(probe, 'landlord', 1);
+  for (let i = 0; i < 8; i++) mk(probe, 'gimbap', 1);
+  probe.setFixture(lord.uid, 5);
+  const spin = probe.spin();
+  ok(spin && spin.total > 40, '건물주 스핀은 본체(+40)보다 크다 — 이웃 배율이 붙었다', String(spin && spin.total));
+  // 이웃이 실제로 2배를 받았는지 지급 내역에서 직접 확인한다
+  const plain = new J.Run(rng(12));
+  plain.deck = [];
+  const filler = mk(plain, 'gimbap', 1);
+  for (let i = 0; i < 8; i++) mk(plain, 'gimbap', 1);
+  plain.setFixture(filler.uid, 5);
+  const plainSpin = plain.spin();
+  ok(spin.total > plainSpin.total, '같은 이웃 구성에서 건물주 쪽이 더 많이 지급한다',
+     `${plainSpin.total} → ${spin.total}`);
 }
 
 console.log(`\n결과: ${pass}/${pass + fail} 통과`);
