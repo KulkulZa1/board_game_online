@@ -465,6 +465,12 @@ async function checkDeploymentCachePolicy() {
   ) {
     throw new Error('Service worker update helper should reload controlled pages after a new SW takes control');
   }
+  // Insecure origins (http on a LAN IP) keep the prototype key but leave the value undefined,
+  // so an `in` check passes and the next line throws. Guard on the value.
+  const updaterCode = updater.body.replace(/\/\/[^\n]*/g, '');   // 주석에 옛 패턴을 인용해도 걸리지 않도록
+  if (/if\s*\(\s*!\s*\(\s*'serviceWorker'\s+in\s+navigator/.test(updaterCode)) {
+    throw new Error("sw-update.js must guard on navigator.serviceWorker's value, not the key — `in` is true on insecure origins where the property is undefined");
+  }
 }
 
 function listHtmlFiles(dir) {
