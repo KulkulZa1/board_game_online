@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>월세 잭팟 — 슬롯 로그라이트</title>
   <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="style.css?v=1.4">
+  <link rel="stylesheet" href="style.css?v=3.0">
 </head>
 <body>
   <div id="container">
@@ -92,6 +92,14 @@
     </div>
 
     <!-- 덱 뷰어 모달 -->
+    <!-- 세입자 해금 -->
+    <div id="unlockModal" class="modal hidden">
+      <div class="modal-box">
+        <div class="pick-title">🏠 세입자 해금 <span id="unlockDeeds"></span><button id="unlockClose" class="modal-close">✕</button></div>
+        <div id="unlockList"></div>
+      </div>
+    </div>
+
     <div id="deckModal" class="modal hidden">
       <div class="modal-box">
         <div class="pick-title">📦 내 덱 <span id="deckModalCount"></span><button id="deckClose" class="modal-close">✕</button></div>
@@ -112,14 +120,20 @@
           같은 심볼 3장은 <b>⚡합성</b>되어 Lv이 오르고(지급 ×Lv), 뽑기에는 가끔 <b>✨황금(×3)</b>이 섞입니다.
           <b>10번 완납</b>하면 내 집 마련!</p>
         <div id="bestLine" class="best-line hidden"></div>
+        <div id="metaLine" class="best-line"></div>
+        <div id="tenantRow"></div>
+        <div id="ascRow"></div>
+        <div id="ascDetail"></div>
         <button id="startBtn">입주하기</button>
+        <button id="unlockBtn" class="skip-btn">🏠 세입자 해금</button>
       </div>
     </div>
   </div>
 
   <script src="/js/admob.js?v=1.0"></script>
-  <script src="sim.js?v=1.4"></script>
-  <script src="game.js?v=1.4"></script>
+  <script src="meta.js?v=3.0"></script>
+  <script src="sim.js?v=3.0"></script>
+  <script src="game.js?v=3.0"></script>
   <script src="/js/sw-update.js?v=20260520b"></script>
 </body>
 </html>

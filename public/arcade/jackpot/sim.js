@@ -13,7 +13,7 @@
   const MAX_FIXTURES = 2;          // 📌 붙박이 — 항상 지정 칸에 나타나는 심볼(배치 전략의 핵심)
 
   // 월세 곡선 — 완납할수록 가파르게 오른다 (잉여 이월을 감안해 후반 급등)
-  const rentFor = (stage) => Math.round(22 * Math.pow(1.50, stage - 1));
+  const rentFor = (stage, growthBonus) => Math.round(22 * Math.pow(1.50 + (growthBonus || 0), stage - 1));
 
   // ── 심볼 정의 ──────────────────────────────────────────────────
   //  base: 스핀당 기본 지급. ev: 봇/추천용 기대값 추정치.
@@ -112,9 +112,16 @@
 
   // ── 런(한 판) ───────────────────────────────────────────────────
   class Run {
-    constructor(rng) {
+    // opts 는 meta.js 의 runOptions() 결과 (세입자 + 승급). 없으면 기존과 동일하게 돈다.
+    constructor(rng, opts) {
       this.rng = rng || Math.random;
-      this.coins = 0;
+      this.opts = Object.assign({
+        startCoins: 0, deckCapBonus: 0, draftBonus: 0, jackpotMult: 1,
+        rentMult: 1, rentGrowth: 0, skipMult: 1, eventMult: 1,
+        spinsPerRent: 0, relicChoices: 0, winStage: 0,
+        startDeck: null, extraStart: [], ascension: 0, tenant: null,
+      }, opts || {});
+      this.coins = Math.max(0, this.opts.startCoins);
       this.stage = 1;
       this.spinNo = 0;
       this.spinsIntoStage = 0;
@@ -124,7 +131,8 @@
       this.totalEarned = 0;
       this.bestSpin = 0;
       this._uid = 0;
-      this.deck = STARTER_DECK.map((id) => this._mk(id));
+      const startIds = (this.opts.startDeck || STARTER_DECK).concat(this.opts.extraStart || []);
+      this.deck = startIds.map((id) => this._mk(id));
       // v2: 유물 / 루트 / 이벤트
       this.relics = new Set();
       this.angelUsed = false;
@@ -206,10 +214,15 @@
       return a;
     }
     has(relic) { return this.relics.has(relic); }
-    spinsPerRent() { return BASE_SPINS_PER_RENT + (this.has('extend') ? 1 : 0); }
+    spinsPerRent() {
+      return Math.max(2, BASE_SPINS_PER_RENT + (this.has('extend') ? 1 : 0) + this.opts.spinsPerRent);
+    }
+    deckCap()  { return Math.max(10, DECK_CAP + this.opts.deckCapBonus); }
+    winStage() { return this.opts.winStage || WIN_STAGE; }
+    skipCoins(){ return Math.round(SKIP_COINS * this.opts.skipMult); }
 
     rent() {
-      let r = rentFor(this.stage) * ROUTES[this.route].rentMult;
+      let r = rentFor(this.stage, this.opts.rentGrowth) * ROUTES[this.route].rentMult * this.opts.rentMult;
       if (this.has('basement')) r *= 0.8;
       if (this.has('extend')) r *= 1.15;
       return Math.round(r);
@@ -234,7 +247,7 @@
 
       // 0) 월드 이벤트 발동 판정 (지속 이벤트 중엔 새로 안 뜸)
       let firedEvent = null;
-      const evMult = ROUTES[this.route].eventMult || 1;
+      const evMult = (ROUTES[this.route].eventMult || 1) * this.opts.eventMult;
       if (!this.activeEvent && this.spinNo > 2 && this._chance(EVENT_CHANCE * evMult)) {
         const ids = Object.keys(WORLD_EVENTS);
         const id = ids[Math.floor(this.rng() * ids.length)];
@@ -261,7 +274,7 @@
           const c = this._upgradeRandom();
           firedEvent.detail = c ? `${SYMBOLS[c.id].icon} ${SYMBOLS[c.id].name} → Lv${c.lv}!` : '강화할 카드가 없다';
         } else if (id === 'box') {
-          if (this.deck.length < DECK_CAP) {
+          if (this.deck.length < this.deckCap()) {
             const rarity = this._chance(0.25) ? 'rare' : (this._chance(0.5) ? 'uncommon' : 'common');
             const pool = Object.keys(SYMBOLS).filter((k) => SYMBOLS[k].rarity === rarity);
             const nid = pool[Math.floor(this.rng() * pool.length)];
@@ -272,7 +285,7 @@
             this._mergeCheck();
           } else firedEvent.detail = '덱이 가득 찼다';
         } else if (id === 'doppel') {
-          if (this.deck.length < DECK_CAP && this.deck.length) {
+          if (this.deck.length < this.deckCap() && this.deck.length) {
             const src = this.deck[Math.floor(this.rng() * this.deck.length)];
             const cp = this._mk(src.id); cp.lv = src.lv; cp.gold = src.gold;
             this.deck.push(cp);
@@ -413,6 +426,7 @@
           if (this.has('dice')) p *= 1.5;
           if (evActive('lucky')) p *= 2;
           if (feverNow) p *= 2;   // 🔥 피버 스핀
+          p *= this.opts.jackpotMult;   // 세입자/승급 보정
           p = Math.min(0.6, p);
           if (this._chance(p)) {
             amt = it.id === 'slotm' ? 40 : 70;
@@ -453,7 +467,7 @@
       // 5) 성장 페이즈 — 닭이 알을 낳고, 알이 부화한다
       for (let i = 0; i < CELLS; i++) {
         const it = at(i); if (!it) continue;
-        if (it.id === 'chicken' && this.deck.length < DECK_CAP && this._chance(0.30)) {
+        if (it.id === 'chicken' && this.deck.length < this.deckCap() && this._chance(0.30)) {
           this.deck.push(this._mk('egg'));
           events.push({ type: 'lay', idx: i });
         } else if (it.id === 'egg' && this._chance(0.12)) {
@@ -521,7 +535,7 @@
           const surplus = this.coins;
           this.rentsPaid++;
           settle = {
-            type: this.stage >= WIN_STAGE && !this.won ? 'won' : 'paid',
+            type: this.stage >= this.winStage() && !this.won ? 'won' : 'paid',
             rent, stage: this.stage, surplus,
             bonus: surplus >= Math.ceil(rent * 0.5),
           };
@@ -574,7 +588,8 @@
       if (ROUTES[id].relic) {
         const unowned = Object.keys(RELICS).filter((r) => !this.relics.has(r) && !(r === 'angel' && this.angelUsed));
         if (unowned.length) {
-          this.pendingRelics = this._shuffle(unowned).slice(0, 2).map((r) => Object.assign({ id: r }, RELICS[r]));
+          const nChoices = Math.max(1, 2 + this.opts.relicChoices);
+          this.pendingRelics = this._shuffle(unowned).slice(0, nChoices).map((r) => Object.assign({ id: r }, RELICS[r]));
         } else {
           this.coins += 15;   // 모든 유물 보유 — 골동품을 판다
         }
@@ -600,7 +615,7 @@
     offers(rareBoost) {
       const boosted = rareBoost || !!ROUTES[this.route].rareBoost;
       const w = boosted ? { common: 20, uncommon: 45, rare: 35 } : RARITY_WEIGHT;
-      const count = Math.max(2, 3 + (this.has('mart') ? 1 : 0) - (this.has('minimal') ? 1 : 0));
+      const count = Math.max(2, 3 + (this.has('mart') ? 1 : 0) - (this.has('minimal') ? 1 : 0) + this.opts.draftBonus);
       const ids = Object.keys(SYMBOLS);
       const out = [];
       let guard = 0;
@@ -615,14 +630,14 @@
       return out.map((id) => ({ id, gold: this._chance(0.05) }));
     }
 
-    skipReward() { return this.has('mart') ? 0 : SKIP_COINS; }
+    skipReward() { return this.has('mart') ? 0 : this.skipCoins(); }
     pick(id, gold) {
       if (id && SYMBOLS[id] && this.deck.length < DECK_CAP) {
         const item = this._mk(id);
         item.gold = !!gold;
         this.deck.push(item);
         if (this.has('clone')) {   // 복제 배양기 — 2장씩, 가끔 양말 덤
-          if (this.deck.length < DECK_CAP) {
+          if (this.deck.length < this.deckCap()) {
             const cp = this._mk(id); cp.gold = !!gold;
             this.deck.push(cp);
           }
