@@ -38,6 +38,9 @@
 - Card buttons in jackpot's symbol/route/relic modals and the map nodes carry `data-id` / `data-type`, so automated balance runs pick by identity instead of guessing from label text.
 
 ### Fixed
+- `sw-update.js` threw on every page load over an insecure origin. It guarded with `'serviceWorker' in navigator`, which is true even where the API is unusable — on plain http against a LAN IP (exactly how this repo is dev-tested on a phone) Chrome keeps the prototype key but leaves the property undefined, so the very next line blew up and took the rest of the script with it. It now checks the value. Caught by a real-browser balance run and gated by a smoke-check assertion.
+
+### Fixed
 - Jackpot's deck cap only applied to some card sources. `pick()` checked the `DECK_CAP` constant instead of the run's own cap, so the collector's +10 never materialised on drafts and, worse, ascension deck penalties were unenforceable — an ascension 10 player capped at 15 could still draft up to 30.
 - Jackpot ascension tiers 9 and 10 were beyond reach (2% and 0% for the tuned bot). Both now sit at 3–4%, which a player who plans fixtures and synergies clears comfortably. The capstone no longer extends the run length: moving the target to 11–12 rents multiplies against a rent curve that grows 1.5× per stage, so it squeezes the deck and jackpot odds instead.
 
