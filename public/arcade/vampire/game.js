@@ -496,6 +496,8 @@
   let overdriveActive = 0;     // 오버드라이브 남은 지속 시간(초)
   let overdriveFlash  = 0;     // 활성화 순간 금빛 섬광 잔여 시간
   let lastMoveDir = { dx: 1, dy: 0 }; // 마지막 이동 방향 (대쉬 방향 결정)
+  let enemyRepoBudget = 0;            // 뒤처진 적 재배치 예산 — 뒤처진 수에 비례해 두꺼워진다
+  let enemyFarCount = 0;              // 지난 프레임에 900px 밖에 있던 적 수
   let itemBoxes     = [];        // 월드에 존재하는 아이템 박스
   let hybridTowers  = [];
   let selectedTowerTypeIdx = 0;
@@ -4620,6 +4622,10 @@
 
   function update(dt) {
     // 이동
+    // 서성이는 플레이어는 적을 거의 안 흘리므로(뒤처짐 few) 스트림이 얇고,
+    // 한 방향으로 도망만 치면 전부 뒤처지므로(80+) 스트림이 두꺼워진다.
+    enemyRepoBudget = Math.min(3, enemyRepoBudget + (2 + Math.min(12, enemyFarCount * 0.12)) * dt);
+    enemyFarCount = 0;
     const { dx, dy } = getMoveDir();
     if (dx !== 0 || dy !== 0) lastMoveDir = { dx, dy };
     const _dashBoostMult = player._dashSpeedBoost > 0 ? 1.35 : 1;
@@ -5136,6 +5142,24 @@
       const ang = Math.atan2(targetActor.y - e.y, targetActor.x - e.x);
       const d   = dist(e, targetActor);
       e.faceAngle = ang;
+
+      // 뒤처진 적 재배치 (원작 뱀서의 핵심 장치) — 모든 적이 플레이어(160px/s)보다
+      // 느려서(최고 75) 한 방향으로 달리기만 하면 아무도 못 따라온다. 실측: 도망 봇이
+      // 2분~10분 동안 킬 27개·피해 0으로 승리 — 게임이 8분짜리 조깅이 됐다.
+      // 너무 멀어진 적은 체력을 유지한 채 플레이어 이동 방향 앞쪽 링으로 순간이동한다.
+      if (!e.isBoss && !e.goblin && d > 900) enemyFarCount++;
+      if (!e.isBoss && !e.goblin && d > 900 && enemyRepoBudget >= 1) {
+        enemyRepoBudget -= 1;
+        const mv = (typeof lastMoveDir === 'object' && lastMoveDir) ? lastMoveDir : { dx: 0, dy: 0 };
+        const heading = (mv.dx || mv.dy) ? Math.atan2(mv.dy, mv.dx) : Math.random() * Math.PI * 2;
+        // 진행 방향 ±90° 부채꼴, 무기 사거리 밖 — 벽이 아니라 스트림으로 흘러들어야
+        // 도망은 비싸지되 숙련 카이팅(틈새 찾기)은 살아남는다
+        const a2 = heading + (Math.random() - 0.5) * Math.PI;
+        const r2 = 560 + Math.random() * 160;   // 궁수 사거리(280) 밖 — 반응할 시간을 준다
+        e.x = player.x + Math.cos(a2) * r2;
+        e.y = player.y + Math.sin(a2) * r2;
+        continue;   // 이번 프레임은 이동 생략 (순간이동 직후)
+      }
 
       // 보스 페이즈 전환 체크 (HP 50% 이하 → 격노)
       if (e.isBoss) {
@@ -7173,7 +7197,9 @@
       </div>
     `;
     modal.style.display = 'block';
-    if (state === 'playing') setPaused(true);
+    // 일시정지 메뉴 없이 조용히 멈춘다 — setPaused(true)는 pauseOverlay(Resume 버튼)를
+    // 이 모달 '뒤에' 띄워서, 보이는데 클릭은 안 되는 버튼이 생겼다 (실플레이에서 발견)
+    if (state === 'playing') { state = 'paused'; saveRunSnapshot('pause'); }
 
     function doEquip() {
       if (modal.style.display === 'none') return;
@@ -7213,6 +7239,30 @@
     // 자동 분해 체크박스
     const chk = document.getElementById('autoDismantleChk');
     if (chk) chk.onchange = () => { autoDismantleEnabled = chk.checked; };
+  }
+
+  // 자동화 테스트용 훅 — ?debug=1 일 때만. 일반 플레이에는 영향이 없다.
+  // (실플레이 밸런스 계측: 봇이 적 위치를 보고 카이팅해야 사람 근사가 된다)
+  if (new URLSearchParams(window.location.search).get('debug') === '1') {
+    window.__vps = {
+      state() {
+        return {
+          state, elapsed: Math.round(elapsed), kills,
+          level: player ? player.level : 0,
+          hp: player ? Math.round(player.hp) : 0,
+          maxHp: player ? player.maxHp : 0,
+          weapons: player ? Object.keys(player.weapons || {}).length : 0,
+        };
+      },
+      grid() {
+        if (!player) return null;
+        return {
+          px: player.x, py: player.y,
+          enemies: enemies.slice(0, 80).map((e) => ({ x: e.x, y: e.y, hp: e.hp, boss: !!e.boss })),
+          gems: xpGems.slice(0, 40).map((g) => ({ x: g.x, y: g.y })),
+        };
+      },
+    };
   }
 
   // 첫 프레임 시작

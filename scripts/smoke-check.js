@@ -933,6 +933,7 @@ function checkVampireDirectorLoopCoverage() {
     'META_KEY',
     'RUN_SNAPSHOT_KEY',
     'RUN_SNAPSHOT_INTERVAL',
+    'enemyRepoBudget',
     'selectedCharacterId',
     'selectedDifficultyId',
     'selectedMapId',
