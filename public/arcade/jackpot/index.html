@@ -15,6 +15,7 @@
       <div id="hdrStats">
         <span title="최고 완납 단계">🏆 <strong id="bestDisp">0</strong></span>
         <button id="deckBtn" class="hdr-btn" title="내 덱 보기 (D)">📦 <b id="deckCount">9</b></button>
+        <button id="mapBtn" class="hdr-btn" title="동네 지도 (M)">🗺️</button>
         <button id="turboBtn" class="hdr-btn" title="터보 모드 (T)">⚡</button>
         <button id="muteBtn" class="hdr-btn" title="음소거 (M)">🔊</button>
       </div>
@@ -70,6 +71,7 @@
     <div id="routeModal" class="modal hidden">
       <div class="modal-box">
         <div class="pick-title">🗺️ 다음 동네를 고르세요</div>
+        <div id="mapView"></div>
         <div id="routeCards"></div>
       </div>
     </div>
@@ -97,6 +99,14 @@
       <div class="modal-box">
         <div class="pick-title">🏠 세입자 해금 <span id="unlockDeeds"></span><button id="unlockClose" class="modal-close">✕</button></div>
         <div id="unlockList"></div>
+      </div>
+    </div>
+
+    <!-- 지도 전체보기 -->
+    <div id="mapModal" class="modal hidden">
+      <div class="modal-box">
+        <div class="pick-title">🗺️ 동네 지도<button id="mapClose" class="modal-close">✕</button></div>
+        <div id="mapFull"></div>
       </div>
     </div>
 
@@ -131,9 +141,10 @@
   </div>
 
   <script src="/js/admob.js?v=1.0"></script>
-  <script src="meta.js?v=3.0"></script>
-  <script src="sim.js?v=3.0"></script>
-  <script src="game.js?v=3.0"></script>
+  <script src="map.js?v=1.0"></script>
+  <script src="meta.js?v=3.1"></script>
+  <script src="sim.js?v=3.2"></script>
+  <script src="game.js?v=3.2"></script>
   <script src="/js/sw-update.js?v=20260520b"></script>
 </body>
 </html>

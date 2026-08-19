@@ -561,6 +561,102 @@
 
   // ── 루트 분기 — 다음 동네 선택 ──────────────────────────────────
   let routeBonusNext = false;
+
+  // ── 동네 지도 렌더 ──────────────────────────────────────────────
+  // 슬더스처럼 층을 아래에서 위로 쌓아 보여준다. 지나온 길은 흐리게,
+  // 지금 갈 수 있는 곳은 밝게 — 몇 층 앞이 보여야 "계획" 이 성립한다.
+  function renderMap(el, opts) {
+    const o = opts || {};
+    if (!el) return;
+    const map = run && run.map;
+    if (!map || !window.JackpotMap) { el.innerHTML = ''; return; }
+    const M = window.JackpotMap;
+    const reach = M.reachable(map);
+    const canPick = !!o.pickable && !!run.pendingRoutes;
+    const visited = new Set(map.visited.map((v) => v.floor + ':' + v.lane));
+
+    let html = '';
+    for (let f = map.floors.length - 1; f >= 0; f--) {
+      const isNow = f === map.pos.floor;
+      html += `<div class="map-floor${isNow ? ' now' : ''}">`;
+      html += `<span class="mf-no">${f === map.floors.length - 1 ? '🏁' : f}</span>`;
+      html += '<span class="mf-nodes">';
+      map.floors[f].forEach((nd, lane) => {
+        const t = M.NODE_TYPES[nd.type] || { icon: '?', name: '?' };
+        const here = isNow && lane === map.pos.lane;
+        const open = reach.some((r) => r.floor === f && r.lane === lane);
+        const been = visited.has(f + ':' + lane);
+        const cls = ['map-node', here ? 'here' : '', open ? 'open' : '', been && !here ? 'been' : ''].filter(Boolean).join(' ');
+        const clickable = canPick && open;
+        html += `<button class="${cls}" ${clickable ? '' : 'disabled'} data-f="${f}" data-l="${lane}" title="${t.name}">${t.icon}</button>`;
+      });
+      html += '</span></div>';
+    }
+    el.innerHTML = html;
+
+    drawMapEdges(el, map, M);
+
+    if (canPick) {
+      el.onclick = (e) => {
+        const b = e.target.closest('.map-node');
+        if (!b || b.disabled) return;
+        if (guarded(e)) return;
+        const f = +b.dataset.f, l = +b.dataset.l;
+        const rt = run.pendingRoutes.find((r) => r.floor === f && r.lane === l);
+        if (!rt) return;
+        pickRoute(rt);
+      };
+    } else el.onclick = null;
+  }
+
+  // 연결선 — 어느 칸이 어디로 이어지는지 보여야 "계획" 이 성립한다.
+  // 노드를 그린 뒤 실제 좌표를 재서 SVG 로 잇는다 (레이아웃이 바뀌어도 따라간다).
+  function drawMapEdges(el, map, M) {
+    const old = el.querySelector('.map-edges');
+    if (old) old.remove();
+    const box = el.getBoundingClientRect();
+    if (!box.width) return;
+    const center = (f, l) => {
+      const n = el.querySelector(`.map-node[data-f="${f}"][data-l="${l}"]`);
+      if (!n) return null;
+      const r = n.getBoundingClientRect();
+      return { x: r.left + r.width / 2 - box.left, y: r.top + r.height / 2 - box.top + el.scrollTop };
+    };
+    const reach = M.reachable(map);
+    const isOpenEdge = (f, l, nf, nl) =>
+      f === map.pos.floor && l === map.pos.lane && reach.some((r) => r.floor === nf && r.lane === nl);
+
+    let lines = '';
+    for (let f = 0; f < map.floors.length - 1; f++) {
+      map.floors[f].forEach((nd, l) => {
+        const a = center(f, l);
+        if (!a) return;
+        nd.next.forEach((nl) => {
+          const b = center(f + 1, nl);
+          if (!b) return;
+          const open = isOpenEdge(f, l, f + 1, nl);
+          lines += `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" class="map-edge${open ? ' open' : ''}" />`;
+        });
+      });
+    }
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('class', 'map-edges');
+    svg.setAttribute('width', String(Math.round(box.width)));
+    svg.setAttribute('height', String(el.scrollHeight));
+    svg.innerHTML = lines;
+    el.insertBefore(svg, el.firstChild);
+  }
+
+  // 동네 선택 확정 — 지도 클릭과 카드 클릭이 같은 경로를 쓴다
+  function pickRoute(rt) {
+    run.chooseRoute(rt.id, rt.floor, rt.lane);
+    Sound.pick();
+    $('routeModal').classList.add('hidden');
+    renderHUD();
+    if (run.pendingRelics) setTimeout(() => showRelic(), T(150));
+    else setTimeout(() => showPick(false, routeBonusNext), T(150));
+  }
+
   function showRoute(bonusAfter) {
     if (run.state !== 'playing' || !run.pendingRoutes) { showPick(false, bonusAfter); return; }
     // 구버전 HTML에 모달이 없으면 자동 선택(평범한 동네) — 시작 벽돌 방지 안전망
@@ -586,16 +682,12 @@
         </span>`;
       btn.addEventListener('click', (e) => {
         if (guarded(e)) return;
-        run.chooseRoute(rt.id);
-        Sound.pick();
-        $('routeModal').classList.add('hidden');
-        renderHUD();
-        if (run.pendingRelics) setTimeout(() => showRelic(), T(150));
-        else setTimeout(() => showPick(false, routeBonusNext), T(150));
+        pickRoute(rt);
       });
       wrap.appendChild(btn);
     });
     $('routeModal').classList.remove('hidden');
+    renderMap($('mapView'), { pickable: true });   // 표시 후에 그려야 좌표를 잴 수 있다
   }
 
   // ── 유물 선택 (유물 골목 입주 보상) ─────────────────────────────
@@ -829,6 +921,11 @@
     }
     // 방어적 바인딩 — 어떤 요소가 없어도(HTML/JS 버전 스큐) 나머지는 정상 동작
     onEl('startBtn', 'click', (e) => { if (guarded(e)) return; start(); });
+    onEl('mapBtn', 'click', () => {
+      $('mapModal').classList.remove('hidden');
+      renderMap($('mapFull'), { pickable: false });   // 표시 후에 그린다
+    });
+    onEl('mapClose', 'click', () => $('mapModal').classList.add('hidden'));
 
     // 세입자 / 승급 선택
     onEl('tenantRow', 'click', (e) => {

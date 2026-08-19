@@ -130,6 +130,7 @@ setTimeout(() => {
     { path: '/js/mahjong-client.js', label: '/js/mahjong-client.js → 200', expect: 200 },
     { path: '/arcade/jackpot/sim.js', label: '/arcade/jackpot/sim.js → 200', expect: 200 },
     { path: '/arcade/jackpot/meta.js', label: '/arcade/jackpot/meta.js → 200', expect: 200 },
+    { path: '/arcade/jackpot/map.js', label: '/arcade/jackpot/map.js → 200', expect: 200 },
     { path: '/arcade/neon-cascade/', label: '/arcade/neon-cascade/ → 200', expect: 200 },
     { path: '/arcade/neon-cascade/sim.js', label: '/arcade/neon-cascade/sim.js → 200', expect: 200 },
     { path: '/vendor/chess.js', label: '/vendor/chess.js → 200 (CDN 대신 동일 오리진)', expect: 200 },
