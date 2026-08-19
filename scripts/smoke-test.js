@@ -112,6 +112,7 @@ setTimeout(() => {
     { path: '/game.html',      label: '/game.html → 200 (게임 페이지)',       expect: 200 },
     { path: '/sandbox/',       label: '/sandbox/ → 404 (개발자 도구 비노출)', expect: 404 },
     { path: '/arcade/snake/',    label: '/arcade/snake/ → 200',    expect: 200 },
+    { path: '/arcade/snake/sim.js', label: '/arcade/snake/sim.js → 200', expect: 200 },
     { path: '/arcade/breakout/', label: '/arcade/breakout/ → 200', expect: 200 },
     { path: '/arcade/vampire/',  label: '/arcade/vampire/ → 200',  expect: 200 },
     { path: '/arcade/vampire/vps-equipment.js', label: '/arcade/vampire/vps-equipment.js → 200', expect: 200 },

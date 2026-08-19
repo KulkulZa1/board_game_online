@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>스네이크 — 보드게임 온라인</title>
   <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="style.css?v=2.0">
+  <link rel="stylesheet" href="style.css?v=3.0">
 </head>
 <body>
   <div id="container">
@@ -17,8 +17,12 @@
         <span>점수 <strong id="scoreDisplay">0</strong></span>
         <span>최고 <strong id="highDisplay">0</strong></span>
         <span>연쇄 <strong id="comboDisplay">x1</strong></span>
+        <span>🐚 <strong id="scaleDisplay">0</strong></span>
       </div>
     </header>
+
+    <!-- 보유 돌연변이 -->
+    <div id="mutTray"></div>
 
     <div id="gameWrapper">
       <canvas id="c" tabindex="0"></canvas>
@@ -28,8 +32,32 @@
         <div id="overlayBox">
           <div id="overlayIcon">🐍</div>
           <p id="overlayMsg">방향키·WASD 또는 스와이프로 조작</p>
+          <div id="runSummary"></div>
           <button id="startBtn">시작하기</button>
+          <button id="shopBtn" class="ghost-btn">🐚 비늘 상점</button>
           <p class="hint-text">스페이스바로도 시작</p>
+        </div>
+      </div>
+
+      <!-- 레벨업 드래프트 -->
+      <div id="draftOverlay">
+        <div id="draftBox">
+          <h3 id="draftTitle">돌연변이 선택</h3>
+          <p id="draftSub">하나를 골라 뱀을 진화시키세요</p>
+          <div id="draftCards"></div>
+        </div>
+      </div>
+
+      <!-- 진화 연출 -->
+      <div id="evoBanner"></div>
+
+      <!-- 비늘 상점 -->
+      <div id="shopOverlay">
+        <div id="shopBox">
+          <h3>🐚 비늘 상점 <span id="shopScales">0</span></h3>
+          <p class="shop-hint">판이 끝나면 비늘이 남습니다. 영구 강화는 사라지지 않습니다.</p>
+          <div id="shopList"></div>
+          <button id="shopClose">닫기</button>
         </div>
       </div>
     </div>
@@ -57,7 +85,8 @@
   </div>
 
   <script src="/js/admob.js?v=1.0"></script>
-  <script src="game.js?v=2.0"></script>
+  <script src="sim.js?v=3.0"></script>
+  <script src="game.js?v=3.0"></script>
   <script src="/js/sw-update.js?v=20260520b"></script>
 </body>
 </html>
