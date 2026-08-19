@@ -583,6 +583,14 @@ no `game-registry.js` entry. Each is reachable at `/arcade/<name>/`.
 | **jackpot** | `/arcade/jackpot/` | 월세 잭팟 — slot **roguelike**; spin to make rent, deck-build between rounds. Pick a **tenant** (6 starting archetypes, 4 unlockable) and an **ascension** (10 cumulative difficulty tiers, each unlocked by winning the one below). Every run pays 🏠 deeds, win or lose | `ROWS=3, COLS=4, BASE_SPINS_PER_RENT=4, DECK_CAP=30, EVENT_CHANCE=0.10`; `TENANTS(6), ASCENSIONS(10)` in `meta.js` | `arcade_jackpot_muted`, `jackpot_meta_v1` |
 | **neon-cascade** | `/arcade/neon-cascade/` | Chain-explosion arcade; timed rounds, limited charges. **Amplifiers** are drafted *before* each round (never mid-round — the clock is the game) and stack up to `MAX_AMPS=4` across consecutive rounds; 3 fusions | `ROUND_SECONDS=45, MAX_CHARGES=4, PULSE_RADIUS=118, RECHARGE_SECONDS=4.5`; `AMPS(10), AMP_FUSIONS(3)` in `sim.js` | `neon_cascade_high_v1`, `neon_cascade_chain_v1`, `neon_cascade_mute_v1` |
 
+**Jackpot balance is measured, not guessed.** `prototypes/jackpot-balance-sweep.js`
+(not in any npm script) reuses the tuned greedy bot from `jackpot-autoplay.js` to report
+win rate per ascension tier and per tenant. Run it after touching any number in `meta.js`.
+The tuning targets it checks: ascension 0 lands in **15–55%**, the curve never jumps *up*
+by more than 8 points as tiers rise, and the top tier is a genuine wall. Current shape is
+roughly 33% at tier 0 falling to ~2% at tier 9 and 0% at tier 10, with the six tenants
+inside a 32–43% band so they read as sidegrades rather than a power ranking.
+
 Several arcade games ship a headless `sim.js` (`bootstrap`, `jackpot`, `neon-cascade`,
 `snake`, `breakout`, `plant`) so their economy can be balanced from Node. Jackpot adds a
 second pure module, `meta.js`, holding the run-to-run layer (tenants, ascension, unlocks);
