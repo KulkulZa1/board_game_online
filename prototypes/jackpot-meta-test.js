@@ -91,16 +91,18 @@ console.log('\n[옵션이 실제 Run 에 반영되는가]');
   ok(base.coins === 0 && base.deckCap() === J.DECK_CAP && base.winStage() === J.WIN_STAGE,
      '옵션 없이 만든 Run 은 기존과 동일 (하위호환)');
 
+  // 정확한 수치가 아니라 성질을 본다 — 밸런스 조정 때마다 테스트가 깨지면 안 된다
   const laborer = new J.Run(rng(1), M.runOptions('laborer', 0));
-  ok(laborer.coins === 10, '막노동꾼 시작 코인 +10', String(laborer.coins));
+  ok(laborer.coins > base.coins, '막노동꾼은 코인을 들고 시작한다', String(laborer.coins));
+  ok(laborer.coins === M.TEN.laborer.opts.startCoins, '시작 코인이 선언된 값과 일치');
 
   const collector = new J.Run(rng(1), M.runOptions('collector', 0));
   ok(collector.deckCap() === J.DECK_CAP + 10, '수집가 덱 상한 +10', String(collector.deckCap()));
   ok(collector.offers().length > base.offers().length, '수집가 드래프트 선택지가 더 많다');
 
   const gambler = new J.Run(rng(1), M.runOptions('gambler', 0));
-  ok(gambler.deck.length === base.deck.length + 2, '도박꾼은 시작 덱이 2장 더 많다 (대가)');
-  ok(gambler.opts.jackpotMult === 2, '도박꾼 잭팟 확률 2배');
+  ok(gambler.deck.length > base.deck.length, '도박꾼은 시작 덱이 더 무겁다 (대가가 실재한다)');
+  ok(gambler.opts.jackpotMult > 1, '도박꾼 잭팟 확률이 기본보다 높다', String(gambler.opts.jackpotMult));
 
   const cook = new J.Run(rng(1), M.runOptions('cook', 0));
   ok(cook.deck.filter((d) => d.id === 'gimbap').length === 2, '요리사는 김밥을 2장 들고 시작');
@@ -111,11 +113,17 @@ console.log('\n[옵션이 실제 Run 에 반영되는가]');
 
   // 승급이 실제로 조인다
   const a10 = new J.Run(rng(1), M.runOptions('laborer', 10));
-  ok(a10.winStage() === 12, '승급10 — 완납 목표 12회');
-  ok(a10.spinsPerRent() < base.spinsPerRent(), '승급5 — 월세 주기가 짧다');
-  ok(a10.deckCap() < J.DECK_CAP, '승급3 — 덱 상한이 줄었다');
-  ok(a10.skipReward() === 0, '승급9 — 스킵 코인이 없다');
-  ok(a10.rent() > base.rent(), '승급1 — 월세가 비싸다', `${base.rent()} → ${a10.rent()}`);
+  ok(a10.winStage() > base.winStage(), '최상단 승급 — 결승선이 더 멀어진다', String(a10.winStage()));
+  ok(a10.deckCap() < J.DECK_CAP, '승급 — 덱 상한이 줄어든다');
+  ok(a10.skipReward() === 0, '승급 — 스킵 코인이 사라진다');
+  ok(a10.rent() > base.rent(), '승급 — 월세가 비싸진다', `${base.rent()} → ${a10.rent()}`);
+  // 어떤 승급도 플레이어를 유리하게 만들면 안 된다
+  let noHelp = true;
+  for (let lv = 1; lv <= M.MAX_ASCENSION; lv++) {
+    const r = new J.Run(rng(5), M.runOptions('laborer', lv));
+    if (r.deckCap() > J.DECK_CAP || r.skipReward() > base.skipReward() || r.winStage() < base.winStage()) noHelp = false;
+  }
+  ok(noHelp, '어떤 승급 단계도 플레이어를 유리하게 만들지 않는다');
 
   // 승급이 올라갈수록 월세는 단조 증가해야 한다
   let mono = true, prev = 0;

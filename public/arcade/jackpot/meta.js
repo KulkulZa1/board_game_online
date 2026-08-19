@@ -20,17 +20,17 @@
   // locked: true 면 해금해야 쓸 수 있다.
   const TENANTS = [
     { id: 'laborer', name: '막노동꾼', icon: '🔨', cost: 0,
-      desc: '기본기에 충실. 시작 코인 +10',
-      opts: { startCoins: 10 } },
+      desc: '기본기에 충실. 시작 코인 +26',
+      opts: { startCoins: 26 } },
     { id: 'collector', name: '수집가', icon: '🧺', cost: 0,
-      desc: '덱 상한 +10, 드래프트 선택지 +1 — 넓게 모아 조합한다',
-      opts: { deckCapBonus: 10, draftBonus: 1 } },
+      desc: '덱 상한 +10, 드래프트 선택지 +1 — 대신 월세가 6% 비싸다',
+      opts: { deckCapBonus: 10, draftBonus: 1, rentMult: 1.06 } },
     { id: 'gambler', name: '도박꾼', icon: '🎲', cost: 60,
-      desc: '잭팟 확률 2배 — 대신 시작 덱에 양말 2장이 더 섞인다',
-      opts: { jackpotMult: 2, extraStart: ['sock', 'sock'] } },
+      desc: '잭팟 확률 1.8배 — 대신 시작 덱에 양말 3장이 더 섞인다',
+      opts: { jackpotMult: 1.8, extraStart: ['sock', 'sock', 'sock'] } },
     { id: 'miser', name: '구두쇠', icon: '🪙', cost: 90,
-      desc: '월세 -12%, 스킵 코인 2배 — 느리지만 단단하다',
-      opts: { rentMult: 0.88, skipMult: 2 } },
+      desc: '월세 -5%, 스킵 코인 2배 — 대신 잭팟 확률이 30% 낮다',
+      opts: { rentMult: 0.95, skipMult: 2, jackpotMult: 0.7 } },
     { id: 'cook', name: '요리사', icon: '👨‍🍳', cost: 140,
       desc: '시작 덱이 음식 위주 + 김밥 한 장 추가',
       opts: { startDeck: ['rice', 'rice', 'rice', 'gimbap', 'gimbap', 'milk', 'milk', 'cat', 'sock'] } },
@@ -43,16 +43,17 @@
   // ── 승급 (이긴 뒤 열리는 난이도 사다리) ────────────────────────
   // 누적이다. 승급 5 는 1~5 의 효과를 모두 받는다.
   const ASCENSIONS = [
-    { lv: 1,  desc: '월세가 10% 더 비싸다',            opts: { rentMult: 1.10 } },
+    { lv: 1,  desc: '월세가 8% 더 비싸다',              opts: { rentMult: 1.08 } },
     { lv: 2,  desc: '시작 코인 -10',                    opts: { startCoins: -10 } },
     { lv: 3,  desc: '덱 상한 -5',                       opts: { deckCapBonus: -5 } },
     { lv: 4,  desc: '유물 선택지가 2개 → 1개로 줄어든다', opts: { relicChoices: -1 } },
-    { lv: 5,  desc: '월세 주기가 1스핀 짧다',           opts: { spinsPerRent: -1 } },
-    { lv: 6,  desc: '월세 곡선이 더 가파르다',          opts: { rentGrowth: 0.05 } },
-    { lv: 7,  desc: '잭팟 확률이 절반',                 opts: { jackpotMult: 0.5 } },
-    { lv: 8,  desc: '시작 덱에 빈 양말 2장이 섞인다',   opts: { extraStart: ['sock', 'sock'] } },
-    { lv: 9,  desc: '스킵 코인이 없다',                 opts: { skipMult: 0 } },
-    { lv: 10, desc: '완납 목표가 12회로 늘어난다',      opts: { winStage: 12 } },
+    { lv: 5,  desc: '월세가 또 8% 비싸진다',            opts: { rentMult: 1.08 } },
+    { lv: 6,  desc: '잭팟 확률이 30% 줄어든다',         opts: { jackpotMult: 0.7 } },
+    { lv: 7,  desc: '시작 덱에 빈 양말 2장이 섞인다',   opts: { extraStart: ['sock', 'sock'] } },
+    { lv: 8,  desc: '스킵 코인이 없다',                 opts: { skipMult: 0 } },
+    { lv: 9,  desc: '월세 곡선이 더 가파르다',          opts: { rentGrowth: 0.03 } },
+    // 최상단은 결승선 자체를 옮긴다 — 여기까지 온 사람을 위한 벽
+    { lv: 10, desc: '완납 목표가 10회 → 12회로 늘어난다', opts: { winStage: 12 } },
   ];
 
   // ── 저장값 ─────────────────────────────────────────────────────
