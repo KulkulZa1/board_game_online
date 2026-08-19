@@ -253,3 +253,125 @@ html, body {
   #dpad button { width: 44px; height: 44px; }
   #levelBar, #rushBar { display: none; }
 }
+
+/* ═══ 로그라이트 레이어 (돌연변이 · 진화 · 비늘 상점) ═══════════ */
+
+/* 보유 돌연변이 트레이 */
+#mutTray {
+  display: flex; flex-wrap: wrap; gap: 4px; justify-content: center;
+  min-height: 22px; padding: 2px 6px;
+}
+.mut-chip {
+  font-size: 0.95rem; line-height: 1; padding: 3px 5px; border-radius: 7px;
+  background: var(--panel); border: 1px solid var(--border); cursor: help;
+}
+.mut-chip.evo    { border-color: #ffd166; box-shadow: 0 0 8px rgba(255,209,102,0.45); }
+.mut-chip.curse  { border-color: #ff4757; }
+.mut-chip.shield { border-color: #67e8f9; color: #67e8f9; font-size: 0.72rem; font-weight: 800; }
+
+/* 드래프트 */
+#draftOverlay {
+  position: fixed; inset: 0; z-index: 30; display: flex;
+  align-items: center; justify-content: center; padding: 10px;
+  background: rgba(6,10,16,0.92); opacity: 0; pointer-events: none;
+  transition: opacity 0.18s;
+}
+#draftOverlay.visible { opacity: 1; pointer-events: all; }
+#draftBox { width: 100%; max-width: 420px; max-height: 92vh; overflow-y: auto; text-align: center; }
+#draftBox h3 { font-size: 1.05rem; margin-bottom: 2px; }
+#draftSub { font-size: 0.76rem; color: var(--muted); margin-bottom: 10px; }
+#draftCards { display: flex; flex-direction: column; gap: 7px; }
+.draft-card {
+  display: grid; grid-template-columns: 34px 1fr; gap: 2px 10px;
+  align-items: center; text-align: left; cursor: pointer;
+  background: var(--panel); border: 1.5px solid var(--border); border-radius: 11px;
+  padding: 9px 11px; color: var(--text); font-family: inherit;
+  transition: transform 0.08s, border-color 0.12s;
+}
+.draft-card:active { transform: scale(0.98); }
+.draft-card.rare   { border-color: #5f8aff; }
+.draft-card.cursed { border-color: #ff4757; background: linear-gradient(180deg, #1d1215, var(--panel)); }
+.dc-icon { grid-row: 1 / 3; font-size: 1.6rem; text-align: center; }
+.dc-name { font-weight: 800; font-size: 0.9rem; }
+.dc-desc { font-size: 0.72rem; color: var(--muted); line-height: 1.35; }
+.dc-tag {
+  grid-column: 2; justify-self: start; font-size: 0.6rem; font-weight: 800;
+  padding: 1px 6px; border-radius: 99px; margin-top: 2px;
+}
+.dc-tag.rare  { background: #5f8aff; color: #08111f; }
+.dc-tag.curse { background: #ff4757; color: #1a0508; }
+.dc-evo {
+  grid-column: 2; font-size: 0.7rem; font-weight: 800; color: #ffd166;
+  margin-top: 3px; animation: evoHint 0.9s infinite alternate;
+}
+@keyframes evoHint { to { text-shadow: 0 0 10px rgba(255,209,102,0.9); } }
+
+/* 진화 배너 */
+#evoBanner {
+  position: fixed; left: 50%; top: 34%; transform: translate(-50%,-50%) scale(0.7);
+  z-index: 35; opacity: 0; pointer-events: none; transition: opacity 0.25s, transform 0.25s;
+}
+#evoBanner.show { opacity: 1; transform: translate(-50%,-50%) scale(1); }
+.evo-inner {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  background: rgba(13,17,23,0.95); border: 2px solid #ffd166; border-radius: 14px;
+  padding: 12px 22px; box-shadow: 0 0 28px rgba(255,209,102,0.55);
+}
+.evo-icon { font-size: 2.2rem; }
+.evo-inner strong { font-size: 1rem; color: #ffd166; }
+.evo-desc { font-size: 0.7rem; color: var(--muted); text-align: center; max-width: 230px; }
+
+/* 판 결과 요약 */
+#runSummary { display: none; margin: 8px 0 4px; }
+#runSummary.visible { display: block; }
+.rs-scales { font-size: 0.85rem; margin-bottom: 5px; }
+.rs-scales strong { color: #ffd166; }
+.rs-scales em { color: var(--muted); font-style: normal; font-size: 0.75rem; }
+.rs-build { display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; }
+.rs-chip {
+  font-size: 0.66rem; padding: 2px 7px; border-radius: 99px;
+  background: var(--panel); border: 1px solid var(--border);
+}
+.rs-chip.evo { border-color: #ffd166; color: #ffd166; }
+.rs-evo { font-size: 0.72rem; color: #ffd166; margin-top: 5px; }
+
+/* 비늘 상점 */
+.ghost-btn {
+  background: none; border: 1px solid var(--border); color: var(--text);
+  border-radius: 9px; padding: 8px 16px; font-size: 0.82rem; cursor: pointer;
+  font-family: inherit; margin-top: 6px;
+}
+.ghost-btn:active { transform: scale(0.97); }
+#shopOverlay {
+  position: fixed; inset: 0; z-index: 40; display: flex;
+  align-items: center; justify-content: center; padding: 10px;
+  background: rgba(6,10,16,0.94); opacity: 0; pointer-events: none; transition: opacity 0.18s;
+}
+#shopOverlay.visible { opacity: 1; pointer-events: all; }
+#shopBox {
+  width: 100%; max-width: 430px; max-height: 88vh; overflow-y: auto;
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 14px; padding: 16px; text-align: center;
+}
+#shopBox h3 { font-size: 1rem; margin-bottom: 4px; }
+#shopScales { color: #ffd166; font-size: 0.85rem; }
+.shop-hint { font-size: 0.72rem; color: var(--muted); margin-bottom: 10px; line-height: 1.4; }
+#shopList { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+.shop-row {
+  display: grid; grid-template-columns: 30px 1fr auto; gap: 10px; align-items: center;
+  background: rgba(255,255,255,0.03); border: 1px solid var(--border);
+  border-radius: 10px; padding: 8px 10px; text-align: left;
+  color: var(--text); font-family: inherit; cursor: pointer;
+}
+.shop-row.afford { border-color: var(--accent); }
+.shop-row:disabled { opacity: 0.45; cursor: default; }
+.shop-row.maxed { opacity: 0.6; border-color: #ffd166; }
+.sr-icon { font-size: 1.3rem; text-align: center; }
+.sr-body strong { font-size: 0.84rem; display: block; }
+.sr-body strong em { color: #ffd166; font-style: normal; font-size: 0.72rem; }
+.sr-body small { font-size: 0.7rem; color: var(--muted); }
+.sr-cost { font-size: 0.78rem; font-weight: 800; color: #ffd166; white-space: nowrap; }
+#shopClose {
+  background: var(--border); border: none; color: var(--text); border-radius: 9px;
+  padding: 9px 20px; font-size: 0.85rem; cursor: pointer; font-family: inherit;
+}

@@ -72,7 +72,7 @@ Handler: `server/handlers/omok.js` | Frontend: `public/js/game-omok.js`
 
 **State fields:**
 ```
-room.boardSize   — { size: 15 } (default; options 13, 15, 19)
+room.boardSize   — { size: 15 } (default; options 13, 15, 17, 19)
 room.board       — size×size 2D array of null|'white'|'black'
 room.currentTurn — 'black' (black moves first)
 room.lastMove    — { row, col }
@@ -85,7 +85,7 @@ room.lastMove    — { row, col }
 
 **Win conditions:**
 - Exactly 5 in a row (Renju rule — 6+ is NOT a win): `endGame(room, yourColor, 'five-in-a-row', { winCells })`
-- Board full (225 moves): `endGame(room, 'draw', 'board-full')`
+- Board full (`size × size` moves — scales with the chosen board, **not** a hardcoded 225): `endGame(room, 'draw', 'board-full')`
 
 **Move record:** `{ row, col, color, moveNum }`
 
@@ -573,7 +573,7 @@ no `game-registry.js` entry. Each is reachable at `/arcade/<name>/`.
 
 | Game | Path | Mechanic | Key Constants | Storage Keys |
 |------|------|----------|---------------|--------------|
-| **snake** | `/arcade/snake/` | Grid snake; grow by eating apples | `GRID=20, TICK=120ms` | `arcade_snake_high` |
+| **snake** | `/arcade/snake/` | Grid snake **roguelite** — every level-up drafts 1 of 3 mutations; pairs fuse into evolutions; curses trade power for a drawback; obstacles close in from Lv.5; scales (🐚) buy permanent upgrades between runs | `COLS/ROWS=20, FOODS_PER_LEVEL=5`; `MUTATIONS(18), EVOLUTIONS(5), UPGRADES(5)` in `sim.js` | `snake_hs`, `snake_meta` |
 | **breakout** | `/arcade/breakout/` | Ball + paddle; power-ups (multi-ball, wide, laser) | `BRICK_ROWS=6, BALL_SPEED_INIT=5` | `arcade_breakout_high` |
 | **vampire** | `/arcade/vampire/` | Top-down survivor; **weapon leveling (1-5) + evolution** (max weapon + passive → evolved super-weapon); 5 base + 5 evolved weapons | `SURVIVE_GOAL=600s, MAX_ENEMIES=120, MAX_WEAPON_LEVEL=5`; `EVOLUTION_DEFS` | `vps_meta_v2`, `vps_run_snapshot_v1`, `vps_muted` |
 | **plant** | `/arcade/plant/` | 식물 키우기 — clicker idle; 9 growth stages; 5 upgrade types | `STAGES[9], UPGRADES[5]` | `plant_save_v1` |
@@ -583,9 +583,20 @@ no `game-registry.js` entry. Each is reachable at `/arcade/<name>/`.
 | **jackpot** | `/arcade/jackpot/` | 월세 잭팟 — slot roguelite; spin to make rent, deck-building between rounds | `ROWS=3, COLS=4, BASE_SPINS_PER_RENT=4, DECK_CAP=30, EVENT_CHANCE=0.10` | `arcade_jackpot_muted` |
 | **neon-cascade** | `/arcade/neon-cascade/` | Chain-explosion arcade; timed rounds, limited charges | `WIDTH=720, HEIGHT=1000, ROUND_SECONDS=45, MAX_CHARGES=4, PULSE_RADIUS=118, RECHARGE_SECONDS=4.5` | `neon_cascade_high_v1`, `neon_cascade_chain_v1`, `neon_cascade_mute_v1` |
 
-Several arcade games ship a headless `sim.js` (`bootstrap`, `jackpot`, `neon-cascade`)
-so their economy can be balanced from Node — see `prototypes/` for the runner scripts.
-These are **not** part of `npm test`.
+Several arcade games ship a headless `sim.js` (`bootstrap`, `jackpot`, `neon-cascade`,
+`snake`) so their economy can be balanced from Node — see `prototypes/` for the runner
+scripts. Most are **not** part of `npm test`; the exception is `snake`, whose
+`prototypes/snake-rogue-test.js` runs in `npm run test:games` and asserts both the rules
+(evolutions resolve, curses cost what they claim, saved meta is sanitised) and the
+*balance* (builds actually diverge, evolutions fire often enough to chase but not by
+default, curses stay a minority of picks).
+
+> **Why snake has a roguelite layer at all.** The pillars the repo's own strongest
+> dopamine games share — and that plain arcade loops lack — are **build identity through
+> choice** and **progress that survives death**. Snake had juice (combo, RUSH, gold food)
+> but every run played identically and a loss left nothing behind. The draft supplies the
+> first, scales supply the second. Keep both when editing: a change that makes every run
+> converge on the same build, or that makes a lost run worthless, removes the point.
 
 > **⚠️ tower-defense is the exception to "arcade games are self-contained."**
 > `public/arcade/tower-defense/` holds only `index.html`. It loads the engine from

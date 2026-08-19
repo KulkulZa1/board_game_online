@@ -437,8 +437,14 @@ async function checkDeploymentCachePolicy() {
   if (sw.body.includes('stale-while-revalidate') || !sw.body.includes('networkFirst(request)')) {
     throw new Error('Service worker should use network-first JS/CSS so deployed game logic appears immediately');
   }
-  if (!sw.body.includes("CACHE_NAME   = 'boardgame-v11'")) {
-    throw new Error('Service worker cache namespace should invalidate pre-progression arcade assets');
+  // 캐시 네임스페이스는 "진행도 이전 아케이드 자산을 무효화할 만큼 새로울 것"만 보장하면 된다.
+  // 예전에는 특정 버전 문자열을 그대로 요구해서, 정당한 캐시 버전업마다 이 검사가 깨졌다.
+  const cacheName = (sw.body.match(/CACHE_NAME\s*=\s*'boardgame-v(\d+)'/) || [])[1];
+  if (!cacheName || Number(cacheName) < 11) {
+    throw new Error(
+      `Service worker cache namespace should invalidate pre-progression arcade assets ` +
+      `(expected boardgame-v11 or newer, found ${cacheName ? 'v' + cacheName : 'none'})`
+    );
   }
   if (!sw.body.includes("fetch(request, { cache: 'no-store' })")) {
     throw new Error('Service worker network-first fetches should bypass the browser HTTP cache');
@@ -522,11 +528,23 @@ function checkProductionArcadeAssetPolicy() {
     'public/arcade/breakout/index.html': ['style.css?v=2.0', 'game.js?v=2.0'],
     'public/arcade/neon-cascade/index.html': ['style.css?v=1.1', 'sim.js?v=1.0', 'game.js?v=1.0'],
   };
+  // 여기 적힌 버전은 "이 아래로는 내려가면 안 되는 하한선"이다.
+  // 예전에는 문자열이 정확히 일치해야 해서, 자산을 고치고 버전을 올리는 정상적인 행동이
+  // 오히려 검사를 깨뜨렸다. 이제는 캐시버스팅이 유지되고 버전이 후퇴하지 않는지만 본다.
+  const verNum = (v) => v.split('.').reduce((acc, part) => acc * 1000 + (parseInt(part, 10) || 0), 0);
   Object.entries(versionedAssets).forEach(([file, assets]) => {
     const page = fs.readFileSync(path.join(root, file), 'utf8');
     assets.forEach((asset) => {
-      if (!page.includes(asset)) {
-        throw new Error(`${file} should cache-bust changed arcade asset ${asset}`);
+      const [name, minVer] = asset.split('?v=');
+      const found = page.match(new RegExp(`${name.replace('.', '\\.')}\\?v=([0-9.]+)`));
+      if (!found) {
+        throw new Error(`${file} should cache-bust arcade asset ${name} with a ?v= query`);
+      }
+      if (verNum(found[1]) < verNum(minVer)) {
+        throw new Error(
+          `${file} cache-bust version for ${name} went backwards ` +
+          `(found v${found[1]}, must be v${minVer} or newer)`
+        );
       }
     });
   });
