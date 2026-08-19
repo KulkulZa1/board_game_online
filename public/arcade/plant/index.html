@@ -72,6 +72,27 @@
       <div id="upgradeList"></div>
     </div>
 
+    <!-- 환생 -->
+    <div class="panel" id="prestigePanel">
+      <div class="panel-title">🌰 환생 <span id="rebirthCount"></span></div>
+      <div id="prestigeSummary"></div>
+      <button id="rebirthBtn" type="button">환생하기</button>
+      <div id="traitList"></div>
+    </div>
+
+    <!-- 환생 확인 -->
+    <div id="rebirthOverlay">
+      <div id="rebirthBox">
+        <div class="rb-icon">🌰</div>
+        <h3>환생하시겠습니까?</h3>
+        <div id="rebirthDetail"></div>
+        <div class="rb-actions">
+          <button id="rebirthCancel" type="button">취소</button>
+          <button id="rebirthConfirm" type="button">환생한다</button>
+        </div>
+      </div>
+    </div>
+
     <!-- 업적 / 메시지 토스트 -->
     <div id="toast"></div>
 
@@ -84,7 +105,8 @@
       window.PG_CONFIG = window.SandboxConfigBridge.read('sandbox_pg_config');
     }
   </script>
-  <script src="game.js?v=1.2"></script>
+  <script src="sim.js?v=2.0"></script>
+  <script src="game.js?v=2.0"></script>
   <script src="/js/sw-update.js?v=20260520b"></script>
 </body>
 </html>

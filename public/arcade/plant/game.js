@@ -158,8 +158,20 @@
       achievements: [],
       breakthroughs: [],
       totalClicks: 0,
+      lifetimeGrowth: 0,      // 이번 회차 누적 성장 — 환생 정수의 근거
       lastSave: Date.now(),
     };
+  }
+
+  // 환생 상태는 저장을 리셋해도 남아야 하므로 별도 키에 둔다
+  const PRESTIGE_KEY = 'plant_prestige_v1';
+  const PP = window.PlantPrestige;
+  function loadPrestige() {
+    try { return PP.normalizePrestige(JSON.parse(localStorage.getItem(PRESTIGE_KEY) || '{}')); }
+    catch (e) { return PP.normalizePrestige({}); }
+  }
+  function savePrestige() {
+    try { localStorage.setItem(PRESTIGE_KEY, JSON.stringify(prestige)); } catch (e) {}
   }
 
   function loadSave() {
@@ -180,6 +192,7 @@
   }
 
   let save = loadSave();
+  let prestige = loadPrestige();
   let toastTimer;
 
   function upgradeLevel(id) {
@@ -225,6 +238,10 @@
       stats.nutrientPerSec *= 1.15;
       stats.growthMult += 0.18;
     }
+    // 환생 특성 — 회차를 거듭할수록 붙는 영구 보정
+    const pb = PP.bonuses(prestige);
+    stats.growthMult *= pb.growthMult;
+    stats.sunPerSec  += pb.sunPerSec;
     return stats;
   }
 
@@ -247,6 +264,7 @@
   function applyGrowth(amount) {
     const st = calcStats();
     save.growth += amount;
+    save.lifetimeGrowth = (save.lifetimeGrowth || 0) + Math.max(0, amount);
     save.star   += amount * st.starPerGrowth;
 
     // 단계 진행
@@ -403,7 +421,83 @@
     renderPlant();
     renderLoopPanel();
     renderUpgrades();
+    renderPrestige();
   }
+
+  // ── 환생 UI ─────────────────────────────────────────────────────
+  function renderPrestige() {
+    const countEl = document.getElementById('rebirthCount');
+    const sumEl = document.getElementById('prestigeSummary');
+    const btn = document.getElementById('rebirthBtn');
+    const list = document.getElementById('traitList');
+    if (!sumEl || !btn || !list) return;
+
+    const gain = PP.pendingEssence(save, prestige);
+    const can = PP.canRebirth(save, prestige);
+    const reason = PP.rebirthBlockReason(save, prestige);
+    const b = PP.bonuses(prestige);
+
+    if (countEl) countEl.textContent = prestige.rebirths > 0 ? `${prestige.rebirths}회차` : '';
+    sumEl.innerHTML =
+      `<div class="pp-row"><span>보유 정수</span><strong>🌰 ${prestige.essence}</strong></div>` +
+      `<div class="pp-row"><span>지금 환생하면</span><strong class="pp-gain">+${gain}</strong></div>` +
+      (prestige.rebirths > 0
+        ? `<div class="pp-row dim"><span>영구 보정</span><span>성장 ×${b.growthMult.toFixed(2)}${b.sunPerSec ? ` · 햇빛 +${b.sunPerSec.toFixed(1)}/s` : ''}</span></div>`
+        : '');
+
+    btn.disabled = !can;
+    btn.textContent = can ? `🌰 환생하기 (+${gain} 정수)` : (reason || '환생 불가');
+
+    list.innerHTML = PP.TRAITS.map((t) => {
+      const lv = prestige.traits[t.id] || 0;
+      const maxed = lv >= t.max;
+      const cost = PP.traitCost(t.id, prestige);
+      const afford = !maxed && prestige.essence >= cost;
+      return `<button class="trait-row${maxed ? ' maxed' : ''}${afford ? ' afford' : ''}" data-id="${t.id}" ${maxed || !afford ? 'disabled' : ''}>
+        <span class="tr-icon">${t.icon}</span>
+        <span class="tr-body">
+          <strong>${t.name} ${lv > 0 ? `<em>Lv.${lv}${maxed ? ' MAX' : ''}</em>` : ''}</strong>
+          <small>${t.desc(Math.min(t.max, lv + 1))}</small>
+        </span>
+        <span class="tr-cost">${maxed ? '완료' : '🌰 ' + cost}</span>
+      </button>`;
+    }).join('');
+  }
+
+  document.getElementById('traitList').addEventListener('click', (e) => {
+    const row = e.target.closest('.trait-row');
+    if (!row || row.disabled) return;
+    const res = PP.buyTrait(prestige, row.dataset.id);
+    if (!res.ok) return;
+    prestige = res.prestige;
+    savePrestige();
+    renderAll();
+    showToast(`🌰 ${PP.T[row.dataset.id].name} 강화!`);
+  });
+
+  // 환생은 진행을 지우는 행위라 반드시 확인을 받는다
+  const rbOverlay = document.getElementById('rebirthOverlay');
+  document.getElementById('rebirthBtn').addEventListener('click', () => {
+    if (!PP.canRebirth(save, prestige)) return;
+    const gain = PP.pendingEssence(save, prestige);
+    document.getElementById('rebirthDetail').innerHTML =
+      `<p class="rb-gain">🌰 <strong>+${gain}</strong> 정수를 얻습니다</p>` +
+      `<p class="rb-lose">초기화: 물·햇빛·양분 · 성장 · 단계 · 업그레이드</p>` +
+      `<p class="rb-keep">유지: 업적 · 돌파 · 별 · 정수 · 특성</p>`;
+    rbOverlay.classList.add('visible');
+  });
+  document.getElementById('rebirthCancel').addEventListener('click', () => rbOverlay.classList.remove('visible'));
+  document.getElementById('rebirthConfirm').addEventListener('click', () => {
+    const res = PP.applyRebirth(save, prestige, defaultSave());
+    if (!res.ok) { rbOverlay.classList.remove('visible'); return; }
+    save = res.save;
+    prestige = res.prestige;
+    saveGame();
+    savePrestige();
+    rbOverlay.classList.remove('visible');
+    renderAll();
+    showToast(`🌰 환생! 정수 +${res.gained} (${prestige.rebirths}회차)`);
+  });
 
   function renderResources() {
     document.getElementById('waterVal').textContent    = fmt(save.water);

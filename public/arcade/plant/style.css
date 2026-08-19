@@ -394,3 +394,60 @@ html, body {
   0%   { opacity: 1; transform: translateY(0); }
   100% { opacity: 0; transform: translateY(-50px); }
 }
+
+/* ═══ 환생 ═══════════════════════════════════════════════════════ */
+#prestigePanel #rebirthCount { font-size: 0.72rem; opacity: 0.7; font-weight: 600; }
+#prestigeSummary { margin-bottom: 8px; }
+.pp-row {
+  display: flex; justify-content: space-between; align-items: baseline;
+  font-size: 0.78rem; padding: 2px 0;
+}
+.pp-row.dim { opacity: 0.7; font-size: 0.72rem; }
+.pp-gain { color: #f0b429; }
+#rebirthBtn {
+  width: 100%; border: none; border-radius: 10px; padding: 11px;
+  font-size: 0.88rem; font-weight: 800; cursor: pointer; font-family: inherit;
+  background: linear-gradient(135deg, #f0b429, #d98324); color: #2a1a05;
+}
+#rebirthBtn:disabled { background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.5); cursor: default; font-weight: 600; font-size: 0.76rem; }
+#rebirthBtn:not(:disabled):active { transform: scale(0.98); }
+
+#traitList { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.trait-row {
+  display: grid; grid-template-columns: 28px 1fr auto; gap: 9px; align-items: center;
+  background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 10px; padding: 8px 10px; text-align: left;
+  color: inherit; font-family: inherit; cursor: pointer;
+}
+.trait-row.afford { border-color: #f0b429; }
+.trait-row:disabled { opacity: 0.45; cursor: default; }
+.trait-row.maxed { opacity: 0.6; border-color: #f0b429; }
+.tr-icon { font-size: 1.2rem; text-align: center; }
+.tr-body strong { font-size: 0.8rem; display: block; }
+.tr-body strong em { color: #f0b429; font-style: normal; font-size: 0.7rem; }
+.tr-body small { font-size: 0.68rem; opacity: 0.7; }
+.tr-cost { font-size: 0.76rem; font-weight: 800; color: #f0b429; white-space: nowrap; }
+
+#rebirthOverlay {
+  position: fixed; inset: 0; z-index: 60; display: flex;
+  align-items: center; justify-content: center; padding: 14px;
+  background: rgba(6,12,8,0.94); opacity: 0; pointer-events: none; transition: opacity 0.18s;
+}
+#rebirthOverlay.visible { opacity: 1; pointer-events: all; }
+#rebirthBox {
+  width: 100%; max-width: 360px; text-align: center;
+  background: #17251b; border: 2px solid #f0b429; border-radius: 16px; padding: 20px 18px;
+}
+.rb-icon { font-size: 2.6rem; }
+#rebirthBox h3 { font-size: 1.05rem; margin: 6px 0 10px; }
+#rebirthDetail p { font-size: 0.78rem; line-height: 1.55; margin: 4px 0; }
+.rb-gain { color: #f0b429; font-size: 0.9rem !important; }
+.rb-lose { color: #ff8a8a; }
+.rb-keep { color: #8fe3a6; }
+.rb-actions { display: flex; gap: 8px; margin-top: 14px; }
+.rb-actions button {
+  flex: 1; border: none; border-radius: 10px; padding: 11px;
+  font-size: 0.85rem; font-weight: 800; cursor: pointer; font-family: inherit;
+}
+#rebirthCancel { background: rgba(255,255,255,0.12); color: inherit; }
+#rebirthConfirm { background: linear-gradient(135deg, #f0b429, #d98324); color: #2a1a05; }
