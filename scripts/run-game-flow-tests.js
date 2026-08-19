@@ -13,6 +13,7 @@ const tests = [
   'prototypes/core-games-handler-test.js',
   'prototypes/snake-rogue-test.js',
   'prototypes/breakout-rogue-test.js',
+  'prototypes/neon-amp-test.js',
 ];
 
 for (const test of tests) {

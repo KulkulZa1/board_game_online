@@ -327,3 +327,64 @@ html, body {
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
+
+/* ═══ 증폭기 레이어 (라운드 전 선택 · 융합) ═══════════════════════ */
+
+#ampTray {
+  position: absolute; left: 50%; transform: translateX(-50%); bottom: 8px;
+  display: flex; gap: 4px; z-index: 12; pointer-events: none;
+}
+.amp-chip {
+  font-size: 0.9rem; line-height: 1; padding: 3px 5px; border-radius: 7px;
+  background: rgba(8,14,26,0.8); border: 1px solid rgba(53,242,255,0.35);
+}
+.amp-chip.fused { border-color: #ffd166; box-shadow: 0 0 8px rgba(255,209,102,0.5); }
+.amp-chip.curse { border-color: #ff5d8f; }
+
+#ampOverlay {
+  position: fixed; inset: 0; z-index: 45; display: flex;
+  align-items: center; justify-content: center; padding: 12px;
+  background: rgba(4,8,16,0.94); opacity: 0; pointer-events: none; transition: opacity 0.18s;
+}
+#ampOverlay.visible { opacity: 1; pointer-events: all; }
+#ampBox { width: 100%; max-width: 420px; max-height: 92vh; overflow-y: auto; text-align: center; }
+#ampBox h3 { font-size: 1.05rem; margin-bottom: 2px; color: #35f2ff; }
+#ampSub { font-size: 0.76rem; opacity: 0.65; margin-bottom: 10px; }
+#ampCards { display: flex; flex-direction: column; gap: 7px; }
+.amp-card {
+  display: grid; grid-template-columns: 34px 1fr; gap: 2px 10px; align-items: center;
+  text-align: left; cursor: pointer; font-family: inherit; color: inherit;
+  background: rgba(12,20,34,0.95); border: 1.5px solid rgba(53,242,255,0.3);
+  border-radius: 11px; padding: 9px 11px; transition: transform 0.08s, border-color 0.12s;
+}
+.amp-card:active { transform: scale(0.98); }
+.amp-card.rare   { border-color: #8cff66; }
+.amp-card.cursed { border-color: #ff5d8f; background: linear-gradient(180deg, #22101c, rgba(12,20,34,0.95)); }
+.ac-icon { grid-row: 1 / 3; font-size: 1.6rem; text-align: center; }
+.ac-name { font-weight: 800; font-size: 0.9rem; }
+.ac-desc { font-size: 0.72rem; opacity: 0.7; line-height: 1.35; }
+.ac-tag {
+  grid-column: 2; justify-self: start; font-size: 0.6rem; font-weight: 800;
+  padding: 1px 6px; border-radius: 99px; margin-top: 2px;
+}
+.ac-tag.rare  { background: #8cff66; color: #08210a; }
+.ac-tag.curse { background: #ff5d8f; color: #23050f; }
+.ac-fuse {
+  grid-column: 2; font-size: 0.7rem; font-weight: 800; color: #ffd166;
+  margin-top: 3px; animation: ampFuseHint 0.9s infinite alternate;
+}
+@keyframes ampFuseHint { to { text-shadow: 0 0 10px rgba(255,209,102,0.9); } }
+
+#ampBanner {
+  position: fixed; left: 50%; top: 32%; transform: translate(-50%,-50%) scale(0.7);
+  z-index: 46; opacity: 0; pointer-events: none; transition: opacity 0.25s, transform 0.25s;
+}
+#ampBanner.show { opacity: 1; transform: translate(-50%,-50%) scale(1); }
+.amp-inner {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  background: rgba(4,8,16,0.96); border: 2px solid #ffd166; border-radius: 14px;
+  padding: 12px 22px; box-shadow: 0 0 28px rgba(255,209,102,0.55);
+}
+.amp-icon { font-size: 2.2rem; }
+.amp-inner strong { font-size: 1rem; color: #ffd166; }
+.amp-desc { font-size: 0.7rem; opacity: 0.7; text-align: center; max-width: 230px; }

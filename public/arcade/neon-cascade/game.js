@@ -10,6 +10,69 @@
   const overlayTitle = document.getElementById('overlayTitle');
   const overlayMsg = document.getElementById('overlayMsg');
   const startBtn = document.getElementById('startBtn');
+  const ampOverlay = document.getElementById('ampOverlay');
+  const ampCards = document.getElementById('ampCards');
+  const ampSub = document.getElementById('ampSub');
+  const ampTray = document.getElementById('ampTray');
+  const ampBanner = document.getElementById('ampBanner');
+
+  // 증폭기는 라운드를 이어갈수록 쌓인다 — 이게 "한 판 더" 의 이유가 된다.
+  // 다만 무한히 쌓이면 전부 갖게 되어 고르는 의미가 사라지므로 상한을 둔다.
+  // (페이지를 새로 열면 빌드는 처음부터 다시 짠다)
+  const MAX_AMPS = 4;
+  let ownedAmps = [];
+  let ampRng = (() => { let s = (Date.now() ^ 0x9e3779b9) >>> 0;
+    return () => { s ^= s << 13; s >>>= 0; s ^= s >> 17; s ^= s << 5; s >>>= 0; return s / 4294967296; }; })();
+
+  function renderAmpTray() {
+    if (!ampTray) return;
+    ampTray.innerHTML = ownedAmps.map((id) => {
+      const d = Sim.ampDef(id);
+      if (!d) return '';
+      const fused = Sim.AMP_FUSIONS.some((f) => f.id === id);
+      return `<span class="amp-chip${fused ? ' fused' : ''}${d.kind === 'cursed' ? ' curse' : ''}" title="${d.name} — ${d.desc}">${d.icon}</span>`;
+    }).join('');
+  }
+
+  function showAmpBanner(item) {
+    if (!ampBanner) return;
+    ampBanner.innerHTML = `<div class="amp-inner"><span class="amp-icon">${item.icon}</span>` +
+      `<strong>${item.name}</strong><span class="amp-desc">${item.desc}</span></div>`;
+    ampBanner.classList.add('show');
+    setTimeout(() => ampBanner.classList.remove('show'), 1700);
+  }
+
+  // 라운드 전에 증폭기를 고르게 한 뒤 시작한다
+  function openAmpDraft(onDone) {
+    if (ownedAmps.length >= MAX_AMPS) { onDone(); return; }
+    const offers = Sim.ampOffers(ampRng, ownedAmps);
+    if (!offers.length) { onDone(); return; }
+    ampSub.textContent = ownedAmps.length
+      ? `보유 ${ownedAmps.length}/${MAX_AMPS} — 하나를 더 고르세요`
+      : '하나를 골라 이번 라운드를 시작합니다';
+    ampCards.innerHTML = offers.map((o, i) => `
+      <button class="amp-card ${o.kind}" data-i="${i}">
+        <span class="ac-icon">${o.icon}</span>
+        <span class="ac-name">${o.name}</span>
+        <span class="ac-desc">${o.desc}</span>
+        ${o.kind === 'cursed' ? '<span class="ac-tag curse">저주</span>' : ''}
+        ${o.kind === 'rare' ? '<span class="ac-tag rare">희귀</span>' : ''}
+        ${o.fusesInto ? `<span class="ac-fuse">⚡ ${o.fusesInto.icon} ${o.fusesInto.name} 완성!</span>` : ''}
+      </button>`).join('');
+    ampOverlay.classList.add('visible');
+    const armed = performance.now() + 320;      // 실수 방지
+    ampCards.onclick = (e) => {
+      const btn = e.target.closest('.amp-card');
+      if (!btn) return;
+      if (e.detail !== 0 && performance.now() < armed) return;
+      const res = Sim.grantAmp(ownedAmps, offers[+btn.dataset.i].id);
+      ownedAmps = res.owned;
+      ampOverlay.classList.remove('visible');
+      renderAmpTray();
+      if (res.fused) showAmpBanner(res.fused);
+      onDone();
+    };
+  }
   const scoreEl = document.getElementById('scoreDisplay');
   const highEl = document.getElementById('highDisplay');
   const timeEl = document.getElementById('timeDisplay');
@@ -65,7 +128,11 @@
   }
 
   function startGame() {
-    state = Sim.createState(Date.now());
+    openAmpDraft(beginRound);
+  }
+
+  function beginRound() {
+    state = Sim.createState(Date.now(), ownedAmps);
     particles = [];
     floaters = [];
     shake = 0;

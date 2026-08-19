@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>NEON CASCADE — 연쇄 폭발</title>
   <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="style.css?v=1.1">
+  <link rel="stylesheet" href="style.css?v=2.0">
 </head>
 <body>
   <div id="container">
@@ -39,6 +39,18 @@
         <div id="overdriveTrack"><div id="overdriveFill"></div></div>
       </div>
 
+      <div id="ampTray"></div>
+
+      <!-- 라운드 시작 전 증폭기 선택 (45초 단판이라 중간에 끊지 않는다) -->
+      <div id="ampOverlay">
+        <div id="ampBox">
+          <h3>⚛ 증폭기 선택</h3>
+          <p id="ampSub">하나를 골라 이번 라운드를 시작합니다</p>
+          <div id="ampCards"></div>
+        </div>
+      </div>
+      <div id="ampBanner"></div>
+
       <div id="chainBanner" aria-live="polite"></div>
       <div id="toast" aria-live="polite"></div>
 
@@ -66,8 +78,8 @@
   </div>
 
   <script src="/js/admob.js?v=1.0"></script>
-  <script src="sim.js?v=1.0"></script>
-  <script src="game.js?v=1.0"></script>
+  <script src="sim.js?v=2.0"></script>
+  <script src="game.js?v=2.0"></script>
   <script src="/js/sw-update.js?v=20260520b"></script>
 </body>
 </html>
