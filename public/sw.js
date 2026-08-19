@@ -8,7 +8,7 @@
 // 캐시 무효화:
 //   activate 시 /api/version 호출 → commit 해시가 바뀌면 캐시 전체 삭제
 
-const CACHE_NAME   = 'boardgame-v15';   // v15: NEON CASCADE 증폭기 자산 추가 — 옛 캐시 퍼지
+const CACHE_NAME   = 'boardgame-v16';   // v16: 식물 환생 자산(sim.js) 추가 — 옛 캐시 퍼지
 const COMMIT_KEY   = 'sw_last_commit';
 
 // 사전 캐시 — HTML 제외, 진짜 정적 자산만 (icons/ 미존재 시 phantom 경로 제외)

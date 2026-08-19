@@ -14,6 +14,7 @@ const tests = [
   'prototypes/snake-rogue-test.js',
   'prototypes/breakout-rogue-test.js',
   'prototypes/neon-amp-test.js',
+  'prototypes/plant-prestige-test.js',
 ];
 
 for (const test of tests) {

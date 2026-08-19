@@ -576,7 +576,7 @@ no `game-registry.js` entry. Each is reachable at `/arcade/<name>/`.
 | **snake** | `/arcade/snake/` | Grid snake **roguelite** — every level-up drafts 1 of 3 mutations; pairs fuse into evolutions; curses trade power for a drawback; obstacles close in from Lv.5; scales (🐚) buy permanent upgrades between runs | `COLS/ROWS=20, FOODS_PER_LEVEL=5`; `MUTATIONS(18), EVOLUTIONS(5), UPGRADES(5)` in `sim.js` | `snake_hs`, `snake_meta` |
 | **breakout** | `/arcade/breakout/` | Ball + paddle **roguelite** — each cleared stage drafts 1 of 3 gear; pairs fuse into 5 combos; curses trade a real cost for score; 🔩 shards buy permanent upgrades between runs | `COLS=10, ROWS=6, FEVER_TARGET=12`; `GEAR(18), FUSIONS(5), UPGRADES(5)` in `sim.js` | `breakout_hs`, `breakout_meta` |
 | **vampire** | `/arcade/vampire/` | Top-down survivor; **weapon leveling (1-5) + evolution** (max weapon + passive → evolved super-weapon); 5 base + 5 evolved weapons | `SURVIVE_GOAL=600s, MAX_ENEMIES=120, MAX_WEAPON_LEVEL=5`; `EVOLUTION_DEFS` | `vps_meta_v2`, `vps_run_snapshot_v1`, `vps_muted` |
-| **plant** | `/arcade/plant/` | 식물 키우기 — clicker idle; 9 growth stages; 5 upgrade types | `STAGES[9], UPGRADES[5]` | `plant_save_v1` |
+| **plant** | `/arcade/plant/` | 식물 키우기 — clicker idle; 9 growth stages; 5 upgrade types. **Prestige (환생)**: cash a run in for 🌰 essence and buy 5 permanent traits; the run resets but achievements/breakthroughs/star/essence/traits never do | `STAGES[9], UPGRADES[5]`; `TRAITS(5), FIRST_REBIRTH_STAGE=4, ESSENCE_DIVISOR=150` in `sim.js` | `plant_save_v1`, `plant_prestige_v1` |
 | **tower-defense** | `/arcade/tower-defense/` | Center-defense TD; 3 tower types + adjacency synergies. **⚠️ Engine lives in `sandbox/tower-defense/`** — see note below | `TD_CONFIG.*` (see Layer C) | `td_published_config` |
 | **factory** | `/arcade/factory/` | 산업의 시대 — spatial automation; production chains, era breakthroughs, stability gates | `BELT_SPEED=2.2, DEPOSIT_MIN=600, ERA_STABILITY_SEC=5, GEN_FUEL_CAP=20` | `arcade_factory_save_v1`, `arcade_factory_high` |
 | **bootstrap** | `/arcade/bootstrap/` | 문명 키우기 — civilization clicker/idle; era actions charge a Golden Age multiplier | `TICKS_PER_SEC=2` | `civ_save_v2`, `civ_best_v1`, `civ_muted` |
@@ -584,9 +584,9 @@ no `game-registry.js` entry. Each is reachable at `/arcade/<name>/`.
 | **neon-cascade** | `/arcade/neon-cascade/` | Chain-explosion arcade; timed rounds, limited charges. **Amplifiers** are drafted *before* each round (never mid-round — the clock is the game) and stack up to `MAX_AMPS=4` across consecutive rounds; 3 fusions | `ROUND_SECONDS=45, MAX_CHARGES=4, PULSE_RADIUS=118, RECHARGE_SECONDS=4.5`; `AMPS(10), AMP_FUSIONS(3)` in `sim.js` | `neon_cascade_high_v1`, `neon_cascade_chain_v1`, `neon_cascade_mute_v1` |
 
 Several arcade games ship a headless `sim.js` (`bootstrap`, `jackpot`, `neon-cascade`,
-`snake`, `breakout`) so their economy can be balanced from Node — see `prototypes/` for the runner
+`snake`, `breakout`, `plant`) so their economy can be balanced from Node — see `prototypes/` for the runner
 scripts. Most are **not** part of `npm test`; the exceptions are `snake`,
-`breakout` and `neon-cascade`, whose suites run in `npm run test:games` and asserts both the rules
+`breakout`, `neon-cascade` and `plant`, whose suites run in `npm run test:games` and asserts both the rules
 (evolutions resolve, curses cost what they claim, saved meta is sanitised) and the
 *balance* (builds actually diverge, evolutions fire often enough to chase but not by
 default, curses stay a minority of picks).
@@ -607,12 +607,21 @@ default, curses stay a minority of picks).
 > | snake | level-up | the snake's body and the grid |
 > | breakout | stage clear | the ball, paddle and bricks |
 > | neon-cascade | before the round | orbs, charges, chain and fever |
+> | plant | *(none — prestige, not draft)* | permanent traits across rebirths |
 >
 > Neon-cascade is the instructive one: it is a 45-second round, so a mid-round draft would
 > eat the very clock the game is about. It drafts **only before the round**, and the build
 > instead accumulates across consecutive rounds (capped at `MAX_AMPS`) — that accumulation
 > *is* its "one more run" hook. When adding a layer to another arcade game, find that game's
 > own pause first; don't paste one of these in.
+>
+> **Plant is the counter-example worth reading.** It is an idle clicker, which already has
+> its own dopamine model (exponential growth), so bolting a draft onto it would fight the
+> genre. It got **prestige** instead. Because prestige *deletes the player's progress*, the
+> rules live in `sim.js` and are pinned hard by tests: `applyRebirth` never mutates the
+> input, returns the original save untouched when the conditions are not met, and always
+> preserves achievements, breakthroughs, star, essence, traits and rebirth count. The UI
+> must also confirm before wiping — never call `applyRebirth` straight off a button.
 
 > **⚠️ tower-defense is the exception to "arcade games are self-contained."**
 > `public/arcade/tower-defense/` holds only `index.html`. It loads the engine from

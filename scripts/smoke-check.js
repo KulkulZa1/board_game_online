@@ -527,6 +527,7 @@ function checkProductionArcadeAssetPolicy() {
     'public/arcade/snake/index.html': ['style.css?v=3.0', 'sim.js?v=3.0', 'game.js?v=3.0'],
     'public/arcade/breakout/index.html': ['style.css?v=3.0', 'sim.js?v=3.0', 'game.js?v=3.0'],
     'public/arcade/neon-cascade/index.html': ['style.css?v=2.0', 'sim.js?v=2.0', 'game.js?v=2.0'],
+    'public/arcade/plant/index.html': ['sim.js?v=2.0', 'game.js?v=2.0'],
   };
   // 여기 적힌 버전은 "이 아래로는 내려가면 안 되는 하한선"이다.
   // 예전에는 문자열이 정확히 일치해야 해서, 자산을 고치고 버전을 올리는 정상적인 행동이
