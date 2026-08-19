@@ -84,6 +84,77 @@
   let coinAnimId = 0;
   let rollTimers = [];
 
+  // ── 로그라이크 메타 (세입자 · 승급 · 해금) ────────────────────
+  const MT = window.JackpotMeta;
+  const META_KEY = 'jackpot_meta_v1';
+  function loadMeta() {
+    try { return MT.normalize(JSON.parse(localStorage.getItem(META_KEY) || '{}')); }
+    catch (e) { return MT.normalize({}); }
+  }
+  function saveMeta() { try { localStorage.setItem(META_KEY, JSON.stringify(meta)); } catch (e) {} }
+  let meta = loadMeta();
+  let tenantId = MT.TENANTS[0].id;
+  let ascension = 0;
+
+  function renderMetaPanel() {
+    const line = $('metaLine');
+    if (line) {
+      line.innerHTML = `🏠 <b>${meta.deeds}</b> 조각 · ${meta.runs}판 · ${meta.wins}승 · 최고 ${meta.bestStage}단계`;
+      line.classList.remove('hidden');
+    }
+    const tr = $('tenantRow');
+    if (tr) {
+      tr.innerHTML = MT.TENANTS.map((t) => {
+        const un = MT.isUnlocked(meta, t.id);
+        return `<button class="tenant-chip${t.id === tenantId ? ' on' : ''}${un ? '' : ' locked'}" data-id="${t.id}" ${un ? '' : 'disabled'} title="${un ? t.desc : '해금 필요 — 🏠 ' + t.cost}">${t.icon} ${t.name}</button>`;
+      }).join('');
+    }
+    const ar = $('ascRow');
+    if (ar) {
+      const maxA = MT.availableAscension(meta);
+      let html = '';
+      for (let lv = 0; lv <= MT.MAX_ASCENSION; lv++) {
+        const playable = lv <= maxA;
+        html += `<button class="asc-chip${lv === ascension ? ' on' : ''}${playable ? '' : ' locked'}" data-lv="${lv}" ${playable ? '' : 'disabled'}>${lv === 0 ? '기본' : '승급 ' + lv}</button>`;
+      }
+      ar.innerHTML = html;
+    }
+    const det = $('ascDetail');
+    if (det) {
+      const t = MT.TEN[tenantId];
+      const lines = MT.describeAscension(ascension);
+      det.innerHTML = `<div class="ad-tenant">${t.icon} <b>${t.name}</b> — ${t.desc}</div>` +
+        (lines.length ? `<div class="ad-asc">${lines.map((l) => `<div>${l}</div>`).join('')}</div>` : '');
+    }
+  }
+
+  function renderUnlockList() {
+    const el = $('unlockList');
+    const d = $('unlockDeeds');
+    if (d) d.textContent = `🏠 ${meta.deeds}`;
+    if (!el) return;
+    el.innerHTML = MT.TENANTS.map((t) => {
+      const un = MT.isUnlocked(meta, t.id);
+      const afford = !un && meta.deeds >= t.cost;
+      return `<button class="unlock-row${un ? ' owned' : ''}${afford ? ' afford' : ''}" data-id="${t.id}" ${un || !afford ? 'disabled' : ''}>
+        <span class="ur-icon">${t.icon}</span>
+        <span class="ur-body"><strong>${t.name}</strong><small>${t.desc}</small></span>
+        <span class="ur-cost">${un ? '보유' : '🏠 ' + t.cost}</span>
+      </button>`;
+    }).join('');
+  }
+
+  // 판이 끝나면 조각을 지급하고 승급 사다리를 갱신한다 (이기든 지든)
+  function settleRun(won) {
+    const res = MT.finishRun(meta, { stage: run.stage, won: !!won, ascension });
+    const before = MT.availableAscension(meta);
+    meta = res.meta;
+    saveMeta();
+    const after = MT.availableAscension(meta);
+    renderMetaPanel();
+    return { gained: res.gained, newAscension: after > before ? after : 0 };
+  }
+
   function loadBest() { try { return parseInt(localStorage.getItem(BEST_KEY) || '0', 10); } catch (e) { return 0; } }
   function saveBest(stage) {
     const b = loadBest();
@@ -614,6 +685,9 @@
       `<b>${WIN_STAGE}번의 월세</b>를 모두 완납하고 전세 지옥에서 탈출했습니다!<br>` +
       `총 수입 <b>${run.totalEarned}</b> 코인 · 최고 스핀 <b>+${run.bestSpin}</b> · 덱 <b>${run.deck.length}</b>장<br><br>` +
       `이대로 은퇴할까요, 아니면 건물주에 도전할까요?<br><span style="color:var(--muted);font-size:0.76rem">무한 모드: 월세가 계속 오릅니다</span>`;
+    const mres = settleRun(true);
+    $('ovMsg').innerHTML += `<br><br>🏠 <b>+${mres.gained}</b> 집문서 조각` +
+      (mres.newAscension ? ` · <b style="color:var(--good,#7bd96c)">승급 ${mres.newAscension} 해금!</b>` : '');
     $('startBtn').textContent = '🏢 무한 모드 계속';
     $('bestLine').classList.add('hidden');
     $('overlay').classList.add('visible');
@@ -633,6 +707,8 @@
       (nearMiss ? `<b style="color:var(--bad)">겨우 ${settle.shortfall}코인이 부족했습니다!</b><br>` : `월세 ${settle.rent} 중 <b>${settle.shortfall}코인</b>이 부족했습니다.<br>`) +
       `${settle.stage}단계에서 퇴거 · 완납 <b>${run.rentsPaid}</b>회 · 총 수입 <b>${run.totalEarned}</b><br>` +
       (nearMiss ? '한 스핀만 더 터졌다면...' : '파괴 시너지(고양이+우유, 광부+보석)로 한 방을 노려보세요.');
+    const mres = settleRun(false);
+    $('ovMsg').innerHTML += `<br>🏠 <b>+${mres.gained}</b> 집문서 조각`;
     $('startBtn').textContent = '🔄 다시 입주';
     const best = loadBest();
     const bl = $('bestLine');
@@ -657,7 +733,7 @@
       else showPick(false);
       return;
     }
-    run = new Run();
+    run = new Run(undefined, MT.runOptions(tenantId, ascension));
     phase = 'idle';
     endless = false;
     displayedCoins = 0;
@@ -743,6 +819,38 @@
     }
     // 방어적 바인딩 — 어떤 요소가 없어도(HTML/JS 버전 스큐) 나머지는 정상 동작
     onEl('startBtn', 'click', (e) => { if (guarded(e)) return; start(); });
+
+    // 세입자 / 승급 선택
+    onEl('tenantRow', 'click', (e) => {
+      const b = e.target.closest('.tenant-chip');
+      if (!b || b.disabled) return;
+      tenantId = b.dataset.id;
+      renderMetaPanel();
+    });
+    onEl('ascRow', 'click', (e) => {
+      const b = e.target.closest('.asc-chip');
+      if (!b || b.disabled) return;
+      ascension = +b.dataset.lv;
+      renderMetaPanel();
+    });
+    // 세입자 해금
+    onEl('unlockBtn', 'click', (e) => {
+      if (guarded(e)) return;
+      renderUnlockList();
+      $('unlockModal').classList.remove('hidden');
+    });
+    onEl('unlockClose', 'click', () => $('unlockModal').classList.add('hidden'));
+    onEl('unlockList', 'click', (e) => {
+      const row = e.target.closest('.unlock-row');
+      if (!row || row.disabled) return;
+      const res = MT.unlockTenant(meta, row.dataset.id);
+      if (!res.ok) return;
+      meta = res.meta;
+      saveMeta();
+      renderUnlockList();
+      renderMetaPanel();
+    });
+    renderMetaPanel();
     onEl('spinBtn', 'click', doSpin);
     onEl('skipBtn', 'click', (e) => { if (guarded(e)) return; resolvePick(null); });
     onEl('movingSkip', 'click', (e) => {

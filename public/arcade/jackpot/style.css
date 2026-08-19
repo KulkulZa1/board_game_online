@@ -384,3 +384,35 @@ button.deck-item { color: var(--text); cursor: pointer; font-family: inherit; }
 }
 .deck-item.gold { border-color: var(--gold); background: rgba(255,209,102,0.1); }
 .deck-item .lvtxt { color: var(--accent); font-size: 0.7rem; }
+
+/* ═══ 로그라이크 메타 (세입자 · 승급 · 해금) ═══════════════════ */
+#tenantRow, #ascRow { display: flex; flex-wrap: wrap; gap: 5px; justify-content: center; margin: 6px 0; }
+.tenant-chip, .asc-chip {
+  border: 1px solid var(--border, #3a2b16); border-radius: 99px; padding: 5px 10px;
+  font-size: 0.72rem; font-weight: 700; cursor: pointer; font-family: inherit;
+  background: rgba(255,255,255,0.05); color: inherit;
+}
+.tenant-chip.on, .asc-chip.on { background: var(--gold, #f4a836); color: #241500; border-color: var(--gold, #f4a836); }
+.tenant-chip.locked, .asc-chip.locked { opacity: 0.35; cursor: default; }
+.tenant-chip:not(.locked):active, .asc-chip:not(.locked):active { transform: scale(0.96); }
+#ascDetail { font-size: 0.7rem; line-height: 1.5; margin: 4px 0 8px; opacity: 0.85; }
+.ad-tenant { margin-bottom: 3px; }
+.ad-asc { color: var(--bad, #ff6b5e); font-size: 0.66rem; }
+#unlockList { display: flex; flex-direction: column; gap: 6px; }
+.unlock-row {
+  display: grid; grid-template-columns: 30px 1fr auto; gap: 9px; align-items: center;
+  background: rgba(255,255,255,0.04); border: 1px solid var(--border, #3a2b16);
+  border-radius: 10px; padding: 8px 10px; text-align: left; color: inherit;
+  font-family: inherit; cursor: pointer;
+}
+.unlock-row.afford { border-color: var(--gold, #f4a836); }
+.unlock-row:disabled { opacity: 0.5; cursor: default; }
+.unlock-row.owned { border-color: var(--gold, #f4a836); opacity: 0.65; }
+.ur-icon { font-size: 1.3rem; text-align: center; }
+.ur-body strong { font-size: 0.82rem; display: block; }
+.ur-body small { font-size: 0.68rem; opacity: 0.72; }
+.ur-cost { font-size: 0.76rem; font-weight: 800; color: var(--gold, #f4a836); white-space: nowrap; }
+
+/* 해금 모달은 시작 오버레이(z-index 40) 위에서 열리는 유일한 모달이라 더 높이 둔다.
+   (다른 모달들은 오버레이가 닫힌 플레이 중에만 뜨므로 30 으로 충분하다) */
+#unlockModal { z-index: 50; }
