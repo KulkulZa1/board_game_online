@@ -574,7 +574,7 @@ no `game-registry.js` entry. Each is reachable at `/arcade/<name>/`.
 | Game | Path | Mechanic | Key Constants | Storage Keys |
 |------|------|----------|---------------|--------------|
 | **snake** | `/arcade/snake/` | Grid snake **roguelite** — every level-up drafts 1 of 3 mutations; pairs fuse into evolutions; curses trade power for a drawback; obstacles close in from Lv.5; scales (🐚) buy permanent upgrades between runs | `COLS/ROWS=20, FOODS_PER_LEVEL=5`; `MUTATIONS(18), EVOLUTIONS(5), UPGRADES(5)` in `sim.js` | `snake_hs`, `snake_meta` |
-| **breakout** | `/arcade/breakout/` | Ball + paddle; power-ups (multi-ball, wide, laser) | `BRICK_ROWS=6, BALL_SPEED_INIT=5` | `arcade_breakout_high` |
+| **breakout** | `/arcade/breakout/` | Ball + paddle **roguelite** — each cleared stage drafts 1 of 3 gear; pairs fuse into 5 combos; curses trade a real cost for score; 🔩 shards buy permanent upgrades between runs | `COLS=10, ROWS=6, FEVER_TARGET=12`; `GEAR(18), FUSIONS(5), UPGRADES(5)` in `sim.js` | `breakout_hs`, `breakout_meta` |
 | **vampire** | `/arcade/vampire/` | Top-down survivor; **weapon leveling (1-5) + evolution** (max weapon + passive → evolved super-weapon); 5 base + 5 evolved weapons | `SURVIVE_GOAL=600s, MAX_ENEMIES=120, MAX_WEAPON_LEVEL=5`; `EVOLUTION_DEFS` | `vps_meta_v2`, `vps_run_snapshot_v1`, `vps_muted` |
 | **plant** | `/arcade/plant/` | 식물 키우기 — clicker idle; 9 growth stages; 5 upgrade types | `STAGES[9], UPGRADES[5]` | `plant_save_v1` |
 | **tower-defense** | `/arcade/tower-defense/` | Center-defense TD; 3 tower types + adjacency synergies. **⚠️ Engine lives in `sandbox/tower-defense/`** — see note below | `TD_CONFIG.*` (see Layer C) | `td_published_config` |
@@ -584,19 +584,25 @@ no `game-registry.js` entry. Each is reachable at `/arcade/<name>/`.
 | **neon-cascade** | `/arcade/neon-cascade/` | Chain-explosion arcade; timed rounds, limited charges | `WIDTH=720, HEIGHT=1000, ROUND_SECONDS=45, MAX_CHARGES=4, PULSE_RADIUS=118, RECHARGE_SECONDS=4.5` | `neon_cascade_high_v1`, `neon_cascade_chain_v1`, `neon_cascade_mute_v1` |
 
 Several arcade games ship a headless `sim.js` (`bootstrap`, `jackpot`, `neon-cascade`,
-`snake`) so their economy can be balanced from Node — see `prototypes/` for the runner
-scripts. Most are **not** part of `npm test`; the exception is `snake`, whose
-`prototypes/snake-rogue-test.js` runs in `npm run test:games` and asserts both the rules
+`snake`, `breakout`) so their economy can be balanced from Node — see `prototypes/` for the runner
+scripts. Most are **not** part of `npm test`; the exceptions are `snake` and
+`breakout`, whose `*-rogue-test.js` suites run in `npm run test:games` and asserts both the rules
 (evolutions resolve, curses cost what they claim, saved meta is sanitised) and the
 *balance* (builds actually diverge, evolutions fire often enough to chase but not by
 default, curses stay a minority of picks).
 
-> **Why snake has a roguelite layer at all.** The pillars the repo's own strongest
+> **Why snake and breakout have a roguelite layer at all.** The pillars the repo's own strongest
 > dopamine games share — and that plain arcade loops lack — are **build identity through
 > choice** and **progress that survives death**. Snake had juice (combo, RUSH, gold food)
-> but every run played identically and a loss left nothing behind. The draft supplies the
-> first, scales supply the second. Keep both when editing: a change that makes every run
-> converge on the same build, or that makes a lost run worthless, removes the point.
+> but every run played identically and a loss left nothing behind; breakout had the same
+> gap. The draft supplies the first, the run currency (snake 🐚 scales / breakout 🔩 shards)
+> supplies the second. Keep both when editing: a change that makes every run converge on
+> the same build, or that makes a lost run worthless, removes the point.
+>
+> The two are deliberately **not** copies of each other. Snake drafts on level-up and its
+> mutations act on the snake's body and the grid; breakout drafts between stages and its
+> gear acts on the ball, paddle and bricks. When adding a layer to another arcade game,
+> derive it from that game's own nouns and its own natural pause, not from these.
 
 > **⚠️ tower-defense is the exception to "arcade games are self-contained."**
 > `public/arcade/tower-defense/` holds only `index.html`. It loads the engine from

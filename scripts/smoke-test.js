@@ -114,6 +114,7 @@ setTimeout(() => {
     { path: '/arcade/snake/',    label: '/arcade/snake/ → 200',    expect: 200 },
     { path: '/arcade/snake/sim.js', label: '/arcade/snake/sim.js → 200', expect: 200 },
     { path: '/arcade/breakout/', label: '/arcade/breakout/ → 200', expect: 200 },
+    { path: '/arcade/breakout/sim.js', label: '/arcade/breakout/sim.js → 200', expect: 200 },
     { path: '/arcade/vampire/',  label: '/arcade/vampire/ → 200',  expect: 200 },
     { path: '/arcade/vampire/vps-equipment.js', label: '/arcade/vampire/vps-equipment.js → 200', expect: 200 },
     { path: '/arcade/plant/',    label: '/arcade/plant/ → 200',    expect: 200 },

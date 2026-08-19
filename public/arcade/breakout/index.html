@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>벽돌깨기 — 보드게임 온라인</title>
   <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="style.css?v=2.0">
+  <link rel="stylesheet" href="style.css?v=3.0">
 </head>
 <body>
   <div id="container">
@@ -18,8 +18,12 @@
         <span>최고 <strong id="highDisplay">0</strong></span>
         <span>❤️ <strong id="livesDisplay">3</strong></span>
         <span>연쇄 <strong id="comboDisplay">x1</strong></span>
+        <span>🔩 <strong id="shardDisplay">0</strong></span>
       </div>
     </header>
+
+    <!-- 보유 장비 -->
+    <div id="gearTray"></div>
 
     <div id="gameWrapper">
       <canvas id="c" tabindex="0"></canvas>
@@ -28,8 +32,32 @@
           <div id="overlayIcon">🧱</div>
           <h2 id="overlayTitle">벽돌깨기</h2>
           <p id="overlayMsg">마우스·터치로 패들 조작</p>
+          <div id="runSummary"></div>
           <button id="startBtn">시작하기</button>
+          <button id="shopBtn" class="ghost-btn">🔩 부품 상점</button>
           <p class="hint-text">클릭 또는 스페이스바로 시작</p>
+        </div>
+      </div>
+
+      <!-- 스테이지 사이 장비 드래프트 -->
+      <div id="draftOverlay">
+        <div id="draftBox">
+          <h3 id="draftTitle">장비 선택</h3>
+          <p id="draftSub">하나를 골라 다음 스테이지로</p>
+          <div id="draftCards"></div>
+        </div>
+      </div>
+
+      <!-- 합성 연출 -->
+      <div id="fuseBanner"></div>
+
+      <!-- 부품 상점 -->
+      <div id="shopOverlay">
+        <div id="shopBox">
+          <h3>🔩 부품 상점 <span id="shopShards">0</span></h3>
+          <p class="shop-hint">판이 끝나면 부품이 남습니다. 영구 강화는 사라지지 않습니다.</p>
+          <div id="shopList"></div>
+          <button id="shopClose">닫기</button>
         </div>
       </div>
     </div>
@@ -46,7 +74,8 @@
   </div>
 
   <script src="/js/admob.js?v=1.0"></script>
-  <script src="game.js?v=2.0"></script>
+  <script src="sim.js?v=3.0"></script>
+  <script src="game.js?v=3.0"></script>
   <script src="/js/sw-update.js?v=20260520b"></script>
 </body>
 </html>
