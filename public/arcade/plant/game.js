@@ -279,7 +279,11 @@
 
   function onStageUp(idx) {
     const s = STAGES[idx];
-    showToast(`🌟 ${s.name} 단계 달성!`);
+    // 단계 달성 보너스 — 다음 티어 업그레이드를 살 마중물이 함께 온다
+    const bundle = PP.stageBundle(idx);
+    save.water += bundle.water; save.sun += bundle.sun;
+    save.nutrient += bundle.nutrient; save.star += bundle.star;
+    showToast(`🌟 ${s.name} 단계! +${Math.round(bundle.water)}💧 +${Math.round(bundle.sun)}☀ +${Math.round(bundle.nutrient)}🌿 +${bundle.star.toFixed(1)}⭐`);
     document.getElementById('plantStage').style.animation = 'none';
     setTimeout(() => {
       document.getElementById('plantStage').style.animation = '';
@@ -349,7 +353,9 @@
   function onWaterClick(e) {
     const st = calcStats();
     save.water    += st.clickWater;
-    save.sun      += st.sunPerClick;
+    // 광합성·토양 생물은 공짜로 조금씩 돈다 — 물만 벌리면 경제의 3/4이 죽는다 (sim.js 참고)
+    save.sun      += st.sunPerClick + PP.CLICK_YIELD.sun;
+    save.nutrient += PP.CLICK_YIELD.nutrient;
     save.totalClicks++;
 
     // 성장: 물 1당 성장 0.4 × growthMult, 비료 적용

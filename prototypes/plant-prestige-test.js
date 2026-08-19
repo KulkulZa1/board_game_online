@@ -173,5 +173,30 @@ console.log('\n[회차 진행 시뮬레이션]');
   console.log(`    성장 배율 추이: ${mults.map((m) => m.toFixed(2)).join(' → ')}`);
 }
 
+console.log('\n[자원 경제 — 죽은 화폐가 없어야 한다]');
+{
+  // 햇빛·영양분·별은 전부 "자기 자신이 비용인 업그레이드"로만 늘릴 수 있어서,
+  // 클릭·단계 보너스에 기본 수입이 없으면 신규 세이브에서 영원히 0이다.
+  // (실제로 그렇게 출시됐었다 — 90초 실플레이에서 셋 다 0으로 확인.)
+  ok(P.CLICK_YIELD && P.CLICK_YIELD.sun > 0, '클릭이 햇빛을 조금씩 번다', String(P.CLICK_YIELD && P.CLICK_YIELD.sun));
+  ok(P.CLICK_YIELD && P.CLICK_YIELD.nutrient > 0, '클릭이 영양분을 조금씩 번다');
+
+  const b1 = P.stageBundle(1), b4 = P.stageBundle(4);
+  ok(b1.water > 0 && b1.sun > 0 && b1.nutrient > 0 && b1.star > 0, '단계 보너스에 네 자원이 모두 있다');
+  ok(b4.water > b1.water && b4.nutrient > b1.nutrient, '단계가 오를수록 보너스도 커진다');
+  ok(P.stageBundle(0).water === 0, '0단계(씨앗)는 보너스가 없다');
+  ok(P.stageBundle(-3).water === 0 && P.stageBundle(NaN).water === 0, '이상한 입력도 안전');
+
+  // 신규 세이브 시뮬레이션: 클릭+단계 보너스만으로 비료(영양분 15)와
+  // 태양광 패널(햇빛 20)이 실제로 살 수 있는 가격인가
+  let sun = 0, nutrient = 0, clicks = 0;
+  for (let stage = 1; stage <= 2; stage++) {
+    for (let c = 0; c < 60; c++) { sun += P.CLICK_YIELD.sun; nutrient += P.CLICK_YIELD.nutrient; clicks++; }
+    const bd = P.stageBundle(stage); sun += bd.sun; nutrient += bd.nutrient;
+  }
+  ok(nutrient >= 15, `2단계까지 ${clicks}클릭이면 비료(영양분 15)를 살 수 있다`, nutrient.toFixed(1));
+  ok(sun >= 20, '같은 시점에 태양광 패널(햇빛 20)도 살 수 있다', sun.toFixed(1));
+}
+
 console.log(`\n결과: ${pass}/${pass + fail} 통과`);
 process.exit(fail ? 1 : 0);

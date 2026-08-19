@@ -147,6 +147,20 @@
   }
 
   // ── 특성이 주는 보정 (게임 루프가 이것만 읽는다) ────────────────
+  // ── 자원 경제 부트스트랩 ──────────────────────────────────────
+  // 클릭은 물만이 아니라 햇빛·영양분도 조금씩 벌어야 한다. 셋 다 "자기 자신이
+  // 비용인 업그레이드"로만 벌리기 때문에, 여기 기본 수입이 없으면 신규 세이브에서
+  // 업그레이드 7종 중 5종·돌파 5종 중 3종·성장 폭발이 전부 영구 잠금이 된다
+  // (실제로 그렇게 출시됐었다 — 회귀 테스트가 이 값을 지킨다).
+  const CLICK_YIELD = { sun: 0.3, nutrient: 0.15 };
+
+  // 단계 달성 보너스 — 축하 + 다음 티어 업그레이드의 마중물
+  function stageBundle(idx) {
+    const i = Math.max(0, idx | 0);
+    if (!i) return { water: 0, sun: 0, nutrient: 0, star: 0 };
+    return { water: 15 * i, sun: 10 * i, nutrient: 7 * i, star: 0.4 * i };
+  }
+
   function bonuses(prestige) {
     const p = normalizePrestige(prestige);
     return {
@@ -159,7 +173,7 @@
   }
 
   const api = {
-    TRAITS, T, FIRST_REBIRTH_STAGE, ESSENCE_DIVISOR,
+    TRAITS, T, FIRST_REBIRTH_STAGE, ESSENCE_DIVISOR, CLICK_YIELD, stageBundle,
     normalizePrestige, traitLevel, essenceFor, pendingEssence,
     canRebirth, rebirthBlockReason, applyRebirth, traitCost, buyTrait, bonuses,
   };

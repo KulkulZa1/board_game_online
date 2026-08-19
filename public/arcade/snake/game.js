@@ -827,6 +827,14 @@
           obstacles: obstacles.length, shields: run ? R.stats(run).shields : 0,
         };
       },
+      grid() {                       // 봇 플레이 계측용 — 판의 실제 좌표
+        return snake ? {
+          snake: snake.map((p) => ({ x: p.x, y: p.y })), dir: { ...dir },
+          food: food ? { ...food } : null,
+          obstacles: obstacles.map((o) => ({ x: o.x, y: o.y })),
+          tickMs, cols: COLS, rows: ROWS,
+        } : null;
+      },
     };
   }
 

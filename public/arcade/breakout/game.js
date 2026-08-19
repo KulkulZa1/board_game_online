@@ -43,8 +43,8 @@
   const ROWS   = 6;
   const PAD_H  = 12;
   const PAD_GAP = 4;          // gap between bricks
-  const BALL_BASE_SPEED = 5;
-  const POWERUP_CHANCE  = 0.18;
+  const BALL_BASE_SPEED = 5.5;
+  const POWERUP_CHANCE  = 0.24;   // 멀티볼·와이드가 자주 떨어져야 벽돌깨기다
   const FEVER_TARGET = 12;
   const FEVER_DURATION_MS = 6000;
 
@@ -58,6 +58,7 @@
   // ── State ────────────────────────────────────────────────────
   let W, H, brickW, brickH, brickTop;
   let paddle, balls, bricks, particles, powerups, falling;
+  let lastBrickTouch = 0;        // 앤티 스톨 — 마지막으로 벽돌을 맞힌 시각
   let score, lives, level, totalBricks, highScore;
   let combo, bestCombo, feverUntil;
   let running = false, animId = 0;
@@ -116,7 +117,10 @@
   // ── Brick builder ────────────────────────────────────────────
   function buildBricks(lv) {
     const b = [];
-    for (let r = 0; r < ROWS; r++) {
+    // 첫 판부터 6줄 전부는 과하다 — 4줄에서 시작해 스테이지마다 한 줄씩 (실측:
+    // 60벽돌 스테이지 1이 2분을 넘겨 첫 드래프트가 너무 늦게 왔다)
+    const rows = Math.min(ROWS, 2 + lv);
+    for (let r = 0; r < rows; r++) {
       for (let c = 0; c < COLS; c++) {
         const hp = Math.min(3, 1 + Math.floor(lv / 3));
         b.push({
@@ -140,7 +144,7 @@
     const gs = run ? R.stats(run).ballSpeedMult : 1;
     const spd = (BALL_BASE_SPEED + (level - 1) * 0.4) * gs;
     const a   = angle !== undefined ? angle : (-Math.PI / 2 + (Math.random() - 0.5) * 0.6);
-    return { x: x || W / 2, y: y || H * 0.72, vx: Math.cos(a) * spd, vy: Math.sin(a) * spd, r: 7 };
+    return { x: x || W / 2, y: y || H * 0.72, vx: Math.cos(a) * spd, vy: Math.sin(a) * spd, r: 7, slowT: 0 };
   }
 
   function makePaddle() {
@@ -148,6 +152,7 @@
   }
 
   function initLevel() {
+    lastBrickTouch = performance.now();
     bricks     = buildBricks(level);
     totalBricks = bricks.length;
     particles  = [];
@@ -221,13 +226,22 @@
     renderMomentum(ts);
     // Move balls
     balls.forEach(ball => {
-      ball.x += ball.vx;
-      ball.y += ball.vy;
+      const slowF = ball.slowT > 0 ? (ball.slowT--, 0.65) : 1;
+      ball.x += ball.vx * slowF;
+      ball.y += ball.vy * slowF;
 
       // Wall collisions
       if (ball.x - ball.r < 0)  { ball.x = ball.r;     ball.vx = Math.abs(ball.vx); playBounce(0.07); }
       if (ball.x + ball.r > W)   { ball.x = W - ball.r; ball.vx = -Math.abs(ball.vx); playBounce(0.07); }
-      if (ball.y - ball.r < 0)   { ball.y = ball.r;     ball.vy = Math.abs(ball.vy); playBounce(0.07); }
+      if (ball.y - ball.r < 0)   {
+        ball.y = ball.r; ball.vy = Math.abs(ball.vy);
+        // 천장 반사에 ±1.5° 지터 — 완전히 같은 경로의 무한 왕복을 끊는다
+        // (실측: 빈 기둥에 갇힌 공이 80초 넘게 벽돌 47개를 못 건드렸다)
+        const sp = Math.hypot(ball.vx, ball.vy);
+        const an = Math.atan2(ball.vy, ball.vx) + (Math.random() - 0.5) * 0.052;
+        ball.vx = Math.cos(an) * sp; ball.vy = Math.abs(Math.sin(an) * sp);
+        playBounce(0.07);
+      }
 
       // Paddle collision
       const pd = paddle;
@@ -237,9 +251,17 @@
           ball.x >= pd.x - pw / 2 && ball.x <= pd.x + pw / 2) {
         const rel = (ball.x - pd.x) / (pw / 2);
         const angle = rel * (Math.PI / 3) - Math.PI / 2;
-        const spd = Math.hypot(ball.vx, ball.vy);
+        // 패들에 맞을 때마다 1.5%씩 빨라진다 (상한 1.6배) — 스테이지 후반이 늘어지지 않게
+        const cap = (BALL_BASE_SPEED + (level - 1) * 0.4) * (run ? R.stats(run).ballSpeedMult : 1) * 1.6;
+        const spd = Math.min(cap, Math.hypot(ball.vx, ball.vy) * 1.02);
         ball.vx = Math.cos(angle) * spd;
         ball.vy = -Math.abs(Math.sin(angle) * spd);
+        // 거의 수직으로 튕기면 한 기둥에 갇힌다 — 최소 수평 성분을 보장
+        if (Math.abs(ball.vx) < spd * 0.12) {
+          const sign = ball.vx >= 0 ? 1 : -1;
+          ball.vx = sign * spd * 0.12;
+          ball.vy = -Math.sqrt(Math.max(0.1, spd * spd - ball.vx * ball.vx));
+        }
         ball.y  = pd.y - ball.r;
         playBounce(0.12);
       }
@@ -274,6 +296,7 @@
     bricks.filter(b => b.alive).forEach(brick => {
       balls.forEach(ball => {
         if (!brickHit(ball, brick, gs)) return;
+        lastBrickTouch = performance.now();
         brick.hp -= gs.brickDamage;
         if (brick.hp <= 0) {
           destroyBrick(brick, gs, true);
@@ -282,6 +305,17 @@
         }
       });
     });
+
+    // 앤티 스톨 — 7초간 아무 벽돌도 못 맞히면 공이 빈 통로에 갇힌 것이다.
+    // 각도를 크게 한 번 틀어 궤도를 깬다 (실측: 지터만으로는 넓은 통로를 40초에도 못 벗어났다)
+    if (aliveBricks().length > 0 && performance.now() - lastBrickTouch > 7000) {
+      lastBrickTouch = performance.now();
+      balls.forEach(ball => {
+        const sp = Math.hypot(ball.vx, ball.vy);
+        const an = Math.atan2(ball.vy, ball.vx) + (Math.random() < 0.5 ? -1 : 1) * (0.35 + Math.random() * 0.35);
+        ball.vx = Math.cos(an) * sp; ball.vy = Math.sin(an) * sp;
+      });
+    }
 
     // Check level complete
     if (aliveBricks().length === 0) {
@@ -487,7 +521,9 @@
 
   function applyPowerup(type) {
     if (type === 'wide')  { paddle.wide = 300; playPowerup(); }
-    if (type === 'slow')  { balls.forEach(b => { b.vx *= 0.7; b.vy *= 0.7; }); playPowerup(); }
+    // ⏱ 슬로우는 6초짜리 한숨이다. 예전엔 vx*=0.7 이 영구·중첩이라 네 번 먹으면
+    // 공이 0.24배속으로 기어갔다 (실측: 속도 5.0 → 1.2, 스테이지 1이 150초에도 안 끝남).
+    if (type === 'slow')  { balls.forEach(b => { b.slowT = 360; }); playPowerup(); }
     if (type === 'multi') {
       const extra = balls.slice(0, 2).map(b =>
         makeBall(b.x, b.y, Math.atan2(b.vy, b.vx) + (Math.random() - 0.5) * 1.2)
@@ -716,6 +752,15 @@
           fused: run ? run.fused.slice() : [],
           balls: balls ? balls.length : 0,
         };
+      },
+      grid() {                       // 봇 플레이 계측용 — 공·패들 좌표
+        return balls ? {
+          balls: balls.map((b) => ({ x: b.x, y: b.y, vx: b.vx, vy: b.vy })),
+          paddle: { x: paddle.x, y: paddle.y, w: paddle.w },
+          bricksLeft: bricks ? bricks.filter((b) => b.alive).length : 0,
+          falling: falling ? falling.map((f) => ({ x: f.x, y: f.y })) : [],
+          W, H,
+        } : null;
       },
     };
   }

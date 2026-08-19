@@ -137,5 +137,30 @@ console.log('\n[밸런스 시뮬레이션]');
   ok(fusedRuns / RUNS < 0.7, '상한(4장) 안에서 융합이 남발되지 않는다', (fusedRuns / RUNS * 100).toFixed(0) + '%');
 }
 
+console.log('\n[시간 경제 — 라운드는 끝나야 한다]');
+{
+  // 웨이브 클리어 +6초 고정이던 시절, 숙련 플레이는 시간 수입이 소모를 앞질러
+  // 한 라운드가 영원히 끝나지 않았다 (실측 200초+, 930만 점). 보너스는 말라야 한다.
+  const st = S.createState(1, []);
+  const bonusAt = (w) => { const s2 = S.createState(1, []); s2.wave = w; s2.time = 10;
+    s2.waveHits = 99; s2.target = 1; s2.pendingWave = true; s2.orbs = []; s2.explosions = [];
+    S.step(s2, 0.001); return s2.time - 10; };
+  const early = bonusAt(1), late = bonusAt(10);
+  ok(early > late, '웨이브 시간 보너스는 후반으로 갈수록 준다', `w1 +${early.toFixed(1)} vs w10 +${late.toFixed(1)}`);
+  ok(late <= 2.05, '후반 웨이브 보너스는 +2초 이하로 마른다', `+${late.toFixed(1)}`);
+  ok(early <= 8, '초반 보너스도 상한이 있다');
+
+  // 피버는 시간을 주지 않는다 — 3배 점수·광역 반경이 보상. 시간까지 주면
+  // (웨이브당 수 회 발동) 어떤 감쇠로도 라운드가 끝나지 않았다 (실측 300초+).
+  const f = S.createState(1, []);
+  f.time = 20; f.overdrive = 99; f.charges = 1;
+  f.orbs = [{ id: 'o', type: 'core', x: 200, y: 300, vx: 0, vy: 0, radius: 13, dead: false, phase: 0 }];
+  f.explosions = [];
+  S.pulse(f, 200, 300);
+  for (let i = 0; i < 20 && f.fever <= 0; i++) S.step(f, 0.05);
+  ok(f.fever > 0, '오버드라이브가 차면 오브 격발로 피버 발동');
+  ok(f.time <= 20.01, '피버 발동이 시간을 주지 않는다', `time=${f.time.toFixed(2)}`);
+}
+
 console.log(`\n결과: ${pass}/${pass + fail} 통과`);
 process.exit(fail ? 1 : 0);

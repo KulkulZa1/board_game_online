@@ -107,6 +107,16 @@ console.log('\n[메타 진행]');
   ok(B.shardsEarned(weak) >= 1, '최악의 판에서도 최소 1조각');
   ok(earned > B.shardsEarned(weak), '잘한 판이 더 많은 조각');
 
+  // 인플레이션 방지 — 스네이크에서 실측된 리스크(곱연산 점수 × 선형 정산)의 대칭 방어
+  const god = B.createRun({ seed: 6 });
+  god.score = 500000; god.level = 20; god.bestCombo = 40; god.fused = ['a','b','c','d','e'];
+  const shopTotal = B.UPGRADES.reduce((a2, u) => {
+    let t = 0; for (let l = 0; l < u.max; l++) t += u.cost(l); return a2 + t;
+  }, 0);
+  const godPay = B.shardsEarned(god);
+  ok(godPay < shopTotal, '신적인 판도 상점 전체보다 적게 준다', `${godPay} < ${shopTotal}`);
+  ok(godPay > 250, '그래도 신적인 판은 확실히 크게 보상한다', String(godPay));
+
   let res = B.buyUpgrade(B.normalizeMeta({ shards: 100 }), 'bigpaddle');
   ok(res.ok && res.meta.upgrades.bigpaddle === 1, '업그레이드 구매');
   ok(res.meta.shards === 100 - 35, '비용만큼 조각 차감', String(res.meta.shards));
