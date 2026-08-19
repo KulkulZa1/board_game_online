@@ -598,6 +598,23 @@ you cannot see past the next floor and the choice collapses back into a blind pi
 the map *after* its modal is visible; a hidden element has a zero-size rect and the edges
 silently come out empty.
 
+**A map with one exit per floor is a corridor.** Edge generation deliberately hands out two
+onward nodes most of the time (three occasionally, one only ~15% of the time), because the
+first version averaged 1.66 options per floor with **40% of floors offering no choice at
+all** — technically a map, functionally a hallway. `prototypes/jackpot-map-test.js` now
+asserts the branching *quality*, not just the topology: average branch width above 1.6, at
+most 25% single-option floors once the forced convergence at the finish is excluded, at
+least one three-way widening, and at least one narrowing (a map with no pinch points has no
+rhythm). Current shape: **1.86 average, 19% single-option (11% excluding convergence)**.
+
+Route choice is worth measuring because it is worth **13 percentage points of win rate**:
+running the tuned greedy bot with different route policies over the same 400 seeds gives
+33% (greedy / prefer-market), 29% (always leftmost), 26% (always rightmost) and 20%
+(deliberately bad — always 부촌). If that spread ever collapses toward zero, the map has
+stopped being a decision and the node effects need re-tuning, not the generator. Card
+buttons in the three pick modals and the map nodes all carry `data-id` / `data-type`, so
+browser-driven balance runs select by identity instead of scraping Korean label text.
+
 **Jackpot balance is measured, not guessed.** `prototypes/jackpot-balance-sweep.js`
 (not in any npm script) reuses the tuned greedy bot from `jackpot-autoplay.js` to report
 win rate per ascension tier and per tenant. Run it after touching any number in `meta.js`.

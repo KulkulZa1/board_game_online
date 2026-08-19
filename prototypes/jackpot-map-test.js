@@ -109,6 +109,34 @@ console.log('\n[노드 종류]');
      ids.filter((id) => !seen.has(id)).join(',') || '-');
 }
 
+
+console.log('\n[분기 품질 — 지도인가 복도인가]');
+{
+  // 선택지가 늘 1개면 "지도" 라는 말이 무의미해진다. 계획이 성립하려면
+  // 대부분의 층에서 실제로 두 갈래 이상이 열려 있어야 한다.
+  let counts = [], one = 0, tot = 0, oneMid = 0, totMid = 0;
+  for (let seed = 1; seed <= 400; seed++) {
+    const m = MAP.generate(rng(seed * 29), 11);
+    const last = m.floors.length - 1;
+    for (;;) {
+      const r = MAP.reachable(m);
+      if (!r.length) break;
+      counts.push(r.length); tot++;
+      if (r.length === 1) one++;
+      // 마지막 층은 하나로 모이도록 설계했으므로 그 직전 층은 제외하고도 본다
+      if (m.pos.floor < last - 1) { totMid++; if (r.length === 1) oneMid++; }
+      MAP.move(m, r[0].floor, r[0].lane);
+    }
+  }
+  const avg = counts.reduce((a, b) => a + b, 0) / counts.length;
+  console.log(`    분기 평균 ${avg.toFixed(2)} · 선택지 1개 ${(one / tot * 100).toFixed(0)}% (수렴 구간 제외 ${(oneMid / totMid * 100).toFixed(0)}%)`);
+  ok(avg > 1.6, '평균 분기 폭이 1.6 초과 (복도가 아니다)', avg.toFixed(2));
+  ok(oneMid / totMid < 0.25, '수렴 구간을 뺀 층 중 선택지 1개뿐인 비율이 25% 미만',
+     (oneMid / totMid * 100).toFixed(0) + '%');
+  ok(counts.some((c) => c >= 3), '3갈래로 넓어지는 구간도 존재한다');
+  ok(oneMid > 0, '좁아지는 구간도 존재한다 (지형에 리듬이 있다)');
+}
+
 console.log('\n[저장값 검증]');
 {
   ok(!MAP.isValid(null), 'null 은 무효');

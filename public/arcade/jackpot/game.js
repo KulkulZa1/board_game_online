@@ -588,7 +588,7 @@
         const been = visited.has(f + ':' + lane);
         const cls = ['map-node', here ? 'here' : '', open ? 'open' : '', been && !here ? 'been' : ''].filter(Boolean).join(' ');
         const clickable = canPick && open;
-        html += `<button class="${cls}" ${clickable ? '' : 'disabled'} data-f="${f}" data-l="${lane}" title="${t.name}">${t.icon}</button>`;
+        html += `<button class="${cls}" ${clickable ? '' : 'disabled'} data-f="${f}" data-l="${lane}" data-type="${nd.type}" title="${t.name}">${t.icon}</button>`;
       });
       html += '</span></div>';
     }
@@ -674,6 +674,7 @@
     run.pendingRoutes.forEach((rt, i) => {
       const btn = document.createElement('button');
       btn.className = 'pick-card route-card' + (rt.relic ? ' rare' : '');
+      btn.dataset.id = rt.id;   // 지도 노드와 같은 식별자 — 자동 플레이/QA 가 카드 글자를 읽지 않아도 된다
       btn.innerHTML = `
         <span class="pick-ico">${rt.icon}</span>
         <span class="pick-body">
@@ -704,6 +705,7 @@
     run.pendingRelics.forEach((rl, i) => {
       const btn = document.createElement('button');
       btn.className = 'pick-card rare relic-card';
+      btn.dataset.id = rl.id;
       btn.innerHTML = `
         <span class="pick-ico">${rl.icon}</span>
         <span class="pick-body">
@@ -742,6 +744,8 @@
       if (o.gold) anyGold = true;
       const btn = document.createElement('button');
       btn.className = `pick-card ${def.rarity}` + (o.gold ? ' golden' : '');
+      btn.dataset.id = o.id;
+      if (o.gold) btn.dataset.gold = '1';
       btn.innerHTML = `
         <span class="pick-ico">${def.icon}</span>
         <span class="pick-body">

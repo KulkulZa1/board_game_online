@@ -71,7 +71,10 @@
       cur.forEach((node, i) => {
         const c = span(i);
         const cand = [c - 1, c, c + 1].filter((x) => x >= 0 && x < nxt.length);
-        const count = Math.min(cand.length, 1 + (rng() < 0.5 ? 1 : 0));
+        // 갈림길이 없으면 지도가 아니라 복도다. 가능한 한 2갈래를 주고,
+        // 가끔만 1갈래로 좁힌다 (좁아지는 구간도 있어야 지형에 리듬이 생긴다).
+        const want = rng() < 0.15 ? 1 : (rng() < 0.20 ? 3 : 2);
+        const count = Math.min(cand.length, want);
         const chosen = [];
         // 가운데부터 확정하고 나머지는 무작위로 하나 더
         chosen.push(c);
