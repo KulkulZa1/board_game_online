@@ -524,8 +524,8 @@ function checkProductionArcadeAssetPolicy() {
   const versionedAssets = {
     'public/arcade/factory/index.html': ['style.css?v=3.1', 'state.js?v=3.0', 'evolution.js?v=3.0', 'game.js?v=3.0'],
     'public/arcade/bootstrap/index.html': ['style.css?v=4.1', 'sim.js?v=4.0', 'game.js?v=4.0'],
-    'public/arcade/snake/index.html': ['style.css?v=2.0', 'game.js?v=2.0'],
-    'public/arcade/breakout/index.html': ['style.css?v=2.0', 'game.js?v=2.0'],
+    'public/arcade/snake/index.html': ['style.css?v=3.0', 'sim.js?v=3.0', 'game.js?v=3.0'],
+    'public/arcade/breakout/index.html': ['style.css?v=3.0', 'sim.js?v=3.0', 'game.js?v=3.0'],
     'public/arcade/neon-cascade/index.html': ['style.css?v=1.1', 'sim.js?v=1.0', 'game.js?v=1.0'],
   };
   // 여기 적힌 버전은 "이 아래로는 내려가면 안 되는 하한선"이다.
