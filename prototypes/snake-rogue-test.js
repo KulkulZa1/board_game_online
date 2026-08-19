@@ -120,6 +120,21 @@ console.log('\n[메타 진행 — 죽어도 남는 것]');
   ok(S.scalesEarned(weak) >= 1, '최악의 판에서도 최소 1비늘 (헛수고 방지)');
   ok(earned > S.scalesEarned(weak), '잘한 판이 더 많은 비늘');
 
+  // 인플레이션 방지 — 신적인 판(65만점)도 상점 전체 가격(~1,160)을 넘게 주면 안 된다.
+  // 한때 score/120 선형 정산으로 한 판에 +6,086이 나와 메타가 한 판만에 끝났다.
+  const god = S.createRun({ seed: 6 });
+  god.score = 651219; god.level = 26; god.bestCombo = 40; god.evolved = ['a','b','c','d','e','f','g'];
+  const shopTotal = S.UPGRADES.reduce((a, u) => {
+    let t = 0; for (let l = 0; l < u.max; l++) t += u.cost(l); return a + t;
+  }, 0);
+  const godPay = S.scalesEarned(god);
+  ok(godPay < shopTotal, '신적인 판도 상점 전체보다 적게 준다', `${godPay} < ${shopTotal}`);
+  ok(godPay > 300, '그래도 신적인 판은 확실히 크게 보상한다', String(godPay));
+  const typical = S.createRun({ seed: 6 });
+  typical.score = 4000; typical.level = 5; typical.bestCombo = 8;
+  const typPay = S.scalesEarned(typical);
+  ok(typPay >= 30 && typPay <= 120, '평범한 판은 30~120비늘 (첫 업그레이드는 첫 판에 산다)', String(typPay));
+
   // 구매
   let meta = S.normalizeMeta({ scales: 100 });
   let res = S.buyUpgrade(meta, 'headstart');

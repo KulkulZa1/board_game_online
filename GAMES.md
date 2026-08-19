@@ -573,15 +573,15 @@ no `game-registry.js` entry. Each is reachable at `/arcade/<name>/`.
 
 | Game | Path | Mechanic | Key Constants | Storage Keys |
 |------|------|----------|---------------|--------------|
-| **snake** | `/arcade/snake/` | Grid snake **roguelite** — every level-up drafts 1 of 3 mutations; pairs fuse into evolutions; curses trade power for a drawback; obstacles close in from Lv.5; scales (🐚) buy permanent upgrades between runs | `COLS/ROWS=20, FOODS_PER_LEVEL=5`; `MUTATIONS(18), EVOLUTIONS(5), UPGRADES(5)` in `sim.js` | `snake_hs`, `snake_meta` |
+| **snake** | `/arcade/snake/` | Grid snake **roguelite** — every level-up drafts 1 of 3 mutations; pairs fuse into evolutions; curses trade power for a drawback; obstacles close in from Lv.5; scales (🐚, sub-linear √score payout — see below) buy permanent upgrades between runs | `COLS/ROWS=20, FOODS_PER_LEVEL=5`; `MUTATIONS(18), EVOLUTIONS(5), UPGRADES(5)` in `sim.js` | `snake_hs`, `snake_meta` |
 | **breakout** | `/arcade/breakout/` | Ball + paddle **roguelite** — each cleared stage drafts 1 of 3 gear; pairs fuse into 5 combos; curses trade a real cost for score; 🔩 shards buy permanent upgrades between runs | `COLS=10, ROWS=6, FEVER_TARGET=12`; `GEAR(18), FUSIONS(5), UPGRADES(5)` in `sim.js` | `breakout_hs`, `breakout_meta` |
 | **vampire** | `/arcade/vampire/` | Top-down survivor; **weapon leveling (1-5) + evolution** (max weapon + passive → evolved super-weapon); 5 base + 5 evolved weapons | `SURVIVE_GOAL=600s, MAX_ENEMIES=120, MAX_WEAPON_LEVEL=5`; `EVOLUTION_DEFS` | `vps_meta_v2`, `vps_run_snapshot_v1`, `vps_muted` |
-| **plant** | `/arcade/plant/` | 식물 키우기 — clicker idle; 9 growth stages; 5 upgrade types. **Prestige (환생)**: cash a run in for 🌰 essence and buy 5 permanent traits; the run resets but achievements/breakthroughs/star/essence/traits never do | `STAGES[9], UPGRADES[5]`; `TRAITS(5), FIRST_REBIRTH_STAGE=4, ESSENCE_DIVISOR=150` in `sim.js` | `plant_save_v1`, `plant_prestige_v1` |
+| **plant** | `/arcade/plant/` | 식물 키우기 — clicker idle; 9 growth stages; 5 upgrade types. **Prestige (환생)**: cash a run in for 🌰 essence and buy 5 permanent traits; the run resets but achievements/breakthroughs/star/essence/traits never do | `STAGES[9], UPGRADES[5]`; `TRAITS(5), FIRST_REBIRTH_STAGE=4, ESSENCE_DIVISOR=150, CLICK_YIELD, stageBundle()` in `sim.js` | `plant_save_v1`, `plant_prestige_v1` |
 | **tower-defense** | `/arcade/tower-defense/` | Center-defense TD; 3 tower types + adjacency synergies. **⚠️ Engine lives in `sandbox/tower-defense/`** — see note below | `TD_CONFIG.*` (see Layer C) | `td_published_config` |
 | **factory** | `/arcade/factory/` | 산업의 시대 — spatial automation; production chains, era breakthroughs, stability gates | `BELT_SPEED=2.2, DEPOSIT_MIN=600, ERA_STABILITY_SEC=5, GEN_FUEL_CAP=20` | `arcade_factory_save_v1`, `arcade_factory_high` |
 | **bootstrap** | `/arcade/bootstrap/` | 문명 키우기 — civilization clicker/idle; era actions charge a Golden Age multiplier | `TICKS_PER_SEC=2` | `civ_save_v2`, `civ_best_v1`, `civ_muted` |
 | **jackpot** | `/arcade/jackpot/` | 월세 잭팟 — slot **roguelike**; spin to make rent, deck-build between rounds. Pick a **tenant** (6 starting archetypes, 4 unlockable) and an **ascension** (10 cumulative difficulty tiers, each unlocked by winning the one below). Routes are chosen on a **Slay-the-Spire-style map** generated up front. Every run pays 🏠 deeds, win or lose | `ROWS=3, COLS=4, BASE_SPINS_PER_RENT=4, DECK_CAP=30, EVENT_CHANCE=0.10`; `TENANTS(6), ASCENSIONS(10)` in `meta.js`; `NODE_TYPES(5)` in `map.js` | `arcade_jackpot_muted`, `jackpot_meta_v1` |
-| **neon-cascade** | `/arcade/neon-cascade/` | Chain-explosion arcade; timed rounds, limited charges. **Amplifiers** are drafted *before* each round (never mid-round — the clock is the game) and stack up to `MAX_AMPS=4` across consecutive rounds; 3 fusions | `ROUND_SECONDS=45, MAX_CHARGES=4, PULSE_RADIUS=118, RECHARGE_SECONDS=4.5`; `AMPS(10), AMP_FUSIONS(3)` in `sim.js` | `neon_cascade_high_v1`, `neon_cascade_chain_v1`, `neon_cascade_mute_v1` |
+| **neon-cascade** | `/arcade/neon-cascade/` | Chain-explosion arcade; timed rounds, limited charges. **Amplifiers** are drafted *before* each round (never mid-round — the clock is the game) and stack up to `MAX_AMPS=4` across consecutive rounds; 3 fusions | `ROUND_SECONDS=45, MAX_CHARGES=4, PULSE_RADIUS=118, RECHARGE_SECONDS=4.5`; `AMPS(10), AMP_FUSIONS(3)` in `sim.js`. **Time income must dry up as waves rise** — chain radius 72 (118 in fever), wave bonus → 0 by wave 8, decaying time orbs, no time from fever, 45s bank cap; with fixed bonuses a skilled round literally never ended (measured 300s+) | `neon_cascade_high_v1`, `neon_cascade_chain_v1`, `neon_cascade_mute_v1` |
 
 **Jackpot's route map** (`map.js`) is generated once at run start — `winStage + 1` floors,
 2–4 lanes per floor, a single start and a single finish so every path converges. Edges only
@@ -653,7 +653,12 @@ default, curses stay a minority of picks).
 > choice** and **progress that survives death**. Snake had juice (combo, RUSH, gold food)
 > but every run played identically and a loss left nothing behind; breakout had the same
 > gap. The draft supplies the first, the run currency (snake 🐚 scales / breakout 🔩 shards)
-> supplies the second. Keep both when editing: a change that makes every run converge on
+> supplies the second. That currency is paid **sub-linearly in score** (√score on the base
+> component): score snowballs multiplicatively through combo and score-mult mutations, and
+> a linear payout let one god run (+6,086 🐚, measured in real browser play) buy the whole
+> shop five times over, killing the "one more run" hook in a single run. Tests pin that
+> even a 650K-score run pays less than the full shop. Keep both pillars when editing: a
+> change that makes every run converge on
 > the same build, or that makes a lost run worthless, removes the point.
 >
 > The three are deliberately **not** copies of each other — each derives its picks from its
@@ -680,6 +685,16 @@ default, curses stay a minority of picks).
 > input, returns the original save untouched when the conditions are not met, and always
 > preserves achievements, breakthroughs, star, essence, traits and rebirth count. The UI
 > must also confirm before wiping — never call `applyRebirth` straight off a button.
+>
+> Plant's second lesson is **dead currencies**. Sun, nutrient and star could each only be
+> earned via upgrades priced in *themselves*, so on a fresh save all three sat at zero
+> forever — 5 of 7 upgrades, 3 of 5 breakthroughs and the growth-burst button were
+> permanently locked, and a 90-second real-browser session confirmed it (all three
+> resources pinned at 0). `CLICK_YIELD` (every click earns a trickle of sun + nutrient) and
+> `stageBundle()` (every stage-up pays a celebration bundle of all four resources) exist to
+> bootstrap the economy; both live in `sim.js` and are pinned by tests that simulate a
+> fresh save affording 비료 and 태양광 패널 from clicks + bundles alone. When adding a
+> resource, always add a source that doesn't require already having it.
 
 > **⚠️ tower-defense is the exception to "arcade games are self-contained."**
 > `public/arcade/tower-defense/` holds only `index.html`. It loads the engine from

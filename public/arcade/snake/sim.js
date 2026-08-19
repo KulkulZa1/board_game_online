@@ -252,7 +252,11 @@
 
   // ── 판 종료 → 비늘 정산 ────────────────────────────────────────
   function scalesEarned(run) {
-    const base = Math.floor(run.score / 120);
+    // 점수는 콤보×배율로 기하급수로 뛰므로 선형 정산은 인플레이션이 된다.
+    // (실측: 잘 굴린 한 판이 score/120 만으로 +5,400비늘 — 상점 전체(~1,160)를
+    //  다섯 번 살 돈이라 메타 진행이 한 판만에 끝나버렸다.) 제곱근으로 눌러서
+    //  좋은 판은 여전히 크게, 신적인 판은 "크지만 전부는 아닌" 보상으로 만든다.
+    const base = Math.floor(Math.sqrt(Math.max(0, run.score)) / 2);
     const lvBonus = run.level * 4;
     const comboBonus = run.bestCombo * 3;
     const evoBonus = run.evolved.length * 25;

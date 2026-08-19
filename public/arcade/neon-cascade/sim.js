@@ -323,16 +323,21 @@
     state.overdrive = Math.min(100, state.overdrive + (orb.type === 'gold' ? 18 : 7));
 
     if (orb.type === 'time') {
-      const bonus = 2.5 + A.timeBonus;
-      state.time = Math.min(99, state.time + bonus);
+      // 시간 오브 보너스는 웨이브에 따라 마른다 — 고정 +2.5는 오브 수(웨이브당 ~6개)와
+      // 곱해져 어떤 소모보다 수입이 컸다. 후반 라운드를 끝내는 건 이 감쇠다.
+      const bonus = Math.max(0.3, 1.5 - state.wave * 0.08) + A.timeBonus;
+      state.time = Math.min(45, state.time + bonus);
       state.events.push({ type: 'time', amount: bonus, x: orb.x, y: orb.y });
     }
 
-    const radius = orb.type === 'nova' ? 178 * A.novaRadius : (state.fever > 0 ? 126 : 96);
+    // 연쇄 폭발 반경 — 96이면 웨이브 8+ 밀도(평균 간격 ~55px)에서 침투가 100%가 되어
+    // 모든 펄스가 전체 소거였다 (실측: 한 펄스가 4초마다 52개 전멸, 라운드가 안 끝남).
+    // 평상시엔 무리 단위로 끊기고, 피버가 전멸급 순간으로 남는다.
+    const radius = orb.type === 'nova' ? 178 * A.novaRadius : (state.fever > 0 ? 118 : 72);
     state.explosions.push(makeExplosion(state, orb.x, orb.y, radius, orb.type === 'nova' ? 'nova' : 'orb'));
     state.events.push({ type: 'hit', orbType: orb.type, x: orb.x, y: orb.y, chain: state.chain, score });
 
-    const earnedCharges = Math.floor(state.chain / 8);
+    const earnedCharges = Math.floor(state.chain / 12);
     if (earnedCharges > state.chargeAwards) {
       state.chargeAwards = earnedCharges;
       if (state.charges < maxChargesOf(state)) state.charges++;
@@ -342,7 +347,8 @@
     if (state.overdrive >= 100) {
       state.overdrive = 0;
       state.fever = 6 + A.feverBonus;
-      state.time = Math.min(99, state.time + 3);
+      // 피버는 시간을 주지 않는다 — 3배 점수와 광역 반경이 보상이다. 시간까지 주면
+      // (웨이브당 ~3.6회 발동 × 초 단위 지급) 라운드가 영원히 끝나지 않는다.
       state.events.push({ type: 'fever' });
     }
 
@@ -357,8 +363,11 @@
   function advanceWave(state) {
     const cleared = state.waveHits;
     state.wave++;
-    state.time = Math.min(99, state.time + 6);
-    state.charges = Math.min(maxChargesOf(state), state.charges + 2);
+    // 시간 보너스는 웨이브가 오를수록 마른다. +6 고정이면 소모를 계속 앞질러서
+    // 라운드가 영원히 안 끝난다 (실측: 스마트펄스 봇이 200초 상한까지 한 라운드
+    // 930만 점 — "45초 라운드"라는 약속과 라운드 사이 드래프트 루프가 통째로 죽었다).
+    state.time = Math.min(45, state.time + Math.max(0, 8 - state.wave));
+    state.charges = Math.min(maxChargesOf(state), state.charges + 1);
     state.score += cleared * state.wave * 40;
     spawnWave(state);
   }

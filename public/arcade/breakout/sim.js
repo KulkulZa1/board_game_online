@@ -232,7 +232,9 @@
 
   // ── 판 종료 → 조각 정산 ────────────────────────────────────────
   function shardsEarned(run) {
-    const base = Math.floor(run.score / 150);
+    // 점수는 콤보·피버·×4 장비로 곱연산으로 뛴다 — 선형 정산은 인플레이션이 된다
+    // (스네이크에서 실측된 것과 같은 실패 형태라 같은 √ 정산을 쓴다)
+    const base = Math.floor(Math.sqrt(Math.max(0, run.score)) / 2);
     const lvBonus = run.level * 6;
     const comboBonus = run.bestCombo * 2;
     const fuseBonus = run.fused.length * 30;
