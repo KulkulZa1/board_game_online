@@ -8,7 +8,7 @@
 // 캐시 무효화:
 //   activate 시 /api/version 호출 → commit 해시가 바뀌면 캐시 전체 삭제
 
-const CACHE_NAME   = 'boardgame-v20';   // v20: 뱀서 재배치 스트림 + 장비 모달 일시정지 정리 — 옛 캐시 퍼지
+const CACHE_NAME   = 'boardgame-v21';   // v21: 문명 키우기 황금기 개편 + 산업의 시대 QA 훅 — 옛 캐시 퍼지
 const COMMIT_KEY   = 'sw_last_commit';
 
 // 사전 캐시 — HTML 제외, 진짜 정적 자산만 (icons/ 미존재 시 phantom 경로 제외)

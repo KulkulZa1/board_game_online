@@ -71,7 +71,11 @@
     population:          (cur, tgt) => cur < tgt * 0.6
       ? '채집 캠프를 더 짓고 막집으로 주거 한도를 확보하세요.'
       : '식량 흑자를 유지하면 인구가 자연 성장합니다. 주거 여유를 확인하세요.',
-    foodBuffer:          () => '채집 캠프를 늘리거나 화덕·곡물창고로 부패를 억제하세요.',
+    // 주의: 흑자인데 비축이 모자라면 "더 지어라"가 아니라 "그만 지어라"가 답이다 —
+    // 건설도 식량을 쓰므로, 계속 지으면 비축이 게이트(45)를 영원히 못 넘는 소프트락이 된다 (실측).
+    foodBuffer:          (cur, tgt, m) => (m && m.foodSurplusRatio > 0.05)
+      ? '식량이 흑자입니다 — 잠시 건설을 멈추면 비축이 차오릅니다. 건설도 식량을 씁니다.'
+      : '채집 캠프를 늘리거나 화덕·곡물창고로 부패를 억제하세요.',
     ecologicalKnowledge: () => '채집 캠프·사냥막을 계속 운영하면 생태 지식이 쌓입니다.',
     foodSurplusRatio:    () => '경작지를 늘리거나 퇴비장으로 토양 비옥도를 높이세요.',
     fertility:           () => '퇴비장을 경작지 수의 60% 이상 운영하세요.',
@@ -662,7 +666,7 @@
     for (const c of g.conditions) {
       const ok = sim._cmp(m[c.metric], c.op, c.value);
       const cur = fmtMetric(c.metric, m[c.metric]);
-      const advice = !ok && GATE_ADVICE[c.metric] ? GATE_ADVICE[c.metric](m[c.metric], c.value) : '';
+      const advice = !ok && GATE_ADVICE[c.metric] ? GATE_ADVICE[c.metric](m[c.metric], c.value, m) : '';
       conds += `<li class="${ok ? 'ok' : 'no'}">${ok ? '✓' : '○'} ${c.label} <span class="cur">(현재 ${cur})</span>` +
         (advice ? `<div class="gate-advice">→ ${advice}</div>` : '') + `</li>`;
     }

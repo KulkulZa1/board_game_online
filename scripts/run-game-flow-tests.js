@@ -17,6 +17,7 @@ const tests = [
   'prototypes/plant-prestige-test.js',
   'prototypes/jackpot-meta-test.js',
   'prototypes/jackpot-map-test.js',
+  'prototypes/bootstrap-loop-test.js',
 ];
 
 for (const test of tests) {
