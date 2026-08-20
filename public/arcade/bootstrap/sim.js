@@ -443,6 +443,9 @@
     }
 
     tick() {
+      // 황금기: 생산(×1.8)만이 아니라 문명의 '시계'(인구 성장·문자·숙련 전환)도 ×1.5 —
+      // 생산은 좋은 빌드에서 병목이 아니라서, 이게 없으면 직접 행동이 아무 의미가 없다
+      const goldenClock = this.activeBoostTicks > 0 ? 1.5 : 1;
       const dt = this.cfg.dt;
 
       // 0) 활성 사건 타이머 감소
@@ -519,7 +522,7 @@
         if (d.fertilityDrain) this.fertility -= d.fertilityDrain * c * util * dt;
         if (d.fertilityRestore) this.fertility += d.fertilityRestore * c * util * dt;
         if (d.usesTools) this.stock.tools = Math.max(0, (this.stock.tools || 0) - this.cfg.toolWear * c * util * dt);
-        if (d.research) this.writing = clamp(this.writing + d.research * this.mods.researchMult * c * util * dt, 0, 1);
+        if (d.research) this.writing = clamp(this.writing + d.research * this.mods.researchMult * c * util * dt * goldenClock, 0, 1);
         if (d.ecology) this.ecologicalKnowledge = clamp(this.ecologicalKnowledge + d.ecology * c * util * dt, 0, this.cfg.ecologyKnowledgeMax);
 
         this.util[id] = util; this.reason[id] = reason;
@@ -540,7 +543,7 @@
         const housing = this.housingCap();
         const housingFactor = clamp((housing - total) / Math.max(housing, 1), 0, 1);
         if (producedFood >= demandFood) {
-          const grow = this.cfg.growthRate * total * dt * clamp(surplusRatio, 0, 1) * housingFactor;
+          const grow = this.cfg.growthRate * total * dt * clamp(surplusRatio, 0, 1) * housingFactor * goldenClock;
           this.pop.unskilled += grow;
         }
       } else {
@@ -562,7 +565,7 @@
         for (const id of this.order) {
           const d = this.bdefs[id], c = this.counts[id] || 0;
           if (!c || !d.converts) continue;
-          let conv = d.converts.rate * c * (this.util[id] || 0) * dt;
+          let conv = d.converts.rate * c * (this.util[id] || 0) * dt * goldenClock;
           conv = Math.min(conv, this.pop.unskilled);
           this.pop.unskilled -= conv; this.pop.skilled += conv;
         }

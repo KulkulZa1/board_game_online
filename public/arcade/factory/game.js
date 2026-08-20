@@ -1740,6 +1740,44 @@
     </ul>
     이후에는 무한 가동으로 <b>산업 점수</b> 최고 기록에 도전! 진행은 광맥 잔량·RP·설비 티어·돌파까지 자동 저장됩니다.`;
 
+  // 자동화 테스트용 훅 — ?debug=1 일 때만. 일반 플레이에는 영향이 없다.
+  // (실플레이 밸런스 계측: 봇이 광맥을 찾아 생산 라인을 깔아야 한다)
+  if (new URLSearchParams(location.search).get('debug') === '1') {
+    window.__factory = {
+      state() {
+        return { state, era, research, score, speed,
+                 need: ERAS[era] ? ERAS[era].count : 0,
+                 target: ERAS[era] ? ERAS[era].target : null,
+                 buildings: buildings.length };
+      },
+      deposits() {
+        const out = [];
+        for (let y = 0; y < GRID_H; y++) for (let x = 0; x < GRID_W; x++) {
+          const d = cellAt(x, y).deposit;
+          if (d) out.push({ x, y, resource: d.resource, amount: d.amount });
+        }
+        return out;
+      },
+      occupied(x, y) { return !!(inBounds(x, y) && cellAt(x, y).b); },
+      build(id, x, y, dir) {
+        selected = id; rot = dir == null ? 1 : dir;
+        place(x, y);
+        return !!(inBounds(x, y) && cellAt(x, y).b && cellAt(x, y).b.id === id);
+      },
+      setSpeed(v) { speed = v; },
+      rp() { return rp; },
+      upgrade(x, y) { upgradeAt(x, y); const b = cellAt(x, y).b; return b ? b.tier : 0; },
+      clear(x, y) { erase(x, y); return !(inBounds(x, y) && cellAt(x, y).b); },
+      inspect() {   // 라인 진단 — 각 건물의 버퍼/방향
+        return buildings.map((b) => ({
+          id: b.id, x: b.x, y: b.y, dir: b.dir, tier: b.tier,
+          item: b.item || null, inBuf: b.inBuf || null, outBuf: b.outBuf || null,
+          fuel: b.fuel == null ? null : Math.round(b.fuel),
+        }));
+      },
+    };
+  }
+
   // ── 부트스트랩 ─────────────────────────────────────────────────
   resize();
   resetWorld();   // 시작 오버레이 뒤로 공장 그리드 미리보기 (grid 초기화 보장)
