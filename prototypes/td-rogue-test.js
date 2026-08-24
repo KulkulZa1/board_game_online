@@ -87,6 +87,118 @@ console.log('\n[적 특성]');
   ok(TD.waveSpec(30).hpMult > TD.waveSpec(20).hpMult * 3, '후반 램프는 지수보다 가파르다 (벽이 존재)');
 }
 
+console.log('\n[페이싱 — 심장이 뛰어야 한다]');
+{
+  // 길 완주 시간: 초기값(침략병 36초)은 실측 결과 지독하게 루즈했다
+  const walk = (t) => TD.PATH_LEN / TD.ENEMIES[t].speed;
+  ok(walk('grunt') < 26, '침략병이 길을 26초 안에 완주한다 (느리면 게임이 늘어진다)', walk('grunt').toFixed(1) + '초');
+  ok(walk('boss') < 45, '보스도 45초 안에 완주한다', walk('boss').toFixed(1) + '초');
+  ok(walk('runner') < walk('grunt'), '질주귀가 가장 빠르다');
+
+  // 건설 단계 카운트다운 — 시계가 없으면 게임이 아니라 스프레드시트다
+  ok(TD.BUILD_SECONDS(1) > TD.BUILD_SECONDS(20), '웨이브가 오를수록 준비 시간이 짧아진다',
+     `${TD.BUILD_SECONDS(1).toFixed(1)}초 → ${TD.BUILD_SECONDS(20).toFixed(1)}초`);
+  ok(TD.BUILD_SECONDS(40) >= 6, '아무리 후반이어도 최소 6초는 준다 (조작 불가능하면 안 된다)');
+  ok(TD.BUILD_SECONDS(1) <= 14, '초반 준비 시간도 너무 길지 않다 (세션의 절반이 대기이면 안 된다)',
+     TD.BUILD_SECONDS(1).toFixed(1) + '초');
+
+  const run = new TD.Run(rng(11));
+  run.build('archer', 0, 0);
+  ok(run.buildLeft > 0, '건설 단계에는 카운트다운이 있다');
+  const before = run.buildLeft;
+  run.tick(0.5);
+  ok(run.buildLeft < before, '건설 중에도 시간이 흐른다');
+  run.pendingDraft = [TD.PERKS[0]];
+  const held = run.buildLeft;
+  run.tick(0.5);
+  ok(run.buildLeft === held, '드래프트를 고르는 동안에는 시계가 멈춘다 (유일한 숨돌릴 틈)');
+  run.pendingDraft = null;
+  let guard = 0;
+  while (run.phase === 'build' && guard++ < 500) run.tick(0.1);
+  ok(run.phase === 'wave', '카운트다운이 끝나면 웨이브가 자동 출격한다');
+
+  // 조기 출격 보너스 — 유혹이되 강제가 아니어야 한다
+  const r2 = new TD.Run(rng(12));
+  const g0 = r2.gold;
+  r2.startWave();
+  ok(r2.gold > g0 && r2.earlyBonus > 0, '남은 시간을 금으로 바꿔 준다 (조기 출격 보너스)', `+${r2.earlyBonus}`);
+  const waveIncome = 15 + 20 * 2;
+  ok(TD.EARLY_GOLD(20, TD.BUILD_SECONDS(20)) < waveIncome, '보너스가 정규 수입을 넘지 않는다 (기다리는 플레이가 파산하면 안 된다)',
+     `${TD.EARLY_GOLD(20, TD.BUILD_SECONDS(20))} < ${waveIncome}`);
+}
+
+console.log('\n[연속 격파 — 누수 한 번이 아깝게]');
+{
+  const run = new TD.Run(rng(13));
+  run.wave = 3; run.hpMult = 1; run.phase = 'wave';
+  const firstTier = TD.COMBO_TIERS[TD.COMBO_TIERS.length - 1].at;
+  for (let i = 0; i < firstTier + 1; i++) { run._spawn('grunt'); run.enemies[i].hp = -1; }
+  run.tick(0.01);
+  ok(run.streak === firstTier + 1, '연속 처치가 쌓인다', String(run.streak));
+  ok(run.comboTier() && run.comboTier().mult > 1, `${firstTier}연속부터 보상 배율이 붙는다`);
+  ok(run.bestStreak === firstTier + 1, '최고 연쇄가 기록된다');
+  // 문턱이 너무 낮으면 연쇄가 아예 안 끊겨 '상시 배율'이 된다 (실측 최고 연쇄 305)
+  ok(firstTier >= 12 && TD.COMBO_TIERS[0].at >= 60, '상위 등급은 후반의 성취여야 한다',
+     TD.COMBO_TIERS.map((t) => t.at).join('/'));
+  ok(TD.COMBO_TIERS[0].mult <= 2, '최고 배율도 경제를 뒤집을 만큼은 아니다', '×' + TD.COMBO_TIERS[0].mult);
+  ok(TD.COMBO_WINDOW <= 2, '연쇄 창이 짧아야 소강 상태에서 끊긴다', TD.COMBO_WINDOW + '초');
+
+  // 누수 = 연쇄 전멸
+  run._spawn('grunt');
+  run.enemies[0].pos = TD.PATH_LEN;
+  const ev = run.tick(0.01);
+  ok(run.streak === 0, '적을 한 마리라도 흘리면 연쇄가 끊긴다');
+  ok(ev.some((e) => e.t === 'leak' && e.lostStreak > 0), '얼마나 잃었는지 이벤트로 알려준다 (연출용)');
+
+  // 콤보 창이 지나면 자연 소멸
+  const r3 = new TD.Run(rng(14));
+  r3.phase = 'wave'; r3.streak = 5; r3.streakT = 0.2;
+  r3.tick(0.5);
+  ok(r3.streak === 0, '한동안 못 잡으면 연쇄가 식는다');
+}
+
+console.log('\n[보스 격노 · 위협도]');
+{
+  const run = new TD.Run(rng(15));
+  run.wave = 5; run.hpMult = 1; run.phase = 'wave';
+  run._spawn('boss');
+  const boss = run.enemies[0];
+  boss.pos = 0;
+  run.tick(1.0);
+  const slowStep = boss.pos;
+  boss.pos = 0; boss.hp = boss.maxHp * 0.05;   // 빈사
+  run.tick(1.0);
+  ok(boss.pos > slowStep * 1.5, '보스는 피가 빠질수록 빨라진다 (다 잡아가던 놈이 출구로 튄다)',
+     `${slowStep.toFixed(2)} → ${boss.pos.toFixed(2)} 칸/초`);
+
+  const r2 = new TD.Run(rng(16));
+  r2.phase = 'wave';
+  ok(r2.threat() === 0, '적이 없으면 위협도 0');
+  r2._spawn('grunt');
+  r2.enemies[0].pos = (TD.PATH_LEN - 1) * 0.9;
+  ok(r2.threat() > 0.85, '선두가 출구에 다가오면 위협도가 오른다 (화면 경고에 쓰인다)');
+}
+
+console.log('\n[융합 강화 — 후반 금의 종착지]');
+{
+  // 상한을 두면 보드를 다 채운 순간 금이 무의미해진다 (실측: 잔금 31,761 · 39칸 만석)
+  const run = new TD.Run(rng(17));
+  run.gold = 1e9;
+  run.build('archer', 0, 0); run.upgrade(0, 0); run.upgrade(0, 0);
+  run.build('archer', 1, 0); run.upgrade(1, 0); run.upgrade(1, 0);
+  run.fuse(0, 0);
+  const t = run.towerAt(0, 0);
+  ok(t.fused && t.flv === 1, '융합체는 융합 Lv1 에서 시작한다');
+  const d1 = run.towerStats(t).dmg;
+  const c1 = run.upgradeCost(t);
+  ok(isFinite(c1), '융합체도 계속 강화할 수 있다 (상한 없음)');
+  run.upgrade(0, 0); run.upgrade(0, 0);
+  ok(t.flv === 3, '융합 Lv3 까지 올라간다');
+  ok(isFinite(run.upgradeCost(t)), '그 위로도 열려 있다 — 금이 끝까지 힘으로 바뀐다');
+  ok(run.towerStats(t).dmg > d1 * 2, '강화할수록 확실히 세진다', `${d1.toFixed(0)} → ${run.towerStats(t).dmg.toFixed(0)}`);
+  ok(run.upgradeCost(t) > c1 * 4, '비용은 피해보다 빠르게 오른다 (금이 늘 부족해야 벽이 생긴다)');
+}
+
 console.log('\n[저주 — 이득에는 대가]');
 {
   const run = new TD.Run(rng(4));
@@ -112,12 +224,15 @@ console.log('\n[메타 — 죽어도 남는다]');
   ok(god < shopTotal, '신적인 판도 상점 전체보다 적게 준다', `${god} < ${shopTotal}`);
 
   let m = TD.normalizeMeta({ cores: 500 });
-  const r = TD.buyMeta(m, 'vault');
-  ok(r.ok && r.meta.upgrades.vault === 1 && r.meta.cores === 500 - 30, '메타 구매/차감');
+  const r = TD.buyMeta(m, 'walls');
+  ok(r.ok && r.meta.upgrades.walls === 1 && r.meta.cores === 500 - 35, '메타 구매/차감');
   ok(!TD.buyMeta(TD.normalizeMeta({ cores: 5 }), 'lens').ok, '핵이 모자라면 구매 실패');
-  const run = new TD.Run(rng(5), TD.normalizeMeta({ upgrades: { armory: 2, walls: 3, vault: 3 } }));
+  const run = new TD.Run(rng(5), TD.normalizeMeta({ upgrades: { armory: 2, walls: 3, forge: 3, tempo: 3 } }));
   ok(run.unlocked.includes('sniper') && run.unlocked.includes('mint'), '병기고: 시작 해금');
-  ok(run.lives === 16 && run.gold === 190, '겹성벽·개전 자금 적용', `lives=${run.lives} gold=${run.gold}`);
+  ok(run.lives === 16, '겹성벽: 시작 생명 +6', `lives=${run.lives}`);
+  // 메타는 정액이 아니라 배율이어야 벽을 움직인다 (실측: 정액 시절 다섯 개 전부 사도 +0.5웨이브)
+  ok(run.mods.dmgMult > 1.2 && run.mods.bountyMult > 1.2, '단조 화력·전리품 감식은 배율로 들어간다',
+     `dmg×${run.mods.dmgMult.toFixed(2)} bounty×${run.mods.bountyMult.toFixed(2)}`);
 }
 
 console.log('\n[밸런스 — 봇 플레이 분포]');
@@ -176,10 +291,15 @@ console.log('\n[밸런스 — 봇 플레이 분포]');
   ok(med >= 8, '봇 중앙값이 8웨이브 이상 (첫 판이 순삭이 아님)', String(med));
   ok(max <= 42, '상한 없는 무한 생존은 없다 (벽이 있다)', String(max));
   const wavesMeta = [];
-  for (let s = 1; s <= 30; s++) wavesMeta.push(play(s * 17, TD.normalizeMeta({ upgrades: { vault: 3, walls: 3, lens: 1, armory: 2, echo: 3 } })));
+  for (let s = 1; s <= 30; s++) wavesMeta.push(play(s * 17, TD.normalizeMeta({ upgrades: { forge: 3, tempo: 3, walls: 3, lens: 1, armory: 2, echo: 3 } })));
+  const mean = (a) => a.reduce((x, y) => x + y, 0) / a.length;
+  const baseMean = mean(waves), metaMean = mean(wavesMeta);
   wavesMeta.sort((a, b) => a - b);
-  console.log(`    풀메타 30판: 중앙값 ${wavesMeta[15]} · 최대 ${wavesMeta[29]}`);
-  ok(wavesMeta[15] > med, '메타 투자가 실제로 더 멀리 보낸다', `${med} → ${wavesMeta[15]}`);
+  console.log(`    풀메타 30판: 중앙값 ${wavesMeta[15]} · 평균 ${metaMean.toFixed(1)} (기준 평균 ${baseMean.toFixed(1)})`);
+  // 중앙값은 정수라 둔감하다 — 평균으로 본다. 메타가 정액 보너스였을 땐 다섯 개를
+  // 전부 최대로 사도 +0.5웨이브였다 (죽은 화폐). 배율로 바꾼 뒤 +2.6.
+  ok(metaMean - baseMean >= 1.5, '메타 투자가 벽을 실제로 밀어낸다 (+1.5웨이브 이상)',
+     `${baseMean.toFixed(1)} → ${metaMean.toFixed(1)}`);
 }
 
 console.log('\n[결정성]');

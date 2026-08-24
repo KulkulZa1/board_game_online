@@ -17,6 +17,10 @@
   // ── 격자와 길 ───────────────────────────────────────────────────
   // 세로 화면 7×10. 길은 뱀처럼 세 번 꺾인다 — 타워 자리는 길이 아닌 모든 칸.
   const COLS = 7, ROWS = 10;
+  // 융합체 강화는 상한이 없다. 상한을 두면 보드를 다 채운 뒤 금이 완전히 무의미해지고
+  // (실측: 판 종료 시 잔금 31,761 · 39칸 만석), 그 순간 경제·보상 관련 모든 선택이
+  // 죽는다. 비용은 ×2.2, 피해는 ×1.62로 올라가므로 금은 끝까지 부족하다 — 그게 벽이다.
+  const FUSED_COST_STEP = 2.2, FUSED_DMG_STEP = 1.62;
   const PATH = [];
   (function buildPath() {
     // (0,1)→(5,1) → (5,3) → (1,3)→(1,5) → (5,5) → (5,7) → (1,7)→(1,9) 방향 전개
@@ -39,15 +43,15 @@
   // cost: 건설 비용, up: 레벨업 비용 배열(Lv2, Lv3), dmg/rate/range 는 Lv1 기준.
   // 레벨업마다 dmg ×1.6. 융합체는 재료 둘을 소모하고 한 칸에 선다.
   const TOWERS = {
-    archer: { name: '궁수탑',  icon: '🏹', cost: 40,  up: [35, 60],  dmg: 6,  rate: 1.6, range: 2.2,
+    archer: { name: '궁수탑',  icon: '🏹', cost: 40,  up: [35, 60],  dmg: 10, rate: 1.6, range: 2.2,
               desc: '싸고 빠르다. 초반의 뼈대' },
-    cannon: { name: '포격탑',  icon: '💣', cost: 70,  up: [60, 100], dmg: 14, rate: 0.6, range: 2.0, splash: 1.1,
+    cannon: { name: '포격탑',  icon: '💣', cost: 70,  up: [60, 100], dmg: 24, rate: 0.6, range: 2.0, splash: 1.1,
               desc: '광역 폭발 — 무리를 갈아버린다' },
-    frost:  { name: '냉각탑',  icon: '❄️', cost: 55,  up: [45, 80],  dmg: 3,  rate: 1.0, range: 2.0, slow: 0.45, slowDur: 1.6,
+    frost:  { name: '냉각탑',  icon: '❄️', cost: 55,  up: [45, 80],  dmg: 5,  rate: 1.0, range: 2.0, slow: 0.45, slowDur: 1.6,
               desc: '적을 느리게 — 모든 탑의 친구' },
-    tesla:  { name: '전격탑',  icon: '⚡', cost: 85,  up: [70, 115], dmg: 9,  rate: 1.1, range: 2.2, chain: 3,
+    tesla:  { name: '전격탑',  icon: '⚡', cost: 85,  up: [70, 115], dmg: 15, rate: 1.1, range: 2.2, chain: 3,
               desc: '번개가 3마리를 타고 흐른다' },
-    sniper: { name: '저격탑',  icon: '🎯', cost: 100, up: [85, 140], dmg: 46, rate: 0.28, range: 4.6, pierceShield: true,
+    sniper: { name: '저격탑',  icon: '🎯', cost: 100, up: [85, 140], dmg: 78, rate: 0.28, range: 4.6, pierceShield: true,
               desc: '느리지만 확실하게 — 방패 무시' },
     mint:   { name: '금광',    icon: '💰', cost: 60,  up: [55, 90],  dmg: 0,  rate: 0,   range: 0, income: 12,
               desc: '공격 대신 웨이브마다 금을 캔다' },
@@ -91,20 +95,25 @@
   ];
 
   // ── 적 ────────────────────────────────────────────────────────
+  // 속도는 "길을 완주하는 데 걸리는 초"로 읽어야 한다 (길이 31칸).
+  // 초기값(침략병 0.85 = 36초)은 실측 결과 지독하게 루즈했다 — 웨이브 10이
+  // 최대 화력으로도 82초. 전부 ~1.75배로 올려 침략병 21초 / 보스 39초로 조인다.
   const ENEMIES = {
-    grunt:  { name: '침략병',   icon: '👾', hp: 26,  speed: 0.85, bounty: 6 },
-    runner: { name: '질주귀',   icon: '🐺', hp: 15,  speed: 1.55, bounty: 6 },
-    tank:   { name: '강철귀',   icon: '🛡️', hp: 88,  speed: 0.5,  bounty: 14 },
-    shield: { name: '방패병',   icon: '🔰', hp: 34,  speed: 0.8,  bounty: 10, shield: 4 },
-    regen:  { name: '재생귀',   icon: '🧪', hp: 46,  speed: 0.72, bounty: 12, regen: 3 },
-    boss:   { name: '군주',     icon: '👑', hp: 620, speed: 0.42, bounty: 90, shield: 6, boss: true },
+    grunt:  { name: '침략병',   icon: '👾', hp: 26,  speed: 1.50, bounty: 6 },
+    runner: { name: '질주귀',   icon: '🐺', hp: 15,  speed: 2.60, bounty: 6 },
+    tank:   { name: '강철귀',   icon: '🛡️', hp: 88,  speed: 0.95, bounty: 14 },
+    shield: { name: '방패병',   icon: '🔰', hp: 34,  speed: 1.40, bounty: 10, shield: 4 },
+    regen:  { name: '재생귀',   icon: '🧪', hp: 46,  speed: 1.25, bounty: 12, regen: 3 },
+    boss:   { name: '군주',     icon: '👑', hp: 620, speed: 0.80, bounty: 90, shield: 6, boss: true,
+              rage: 0.9 },   // 체력이 깎일수록 빨라진다 — 다 잡아가던 보스가 갑자기 뛴다
   };
   // 웨이브 구성 — 5의 배수는 보스. 예고(preview)가 있어야 배치가 '계획'이 된다.
   function waveSpec(n) {
-    // 후반은 지수 위에 2차 램프를 더한다 — 이게 없으면 어떤 빌드든 40웨이브를
-    // 무한히 버텼다 (스윕 실측: 메타0 봇의 48%가 상한 도달). 벽은 있어야 한다.
+    // 지수 1.34 는 "한 판 = 13분(1배속) / 4.5분(3배속), 중앙값 22웨이브"를 목표로 실측해
+    // 고른 값이다. 더 완만하게 두면(1.21) 한 판이 21분으로 늘어져 아케이드가 아니게 된다.
+    // 2차 항은 최상단에서 곡선을 한 번 더 꺾어 무한 생존을 막는다.
     const late = Math.max(0, n - 12);
-    const hpMult = Math.pow(1.17, n - 1) * (1 + late * late * 0.016);
+    const hpMult = Math.pow(1.34, n - 1) * (1 + late * late * 0.002);
     const list = [];
     const push = (type, count) => list.push({ type, count });
     if (n % 5 === 0) {
@@ -120,14 +129,41 @@
     return { n, hpMult, list, label: list.map((e) => `${ENEMIES[e.type].icon}×${e.count}`).join(' ') };
   }
 
+  // ── 페이싱 ─────────────────────────────────────────────────────
+  // 건설 단계에 시계가 없으면 게임이 아니라 스프레드시트다. 카운트다운이 끝나면
+  // 웨이브가 자동으로 출격하고, 남은 시간을 금으로 바꿔 '지금 부르기'를 유혹한다.
+  const BUILD_SECONDS = (wave) => Math.max(6, 13 - wave * 0.35);
+  // 조기 출격 보너스는 '유혹'이지 '강제'가 아니어야 한다. 처음엔 정규 수입의 2배를
+  // 줬는데, 그러자 끝까지 기다리는 플레이는 웨이브 4에서 파산했다 (실측: 탐욕봇 23 vs
+  // 신중봇 4). 지금은 기다리는 쪽이 약 2웨이브 더 깊이 가고, 부르는 쪽은 실시간 템포와
+  // 보너스를 얻는다 — 어느 쪽도 정답이 아닌 상태.
+  const EARLY_GOLD = (wave, secsLeft) => Math.round(secsLeft * (0.5 + wave * 0.14));
+  // 연속 격파 — 2.6초 안에 다음을 잡으면 이어진다. 누수 한 번이면 전부 리셋.
+  // 문턱과 배율은 실측으로 잡았다. 처음엔 창 2.6초 / 8·20·40연속에 ×1.5·2·3 이었는데,
+  // 웨이브마다 수십 마리가 죽으니 연쇄가 아예 끊기질 않아 (실측 최고 연쇄 305) 사실상
+  // '상시 ×3 경제'가 됐다. 창을 좁히고 문턱을 올려 상위 등급을 후반의 성취로 만든다.
+  const COMBO_WINDOW = 1.6;
+  const COMBO_TIERS = [
+    { at: 100, mult: 1.7, label: '⚡ 초토화' },
+    { at: 45,  mult: 1.4, label: '🔥 맹공' },
+    { at: 15,  mult: 1.2, label: '✨ 연속 격파' },
+  ];
+  const comboTier = (streak) => COMBO_TIERS.find((t) => streak >= t.at) || null;
+
   // ── 메타 (영구 업그레이드) ─────────────────────────────────────
   const META_KEY = 'td_meta_v1';
+  // ⚠ 메타는 반드시 '곱연산'이어야 한다. 처음엔 전부 정액 보너스(시작 금 +90, 생명 +6)
+  // 였는데, 적 체력이 1.21^n 으로 자라는 벽 앞에서 정액은 무의미했다 — 다섯 개를 전부
+  // 최대로 사도 도달 웨이브가 0.5밖에 안 늘었다 (실측). 지금은 피해·수입이 배율이다.
   const META_UPGRADES = [
-    { id: 'vault',   name: '개전 자금', icon: '💰', max: 3, cost: (l) => 30 + l * 45, desc: (l) => `시작 금 +${(l + 1) * 30}` },
+    { id: 'forge',   name: '단조 화력', icon: '🔥', max: 3, cost: (l) => 40 + l * 70, desc: (l) => `모든 타워 피해 +${(l + 1) * 8}%` },
+    // 웨이브 정산 수입이 아니라 '처치 보상' 배율이다 — 후반 금의 95%는 현상금에서 나오고,
+    // 정산 수입(15+2w)은 5%뿐이라 거기에 배율을 걸면 아무 일도 일어나지 않았다 (실측 -0.1웨이브).
+    { id: 'tempo',   name: '전리품 감식', icon: '💵', max: 3, cost: (l) => 45 + l * 65, desc: (l) => `적 처치 보상 +${(l + 1) * 9}%` },
     { id: 'walls',   name: '겹성벽',   icon: '🏰', max: 3, cost: (l) => 35 + l * 50, desc: (l) => `시작 생명 +${(l + 1) * 2}` },
-    { id: 'lens',    name: '넓은 안목', icon: '🃏', max: 1, cost: () => 180,          desc: () => '드래프트가 4장이 된다' },
+    { id: 'lens',    name: '넓은 안목', icon: '🃏', max: 1, cost: () => 150,          desc: () => '드래프트가 4장이 된다' },
     { id: 'armory',  name: '병기고',   icon: '🗝️', max: 2, cost: (l) => 60 + l * 80, desc: (l) => l === 0 ? '저격탑을 처음부터 해금' : '금광을 처음부터 해금' },
-    { id: 'echo',    name: '메아리 핵', icon: '🔮', max: 3, cost: (l) => 50 + l * 60, desc: (l) => `마나핵 획득 +${(l + 1) * 15}%` },
+    { id: 'echo',    name: '메아리 핵', icon: '🔮', max: 3, cost: (l) => 50 + l * 60, desc: (l) => `마나핵 획득 +${(l + 1) * 15}% (판 밖의 성장)` },
   ];
   function normalizeMeta(raw) {
     const m = raw && typeof raw === 'object' ? raw : {};
@@ -166,8 +202,9 @@
     constructor(rng, meta) {
       this.rng = rng || makeRng(Date.now() & 0xffffffff);
       const m = normalizeMeta(meta);
-      this.gold = 100 + (m.upgrades.vault || 0) * 30;
+      this.gold = 140;
       this.lives = 10 + (m.upgrades.walls || 0) * 2;
+      this.incomeMult = 1;
       this.wave = 0;                 // 아직 시작 안 한 상태. startWave()로 1부터
       this.score = 0;
       this.towers = [];              // {x,y,type,lv,fused,cool}
@@ -176,7 +213,8 @@
       this.spawnT = 0;
       this.phase = 'build';          // build | wave | draft | over
       this.hpMult = 1;               // startWave 전에 스폰돼도 안전
-      this.mods = { dmgMult: 1, rangeMult: 1, rateMult: 1, bountyMult: 1, costMult: 1, slowBonus: 0, slowAll: 0 };
+      this.mods = { dmgMult: 1 + (m.upgrades.forge || 0) * 0.08, rangeMult: 1, rateMult: 1,
+                    bountyMult: 1 + (m.upgrades.tempo || 0) * 0.09, costMult: 1, slowBonus: 0, slowAll: 0 };
       this.curses = { hpMult: 1, speedMult: 1 };
       this.unlocked = ['archer', 'cannon', 'frost'];
       if ((m.upgrades.armory || 0) >= 1) this.unlocked.push('sniper');
@@ -184,6 +222,11 @@
       this.draftSize = 3 + ((m.upgrades.lens || 0) ? 1 : 0);
       this.pendingDraft = null;
       this.kills = 0;
+      this.buildLeft = BUILD_SECONDS(1);   // 건설 단계 카운트다운
+      this.streak = 0;                     // 연속 격파
+      this.streakT = 0;                    // 남은 콤보 창
+      this.bestStreak = 0;
+      this.earlyBonus = 0;                 // 마지막 조기 출격 보너스 (연출용)
       this.log = [];
     }
 
@@ -203,20 +246,31 @@
       this.towers.push(t);
       return t;
     }
-    upgradeCost(t) { return t.fused || t.lv >= 3 ? Infinity : Math.round(TOWERS[t.type].up[t.lv - 1] * (1 + this.mods.costMult - 1)); }
+    // 융합체도 계속 강화된다(융합 Lv1~3). 이게 없으면 보드를 Lv3로 채운 순간
+    // 화력 천장이 고정돼 금이 무의미해지고 — 실측대로 모든 판이 같은 웨이브에서 끝났다.
+    // 후반의 금은 여기로 흘러야 '더 벌어서 더 버틴다'는 선택이 성립한다.
+    upgradeCost(t) {
+      if (t.fused) {
+        const flv = t.flv || 1;
+        return Math.round(TOWERS[t.type].cost * 2.6 * Math.pow(FUSED_COST_STEP, flv - 1) * this.mods.costMult);
+      }
+      if (t.lv >= 3) return Infinity;
+      return Math.round(TOWERS[t.type].up[t.lv - 1] * this.mods.costMult);
+    }
     upgrade(x, y) {
       const t = this.towerAt(x, y);
       if (!t) return false;
       const cost = this.upgradeCost(t);
       if (!isFinite(cost) || this.gold < cost) return false;
-      this.gold -= cost; t.lv += 1;
+      this.gold -= cost;
+      if (t.fused) t.flv = (t.flv || 1) + 1; else t.lv += 1;
       return true;
     }
     sell(x, y) {
       const i = this.towers.findIndex((t) => t.x === x && t.y === y);
       if (i < 0) return false;
       const t = this.towers[i];
-      const back = Math.round(TOWERS[t.type].cost * 0.6 * t.lv);
+      const back = Math.round(TOWERS[t.type].cost * 0.6 * (t.fused ? 4 * (t.flv || 1) : t.lv));
       this.towers.splice(i, 1);
       this.gold += back;
       return back;
@@ -236,7 +290,7 @@
       const mate = this.canFuse(x, y);
       if (!t || !mate) return false;
       this.towers.splice(this.towers.indexOf(mate), 1);   // 재료 소모 — 공짜 융합은 융합이 아니다
-      t.fused = true;
+      t.fused = true; t.flv = 1;
       return true;
     }
 
@@ -244,8 +298,9 @@
       const base = TOWERS[t.type];
       const lvMult = Math.pow(1.6, t.lv - 1);
       const fu = t.fused ? FUSIONS[t.type] : null;
+      const fuLvMult = t.fused ? Math.pow(FUSED_DMG_STEP, (t.flv || 1) - 1) : 1;
       return {
-        dmg: base.dmg * lvMult * (fu ? fu.dmgMult : 1) * this.mods.dmgMult,
+        dmg: base.dmg * lvMult * (fu ? fu.dmgMult : 1) * fuLvMult * this.mods.dmgMult,
         rate: base.rate * (fu && fu.rateMult ? fu.rateMult : 1) * this.mods.rateMult,
         range: base.range * this.mods.rangeMult,
         splash: base.splash || 0,
@@ -257,7 +312,7 @@
         pierceLine: !!(fu && fu.pierceLine),
         burn: fu && fu.burn ? fu.burn : 0, burnDur: fu ? fu.burnDur || 0 : 0,
         freeze: fu && fu.freeze ? fu.freeze : 0,
-        income: (base.income || 0) * (t.fused && fu.incomeMult ? fu.incomeMult : 1) * t.lv,
+        income: (base.income || 0) * (t.fused && fu.incomeMult ? fu.incomeMult : 1) * (t.fused ? 3 * (t.flv || 1) : t.lv),
         interest: t.fused && fu.interest ? fu.interest : 0,
       };
     }
@@ -279,7 +334,11 @@
       this.spawnT = 0;
       this.phase = 'wave';
       this.hpMult = spec.hpMult * this.curses.hpMult;
-      this.waveSpeed = 1 + Math.max(0, this.wave - 10) * 0.01;   // 후반 속도 크리프
+      this.waveSpeed = 1 + Math.max(0, this.wave - 10) * 0.015;  // 후반 속도 크리프
+      // 남은 건설 시간을 금으로 — 준비가 덜 됐어도 부르고 싶게 만드는 유혹
+      this.earlyBonus = this.buildLeft > 0.4 ? EARLY_GOLD(this.wave, this.buildLeft) : 0;
+      this.gold += this.earlyBonus;
+      this.buildLeft = 0;
       return spec;
     }
     nextWavePreview() { return waveSpec(this.wave + 1); }
@@ -289,7 +348,7 @@
       this.enemies.push({
         type, hp: def.hp * this.hpMult, maxHp: def.hp * this.hpMult,
         pos: 0, slow: 0, slowT: 0, freezeT: 0, burn: 0, burnT: 0,
-        shield: def.shield || 0, regen: def.regen || 0,
+        shield: def.shield || 0, regen: def.regen || 0, rage: def.rage || 0,
         speed: def.speed * (1 + (this.curses.speedMult - 1)) * (this.waveSpeed || 1),
       });
     }
@@ -297,7 +356,22 @@
     // dt 초 진행. 이벤트 목록을 돌려준다 (렌더러의 연출 훅)
     tick(dt) {
       const ev = [];
+      // 건설 단계에도 시계가 흐른다 — 드래프트를 고르는 동안만 멈춘다(그게 숨 돌릴 틈).
+      if (this.phase === 'build') {
+        if (this.pendingDraft) return ev;
+        this.buildLeft = Math.max(0, this.buildLeft - dt);
+        if (this.buildLeft <= 0) {
+          const spec = this.startWave();
+          if (spec) ev.push({ t: 'autowave', wave: spec.n });
+        }
+        return ev;
+      }
       if (this.phase !== 'wave') return ev;
+      // 콤보 창 소멸
+      if (this.streakT > 0) {
+        this.streakT -= dt;
+        if (this.streakT <= 0 && this.streak > 0) { this.streak = 0; ev.push({ t: 'streakend' }); }
+      }
 
       // 스폰
       this.spawnT -= dt;
@@ -305,7 +379,7 @@
         const type = this.spawnQueue.shift();
         this._spawn(type);
         ev.push({ t: 'spawn', type });
-        this.spawnT = type === 'boss' ? 1.2 : Math.max(0.28, 0.75 - this.wave * 0.02);
+        this.spawnT = type === 'boss' ? 0.9 : Math.max(0.16, 0.42 - this.wave * 0.012);
       }
 
       // 적 이동/도트
@@ -314,7 +388,9 @@
         if (e.regen && e.hp < e.maxHp && e.hp > 0) e.hp = Math.min(e.maxHp, e.hp + e.regen * dt);
         if (e.freezeT > 0) { e.freezeT -= dt; continue; }
         const slowF = e.slowT > 0 ? (e.slowT -= dt, 1 - Math.min(0.8, e.slow)) : 1;
-        e.pos += e.speed * slowF * dt;
+        // 격노: 보스는 피가 빠질수록 빨라진다 — 다 잡았다 싶을 때 출구로 튄다
+        const rage = e.rage ? 1 + e.rage * (1 - Math.max(0, e.hp) / e.maxHp) : 1;
+        e.pos += e.speed * slowF * rage * dt;
       }
 
       // 도착 처리
@@ -323,14 +399,25 @@
         if (e.pos >= PATH_LEN - 1) {
           this.enemies.splice(i, 1);
           this.lives -= ENEMIES[e.type].boss ? 3 : 1;
-          ev.push({ t: 'leak', type: e.type });
+          const lostStreak = this.streak;
+          this.streak = 0; this.streakT = 0;   // 누수 한 번이면 연쇄가 통째로 끊긴다
+          ev.push({ t: 'leak', type: e.type, lostStreak });
         } else if (e.hp <= 0) {
           this.enemies.splice(i, 1);
-          const bounty = Math.round(ENEMIES[e.type].bounty * this.mods.bountyMult);
+          this.streak += 1;
+          this.streakT = COMBO_WINDOW;
+          if (this.streak > this.bestStreak) this.bestStreak = this.streak;
+          const tier = comboTier(this.streak);
+          const mult = tier ? tier.mult : 1;
+          const bounty = Math.round(ENEMIES[e.type].bounty * (1 + this.wave * 0.06) * this.mods.bountyMult * mult);
           this.gold += bounty;
-          this.score += Math.round(ENEMIES[e.type].bounty * this.wave);
+          this.score += Math.round(ENEMIES[e.type].bounty * this.wave * mult);
           this.kills += 1;
-          ev.push({ t: 'kill', type: e.type, bounty, x: this.enemyXY(e).x, y: this.enemyXY(e).y });
+          const p = this.enemyXY(e);
+          ev.push({ t: 'kill', type: e.type, bounty, mult, x: p.x, y: p.y });
+          // 콤보 등급이 막 올라간 순간 — 연출이 크게 터져야 한다
+          const prev = comboTier(this.streak - 1);
+          if (tier && (!prev || prev.at !== tier.at)) ev.push({ t: 'combo', tier, streak: this.streak });
         }
       }
       if (this.lives <= 0) { this.phase = 'over'; ev.push({ t: 'gameover' }); return ev; }
@@ -417,6 +504,13 @@
     }
 
     waveOver() { return this.phase === 'wave' && !this.spawnQueue.length && !this.enemies.length; }
+    // 선두 적이 출구에 얼마나 다가왔나 (0~1) — 화면 가장자리 경고에 쓴다
+    threat() {
+      let worst = 0;
+      for (const e of this.enemies) worst = Math.max(worst, e.pos / (PATH_LEN - 1));
+      return worst;
+    }
+    comboTier() { return comboTier(this.streak); }
 
     // 웨이브 종료 정산 → 드래프트 제시
     settleWave() {
@@ -427,9 +521,11 @@
         if (st.income) income += Math.round(st.income);
         if (st.interest) income += Math.round(this.gold * st.interest);
       }
+      income = Math.round(income * this.incomeMult);
       this.gold += income;
       this.score += this.wave * 10;
       this.phase = 'build';
+      this.buildLeft = BUILD_SECONDS(this.wave + 1);
       this.pendingDraft = this._draftOffers();
       return { income, draft: this.pendingDraft };
     }
@@ -492,8 +588,9 @@
 
   const api = {
     COLS, ROWS, PATH, PATH_LEN, onPath,
-    TOWERS, FUSIONS, PERKS, CURSES, ENEMIES, waveSpec,
+    TOWERS, FUSIONS, PERKS, CURSES, ENEMIES, waveSpec, FUSED_COST_STEP, FUSED_DMG_STEP,
     META_KEY, META_UPGRADES, normalizeMeta, metaCost, buyMeta, coresEarned,
+    BUILD_SECONDS, EARLY_GOLD, COMBO_WINDOW, COMBO_TIERS, comboTier,
     makeRng, Run,
   };
   if (typeof window !== 'undefined') window.TDRogue = api;
