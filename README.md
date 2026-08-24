@@ -92,16 +92,15 @@ They save their live config to browser `localStorage`:
 |---|---|---|
 | `sandbox/vampire-survivors/` | `sandbox_vs_config` | `/arcade/vampire/` via `public/js/sandbox-config.js` |
 | `sandbox/plant-growing/` | `sandbox_pg_config` | `/arcade/plant/` via `public/js/sandbox-config.js` |
-| `sandbox/tower-defense/` | `sandbox_td_config` / `td_published_config` | `/arcade/tower-defense/` via `/arcade/tower-defense/runtime/` |
+| `sandbox/tower-defense/` | `sandbox_td_config` / `td_published_config` | (editor-only — the arcade TD is now a self-contained game) |
 
-Because production does not serve `/sandbox/`, production checks should verify that arcade pages still load, no public arcade HTML requests `/sandbox/` assets, and `/sandbox/` returns 404. Tower Defense reuses the sandbox engine through a production-safe runtime alias under `/arcade/tower-defense/runtime/`; the editor itself remains a local developer tool.
+Because production does not serve `/sandbox/`, production checks should verify that arcade pages still load, no public arcade HTML requests `/sandbox/` assets, and `/sandbox/` returns 404. The `/arcade/tower-defense/runtime/` alias still serves the sandbox TD engine for the editor's publish flow, but the arcade Tower Defense page (첨탑 대란) is a self-contained game and no longer loads it.
 
 Tower Defense has an explicit publish/import workflow for the common case where `npm run sandbox` and the main app run on different origins:
 
 1. Run `npm run sandbox` and edit `sandbox/tower-defense/`.
 2. Click `Publish`; the editor validates the config, stores `td_published_config` on the current origin, and exports `td-published-config.json`.
-3. Open `/arcade/tower-defense/` on the target origin.
-4. Click `Import` and select the exported file, then `Publish` if you want that origin to prefer the imported config.
+3. That config feeds the **sandbox editor's own play mode** (and any future consumer). The arcade `/arcade/tower-defense/` page is now the standalone 첨탑 대란 roguelite and does not read sandbox config.
 
 See `docs/launch-readiness.md` for the current security, deployment, and manual verification checklist.
 

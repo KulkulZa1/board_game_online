@@ -535,6 +535,7 @@ function checkProductionArcadeAssetPolicy() {
     'public/arcade/neon-cascade/index.html': ['style.css?v=2.0', 'sim.js?v=2.0', 'game.js?v=2.0'],
     'public/arcade/plant/index.html': ['sim.js?v=2.0', 'game.js?v=2.0'],
     'public/arcade/jackpot/index.html': ['meta.js?v=3.0', 'sim.js?v=3.0', 'game.js?v=3.0'],
+    'public/arcade/tower-defense/index.html': ['style.css?v=1.0', 'sim.js?v=1.0', 'game.js?v=1.0'],
   };
   // 여기 적힌 버전은 "이 아래로는 내려가면 안 되는 하한선"이다.
   // 예전에는 문자열이 정확히 일치해야 해서, 자산을 고치고 버전을 올리는 정상적인 행동이
@@ -557,9 +558,14 @@ function checkProductionArcadeAssetPolicy() {
     });
   });
 
+  // 아케이드 TD(첨탑 대란)는 자립형 로그라이트다 — 샌드박스 엔진(runtime)을 로드하면
+  // 에디터 UI가 게임인 척하던 옛 구조로의 회귀다 (재미없다고 실측·판정되어 재건축됨).
   const towerPage = fs.readFileSync(path.join(root, 'public/arcade/tower-defense/index.html'), 'utf8');
-  if (!towerPage.includes('/arcade/tower-defense/runtime/config.js') || !towerPage.includes('/arcade/tower-defense/runtime/game.js')) {
-    throw new Error('Tower Defense arcade page should load runtime assets from /arcade/tower-defense/runtime/');
+  if (towerPage.includes('/arcade/tower-defense/runtime/')) {
+    throw new Error('Tower Defense arcade page must be self-contained — no runtime/ (sandbox engine) assets');
+  }
+  if (!towerPage.includes('sim.js') || !towerPage.includes('game.js')) {
+    throw new Error('Tower Defense arcade page should load its own sim.js and game.js');
   }
 
   const server = fs.readFileSync(path.join(root, 'server/index.js'), 'utf8');
@@ -901,15 +907,8 @@ function checkTowerDefenseSandboxCoverage() {
     throw new Error('Tower Defense editor should validate and publish configs for arcade import');
   }
   const sandboxPage = fs.readFileSync(path.join(root, 'sandbox/tower-defense/index.html'), 'utf8');
-  const arcadePage = fs.readFileSync(path.join(root, 'public/arcade/tower-defense/index.html'), 'utf8');
-  if (!sandboxPage.includes('data-action="publish"') || !arcadePage.includes('data-action="publish"')) {
-    throw new Error('Tower Defense sandbox and arcade route should expose publish controls');
-  }
-  if (!arcadePage.includes('td_published_config') || !arcadePage.includes('Published config loaded')) {
-    throw new Error('Tower Defense arcade route should prefer published config and show load status');
-  }
-  if (!arcadePage.includes('data-action="play-stage"') || !arcadePage.includes('data-action="meteor"') || !arcadePage.includes('data-place-type="amplifier"')) {
-    throw new Error('Tower Defense arcade page should expose game-first controls and quick tower placement');
+  if (!sandboxPage.includes('data-action="publish"')) {
+    throw new Error('Tower Defense sandbox editor should expose publish controls');
   }
 }
 

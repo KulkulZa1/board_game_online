@@ -24,7 +24,7 @@ Layer A supports **12 games**: Chess, Omok, Connect4, Othello, Checkers, Indian 
 **Special case — BANG! (4-7 players)**: same self-contained pattern (`server/bang.js` + `server/handlers/bang-engine.js` + `/bang.html` + `public/js/bang-client.js`, socket events `bang:*`).
 Do NOT try to fit either into the host/guest `RoomState` — they are intentionally separate subsystems.
 
-Layer B currently has **9 arcade games**: Snake, Breakout, Vampire Survivors (`vampire`), Plant Growing (`plant`), Tower Defense (`tower-defense`), 산업의 시대 / "Industrial Age" (`factory`), 문명 키우기 / civilization idle-clicker (`bootstrap`), 월세 잭팟 / slot roguelite (`jackpot`), NEON CASCADE (`neon-cascade`). All are zero-server-dependency static pages served under `/arcade/<name>/` — see `ADDING_AN_ARCADE_GAME.md`.
+Layer B currently has **9 arcade games**: Snake, Breakout, Vampire Survivors (`vampire`), Plant Growing (`plant`), 첨탑 대란 / TD roguelite (`tower-defense`), 산업의 시대 / "Industrial Age" (`factory`), 문명 키우기 / civilization idle-clicker (`bootstrap`), 월세 잭팟 / slot roguelite (`jackpot`), NEON CASCADE (`neon-cascade`). All are zero-server-dependency static pages served under `/arcade/<name>/` — see `ADDING_AN_ARCADE_GAME.md`.
 
 Layer C has **3 design sandboxes**: `vampire-survivors`, `plant-growing`, `tower-defense`. They save live config to browser `localStorage` and feed the matching arcade game (see "Sandbox → arcade" below). Sandbox is dev-only — production must return 404 for `/sandbox/` (enforced by the smoke test).
 
@@ -58,7 +58,7 @@ npm run sandbox
 | `npm run lint` | `scripts/check-js.js` — parses every `.js` file in the repo for syntax errors (no ESLint config) |
 | `npm test` | `scripts/smoke-test.js` — starts the server on port 13001, runs 82 assertions (handler registry, room creation, core routes) |
 | `npm run test:full` | `scripts/smoke-check.js` — starts the server on port 3100, checks routes/static assets/handlers plus JS syntax across the whole repo (slower, more thorough than `npm test`) |
-| `npm run test:games` | `scripts/run-game-flow-tests.js` — runs 13 rule-engine/flow suites from `prototypes/`: Mahjong (engine, flow, timer), BANG! flow, a 36-assertion backgammon/texasholdem/dotsboxes handler suite, a 40-assertion suite covering the other 9 board games (`core-games-handler-test.js`), and the seven arcade progression suites `snake-rogue-test.js` (45), `breakout-rogue-test.js` (41), `neon-amp-test.js` (37), `plant-prestige-test.js` (60), `jackpot-meta-test.js` (68), `jackpot-map-test.js` (37) and `bootstrap-loop-test.js` (9), which assert those games' rules *and* balance. Each is also runnable standalone via `node prototypes/<name>.js` |
+| `npm run test:games` | `scripts/run-game-flow-tests.js` — runs 14 rule-engine/flow suites from `prototypes/`: Mahjong (engine, flow, timer), BANG! flow, a 36-assertion backgammon/texasholdem/dotsboxes handler suite, a 40-assertion suite covering the other 9 board games (`core-games-handler-test.js`), and the eight arcade progression suites `snake-rogue-test.js` (45), `breakout-rogue-test.js` (41), `neon-amp-test.js` (37), `plant-prestige-test.js` (60), `jackpot-meta-test.js` (68), `jackpot-map-test.js` (37), `bootstrap-loop-test.js` (9) and `td-rogue-test.js` (45), which assert those games' rules *and* balance. Each is also runnable standalone via `node prototypes/<name>.js` |
 | `npm run check` | `lint && test && test:games && test:full` — run before considering a change done |
 | `npm run build` | `scripts/no-build.js` — no-op that just prints "there is no build step" (there is genuinely no bundler) |
 | `npm run verify:production` | `scripts/verify-production-version.js` — after a Render deploy, hits `/api/version` to confirm the live commit/branch match what you expect. Pass `EXPECTED_COMMIT=<sha>` to check a specific commit. See `docs/render-version-verification.md`. |
@@ -230,7 +230,7 @@ Sandbox editors (Layer C, `npm run sandbox`, never served in production) save li
 |---|---|---|
 | `sandbox/vampire-survivors/` | `sandbox_vs_config` | `/arcade/vampire/` via `public/js/sandbox-config.js` |
 | `sandbox/plant-growing/` | `sandbox_pg_config` | `/arcade/plant/` via `public/js/sandbox-config.js` |
-| `sandbox/tower-defense/` | `sandbox_td_config` / `td_published_config` | `/arcade/tower-defense/` via a production-safe runtime alias at `/arcade/tower-defense/runtime/` (an Express static mount pointing at `sandbox/tower-defense/`, not the editor itself) |
+| `sandbox/tower-defense/` | `sandbox_td_config` / `td_published_config` | (editor-only) — the arcade `/arcade/tower-defense/` page is now the self-contained 첨탑 대란 roguelite; the `/arcade/tower-defense/runtime/` Express alias still serves the sandbox engine for the editor's publish flow, and a smoke-check gate rejects `runtime/` assets reappearing in the arcade page |
 
 Tower Defense has an explicit Publish/Import workflow for when the sandbox and main app run on different origins — see `README.md` § "Sandbox to arcade content flow" for the steps.
 

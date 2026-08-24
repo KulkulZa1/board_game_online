@@ -1,0 +1,113 @@
+/* 첨탑 대란 — 세로 모바일 우선, 다른 아케이드 게임과 같은 톤 */
+*, *::before, *::after { box-sizing: border-box; }
+:root {
+  --bg: #0a0e1a; --panel: #121a2e; --line: #223055;
+  --text: #dfe8ff; --muted: #7c8cb8;
+  --gold: #ffd166; --bad: #ff5d6c; --good: #6be675; --accent: #6ea8ff;
+}
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+  font-family: 'Segoe UI', system-ui, sans-serif; -webkit-tap-highlight-color: transparent; }
+#container { max-width: 480px; margin: 0 auto; min-height: 100%; display: flex; flex-direction: column; padding: 8px 10px 14px; }
+
+#hdr { display: flex; align-items: center; gap: 8px; padding: 4px 0 8px; }
+.back-btn { color: var(--muted); text-decoration: none; font-size: 0.9rem; }
+.game-title { font-weight: 800; font-size: 1.02rem; }
+#hdrStats { margin-left: auto; display: flex; gap: 8px; align-items: center; font-size: 0.85rem; }
+.hdr-btn { background: none; border: 1px solid var(--line); border-radius: 8px; color: var(--text);
+  padding: 3px 8px; font-size: 0.85rem; cursor: pointer; }
+
+#statBar { display: flex; gap: 6px; margin-bottom: 8px; }
+.stat { flex: 1; background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+  padding: 6px 8px; text-align: center; font-size: 0.82rem; }
+.stat b { display: block; font-size: 1.05rem; }
+.stat.lives b { color: var(--bad); }
+.stat.gold b { color: var(--gold); }
+.stat.wave b { color: var(--accent); }
+
+#previewBar { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+  padding: 6px 10px; margin-bottom: 8px; font-size: 0.82rem; color: var(--muted);
+  display: flex; align-items: center; gap: 8px; min-height: 34px; }
+#previewBar b { color: var(--text); }
+#modBar { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; min-height: 20px; }
+.mod-chip { background: rgba(110,168,255,0.12); border: 1px solid var(--line); border-radius: 20px;
+  padding: 1px 8px; font-size: 0.74rem; }
+.mod-chip.curse { background: rgba(255,93,108,0.14); border-color: rgba(255,93,108,0.5); }
+
+#boardWrap { position: relative; }
+#c { display: block; width: 100%; border-radius: 14px; border: 1px solid var(--line);
+  touch-action: manipulation; }
+
+#waveBtn { width: 100%; margin-top: 10px; padding: 13px; font-size: 1.05rem; font-weight: 800;
+  background: linear-gradient(135deg, #2f6fed, #274bb8); color: #fff;
+  border: none; border-radius: 12px; cursor: pointer; }
+#waveBtn:disabled { opacity: 0.45; }
+#waveBtn.danger { background: linear-gradient(135deg, #e74c3c, #b03a2e); }
+
+/* 건설/타워 메뉴 — 캔버스 아래 슬라이드 */
+#buildMenu { margin-top: 8px; background: var(--panel); border: 1px solid var(--line);
+  border-radius: 12px; padding: 8px; display: none; }
+#buildMenu.open { display: block; }
+#buildTitle { font-size: 0.85rem; color: var(--muted); margin-bottom: 6px; }
+#buildBtns { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.tower-btn { background: #182240; border: 1px solid var(--line); border-radius: 10px;
+  color: var(--text); padding: 8px 4px; cursor: pointer; font-size: 0.8rem; text-align: center; }
+.tower-btn:disabled { opacity: 0.4; }
+.tower-btn .t-ico { font-size: 1.3rem; display: block; }
+.tower-btn .t-cost { color: var(--gold); font-size: 0.76rem; }
+.tower-btn.action { background: #16324a; }
+.tower-btn.danger { background: #3a1a24; }
+.tower-btn.fuse-ready { background: #3a2f14; border-color: var(--gold); box-shadow: 0 0 10px rgba(255,209,102,0.35); }
+
+/* 모달 공통 */
+.modal { position: fixed; inset: 0; background: rgba(5,8,18,0.82); display: flex;
+  align-items: center; justify-content: center; z-index: 50; padding: 16px; }
+.modal.hidden { display: none; }
+.modal-box { background: var(--panel); border: 1px solid var(--line); border-radius: 16px;
+  padding: 14px; width: 100%; max-width: 420px; max-height: 86vh; overflow-y: auto; }
+.pick-title { font-weight: 800; margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
+.pick-title .spacer { flex: 1; }
+.modal-close { background: none; border: none; color: var(--muted); font-size: 1rem; cursor: pointer; }
+
+.pick-card { display: flex; gap: 10px; align-items: center; width: 100%; text-align: left;
+  background: #182240; border: 1px solid var(--line); border-radius: 12px;
+  padding: 10px; margin-bottom: 8px; color: var(--text); cursor: pointer; }
+.pick-card:active { transform: scale(0.98); }
+.pick-card .pick-ico { font-size: 1.7rem; }
+.pick-card .pick-name { font-weight: 700; display: block; }
+.pick-card .pick-desc { color: var(--muted); font-size: 0.8rem; }
+.pick-card.curse { border-color: rgba(255,93,108,0.6); background: #2a1420; }
+.pick-card.tower { border-color: rgba(110,168,255,0.5); }
+.skip-btn { width: 100%; background: none; border: 1px dashed var(--line); border-radius: 10px;
+  color: var(--muted); padding: 9px; cursor: pointer; font-size: 0.85rem; }
+
+/* 메타 상점 */
+.meta-row { display: flex; gap: 10px; align-items: center; width: 100%; text-align: left;
+  background: #182240; border: 1px solid var(--line); border-radius: 12px;
+  padding: 10px; margin-bottom: 8px; color: var(--text); cursor: pointer; }
+.meta-row:disabled { opacity: 0.45; cursor: default; }
+.meta-row .m-ico { font-size: 1.5rem; }
+.meta-row .m-name { font-weight: 700; }
+.meta-row .m-desc { color: var(--muted); font-size: 0.78rem; }
+.meta-row .m-cost { margin-left: auto; color: var(--gold); font-weight: 700; white-space: nowrap; }
+.meta-row.maxed .m-cost { color: var(--good); }
+
+/* 오버레이 (시작/종료) */
+.overlay { position: fixed; inset: 0; background: rgba(5,8,18,0.92); z-index: 60;
+  display: none; align-items: center; justify-content: center; padding: 16px; }
+.overlay.visible { display: flex; }
+.ov-box { background: var(--panel); border: 1px solid var(--line); border-radius: 18px;
+  padding: 20px; width: 100%; max-width: 420px; text-align: center; max-height: 90vh; overflow-y: auto; }
+.ov-icon { font-size: 2.6rem; }
+.ov-box h2 { margin: 6px 0 8px; }
+.ov-msg { color: var(--muted); font-size: 0.9rem; line-height: 1.55; }
+.ov-msg b { color: var(--text); }
+#startBtn { width: 100%; margin-top: 12px; padding: 13px; font-size: 1.05rem; font-weight: 800;
+  background: linear-gradient(135deg, #2f6fed, #274bb8); color: #fff; border: none; border-radius: 12px; cursor: pointer; }
+#metaBtn { width: 100%; margin-top: 8px; padding: 10px; background: none; border: 1px solid var(--line);
+  border-radius: 10px; color: var(--text); cursor: pointer; }
+.best-line { color: var(--muted); font-size: 0.85rem; margin-top: 8px; }
+
+#toast { position: fixed; left: 50%; bottom: 84px; transform: translateX(-50%);
+  background: #182240; border: 1px solid var(--line); border-radius: 20px; color: var(--text);
+  padding: 7px 16px; font-size: 0.85rem; opacity: 0; transition: opacity 0.25s; pointer-events: none; z-index: 70; white-space: nowrap; }
+#toast.show { opacity: 1; }
