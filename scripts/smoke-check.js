@@ -567,6 +567,18 @@ function checkProductionArcadeAssetPolicy() {
   if (!towerPage.includes('sim.js') || !towerPage.includes('game.js')) {
     throw new Error('Tower Defense arcade page should load its own sim.js and game.js');
   }
+  // 마나핵 상점(.modal)은 시작/종료 화면(.overlay)보다 반드시 위에 떠야 한다.
+  // 상점을 여는 두 경로가 모두 오버레이 위이므로, 순서가 뒤집히면 상점이 아예 안 열린다
+  // (실플레이에서 발견 — 눌러도 오버레이 뒤에서 열렸다).
+  const tdCss = fs.readFileSync(path.join(root, 'public/arcade/tower-defense/style.css'), 'utf8');
+  const zOf = (sel) => {
+    const m = tdCss.match(new RegExp(`\\${sel}\\s*\\{[^}]*z-index:\\s*(\\d+)`));
+    return m ? Number(m[1]) : null;
+  };
+  const zModal = zOf('.modal'), zOverlay = zOf('.overlay');
+  if (!zModal || !zOverlay || zModal <= zOverlay) {
+    throw new Error(`Tower Defense .modal must stack above .overlay (found modal=${zModal}, overlay=${zOverlay}) — otherwise the mana-core shop opens behind the start/game-over screen`);
+  }
 
   const server = fs.readFileSync(path.join(root, 'server/index.js'), 'utf8');
   if (!server.includes("'/arcade/tower-defense/runtime'") || server.includes("app.use('/sandbox'")) {
