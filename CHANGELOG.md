@@ -37,6 +37,10 @@
 - Jackpot's map now actually branches. The first version averaged 1.66 onward options per floor and left 40% of floors with a single exit — a corridor with map art. Generation now hands out two onward nodes by default, three sometimes and one only occasionally, lifting the average to 1.86 with 19% single-option floors (11% once the forced convergence at the finish is excluded). Verified by real browser play, clicking the map nodes themselves: 2.02 average options per floor, no console errors, no fallback to the card list.
 - Card buttons in jackpot's symbol/route/relic modals and the map nodes carry `data-id` / `data-type`, so automated balance runs pick by identity instead of guessing from label text.
 
+### Fixed — 첨탑 대란's mana-core shop opened behind the overlay
+- The shop (`.modal`, z-index 50) stacked **below** the start/game-over screen (`.overlay`, z-index 60), and both buttons that open it live on that overlay — so tapping 🔮 마나핵 연구 opened the shop behind a 94%-opaque backdrop. The entire meta-progression loop was unreachable by a real player. Found by playing the merged build and screenshotting the shop. Modals now stack above overlays, and a smoke-check gate compares the two z-indexes (reverting the fix makes `npm run test:full` fail with the reason).
+- End-to-end verification of the loop after the fix: run 1 reached wave 18 → earned 🔮184 → bought 단조 화력 ×2 by clicking the real shop rows → reloaded (meta persisted from localStorage) → run 2 started at 피해 ×1.16 and reached **wave 20 (+2)**.
+
 ### Changed — 첨탑 대란 tension pass + UI overhaul
 - **Diagnosed the looseness with numbers first.** One grunt needed **36 seconds** to walk the path (tank 62s, boss 74s), wave 10 took **82 seconds even with 16 maxed towers**, and the build phase had **no clock at all** — the player could sit between waves forever. That is the whole complaint, measured.
 - **Enemies are ~1.75× faster** (grunt 36s → 21s completion, boss 74s → 39s) with a tighter spawn cadence, and tower damage was raised to compensate for the time-in-range that speed removes. Wave 10 now resolves in ~37s.
