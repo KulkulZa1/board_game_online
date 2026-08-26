@@ -140,8 +140,11 @@
   // 이미 가진 것/진화로 소모된 것은 제외. 저주는 확률적으로 섞인다.
   function draftOffers(run, count) {
     const n = count || (run.meta.upgrades.widedraft ? 4 : 3);
-    const owned = new Set(run.owned);
-    const avail = MUTATIONS.filter((m) => !owned.has(m.id));
+    // ⚠ owned 만으로 거르면 안 된다. grant() 가 진화 시 재료를 owned 에서 빼기 때문에
+    // 소모된 재료가 풀로 되돌아오고, 같은 진화를 무한히 재양산할 수 있다.
+    // (실측: 점수 중앙 123만 → 469만, 3.8배 인플레 / 진화 중앙 28회 — 진화는 총 5종뿐)
+    const seen = new Set([...run.owned, ...(run.consumed || [])]);
+    const avail = MUTATIONS.filter((m) => !seen.has(m.id));
     const rareBoost = (run.meta.upgrades.luckyblood || 0) * 0.10;
 
     const weightOf = (m) => {
@@ -178,6 +181,8 @@
     run.owned.push(id);
     const evo = evolutionFor(run.owned, id);
     if (evo) {
+      // 소모한 재료를 영구 기록 — 드래프트 풀로 되돌아오면 안 된다
+      run.consumed = (run.consumed || []).concat(evo.from);
       run.owned = run.owned.filter((x) => !evo.from.includes(x));
       run.owned.push(evo.id);
       run.evolved.push(evo.id);

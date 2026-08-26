@@ -547,7 +547,15 @@
       let curseUsed = false;
       for (const c of pool) {
         if (out.length >= this.draftSize) break;
-        if (c.kind === 'curse') { if (curseUsed) continue; curseUsed = true; }
+        if (c.kind === 'curse') {
+          if (curseUsed) continue;
+          // ⚠ 생명을 요구하는 저주는 '실제로 낼 수 있을 때만' 제시한다.
+          // pickDraft 의 Math.max(1, ...) 바닥값이 생명 1~3 일 때 대가를 0으로 만들어,
+          // 과부하 코어(피해 +35%)가 사실상 공짜가 됐다 — 1.35^n 이 적 체력 1.34^n 을
+          // 앞질러 무한 생존이 열렸다 (실측: 강제 선택 시 80/80 판이 웨이브 60 초과).
+          if (c.curse && c.curse.livesCap && this.lives + c.curse.livesCap < 1) continue;
+          curseUsed = true;
+        }
         out.push(c);
       }
       return out;
@@ -571,6 +579,8 @@
         if (c.curse.hpMult) this.curses.hpMult *= (1 + c.curse.hpMult);
         if (c.curse.speedMult) this.curses.speedMult *= (1 + c.curse.speedMult);
         if (c.curse.livesCap) this.lives = Math.max(1, this.lives + c.curse.livesCap);
+        // 바닥값 1 자체는 '고르자마자 즉사' 를 막으려고 있는 것이라 유지한다.
+        // 대신 _draftOffers 가 감당 못 할 저주를 아예 제시하지 않는다 — 아래 참고.
       }
       this.pendingDraft = null;
       return true;
