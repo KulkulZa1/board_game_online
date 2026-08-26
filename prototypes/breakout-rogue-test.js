@@ -170,5 +170,20 @@ console.log('\n[밸런스 시뮬레이션]');
   ok(a === b, '같은 시드는 같은 선택지 (결정적)');
 }
 
+console.log('\n[소모된 재료는 드래프트 풀로 돌아오지 않는다]');
+{
+  // 스네이크와 완전히 같은 버그가 여기에도 있었다 (실측: 레벨 중앙 76.5 → 291, 3.8배).
+  const fus = B.FUSIONS[0];
+  const run = B.createRun({ seed: 4242 });
+  fus.from.forEach((id) => B.grant(run, id));
+  ok(run.fused.includes(fus.id), '재료를 모두 얻으면 융합한다', fus.id);
+  ok(fus.from.every((f) => !run.owned.includes(f)), '융합이 재료를 소모한다');
+  const seen = new Set();
+  for (let i = 0; i < 500; i++) B.draftOffers(run, 3).forEach((o) => seen.add(o.id));
+  const returned = fus.from.filter((f) => seen.has(f));
+  ok(returned.length === 0, '500회 드래프트해도 소모된 재료가 다시 나오지 않는다', returned.join(',') || '-');
+  ok(!seen.has(fus.id), '이미 만든 융합체도 다시 제시되지 않는다');
+}
+
 console.log(`\n결과: ${pass}/${pass + fail} 통과`);
 process.exit(fail ? 1 : 0);

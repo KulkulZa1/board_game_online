@@ -311,5 +311,34 @@ console.log('\n[결정성]');
   ok(a.gold === b.gold && a.enemies.length === b.enemies.length, '같은 시드는 같은 판 (결정적)');
 }
 
+console.log('\n[저주의 대가는 진짜여야 한다]');
+{
+  // pickDraft 의 Math.max(1, ...) 바닥값이 생명이 적을 때 대가를 0으로 만들었다.
+  // 과부하 코어(피해 +35%, 생명 -3)가 사실상 공짜가 되면 1.35^n 이 적 체력 1.34^n 을
+  // 앞질러 무한 생존이 열린다 (실측: 강제 선택 시 80/80 판이 웨이브 60 초과).
+  const lifeCurse = TD.CURSES.find((c) => c.curse && c.curse.livesCap);
+  ok(!!lifeCurse, '생명을 요구하는 저주가 존재한다', lifeCurse && lifeCurse.id);
+
+  const offeredAt = (lives) => {
+    const run = new TD.Run(rng(77));
+    run.wave = 6; run.lives = lives;
+    let n = 0;
+    for (let i = 0; i < 400; i++) if (run._draftOffers().some((c) => c.id === lifeCurse.id)) n++;
+    return n;
+  };
+  ok(offeredAt(10) > 0, '생명이 넉넉하면 제시된다');
+  ok(offeredAt(2) === 0, '대가를 낼 수 없으면 아예 제시되지 않는다 (바닥값이 대가를 공짜로 만드는 구멍)',
+     `생명2 에서 ${offeredAt(2)}회`);
+
+  // 고르면 실제로 생명이 준다
+  const run = new TD.Run(rng(78));
+  run.wave = 6; run.lives = 10;
+  run.pendingDraft = [lifeCurse];
+  const before = run.lives;
+  run.pickDraft(lifeCurse.id);
+  ok(run.lives === before + lifeCurse.curse.livesCap, '고르면 생명이 실제로 줄어든다',
+     `${before} → ${run.lives}`);
+}
+
 console.log(`\n결과: ${pass}/${pass + fail} 통과`);
 process.exit(fail ? 1 : 0);

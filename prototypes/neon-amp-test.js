@@ -162,5 +162,39 @@ console.log('\n[시간 경제 — 라운드는 끝나야 한다]');
   ok(f.time <= 20.01, '피버 발동이 시간을 주지 않는다', `time=${f.time.toFixed(2)}`);
 }
 
+console.log('\n[라운드는 반드시 끝난다 — 증폭기를 다 껴도]');
+{
+  // 시간 오브 보너스가 증폭기와 함께 커지면 후반 수입이 소모와 균형을 이뤄 라운드가
+  // 영원히 안 끝난다. 실측: 예전 식(감쇠 밖 가산)에서 풀스택 25/25 라운드가 3000초
+  // 미종료(wave 1702 확인). 지금은 바닥값이 증폭기와 무관한 절대값이라 반드시 마른다.
+  const timeGain = (wave, amps) => {
+    const st = S.createState(1, amps);
+    st.wave = wave; st.time = 10; st.charges = 1; st.explosions = [];
+    st.orbs = [{ id: 'o', type: 'time', x: 100, y: 100, vx: 0, vy: 0, radius: 14, dead: false, phase: 0 }];
+    S.pulse(st, 100, 100);
+    for (let i = 0; i < 12 && st.orbs.length; i++) S.step(st, 0.05);
+    return st.time - 10;
+  };
+  const full = ['timecrystal', 'shockwave', 'timecrystal', 'shockwave'];
+  const early = timeGain(1, full), late = timeGain(40, full);
+  ok(early > late, '증폭기를 껴도 시간 오브 보상은 후반에 준다', `w1 +${early.toFixed(2)}초 → w40 +${late.toFixed(2)}초`);
+  ok(late <= 0.35, '후반 바닥값은 증폭기와 무관한 절대값이다', `+${late.toFixed(2)}초`);
+  ok(timeGain(40, []) <= 0.35 && Math.abs(timeGain(40, []) - late) < 0.05,
+     '무증폭과 풀스택의 후반 바닥이 같다 (배율이 바닥까지 키우면 안 된다)');
+
+  // 실제로 라운드가 끝나는가 — 스마트펄스를 계속 쓰는 숙련 플레이 근사
+  let unfinished = 0;
+  for (let seed = 1; seed <= 12; seed++) {
+    const st = S.createState(seed * 13, full);
+    let t = 0;
+    while (!st.ended && t < 1200) {
+      if (st.charges > 0) { const b = S.bestPulseTarget(st); S.pulse(st, b.x, b.y); }
+      S.step(st, 0.05); t += 0.05;
+    }
+    if (!st.ended) unfinished++;
+  }
+  ok(unfinished === 0, '풀스택 12판이 모두 끝난다 (무한 라운드 없음)', `미종료 ${unfinished}/12`);
+}
+
 console.log(`\n결과: ${pass}/${pass + fail} 통과`);
 process.exit(fail ? 1 : 0);

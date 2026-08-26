@@ -196,5 +196,25 @@ console.log('\n[밸런스 시뮬레이션]');
   ok(s1 === s2, '같은 시드는 같은 선택지 (결정적)');
 }
 
+console.log('\n[소모된 재료는 드래프트 풀로 돌아오지 않는다]');
+{
+  // grant() 가 진화 시 재료를 owned 에서 빼기 때문에, draftOffers 가 owned 만으로
+  // 거르면 재료가 풀로 복귀해 같은 진화를 무한 재양산할 수 있었다.
+  // 실측 영향: 점수 중앙 123만 → 469만 (3.8배 인플레), 진화 중앙 28회 (진화는 총 5종).
+  const evo = S.EVOLUTIONS[0];
+  const run = S.createRun({ seed: 4242 });
+  evo.from.forEach((id) => S.grant(run, id));
+  ok(run.evolved.includes(evo.id), '재료를 모두 얻으면 진화한다', evo.id);
+  ok(evo.from.every((f) => !run.owned.includes(f)), '진화가 재료를 소모한다');
+
+  const seen = new Set();
+  for (let i = 0; i < 500; i++) S.draftOffers(run, 3).forEach((o) => seen.add(o.id));
+  const returned = evo.from.filter((f) => seen.has(f));
+  ok(returned.length === 0, '500회 드래프트해도 소모된 재료가 다시 나오지 않는다', returned.join(',') || '-');
+
+  // 진화체 자체도 다시 제시되면 안 된다
+  ok(!seen.has(evo.id), '이미 만든 진화체도 다시 제시되지 않는다');
+}
+
 console.log(`\n결과: ${pass}/${pass + fail} 통과`);
 process.exit(fail ? 1 : 0);

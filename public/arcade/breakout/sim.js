@@ -128,8 +128,11 @@
   // ── 드래프트 ───────────────────────────────────────────────────
   function draftOffers(run, count) {
     const n = count || (run.meta.upgrades.widedraft ? 4 : 3);
-    const owned = new Set(run.owned);
-    const pool = GEAR.filter((g) => !owned.has(g.id));
+    // ⚠ 스네이크와 완전히 같은 버그가 여기에도 있었다 — grant() 가 융합 시 재료를
+    // owned 에서 빼므로, owned 만으로 거르면 재료가 풀로 복귀해 재farm 이 가능하다.
+    // (실측: 레벨 중앙 76.5 → 291, 3.8배 인플레)
+    const seen = new Set([...run.owned, ...(run.consumed || [])]);
+    const pool = GEAR.filter((g) => !seen.has(g.id));
     const rareBoost = (run.meta.upgrades.scavenger || 0) * 0.10;
     const weightOf = (g) => {
       if (g.kind === 'cursed') return 0.9;
@@ -162,6 +165,7 @@
     run.owned.push(id);
     const fus = fusionFor(run.owned, id);
     if (fus) {
+      run.consumed = (run.consumed || []).concat(fus.from);
       run.owned = run.owned.filter((x) => !fus.from.includes(x));
       run.owned.push(fus.id);
       run.fused.push(fus.id);
