@@ -586,6 +586,48 @@ function checkProductionArcadeAssetPolicy() {
   }
 }
 
+function checkNeonLadderCoverage() {
+  // NEON 은 원래 '지는 조건'이 없었다. 임계 사슬(할당량+환생)이 그 자리를 채운다 —
+  // 이게 빠지면 게임이 다시 끝없이 도는 상태로 돌아간다.
+  const sim = fs.readFileSync(path.join(root, 'public/arcade/neon-cascade/sim.js'), 'utf8');
+  for (const fn of ['quotaFor', 'settleRound', 'createRun', 'legacyMult', 'ROUNDS_PER_CYCLE']) {
+    if (!sim.includes(fn)) {
+      throw new Error(`NEON CASCADE sim.js must keep the threshold ladder (missing ${fn}) — without it the game has no loss condition`);
+    }
+  }
+  // 융합 재료가 선택지 풀로 돌아오면 같은 융합을 무한히 재양산한다 (스네이크/브레이크아웃과 같은 버그).
+  if (!/ampOffers\s*\([^)]*consumed/.test(sim)) {
+    throw new Error('NEON CASCADE ampOffers must filter by consumed materials, not just owned — otherwise fused amps can be re-farmed');
+  }
+  // 사슬이 증폭기 풀만큼 길면 마지막 라운드엔 모두가 같은 빌드라 결과가 운이 아니게 된다.
+  const NEON = require(path.join(root, 'public/arcade/neon-cascade/sim.js'));
+  if (!(NEON.ROUNDS_PER_CYCLE < NEON.AMPS.length)) {
+    throw new Error(`NEON ladder (${NEON.ROUNDS_PER_CYCLE}) must be shorter than the amp pool (${NEON.AMPS.length}) so builds still differ on the final round`);
+  }
+  // 결과 오버레이는 증폭기 오버레이/융합 배너보다 위에 떠야 한다 (TD .modal 과 같은 함정).
+  const css = fs.readFileSync(path.join(root, 'public/arcade/neon-cascade/style.css'), 'utf8');
+  const zOf = (sel) => {
+    const m = css.match(new RegExp(`${sel}\\s*\\{[^}]*z-index:\\s*(\\d+)`));
+    return m ? Number(m[1]) : null;
+  };
+  const zOverlay = zOf('#overlay'), zBanner = zOf('#ampBanner');
+  if (!zOverlay || !zBanner || zOverlay <= zBanner) {
+    throw new Error(`NEON #overlay must stack above #ampBanner (found overlay=${zOverlay}, banner=${zBanner}) — otherwise the amp banner covers the round result`);
+  }
+}
+
+function checkPortContract() {
+  // 이식 계약이 실제로 존재하고 테스트에 연결돼 있어야 한다 (docs/port-contract.md 참고).
+  for (const f of ['prototypes/golden/tower-defense.json', 'prototypes/golden/neon-cascade.json',
+                   'prototypes/golden-spec.js', 'prototypes/golden-run-test.js', 'scripts/record-golden-runs.js']) {
+    if (!fs.existsSync(path.join(root, f))) throw new Error(`Port contract file missing: ${f}`);
+  }
+  const runner = fs.readFileSync(path.join(root, 'scripts/run-game-flow-tests.js'), 'utf8');
+  if (!runner.includes('golden-run-test.js')) {
+    throw new Error('golden-run-test.js must be wired into run-game-flow-tests.js — an unrun contract is not a contract');
+  }
+}
+
 function checkFactoryArcadeCoverage() {
   const page = fs.readFileSync(path.join(root, 'public/arcade/factory/index.html'), 'utf8');
   const game = fs.readFileSync(path.join(root, 'public/arcade/factory/game.js'), 'utf8');
@@ -1746,6 +1788,8 @@ async function main() {
     checkPlantArcadeCoverage();
     checkQuickArcadeRewardCoverage();
     checkNeonCascadeCoverage();
+    checkNeonLadderCoverage();
+    checkPortContract();
     checkBootstrapArcadeCoverage();
     checkSandboxConfigBridgeRead();
     checkTowerDefenseSandboxCoverage();

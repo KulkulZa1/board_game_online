@@ -20,7 +20,8 @@ const runFor = (state, seconds, dt = 1 / 60) => { for (let t = 0; t < seconds; t
 console.log('\n[증폭기 기본]');
 {
   ok(Array.isArray(S.AMPS) && S.AMPS.length >= 10, `증폭기 ${S.AMPS.length}종 정의`);
-  ok(S.AMP_FUSIONS.length === 3, `융합 ${S.AMP_FUSIONS.length}종 정의`);
+  ok(S.AMPS.length >= 14, `증폭기 ${S.AMPS.length}종 — 사슬(${S.ROUNDS_PER_CYCLE}라운드)보다 길어야 마지막까지 빌드가 갈린다`);
+  ok(S.AMP_FUSIONS.length === 5, `융합 ${S.AMP_FUSIONS.length}종 정의`);
 
   const offers = S.ampOffers(rng(7), []);
   ok(offers.length === 3, '기본 선택지 3장');
@@ -115,18 +116,19 @@ console.log('\n[밸런스 시뮬레이션]');
 {
   const builds = new Map();
   let fusedRuns = 0, cursedPicks = 0, totalPicks = 0;
-  const RUNS = 200, PICKS = 4;   // 게임의 MAX_AMPS 와 같은 상한 (라운드마다 1장씩)
+  const RUNS = 200, PICKS = S.ROUNDS_PER_CYCLE;   // 사슬 한 순환에서 뽑는 장수 (라운드마다 1장)
   for (let seed = 1; seed <= RUNS; seed++) {
     const r = rng(seed * 7717);
-    let owned = [];
+    let owned = [], consumed = [];
     for (let i = 0; i < PICKS; i++) {
-      const offers = S.ampOffers(r, owned);
+      const offers = S.ampOffers(r, owned, 3, consumed);
       if (!offers.length) break;
       const pick = offers[Math.floor(r() * offers.length)];
       if (pick.kind === 'cursed') cursedPicks++;
       totalPicks++;
-      const res = S.grantAmp(owned, pick.id);
+      const res = S.grantAmp(owned, pick.id, consumed);
       owned = res.owned;
+      consumed = res.consumed;
       if (res.fused) fusedRuns++;
     }
     builds.set(owned.slice().sort().join('+'), true);
@@ -134,7 +136,7 @@ console.log('\n[밸런스 시뮬레이션]');
   console.log(`    고유 빌드 ${builds.size}/${RUNS}, 융합 발생 ${(fusedRuns / RUNS * 100).toFixed(0)}%, 저주 선택 ${(cursedPicks / totalPicks * 100).toFixed(0)}%`);
   ok(builds.size > RUNS * 0.3, '빌드가 갈라진다', `${builds.size}/${RUNS}`);
   ok(cursedPicks / totalPicks > 0.02 && cursedPicks / totalPicks < 0.35, '저주는 섞이되 흔하지 않다');
-  ok(fusedRuns / RUNS < 0.7, '상한(4장) 안에서 융합이 남발되지 않는다', (fusedRuns / RUNS * 100).toFixed(0) + '%');
+  ok(fusedRuns / RUNS < 2.2, '한 순환에서 융합이 남발되지 않는다', (fusedRuns / RUNS).toFixed(2) + '회/판');
 }
 
 console.log('\n[시간 경제 — 라운드는 끝나야 한다]');
@@ -194,6 +196,82 @@ console.log('\n[라운드는 반드시 끝난다 — 증폭기를 다 껴도]');
     if (!st.ended) unfinished++;
   }
   ok(unfinished === 0, '풀스택 12판이 모두 끝난다 (무한 라운드 없음)', `미종료 ${unfinished}/12`);
+}
+
+console.log('\n[재양산 — 융합 재료가 선택지로 돌아오면 안 된다]');
+{
+  // ⚠ 실제로 났던 버그: ampOffers 가 owned 만 보고 걸러서, 융합으로 소모된 재료가
+  //    풀로 돌아왔다. 드래프트가 4장으로 잠겨 있을 땐 안 보였지만 사슬에서 풀리면
+  //    같은 융합을 무한히 다시 만들어 증폭기가 중첩된다.
+  let owned = S.grantAmp([], 'widepulse').owned;
+  const res = S.grantAmp(owned, 'novacore', []);
+  ok(res.fused && res.fused.id === 'shockwave', '충격파 융합 성립');
+  ok(res.consumed.includes('widepulse') && res.consumed.includes('novacore'), '재료가 consumed 로 기록된다');
+  const again = S.ampOffers(() => 0.5, res.owned, 99, res.consumed).map((o) => o.id);
+  ok(!again.includes('widepulse') && !again.includes('novacore'), '소모된 재료는 다시 제시되지 않는다');
+
+  // 한 순환을 끝까지 돌려도 같은 융합이 두 번 생기지 않아야 한다
+  const run = S.createRun(4242);
+  const seen = [];
+  for (let i = 0; i < 20; i++) {
+    const offers = S.runOffers(run, 3);
+    if (!offers.length) break;
+    const fused = S.takeAmp(run, offers[0].id);
+    if (fused) seen.push(fused.id);
+  }
+  ok(seen.length === new Set(seen).size, '한 런에서 같은 융합이 두 번 생기지 않는다', seen.join(','));
+  ok(run.owned.length === new Set(run.owned).size, '보유 목록에 중복이 없다', run.owned.join(','));
+  ok(run.owned.length + run.consumed.length <= S.AMPS.length + S.AMP_FUSIONS.length, '풀보다 많이 뽑히지 않는다');
+}
+
+console.log('\n[임계 사슬 — 확률적 클리어와 환생]');
+{
+  ok(S.ROUNDS_PER_CYCLE < S.AMPS.length, '사슬이 증폭기 풀보다 짧다 (마지막 라운드도 빌드가 갈린다)',
+    `${S.ROUNDS_PER_CYCLE} < ${S.AMPS.length}`);
+
+  // 할당량은 라운드마다 오른다
+  let rising = true;
+  for (let r = 2; r <= S.ROUNDS_PER_CYCLE; r++) if (S.quotaFor(r, 0) <= S.quotaFor(r - 1, 0)) rising = false;
+  ok(rising, '할당량은 라운드마다 오른다');
+
+  // 실측 빌드 성장은 라운드당 ×1.27 — 할당량이 그보다 빨라야 언젠가 반드시 잡힌다
+  const step = S.quotaFor(2, 0) / S.quotaFor(1, 0);
+  ok(step > 1.27, '할당량 상승이 빌드 성장(실측 ×1.27)보다 가파르다', `×${step.toFixed(3)}`);
+
+  // 환생하면 곡선이 통째로 오르고, 유산보다 가파르다 = 끝이 없다
+  ok(S.quotaFor(1, 1) > S.quotaFor(1, 0), '환생하면 할당량이 오른다');
+  const quotaJump = S.quotaFor(1, 1) / S.quotaFor(1, 0);
+  const legacyJump = S.legacyMult(1) / S.legacyMult(0);
+  ok(quotaJump > legacyJump, '순환마다 순수 난이도가 오른다 (끝까지는 갈 수 없다)',
+    `할당량 ×${quotaJump.toFixed(2)} vs 유산 ×${legacyJump.toFixed(2)}`);
+
+  // 정산 상태 기계
+  const run = S.createRun(7);
+  ok(run.alive && run.round === 1 && run.prestige === 0, '런은 1라운드에서 시작한다');
+  ok(run.quota === S.quotaFor(1, 0), '시작 할당량이 곡선과 일치한다');
+
+  const miss = S.settleRound(S.createRun(8), 0);
+  ok(!miss.cleared && miss.gameOver, '할당량 미달이면 런이 끝난다');
+
+  // 8라운드를 모두 넘기면 환생
+  const win = S.createRun(9);
+  let reb = null;
+  for (let r = 1; r <= S.ROUNDS_PER_CYCLE; r++) {
+    S.takeAmp(win, (S.runOffers(win, 3)[0] || {}).id);
+    reb = S.settleRound(win, S.quotaFor(win.round, win.prestige) * 2);
+  }
+  ok(reb && reb.rebirth, '사슬 끝까지 가면 환생한다');
+  ok(win.prestige === 1 && win.round === 1, '환생 후 1라운드로 돌아간다');
+  ok(win.owned.length === 0 && win.consumed.length === 0, '환생하면 증폭기를 전부 잃는다');
+  ok(S.legacyMult(win.prestige) > 1, '대신 영구 배율이 남는다');
+  ok(win.alive, '환생은 런을 끝내지 않는다');
+
+  // 유산은 점수 배율로만 들어간다 (조작감을 건드리면 순환마다 게임이 달라진다)
+  const plain = S.createState(3, []);
+  const withLegacy = S.createState(3, [], S.legacyMult(2));
+  ok(withLegacy.amps.scoreMult > plain.amps.scoreMult, '유산은 점수 배율을 올린다');
+  ok(withLegacy.maxCharges === plain.maxCharges, '유산은 충전 수를 바꾸지 않는다');
+  ok(withLegacy.amps.pulseRadius === plain.amps.pulseRadius, '유산은 펄스 반경을 바꾸지 않는다');
 }
 
 console.log(`\n결과: ${pass}/${pass + fail} 통과`);

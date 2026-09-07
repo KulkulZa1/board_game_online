@@ -581,7 +581,7 @@ no `game-registry.js` entry. Each is reachable at `/arcade/<name>/`.
 | **factory** | `/arcade/factory/` | 산업의 시대 — spatial automation; production chains, era breakthroughs, stability gates. Verified by scripted real-browser play through era 3: a minimal miner→furnace→workshop→lab line clears era 1 in ~1:12 of game time, and each later era clears once its chain + power + one RP upgrade (the breakthrough's 개량 설비 condition) are in place — an era gate that won't advance despite the counter being full is almost always the missing upgrade or a starved 조립기 input. `?debug=1` exposes build/inspect/deposits for QA bots | `BELT_SPEED=2.2, DEPOSIT_MIN=600, ERA_STABILITY_SEC=5, GEN_FUEL_CAP=20` | `arcade_factory_save_v1`, `arcade_factory_high` |
 | **bootstrap** | `/arcade/bootstrap/` | 문명 키우기 — civilization clicker/idle; era actions charge a **Golden Age** that boosts production ×1.8 *and* the civilization's clocks (pop growth, writing, skill conversion ×1.5). The clocks part is load-bearing: production is never the bottleneck for a sane build order, so a production-only Golden Age measured out to exactly zero benefit (idle and clicky runs both won at t=842). Now clicking wins ~30% sooner (t=586) while the pure-idle path still wins — pinned by `bootstrap-loop-test.js`, which plays a full run with a scripted build order. Beware the measured first-gate trap: construction spends food, so "build more camps" while the gate wants a food *buffer* soft-locks era A forever — the gate advice steers away from it | `TICKS_PER_SEC=2` | `civ_save_v2`, `civ_best_v1`, `civ_muted` |
 | **jackpot** | `/arcade/jackpot/` | 월세 잭팟 — slot **roguelike**; spin to make rent, deck-build between rounds. Pick a **tenant** (6 starting archetypes, 4 unlockable) and an **ascension** (10 cumulative difficulty tiers, each unlocked by winning the one below). Routes are chosen on a **Slay-the-Spire-style map** generated up front. Every run pays 🏠 deeds, win or lose | `ROWS=3, COLS=4, BASE_SPINS_PER_RENT=4, DECK_CAP=30, EVENT_CHANCE=0.10`; `TENANTS(6), ASCENSIONS(10)` in `meta.js`; `NODE_TYPES(5)` in `map.js` | `arcade_jackpot_muted`, `jackpot_meta_v1` |
-| **neon-cascade** | `/arcade/neon-cascade/` | Chain-explosion arcade; timed rounds, limited charges. **Amplifiers** are drafted *before* each round (never mid-round — the clock is the game) and stack up to `MAX_AMPS=4` across consecutive rounds; 3 fusions | `ROUND_SECONDS=45, MAX_CHARGES=4, PULSE_RADIUS=118, RECHARGE_SECONDS=4.5`; `AMPS(10), AMP_FUSIONS(3)` in `sim.js`. **Time income must dry up as waves rise** — chain radius 72 (118 in fever), wave bonus → 0 by wave 8, decaying time orbs, no time from fever, 45s bank cap; with fixed bonuses a skilled round literally never ended (measured 300s+) | `neon_cascade_high_v1`, `neon_cascade_chain_v1`, `neon_cascade_mute_v1` |
+| **neon-cascade** | `/arcade/neon-cascade/` | Chain-explosion arcade on a **threshold ladder** (임계 사슬): each round has a score **quota**; miss it and the run ends — this is the game's only loss condition. Clearing all `ROUNDS_PER_CYCLE=8` triggers **rebirth** (환생): all amps are lost, the run restarts at round 1 with a permanent score multiplier, and the quota curve rises by more than the legacy reward, so the ladder has no end. Amplifiers are drafted *before* each round (never mid-round — the clock is the game) and are no longer capped | `ROUND_SECONDS=45, MAX_CHARGES=4, PULSE_RADIUS=118, RECHARGE_SECONDS=4.5`; `AMPS(14), AMP_FUSIONS(5)`; ladder `QUOTA_BASE=1_500_000, QUOTA_STEP=1.46, PRESTIGE_STEP=1.58, LEGACY_STEP=1.45`. **The pool must stay longer than the ladder** — with 10 amps everyone converged on the same build by pick 10 (measured p90/p10 collapse 2.6 → 1.28) and the last round stopped being luck. **Time income must dry up as waves rise** — chain radius 72 (118 in fever), wave bonus → 0 by wave 5, decaying time orbs, no time from fever, 45s bank cap; with fixed bonuses a skilled round literally never ended (measured 300s+). **`ampOffers` must filter by `consumed`, not just `owned`** — fusion removes materials from `owned`, so filtering on `owned` alone re-offers them and the same fusion can be farmed forever | `neon_cascade_high_v1`, `neon_cascade_chain_v1`, `neon_cascade_depth_v1`, `neon_cascade_mute_v1` |
 
 **Jackpot's route map** (`map.js`) is generated once at run start — `winStage + 1` floors,
 2–4 lanes per floor, a single start and a single finish so every path converges. Edges only
@@ -638,6 +638,23 @@ Measured: effectively unreachable in a normal run (0% over 400 runs, which end n
 35), and reachable around spin 63–129 by a bot deliberately hunting the parts in endless
 mode. That is the intent — a build for people who are already past winning.
 
+### Port contract — `sim.js` as an engine-neutral spec
+
+`tower-defense` and `neon-cascade` are pinned by **golden runs** so their rules can be ported to
+another engine (Godot/GDScript) without the two copies silently drifting. Two tiers, because
+floating-point results cannot be matched bit-for-bit across engines:
+
+| Tier | Contents | Compared |
+|---|---|---|
+| **A — determinism** | digest of the event stream, final score/wave | within JS only (catches accidental nondeterminism) |
+| **B — port equivalence** | uint32 RNG sequences, wave tables, quota integers, draft card-id order, cost tables | **must match across engines** |
+
+- contract files: `prototypes/golden/<game>.json`
+- verify: `node prototypes/golden-run-test.js` (runs inside `npm run test:games`)
+- re-record after an *intentional* rule change: `node scripts/record-golden-runs.js`
+- traps (arithmetic vs logical shift in the two xorshifts, `Object.entries` ordering, negative
+  integer division): see **`docs/port-contract.md`**
+
 Several arcade games ship a headless `sim.js` (`bootstrap`, `jackpot`, `neon-cascade`,
 `snake`, `breakout`, `plant`) so their economy can be balanced from Node. Jackpot adds a
 second pure module, `meta.js`, holding the run-to-run layer (tenants, ascension, unlocks);
@@ -674,9 +691,30 @@ default, curses stay a minority of picks).
 >
 > Neon-cascade is the instructive one: it is a 45-second round, so a mid-round draft would
 > eat the very clock the game is about. It drafts **only before the round**, and the build
-> instead accumulates across consecutive rounds (capped at `MAX_AMPS`) — that accumulation
-> *is* its "one more run" hook. When adding a layer to another arcade game, find that game's
-> own pause first; don't paste one of these in.
+> accumulates across consecutive rounds — that accumulation *is* its "one more run" hook.
+> When adding a layer to another arcade game, find that game's own pause first; don't paste
+> one of these in.
+>
+> **Neon-cascade also carries the fourth pillar: a run has to be able to lose.** It shipped
+> without any loss condition — rounds repeated forever and the build was capped at four
+> amps, so a good player and a bad one arrived at the same place. The **threshold ladder**
+> replaced the cap with failure: a per-round quota that rises faster (×1.46) than the build
+> does (measured ×1.27/round), so it always catches up eventually — but *when* it catches
+> up is decided by draft luck, whose spread is 2.5–4× at any given round count. That is the
+> point, and it is the design rule worth carrying to other games:
+>
+> > **확률감은 승률의 이항성이 아니라 경로의 분산에서 온다.**
+> > A game can clear 32% of the time and still feel scripted if it always dies in the same
+> > place. Measured here: deaths spread across all 8 rounds, sd 1.73 (skilled bot), cycle-1
+> > clear 22–24%, three rebirths 0.7%, five rebirths 0.0%.
+>
+> Two traps this surfaced, both worth checking in any ladder-shaped game:
+> 1. **The draft pool must be longer than the ladder.** With 10 amps and 10 rounds, everyone
+>    held the identical build by the last round (p90/p10 collapsed 2.6 → 1.28) and the
+>    finale stopped being probabilistic. The pool is now 14 against an 8-round ladder.
+> 2. **The rebirth reward must be smaller than the rebirth penalty.** Legacy pays ×1.45
+>    while the quota curve jumps ×1.58, so each cycle is ~9% harder in net terms. If the
+>    reward wins, "환생" becomes an infinite ramp instead of a ceiling you can see.
 >
 > **Plant is the counter-example worth reading.** It is an idle clicker, which already has
 > its own dopamine model (exponential growth), so bolting a draft onto it would fight the
