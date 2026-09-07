@@ -1,0 +1,862 @@
+{
+  "game": "neon-cascade",
+  "specVersion": 1,
+  "tierB": {
+    "rng": [
+      {
+        "seed": 1,
+        "ints": [
+          270369,
+          67634689,
+          2647435461,
+          307599695,
+          2398689233,
+          745495504,
+          632435482,
+          435756210,
+          2005365029,
+          2916098932,
+          2657092299,
+          1495045943,
+          3031976842,
+          82049198,
+          87470069,
+          3385103793
+        ]
+      },
+      {
+        "seed": 20260907,
+        "ints": [
+          573791315,
+          2124024175,
+          3377012788,
+          1152713971,
+          1632225830,
+          1504305696,
+          3629632022,
+          62277916,
+          2552243862,
+          44545295,
+          1958989452,
+          2941995173,
+          264174530,
+          3357321089,
+          3245971223,
+          2163922330
+        ]
+      },
+      {
+        "seed": 777,
+        "ints": [
+          205866009,
+          1006696762,
+          1204993417,
+          470885048,
+          813821435,
+          2867849188,
+          2491076941,
+          70376164,
+          3536187154,
+          2345961633,
+          1121197537,
+          3965974517,
+          3242117595,
+          414260985,
+          1454000782,
+          3767216915
+        ]
+      }
+    ],
+    "ladder": {
+      "roundsPerCycle": 8,
+      "quota": [
+        {
+          "prestige": 0,
+          "rounds": [
+            1500000,
+            2190000,
+            3197400,
+            4668204,
+            6815578,
+            9950744,
+            14528086,
+            21211005
+          ]
+        },
+        {
+          "prestige": 1,
+          "rounds": [
+            2370000,
+            3460200,
+            5051892,
+            7375762,
+            10768613,
+            15722175,
+            22954375,
+            33513388
+          ]
+        },
+        {
+          "prestige": 2,
+          "rounds": [
+            3744600,
+            5467116,
+            7981989,
+            11653704,
+            17014409,
+            24841036,
+            36267913,
+            52951153
+          ]
+        }
+      ],
+      "legacy": [
+        {
+          "prestige": 0,
+          "mult": 1
+        },
+        {
+          "prestige": 1,
+          "mult": 1.45
+        },
+        {
+          "prestige": 2,
+          "mult": 2.1025
+        },
+        {
+          "prestige": 3,
+          "mult": 3.048625
+        }
+      ]
+    },
+    "amps": [
+      {
+        "id": "overcharge",
+        "kind": "common",
+        "mods": {
+          "startCharges": 2,
+          "maxCharges": 1
+        }
+      },
+      {
+        "id": "widepulse",
+        "kind": "common",
+        "mods": {
+          "pulseRadius": 0.18
+        }
+      },
+      {
+        "id": "goldbias",
+        "kind": "common",
+        "mods": {
+          "goldWeight": 14
+        }
+      },
+      {
+        "id": "fastcharge",
+        "kind": "common",
+        "mods": {
+          "rechargeMult": -0.25
+        }
+      },
+      {
+        "id": "timecrystal",
+        "kind": "common",
+        "mods": {
+          "timeBonus": 1.5
+        }
+      },
+      {
+        "id": "novacore",
+        "kind": "rare",
+        "mods": {
+          "novaRadius": 0.35
+        }
+      },
+      {
+        "id": "chainamp",
+        "kind": "rare",
+        "mods": {
+          "chainStep": 0.3
+        }
+      },
+      {
+        "id": "overload",
+        "kind": "rare",
+        "mods": {
+          "feverBonus": 3.6
+        }
+      },
+      {
+        "id": "unstable",
+        "kind": "cursed",
+        "mods": {
+          "scoreMult": 1,
+          "maxCharges": -1
+        }
+      },
+      {
+        "id": "compressed",
+        "kind": "cursed",
+        "mods": {
+          "scoreMult": 0.7,
+          "roundTime": -6
+        }
+      },
+      {
+        "id": "prism",
+        "kind": "common",
+        "mods": {
+          "chainDiv": -1
+        }
+      },
+      {
+        "id": "flux",
+        "kind": "common",
+        "mods": {
+          "orbSpeed": -0.25
+        }
+      },
+      {
+        "id": "bloom",
+        "kind": "rare",
+        "mods": {
+          "orbRadius": 0.4
+        }
+      },
+      {
+        "id": "greed",
+        "kind": "cursed",
+        "mods": {
+          "goldScore": 2,
+          "coreScore": -0.45
+        }
+      }
+    ],
+    "fusions": [
+      {
+        "id": "shockwave",
+        "from": [
+          "widepulse",
+          "novacore"
+        ],
+        "mods": {
+          "pulseRadius": 0.3,
+          "novaRadius": 0.6
+        }
+      },
+      {
+        "id": "perpetual",
+        "from": [
+          "overcharge",
+          "fastcharge"
+        ],
+        "mods": {
+          "startCharges": 2,
+          "maxCharges": 1,
+          "rechargeMult": -0.45
+        }
+      },
+      {
+        "id": "collapse",
+        "from": [
+          "unstable",
+          "compressed"
+        ],
+        "mods": {
+          "scoreMult": 2.5,
+          "maxCharges": -1,
+          "roundTime": -6
+        }
+      },
+      {
+        "id": "kaleido",
+        "from": [
+          "prism",
+          "chainamp"
+        ],
+        "mods": {
+          "chainDiv": -1,
+          "chainStep": 0.3
+        }
+      },
+      {
+        "id": "stormfront",
+        "from": [
+          "flux",
+          "bloom"
+        ],
+        "mods": {
+          "orbSpeed": -0.4,
+          "orbRadius": 0.8
+        }
+      }
+    ],
+    "offers": [
+      {
+        "seed": 11,
+        "picks": [
+          {
+            "shown": [
+              "overcharge",
+              "goldbias",
+              "widepulse"
+            ],
+            "took": "overcharge"
+          },
+          {
+            "shown": [
+              "greed",
+              "timecrystal",
+              "fastcharge"
+            ],
+            "took": "greed"
+          },
+          {
+            "shown": [
+              "goldbias",
+              "unstable",
+              "bloom"
+            ],
+            "took": "goldbias"
+          },
+          {
+            "shown": [
+              "overload",
+              "flux",
+              "compressed"
+            ],
+            "took": "overload"
+          },
+          {
+            "shown": [
+              "novacore",
+              "timecrystal",
+              "bloom"
+            ],
+            "took": "novacore"
+          },
+          {
+            "shown": [
+              "flux",
+              "prism",
+              "widepulse"
+            ],
+            "took": "flux"
+          },
+          {
+            "shown": [
+              "chainamp",
+              "widepulse",
+              "fastcharge"
+            ],
+            "took": "chainamp"
+          },
+          {
+            "shown": [
+              "timecrystal",
+              "fastcharge",
+              "bloom"
+            ],
+            "took": "timecrystal"
+          }
+        ],
+        "owned": [
+          "overcharge",
+          "greed",
+          "goldbias",
+          "overload",
+          "novacore",
+          "flux",
+          "chainamp",
+          "timecrystal"
+        ],
+        "consumed": []
+      },
+      {
+        "seed": 20260907,
+        "picks": [
+          {
+            "shown": [
+              "widepulse",
+              "novacore",
+              "flux"
+            ],
+            "took": "widepulse"
+          },
+          {
+            "shown": [
+              "fastcharge",
+              "novacore",
+              "timecrystal"
+            ],
+            "took": "fastcharge"
+          },
+          {
+            "shown": [
+              "flux",
+              "overcharge",
+              "overload"
+            ],
+            "took": "flux"
+          },
+          {
+            "shown": [
+              "overcharge",
+              "chainamp",
+              "prism"
+            ],
+            "took": "overcharge"
+          },
+          {
+            "shown": [
+              "goldbias",
+              "prism",
+              "compressed"
+            ],
+            "took": "goldbias"
+          },
+          {
+            "shown": [
+              "overload",
+              "compressed",
+              "prism"
+            ],
+            "took": "overload"
+          },
+          {
+            "shown": [
+              "timecrystal",
+              "prism",
+              "unstable"
+            ],
+            "took": "timecrystal"
+          },
+          {
+            "shown": [
+              "compressed",
+              "bloom",
+              "prism"
+            ],
+            "took": "compressed"
+          }
+        ],
+        "owned": [
+          "widepulse",
+          "flux",
+          "perpetual",
+          "goldbias",
+          "overload",
+          "timecrystal",
+          "compressed"
+        ],
+        "consumed": [
+          "overcharge",
+          "fastcharge"
+        ]
+      },
+      {
+        "seed": 4242,
+        "picks": [
+          {
+            "shown": [
+              "goldbias",
+              "flux",
+              "prism"
+            ],
+            "took": "goldbias"
+          },
+          {
+            "shown": [
+              "fastcharge",
+              "overcharge",
+              "timecrystal"
+            ],
+            "took": "fastcharge"
+          },
+          {
+            "shown": [
+              "prism",
+              "timecrystal",
+              "greed"
+            ],
+            "took": "prism"
+          },
+          {
+            "shown": [
+              "overcharge",
+              "flux",
+              "bloom"
+            ],
+            "took": "overcharge"
+          },
+          {
+            "shown": [
+              "overload",
+              "bloom",
+              "timecrystal"
+            ],
+            "took": "overload"
+          },
+          {
+            "shown": [
+              "timecrystal",
+              "flux",
+              "bloom"
+            ],
+            "took": "timecrystal"
+          },
+          {
+            "shown": [
+              "chainamp",
+              "greed",
+              "widepulse"
+            ],
+            "took": "chainamp"
+          },
+          {
+            "shown": [
+              "widepulse",
+              "novacore",
+              "bloom"
+            ],
+            "took": "widepulse"
+          }
+        ],
+        "owned": [
+          "goldbias",
+          "perpetual",
+          "overload",
+          "timecrystal",
+          "kaleido",
+          "widepulse"
+        ],
+        "consumed": [
+          "overcharge",
+          "fastcharge",
+          "prism",
+          "chainamp"
+        ]
+      }
+    ],
+    "waves": [
+      {
+        "seed": 7,
+        "waves": [
+          {
+            "wave": 1,
+            "target": 12,
+            "count": 19,
+            "types": [
+              "core",
+              "core",
+              "core",
+              "core",
+              "core",
+              "core",
+              "time",
+              "gold",
+              "core",
+              "nova",
+              "nova",
+              "core",
+              "core",
+              "core",
+              "core",
+              "core",
+              "core",
+              "time",
+              "gold"
+            ]
+          },
+          {
+            "wave": 2,
+            "target": 15,
+            "count": 24,
+            "types": [
+              "core",
+              "core",
+              "core",
+              "core",
+              "nova",
+              "gold",
+              "gold",
+              "nova",
+              "core",
+              "core",
+              "core",
+              "core",
+              "core",
+              "core",
+              "core",
+              "core",
+              "gold",
+              "gold",
+              "core",
+              "core",
+              "core",
+              "gold",
+              "core",
+              "nova"
+            ]
+          },
+          {
+            "wave": 3,
+            "target": 18,
+            "count": 29,
+            "types": [
+              "core",
+              "nova",
+              "gold",
+              "core",
+              "core",
+              "gold",
+              "gold",
+              "core",
+              "nova",
+              "core",
+              "core",
+              "core",
+              "core",
+              "core",
+              "time",
+              "nova",
+              "time",
+              "nova",
+              "core",
+              "nova",
+              "core",
+              "core",
+              "core",
+              "nova",
+              "nova",
+              "core",
+              "core",
+              "gold",
+              "gold"
+            ]
+          },
+          {
+            "wave": 4,
+            "target": 21,
+            "count": 34,
+            "types": [
+              "core",
+              "core",
+              "core",
+              "core",
+              "gold",
+              "core",
+              "core",
+              "core",
+              "core",
+              "gold",
+              "time",
+              "core",
+              "core",
+              "core",
+              "gold",
+              "nova",
+              "core",
+              "gold",
+              "core",
+              "core",
+              "core",
+              "time",
+              "core",
+              "core",
+              "core",
+              "core",
+              "time",
+              "core",
+              "core",
+              "time",
+              "time",
+              "core",
+              "core",
+              "nova"
+            ]
+          }
+        ]
+      },
+      {
+        "seed": 20260907,
+        "waves": [
+          {
+            "wave": 1,
+            "target": 12,
+            "count": 19,
+            "types": [
+              "core",
+              "nova",
+              "core",
+              "core",
+              "time",
+              "core",
+              "core",
+              "nova",
+              "core",
+              "gold",
+              "core",
+              "core",
+              "time",
+              "core",
+              "core",
+              "core",
+              "core",
+              "core",
+              "core"
+            ]
+          },
+          {
+            "wave": 2,
+            "target": 15,
+            "count": 24,
+            "types": [
+              "gold",
+              "core",
+              "core",
+              "time",
+              "core",
+              "core",
+              "core",
+              "core",
+              "core",
+              "nova",
+              "time",
+              "core",
+              "gold",
+              "nova",
+              "core",
+              "core",
+              "nova",
+              "core",
+              "core",
+              "time",
+              "core",
+              "time",
+              "core",
+              "nova"
+            ]
+          },
+          {
+            "wave": 3,
+            "target": 18,
+            "count": 29,
+            "types": [
+              "core",
+              "core",
+              "core",
+              "gold",
+              "core",
+              "core",
+              "core",
+              "nova",
+              "core",
+              "core",
+              "nova",
+              "gold",
+              "core",
+              "time",
+              "core",
+              "nova",
+              "core",
+              "core",
+              "time",
+              "core",
+              "time",
+              "core",
+              "core",
+              "core",
+              "time",
+              "nova",
+              "core",
+              "core",
+              "core"
+            ]
+          },
+          {
+            "wave": 4,
+            "target": 21,
+            "count": 34,
+            "types": [
+              "core",
+              "gold",
+              "time",
+              "nova",
+              "time",
+              "core",
+              "core",
+              "gold",
+              "core",
+              "core",
+              "gold",
+              "time",
+              "gold",
+              "nova",
+              "nova",
+              "core",
+              "core",
+              "gold",
+              "core",
+              "nova",
+              "core",
+              "nova",
+              "core",
+              "gold",
+              "core",
+              "time",
+              "core",
+              "core",
+              "core",
+              "core",
+              "time",
+              "core",
+              "time",
+              "core"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "tierA": [
+    {
+      "seed": 7,
+      "amps": [],
+      "legacy": 1,
+      "score": 2134250,
+      "wave": 21,
+      "bestChain": 52,
+      "secs": 79.1,
+      "digest": "076cf537e14bd5da51f1da9ad08e7a01"
+    },
+    {
+      "seed": 20260907,
+      "amps": [
+        "overcharge",
+        "widepulse"
+      ],
+      "legacy": 1,
+      "score": 2621475,
+      "wave": 25,
+      "bestChain": 52,
+      "secs": 88.133,
+      "digest": "43940d6fb71f836721aea0a447a1b9ce"
+    },
+    {
+      "seed": 4242,
+      "amps": [
+        "prism",
+        "bloom",
+        "greed"
+      ],
+      "legacy": 2.1025,
+      "score": 21533447,
+      "wave": 48,
+      "bestChain": 52,
+      "secs": 112.7,
+      "digest": "228e5253f695da856a7ff8211c920591"
+    }
+  ]
+}

@@ -16,17 +16,15 @@
   const ampTray = document.getElementById('ampTray');
   const ampBanner = document.getElementById('ampBanner');
 
-  // 증폭기는 라운드를 이어갈수록 쌓인다 — 이게 "한 판 더" 의 이유가 된다.
-  // 다만 무한히 쌓이면 전부 갖게 되어 고르는 의미가 사라지므로 상한을 둔다.
-  // (페이지를 새로 열면 빌드는 처음부터 다시 짠다)
-  const MAX_AMPS = 4;
-  let ownedAmps = [];
-  let ampRng = (() => { let s = (Date.now() ^ 0x9e3779b9) >>> 0;
-    return () => { s ^= s << 13; s >>>= 0; s ^= s >> 17; s ^= s << 5; s >>>= 0; return s / 4294967296; }; })();
+  // 증폭기 상한(4장)은 사라졌다. 이제 빌드를 멈추는 건 상한이 아니라 '사슬'이다 —
+  // 라운드마다 할당량이 있고 못 채우면 끝난다. 상한이 아니라 실패가 빌드를 끝낸다.
+  let run = null;
+
+  function ownedList() { return run ? run.owned : []; }
 
   function renderAmpTray() {
     if (!ampTray) return;
-    ampTray.innerHTML = ownedAmps.map((id) => {
+    ampTray.innerHTML = ownedList().map((id) => {
       const d = Sim.ampDef(id);
       if (!d) return '';
       const fused = Sim.AMP_FUSIONS.some((f) => f.id === id);
@@ -44,12 +42,15 @@
 
   // 라운드 전에 증폭기를 고르게 한 뒤 시작한다
   function openAmpDraft(onDone) {
-    if (ownedAmps.length >= MAX_AMPS) { onDone(); return; }
-    const offers = Sim.ampOffers(ampRng, ownedAmps);
+    const offers = Sim.runOffers(run, 3);
     if (!offers.length) { onDone(); return; }
-    ampSub.textContent = ownedAmps.length
-      ? `보유 ${ownedAmps.length}/${MAX_AMPS} — 하나를 더 고르세요`
+    ampSub.textContent = run.owned.length
+      ? `보유 ${run.owned.length}장 — 하나를 더 고르세요`
       : '하나를 골라 이번 라운드를 시작합니다';
+    if (ampQuota) {
+      ampQuota.innerHTML = `라운드 ${run.round} 할당량 <b>${formatScore(run.quota)}</b>` +
+        (run.prestige ? ` · 유산 ×${Sim.legacyMult(run.prestige).toFixed(2)}` : '');
+    }
     ampCards.innerHTML = offers.map((o, i) => `
       <button class="amp-card ${o.kind}" data-i="${i}">
         <span class="ac-icon">${o.icon}</span>
@@ -65,11 +66,10 @@
       const btn = e.target.closest('.amp-card');
       if (!btn) return;
       if (e.detail !== 0 && performance.now() < armed) return;
-      const res = Sim.grantAmp(ownedAmps, offers[+btn.dataset.i].id);
-      ownedAmps = res.owned;
+      const fused = Sim.takeAmp(run, offers[+btn.dataset.i].id);
       ampOverlay.classList.remove('visible');
       renderAmpTray();
-      if (res.fused) showAmpBanner(res.fused);
+      if (fused) showAmpBanner(fused);
       onDone();
     };
   }
@@ -85,8 +85,15 @@
   const chainBanner = document.getElementById('chainBanner');
   const toast = document.getElementById('toast');
   const smartPulseBtn = document.getElementById('smartPulseBtn');
+  const roundEl = document.getElementById('roundDisplay');
+  const cycleEl = document.getElementById('cycleDisplay');
+  const quotaEl = document.getElementById('quotaDisplay');
+  const quotaFill = document.getElementById('quotaFill');
+  const ampQuota = document.getElementById('ampQuota');
+  const runStats = document.getElementById('runStats');
   const muteBtn = document.getElementById('muteBtn');
 
+  const DEPTH_KEY = 'neon_cascade_depth_v1';
   const HIGH_KEY = 'neon_cascade_high_v1';
   const CHAIN_KEY = 'neon_cascade_chain_v1';
   const MUTE_KEY = 'neon_cascade_mute_v1';
@@ -101,6 +108,7 @@
   let toastUntil = 0;
   let highScore = readNumber(HIGH_KEY);
   let recordChain = readNumber(CHAIN_KEY);
+  let bestDepth = readNumber(DEPTH_KEY);
   let muted = readNumber(MUTE_KEY) === 1;
   let audioContext = null;
 
@@ -128,11 +136,30 @@
   }
 
   function startGame() {
+    run = Sim.createRun((Date.now() ^ 0x9e3779b9) | 0);
+    renderAmpTray();
+    renderLadder();
     openAmpDraft(beginRound);
   }
 
+  // 이어가기 — 라운드를 넘겼을 때. 런은 유지하고 드래프트부터 다시.
+  function nextRound() {
+    renderLadder();
+    overlay.classList.remove('visible');
+    openAmpDraft(beginRound);
+  }
+
+  function renderLadder() {
+    if (!run || !roundEl) return;
+    roundEl.textContent = `라운드 ${run.round} / ${Sim.ROUNDS_PER_CYCLE}`;
+    if (cycleEl) {
+      cycleEl.textContent = `환생 ${run.prestige}`;
+      cycleEl.classList.toggle('hidden', run.prestige === 0);
+    }
+  }
+
   function beginRound() {
-    state = Sim.createState(Date.now(), ownedAmps);
+    state = Sim.createState((Date.now() ^ run.seed) | 0, run.owned, Sim.legacyMult(run.prestige));
     particles = [];
     floaters = [];
     shake = 0;
@@ -263,6 +290,24 @@
     smartPulseBtn.disabled = state.charges <= 0;
     if (timestamp && state.time < 8) timeEl.style.color = Math.floor(timestamp / 250) % 2 ? '#ff5d8f' : '#ffd166';
     else timeEl.style.color = '';
+    renderQuota(timestamp);
+  }
+
+  // 할당량 게이지 — 이 게임에서 유일하게 '지는' 곳이라, 남은 시간과 함께
+  // 가장 크게 보여야 한다. 못 채운 채 시간이 줄면 붉게 뛴다.
+  function renderQuota(timestamp) {
+    if (!run || !quotaFill) return;
+    const pct = Math.min(100, state.score / run.quota * 100);
+    const met = state.score >= run.quota;
+    quotaFill.style.width = `${pct}%`;
+    quotaFill.classList.toggle('met', met);
+    if (quotaEl) quotaEl.textContent = `${formatScore(state.score)} / ${formatScore(run.quota)}`;
+    const danger = !met && state.time < 12;
+    quotaFill.classList.toggle('danger', danger);
+    if (quotaEl) {
+      quotaEl.classList.toggle('met', met);
+      quotaEl.classList.toggle('danger', danger && !!timestamp && Math.floor(timestamp / 220) % 2 === 0);
+    }
   }
 
   function draw(timestamp) {
@@ -393,9 +438,13 @@
     toastUntil = performance.now() + 1500;
   }
 
+  // 라운드가 끝났다 = 시간이 다 됐다. 여기서 할당량을 정산한다.
+  // 넘겼으면 다음 라운드, 8라운드를 넘겼으면 환생, 못 채웠으면 런 종료.
   function finishGame() {
     running = false;
     cancelAnimationFrame(animationId);
+    smartPulseBtn.disabled = true;
+
     if (state.score > highScore) {
       highScore = state.score;
       saveNumber(HIGH_KEY, highScore);
@@ -405,14 +454,53 @@
       recordChain = state.bestChain;
       saveNumber(CHAIN_KEY, recordChain);
     }
-    overlayIcon.textContent = state.score >= highScore && state.score > 0 ? '🏆' : '⚛';
-    overlayTitle.textContent = `WAVE ${state.wave} 종료`;
-    overlayMsg.textContent = `점수 ${formatScore(state.score)} · 최고 연쇄 ×${state.bestChain} · 기록 연쇄 ×${recordChain}`;
-    startBtn.textContent = '다시 점화';
+
+    const res = Sim.settleRound(run, state.score);
+    const depth = res.prestige * Sim.ROUNDS_PER_CYCLE + res.round;
+    if (depth > bestDepth) { bestDepth = depth; saveNumber(DEPTH_KEY, bestDepth); }
+    renderLadder();
+    renderQuota(0);
+
+    const line = `${formatScore(res.score)} / ${formatScore(res.quota)}`;
+    const legend = document.getElementById('legend');
+    if (legend) legend.classList.add('hidden');
+    if (runStats) {
+      runStats.classList.remove('hidden');
+      runStats.innerHTML =
+        `<span><b>${line}</b><small>할당량</small></span>` +
+        `<span><b>×${state.bestChain}</b><small>최고 연쇄</small></span>` +
+        `<span><b>${run.owned.length}장</b><small>증폭기</small></span>` +
+        `<span><b>${depth}</b><small>도달 (최고 ${bestDepth})</small></span>`;
+    }
+
+    if (res.rebirth) {
+      // 환생 — 여기까지 온 건 드문 일이다. 잃는 것과 얻는 것을 분명히 보여준다.
+      overlayIcon.textContent = '♾️';
+      overlayTitle.textContent = `환생 ${res.prestige}`;
+      overlayMsg.innerHTML = `사슬 ${Sim.ROUNDS_PER_CYCLE}라운드를 모두 넘겼습니다. ` +
+        `증폭기 <b>전부</b>를 내려놓고 처음으로 돌아가되, 영구 배율 <b>×${Sim.legacyMult(res.prestige).toFixed(2)}</b>를 얻습니다. ` +
+        `다음 순환의 할당량은 <b>×${Sim.PRESTIGE_STEP}</b> — 유산보다 가파릅니다.`;
+      startBtn.textContent = '♾️ 환생하기';
+      startBtn.dataset.act = 'next';
+      renderAmpTray();
+      Sound.end();
+    } else if (res.cleared) {
+      overlayIcon.textContent = '✅';
+      overlayTitle.textContent = `라운드 ${res.round} 통과`;
+      overlayMsg.innerHTML = `할당량 <b>${line}</b> — 다음 라운드 할당량은 <b>${formatScore(run.quota)}</b>입니다.`;
+      startBtn.textContent = '▶ 다음 라운드';
+      startBtn.dataset.act = 'next';
+      Sound.end();
+    } else {
+      overlayIcon.textContent = '💀';
+      overlayTitle.textContent = `라운드 ${res.round} 실패`;
+      overlayMsg.innerHTML = `할당량 <b>${line}</b> — ${formatScore(res.quota - res.score)} 모자랍니다.`;
+      startBtn.textContent = '다시 점화';
+      startBtn.dataset.act = 'restart';
+      Sound.end();
+      if (window.AdMobHelper && state.score > 0) AdMobHelper.showAfterGame();
+    }
     overlay.classList.add('visible');
-    smartPulseBtn.disabled = true;
-    Sound.end();
-    if (window.AdMobHelper && state.score > 0) AdMobHelper.showAfterGame();
   }
 
   function formatScore(value) {
@@ -485,7 +573,33 @@
     }
   });
 
-  startBtn.addEventListener('click', startGame);
+  // 자동화 테스트 훅 — ?debug=1 일 때만. 한 라운드가 실제로 90초라 사슬 전체(8라운드,
+  // 환생까지)를 실시간으로 도는 건 브라우저 검증에선 비현실적이다.
+  if (new URLSearchParams(location.search).get('debug') === '1') {
+    window.__neon = {
+      run: () => run,
+      state: () => state ? {
+        score: state.score, wave: state.wave, time: state.time,
+        charges: state.charges, ended: state.ended,
+      } : null,
+      ladder: () => run ? {
+        round: run.round, prestige: run.prestige, quota: run.quota,
+        owned: run.owned.slice(), alive: run.alive, bestDepth: bestDepth,
+      } : null,
+      // 남은 시간을 깎아 라운드를 즉시 끝낸다 (점수는 그대로 — 통과/실패가 진짜로 갈린다)
+      endRound: () => { if (state) state.time = 0; },
+      // 할당량을 채운 셈 치고 끝낸다 — 환생 경로 확인용
+      forceClear: () => { if (state && run) { state.score = run.quota; state.time = 0; } },
+    };
+  }
+
+  // 시작 버튼은 상황에 따라 셋을 겸한다: 첫 점화 / 다음 라운드(런 유지) / 재시작
+  startBtn.addEventListener('click', () => {
+    if (startBtn.dataset.act === 'next' && run && run.alive) { nextRound(); return; }
+    if (runStats) runStats.classList.add('hidden');
+    startBtn.dataset.act = 'restart';
+    startGame();
+  });
   smartPulseBtn.addEventListener('click', autoPulse);
   muteBtn.addEventListener('click', () => {
     muted = !muted;

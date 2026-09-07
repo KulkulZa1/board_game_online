@@ -3,6 +3,28 @@
 ## [Unreleased] - Vampire Survivors director-loop readiness
 
 ### Added
+- **NEON CASCADE 임계 사슬 (threshold ladder)** — the game had no loss condition at all: rounds
+  repeated forever and the build was frozen at `MAX_AMPS=4`, so a skilled run and a careless one
+  ended in the same place. Each round now carries a score **quota** (`QUOTA_BASE=1_500_000`,
+  ×`1.46`/round); missing it ends the run. Clearing all 8 rounds triggers **환생 (rebirth)**:
+  every amplifier is lost, the run restarts at round 1 with a permanent ×1.45 legacy multiplier,
+  and the quota curve jumps ×1.58 — the reward is deliberately smaller than the penalty, so the
+  ladder has a visible ceiling instead of an infinite ramp. Measured over full runs: deaths spread
+  across all 8 rounds (sd 1.73), cycle-1 clear 22% for an optimal bot and ~6% at 0.7× skill,
+  three rebirths 0.7%, five rebirths 0.0%.
+- NEON amplifier pool widened to **14 amps / 5 fusions** (`prism`, `flux`, `bloom`, `greed`;
+  `kaleido`, `stormfront`) with five new stats (`chainDiv`, `orbSpeed`, `orbRadius`, `goldScore`,
+  `coreScore`). The pool had to grow past the ladder length: with 10 amps every run converged on
+  the identical build by the tenth pick (measured p90/p10 collapse 2.6 → 1.28), which made the
+  final round deterministic. Unique builds per 200 runs went 116 → 180.
+- **Port contract** (`docs/port-contract.md`) — `tower-defense` and `neon-cascade` `sim.js` are now
+  pinned by golden runs so their rules can be ported to another engine (Godot/GDScript) without the
+  two copies drifting. Tier A hashes the event stream (JS-only determinism); Tier B pins uint32 RNG
+  sequences, wave tables, quota integers, draft card-id order and cost tables, which must match
+  across engines. Files: `prototypes/golden-spec.js`, `prototypes/golden-run-test.js`,
+  `prototypes/golden/*.json`, `scripts/record-golden-runs.js`.
+- NEON `?debug=1` automation hooks (`window.__neon`) matching the Tower Defense idiom — a round runs
+  ~90 real seconds, so verifying all 8 rounds plus rebirth in a browser is otherwise impractical.
 - Character selection, difficulty selection, local meta progression, permanent upgrades, daily challenge, map unlocks, pause UI, survival win resolution, and rewarded ad hooks for `/arcade/vampire/`.
 - Tower Defense hybrid loop for `/arcade/vampire/`: players can place Cannon/Frost/Tesla towers during runs with rechargeable tower charges.
 - Achievement coin rewards and end-run evolution reports that show missed evolution plans, lowest HP, and tower placements.
@@ -85,6 +107,19 @@
 - Snake and breakout expose a `grid()` QA hook behind `?debug=1` so browser-driven balance runs can read real positions instead of scraping pixels.
 
 ### Fixed
+- NEON CASCADE fused amplifier materials were returned to the draft pool — `ampOffers` filtered on
+  `owned` only, but `grantAmp` removes materials from `owned` when they fuse, so the same fusion
+  could be farmed indefinitely and stack (this is the same bug class fixed earlier in snake and
+  breakout). `ampOffers`/`grantAmp` now track a `consumed` list. The four-pick cap had been hiding
+  it; uncapping drafts for the ladder would have made it exploitable.
+- NEON round result overlay stacked *below* the amplifier fusion banner (`#overlay` z-index 12 vs
+  `#ampBanner` 46), so a banner could cover the round result. Raised to 50, with a smoke-check gate
+  (same trap as the Tower Defense `.modal` / `.overlay` inversion).
+- NEON rounds ran 98–107 seconds against a nominal 45-second budget, which made the new quota
+  something you reached by outlasting rather than by playing well; wave time bonus now dries up by
+  wave 5 (was 8) and the time-orb decay slope was tightened.
+- `public/arcade/neon-cascade/sim.js` now also exports via `module.exports`, so tests and balance
+  harnesses can `require()` it instead of loading it through `vm` with a fake `window`.
 - `sw-update.js` threw on every page load over an insecure origin. It guarded with `'serviceWorker' in navigator`, which is true even where the API is unusable — on plain http against a LAN IP (exactly how this repo is dev-tested on a phone) Chrome keeps the prototype key but leaves the property undefined, so the very next line blew up and took the rest of the script with it. It now checks the value. Caught by a real-browser balance run and gated by a smoke-check assertion.
 
 ### Fixed

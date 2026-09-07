@@ -1,0 +1,1096 @@
+{
+  "game": "tower-defense",
+  "specVersion": 1,
+  "tierB": {
+    "rng": [
+      {
+        "seed": 1,
+        "ints": [
+          270369,
+          67601921,
+          1815334946,
+          3502570521,
+          2813889786,
+          1926949577,
+          3757603848,
+          3746828980,
+          4250221205,
+          452019542,
+          2032669467,
+          304257406,
+          1621247736,
+          668404230,
+          342687981,
+          979378293
+        ]
+      },
+      {
+        "seed": 20260907,
+        "ints": [
+          574413907,
+          2405790088,
+          198722914,
+          1844748248,
+          1073511231,
+          2750164274,
+          4010130679,
+          1274374138,
+          105864095,
+          1252715809,
+          4141224550,
+          2814627147,
+          322768318,
+          3822554011,
+          1178123241,
+          2046024235
+        ]
+      },
+      {
+        "seed": 777,
+        "ints": [
+          205866009,
+          1007647034,
+          3056452974,
+          3732948974,
+          433059536,
+          95071770,
+          1565590510,
+          3635630712,
+          3983731654,
+          2974518179,
+          3351346236,
+          3768060927,
+          3709565580,
+          4212217481,
+          3922481993,
+          386732539
+        ]
+      }
+    ],
+    "waves": [
+      {
+        "n": 1,
+        "hpMult": 1,
+        "list": [
+          {
+            "type": "grunt",
+            "count": 6
+          }
+        ]
+      },
+      {
+        "n": 2,
+        "hpMult": 1.34,
+        "list": [
+          {
+            "type": "grunt",
+            "count": 8
+          },
+          {
+            "type": "runner",
+            "count": 4
+          }
+        ]
+      },
+      {
+        "n": 3,
+        "hpMult": 1.7956,
+        "list": [
+          {
+            "type": "grunt",
+            "count": 9
+          },
+          {
+            "type": "runner",
+            "count": 5
+          }
+        ]
+      },
+      {
+        "n": 4,
+        "hpMult": 2.406104,
+        "list": [
+          {
+            "type": "grunt",
+            "count": 11
+          },
+          {
+            "type": "runner",
+            "count": 6
+          },
+          {
+            "type": "tank",
+            "count": 2
+          }
+        ]
+      },
+      {
+        "n": 5,
+        "hpMult": 3.224179,
+        "list": [
+          {
+            "type": "boss",
+            "count": 1
+          },
+          {
+            "type": "grunt",
+            "count": 11
+          }
+        ]
+      },
+      {
+        "n": 6,
+        "hpMult": 4.3204,
+        "list": [
+          {
+            "type": "grunt",
+            "count": 14
+          },
+          {
+            "type": "runner",
+            "count": 8
+          },
+          {
+            "type": "tank",
+            "count": 3
+          },
+          {
+            "type": "shield",
+            "count": 3
+          }
+        ]
+      },
+      {
+        "n": 7,
+        "hpMult": 5.789336,
+        "list": [
+          {
+            "type": "grunt",
+            "count": 15
+          },
+          {
+            "type": "runner",
+            "count": 9
+          },
+          {
+            "type": "tank",
+            "count": 3
+          },
+          {
+            "type": "shield",
+            "count": 3
+          }
+        ]
+      },
+      {
+        "n": 8,
+        "hpMult": 7.757711,
+        "list": [
+          {
+            "type": "grunt",
+            "count": 17
+          },
+          {
+            "type": "runner",
+            "count": 10
+          },
+          {
+            "type": "tank",
+            "count": 4
+          },
+          {
+            "type": "shield",
+            "count": 3
+          },
+          {
+            "type": "regen",
+            "count": 2
+          }
+        ]
+      },
+      {
+        "n": 9,
+        "hpMult": 10.395333,
+        "list": [
+          {
+            "type": "grunt",
+            "count": 18
+          },
+          {
+            "type": "runner",
+            "count": 11
+          },
+          {
+            "type": "tank",
+            "count": 4
+          },
+          {
+            "type": "shield",
+            "count": 4
+          },
+          {
+            "type": "regen",
+            "count": 2
+          }
+        ]
+      },
+      {
+        "n": 10,
+        "hpMult": 13.929746,
+        "list": [
+          {
+            "type": "boss",
+            "count": 2
+          },
+          {
+            "type": "grunt",
+            "count": 16
+          }
+        ]
+      },
+      {
+        "n": 11,
+        "hpMult": 18.665859,
+        "list": [
+          {
+            "type": "grunt",
+            "count": 21
+          },
+          {
+            "type": "runner",
+            "count": 13
+          },
+          {
+            "type": "tank",
+            "count": 5
+          },
+          {
+            "type": "shield",
+            "count": 4
+          },
+          {
+            "type": "regen",
+            "count": 2
+          }
+        ]
+      },
+      {
+        "n": 12,
+        "hpMult": 25.012251,
+        "list": [
+          {
+            "type": "grunt",
+            "count": 23
+          },
+          {
+            "type": "runner",
+            "count": 14
+          },
+          {
+            "type": "tank",
+            "count": 6
+          },
+          {
+            "type": "shield",
+            "count": 5
+          },
+          {
+            "type": "regen",
+            "count": 3
+          }
+        ]
+      },
+      {
+        "n": 13,
+        "hpMult": 33.583449,
+        "list": [
+          {
+            "type": "grunt",
+            "count": 24
+          },
+          {
+            "type": "runner",
+            "count": 15
+          },
+          {
+            "type": "tank",
+            "count": 6
+          },
+          {
+            "type": "shield",
+            "count": 5
+          },
+          {
+            "type": "regen",
+            "count": 3
+          }
+        ]
+      },
+      {
+        "n": 14,
+        "hpMult": 45.271294,
+        "list": [
+          {
+            "type": "grunt",
+            "count": 26
+          },
+          {
+            "type": "runner",
+            "count": 16
+          },
+          {
+            "type": "tank",
+            "count": 7
+          },
+          {
+            "type": "shield",
+            "count": 5
+          },
+          {
+            "type": "regen",
+            "count": 3
+          }
+        ]
+      },
+      {
+        "n": 15,
+        "hpMult": 61.265355,
+        "list": [
+          {
+            "type": "boss",
+            "count": 2
+          },
+          {
+            "type": "grunt",
+            "count": 21
+          }
+        ]
+      },
+      {
+        "n": 16,
+        "hpMult": 83.224592,
+        "list": [
+          {
+            "type": "grunt",
+            "count": 29
+          },
+          {
+            "type": "runner",
+            "count": 18
+          },
+          {
+            "type": "tank",
+            "count": 8
+          },
+          {
+            "type": "shield",
+            "count": 6
+          },
+          {
+            "type": "regen",
+            "count": 4
+          }
+        ]
+      },
+      {
+        "n": 17,
+        "hpMult": 113.466086,
+        "list": [
+          {
+            "type": "grunt",
+            "count": 30
+          },
+          {
+            "type": "runner",
+            "count": 19
+          },
+          {
+            "type": "tank",
+            "count": 8
+          },
+          {
+            "type": "shield",
+            "count": 6
+          },
+          {
+            "type": "regen",
+            "count": 4
+          }
+        ]
+      },
+      {
+        "n": 18,
+        "hpMult": 155.23025,
+        "list": [
+          {
+            "type": "grunt",
+            "count": 32
+          },
+          {
+            "type": "runner",
+            "count": 20
+          },
+          {
+            "type": "tank",
+            "count": 9
+          },
+          {
+            "type": "shield",
+            "count": 7
+          },
+          {
+            "type": "regen",
+            "count": 4
+          }
+        ]
+      },
+      {
+        "n": 19,
+        "hpMult": 213.053518,
+        "list": [
+          {
+            "type": "grunt",
+            "count": 33
+          },
+          {
+            "type": "runner",
+            "count": 21
+          },
+          {
+            "type": "tank",
+            "count": 9
+          },
+          {
+            "type": "shield",
+            "count": 7
+          },
+          {
+            "type": "regen",
+            "count": 4
+          }
+        ]
+      },
+      {
+        "n": 20,
+        "hpMult": 293.292035,
+        "list": [
+          {
+            "type": "boss",
+            "count": 3
+          },
+          {
+            "type": "grunt",
+            "count": 26
+          }
+        ]
+      },
+      {
+        "n": 21,
+        "hpMult": 404.857413,
+        "list": [
+          {
+            "type": "grunt",
+            "count": 36
+          },
+          {
+            "type": "runner",
+            "count": 23
+          },
+          {
+            "type": "tank",
+            "count": 10
+          },
+          {
+            "type": "shield",
+            "count": 8
+          },
+          {
+            "type": "regen",
+            "count": 5
+          }
+        ]
+      },
+      {
+        "n": 22,
+        "hpMult": 560.250189,
+        "list": [
+          {
+            "type": "grunt",
+            "count": 38
+          },
+          {
+            "type": "runner",
+            "count": 24
+          },
+          {
+            "type": "tank",
+            "count": 11
+          },
+          {
+            "type": "shield",
+            "count": 8
+          },
+          {
+            "type": "regen",
+            "count": 5
+          }
+        ]
+      },
+      {
+        "n": 23,
+        "hpMult": 777.010987,
+        "list": [
+          {
+            "type": "grunt",
+            "count": 39
+          },
+          {
+            "type": "runner",
+            "count": 25
+          },
+          {
+            "type": "tank",
+            "count": 11
+          },
+          {
+            "type": "shield",
+            "count": 8
+          },
+          {
+            "type": "regen",
+            "count": 5
+          }
+        ]
+      },
+      {
+        "n": 24,
+        "hpMult": 1079.75749,
+        "list": [
+          {
+            "type": "grunt",
+            "count": 41
+          },
+          {
+            "type": "runner",
+            "count": 26
+          },
+          {
+            "type": "tank",
+            "count": 12
+          },
+          {
+            "type": "shield",
+            "count": 9
+          },
+          {
+            "type": "regen",
+            "count": 6
+          }
+        ]
+      },
+      {
+        "n": 25,
+        "hpMult": 1503.042546,
+        "list": [
+          {
+            "type": "boss",
+            "count": 3
+          },
+          {
+            "type": "grunt",
+            "count": 31
+          }
+        ]
+      },
+      {
+        "n": 26,
+        "hpMult": 2095.362631,
+        "list": [
+          {
+            "type": "grunt",
+            "count": 44
+          },
+          {
+            "type": "runner",
+            "count": 28
+          },
+          {
+            "type": "tank",
+            "count": 13
+          },
+          {
+            "type": "shield",
+            "count": 9
+          },
+          {
+            "type": "regen",
+            "count": 6
+          }
+        ]
+      },
+      {
+        "n": 27,
+        "hpMult": 2924.777006,
+        "list": [
+          {
+            "type": "grunt",
+            "count": 45
+          },
+          {
+            "type": "runner",
+            "count": 29
+          },
+          {
+            "type": "tank",
+            "count": 13
+          },
+          {
+            "type": "shield",
+            "count": 10
+          },
+          {
+            "type": "regen",
+            "count": 6
+          }
+        ]
+      },
+      {
+        "n": 28,
+        "hpMult": 4086.780825,
+        "list": [
+          {
+            "type": "grunt",
+            "count": 47
+          },
+          {
+            "type": "runner",
+            "count": 30
+          },
+          {
+            "type": "tank",
+            "count": 14
+          },
+          {
+            "type": "shield",
+            "count": 10
+          },
+          {
+            "type": "regen",
+            "count": 7
+          }
+        ]
+      },
+      {
+        "n": 29,
+        "hpMult": 5715.330549,
+        "list": [
+          {
+            "type": "grunt",
+            "count": 48
+          },
+          {
+            "type": "runner",
+            "count": 31
+          },
+          {
+            "type": "tank",
+            "count": 14
+          },
+          {
+            "type": "shield",
+            "count": 10
+          },
+          {
+            "type": "regen",
+            "count": 7
+          }
+        ]
+      },
+      {
+        "n": 30,
+        "hpMult": 7998.275512,
+        "list": [
+          {
+            "type": "boss",
+            "count": 4
+          },
+          {
+            "type": "grunt",
+            "count": 36
+          }
+        ]
+      }
+    ],
+    "pacing": [
+      {
+        "wave": 1,
+        "build": 12.65,
+        "early10": 6
+      },
+      {
+        "wave": 2,
+        "build": 12.3,
+        "early10": 8
+      },
+      {
+        "wave": 3,
+        "build": 11.95,
+        "early10": 9
+      },
+      {
+        "wave": 4,
+        "build": 11.6,
+        "early10": 11
+      },
+      {
+        "wave": 5,
+        "build": 11.25,
+        "early10": 12
+      },
+      {
+        "wave": 6,
+        "build": 10.9,
+        "early10": 13
+      },
+      {
+        "wave": 7,
+        "build": 10.55,
+        "early10": 15
+      },
+      {
+        "wave": 8,
+        "build": 10.2,
+        "early10": 16
+      },
+      {
+        "wave": 9,
+        "build": 9.85,
+        "early10": 18
+      },
+      {
+        "wave": 10,
+        "build": 9.5,
+        "early10": 19
+      },
+      {
+        "wave": 11,
+        "build": 9.15,
+        "early10": 20
+      },
+      {
+        "wave": 12,
+        "build": 8.8,
+        "early10": 22
+      },
+      {
+        "wave": 13,
+        "build": 8.45,
+        "early10": 23
+      },
+      {
+        "wave": 14,
+        "build": 8.1,
+        "early10": 25
+      },
+      {
+        "wave": 15,
+        "build": 7.75,
+        "early10": 26
+      },
+      {
+        "wave": 16,
+        "build": 7.4,
+        "early10": 27
+      },
+      {
+        "wave": 17,
+        "build": 7.05,
+        "early10": 29
+      },
+      {
+        "wave": 18,
+        "build": 6.7,
+        "early10": 30
+      },
+      {
+        "wave": 19,
+        "build": 6.35,
+        "early10": 32
+      },
+      {
+        "wave": 20,
+        "build": 6,
+        "early10": 33
+      },
+      {
+        "wave": 21,
+        "build": 6,
+        "early10": 34
+      },
+      {
+        "wave": 22,
+        "build": 6,
+        "early10": 36
+      },
+      {
+        "wave": 23,
+        "build": 6,
+        "early10": 37
+      },
+      {
+        "wave": 24,
+        "build": 6,
+        "early10": 39
+      },
+      {
+        "wave": 25,
+        "build": 6,
+        "early10": 40
+      },
+      {
+        "wave": 26,
+        "build": 6,
+        "early10": 41
+      },
+      {
+        "wave": 27,
+        "build": 6,
+        "early10": 43
+      },
+      {
+        "wave": 28,
+        "build": 6,
+        "early10": 44
+      },
+      {
+        "wave": 29,
+        "build": 6,
+        "early10": 46
+      },
+      {
+        "wave": 30,
+        "build": 6,
+        "early10": 47
+      }
+    ],
+    "combo": [
+      {
+        "streak": 0,
+        "mult": 1,
+        "label": null
+      },
+      {
+        "streak": 14,
+        "mult": 1,
+        "label": null
+      },
+      {
+        "streak": 15,
+        "mult": 1.2,
+        "label": "✨ 연속 격파"
+      },
+      {
+        "streak": 44,
+        "mult": 1.2,
+        "label": "✨ 연속 격파"
+      },
+      {
+        "streak": 45,
+        "mult": 1.4,
+        "label": "🔥 맹공"
+      },
+      {
+        "streak": 99,
+        "mult": 1.4,
+        "label": "🔥 맹공"
+      },
+      {
+        "streak": 100,
+        "mult": 1.7,
+        "label": "⚡ 초토화"
+      },
+      {
+        "streak": 400,
+        "mult": 1.7,
+        "label": "⚡ 초토화"
+      }
+    ],
+    "fusion": {
+      "costStep": 2.2,
+      "dmgStep": 1.62
+    },
+    "meta": [
+      {
+        "id": "forge",
+        "max": 3,
+        "costs": [
+          40,
+          110,
+          180,
+          null,
+          null
+        ]
+      },
+      {
+        "id": "tempo",
+        "max": 3,
+        "costs": [
+          45,
+          110,
+          175,
+          null,
+          null
+        ]
+      },
+      {
+        "id": "walls",
+        "max": 3,
+        "costs": [
+          35,
+          85,
+          135,
+          null,
+          null
+        ]
+      },
+      {
+        "id": "lens",
+        "max": 1,
+        "costs": [
+          150,
+          null,
+          null,
+          null,
+          null
+        ]
+      },
+      {
+        "id": "armory",
+        "max": 2,
+        "costs": [
+          60,
+          140,
+          null,
+          null,
+          null
+        ]
+      },
+      {
+        "id": "echo",
+        "max": 3,
+        "costs": [
+          50,
+          110,
+          170,
+          null,
+          null
+        ]
+      }
+    ],
+    "cores": [
+      {
+        "wave": 1,
+        "score": 0,
+        "cores": 3
+      },
+      {
+        "wave": 8,
+        "score": 5000,
+        "cores": 59
+      },
+      {
+        "wave": 22,
+        "score": 250000,
+        "cores": 316
+      },
+      {
+        "wave": 40,
+        "score": 9000000,
+        "cores": 1620
+      }
+    ],
+    "path": {
+      "len": 31,
+      "cols": 7,
+      "rows": 10,
+      "cells": 31
+    }
+  },
+  "tierA": [
+    {
+      "seed": 1,
+      "waves": 10,
+      "digest": "582006e5bd4990cb130c459448cd7e10",
+      "tail": [
+        {
+          "wave": 8,
+          "lives": 7,
+          "gold": 647,
+          "towers": 39,
+          "income": 31
+        },
+        {
+          "wave": 9,
+          "lives": 2,
+          "gold": 1238,
+          "towers": 39,
+          "income": 33
+        },
+        {
+          "wave": 10,
+          "dead": true
+        }
+      ]
+    },
+    {
+      "seed": 20260907,
+      "waves": 10,
+      "digest": "921930b6b5ec9fde78ebea3557d5966d",
+      "tail": [
+        {
+          "wave": 8,
+          "lives": 1,
+          "gold": 889,
+          "towers": 39,
+          "income": 31
+        },
+        {
+          "wave": 9,
+          "lives": 1,
+          "gold": 1607,
+          "towers": 39,
+          "income": 33
+        },
+        {
+          "wave": 10,
+          "dead": true
+        }
+      ]
+    },
+    {
+      "seed": 4242,
+      "waves": 10,
+      "digest": "82b24d58f138a048baddf5b8c432a5d9",
+      "tail": [
+        {
+          "wave": 8,
+          "lives": 1,
+          "gold": 1060,
+          "towers": 39,
+          "income": 31
+        },
+        {
+          "wave": 9,
+          "lives": 1,
+          "gold": 1832,
+          "towers": 39,
+          "income": 33
+        },
+        {
+          "wave": 10,
+          "dead": true
+        }
+      ]
+    }
+  ]
+}
