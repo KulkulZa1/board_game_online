@@ -710,9 +710,24 @@ function aiRespondCall(room, seat, offer) {
 
 // ── 소켓 등록 ─────────────────────────────────────────────────────
 function register(io, socket) {
+  // 한 소켓은 테이블 하나만 — findBySocket 은 첫 테이블만 찾으므로, 여러 테이블에 걸치면
+  // 행동이 엉뚱한 테이블로 간다. 새로 만들거나 들어가면 내가 호스트인 대기 테이블은 정리한다.
+  function releaseWaitingTablesHostedBy(socketId) {
+    for (const room of [...rooms.values()]) {
+      if (room.status !== 'waiting') continue;
+      const host = room.seats[room.hostSeat];
+      if (!host || host.socketId !== socketId) continue;
+      emitAll(room, 'mahjong:error', { message: '방장이 다른 방으로 이동했습니다', fatal: true });
+      socket.leave('mj:' + room.code);
+      destroyRoom(room);
+    }
+  }
+
   socket.on('mahjong:create', (payload) => {
     const { nickname } = payload && typeof payload === 'object' ? payload : {};
     if (!rateCheck(socket.id, 'mj-create', 5, 60 * 1000)) return;
+    releaseWaitingTablesHostedBy(socket.id);
+    if (findBySocket(socket.id)) return socket.emit('mahjong:error', { message: '이미 진행 중인 대국이 있습니다' });
     const room = createRoom(nickname);
     const seat = room.seats[0];
     seat.socketId = socket.id;
@@ -729,8 +744,14 @@ function register(io, socket) {
     const room = rooms.get(String(code || '').toUpperCase().trim());
     if (!room) return socket.emit('mahjong:error', { message: '방을 찾을 수 없습니다' });
     if (room.status !== 'waiting') return socket.emit('mahjong:error', { message: '이미 시작된 방입니다' });
+    // 같은 테이블에 두 번 앉으면(참가 버튼 연타) 두 번째 자리는 실제 클라이언트가 없는
+    // '연결됨' 유령 좌석이 되어 그 차례에서 대국이 멈춘다 — 이미 앉아 있으면 무시한다.
+    const already = findBySocket(socket.id);
+    if (already && already.room === room) return;
     const seatIdx = room.seats.findIndex((s) => s === null);
     if (seatIdx < 0) return socket.emit('mahjong:error', { message: '자리가 없습니다' });
+    releaseWaitingTablesHostedBy(socket.id);
+    if (findBySocket(socket.id)) return socket.emit('mahjong:error', { message: '이미 진행 중인 대국이 있습니다' });
     const seat = seatHuman(room, seatIdx, nickname);
     seat.socketId = socket.id;
     seat.connected = true;

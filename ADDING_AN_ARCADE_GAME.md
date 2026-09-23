@@ -8,22 +8,24 @@ They have **zero server dependency** — no socket events, no room state, no bac
 ## What Makes an Arcade Game
 
 - Single HTML page with a `<canvas>` or DOM game area
-- All game logic in one `game.js` IIFE — no imports, no build step
+- Game code in a `game.js` IIFE — no imports, no build step. Most games also keep their **rules** in a
+  headless `sim.js` (see "Headless `sim.js` + tests" below) so balance can be tested from Node
 - Korean UI (matches the rest of the platform)
 - `← 로비` back button linking to `/`
 - Score saved to `localStorage` for high-score display
-- AdMob interstitial on game-over via `/js/admob.js` (no-op on web)
+- AdMob interstitial on game-over via `window.AdMobHelper.showAfterGame()` from `/js/admob.js` (no-op on web)
 - Mobile-responsive (touch controls or virtual joystick if needed)
 
 ---
 
-## Files to Create (3 files)
+## Files to Create (3 files, plus an optional `sim.js`)
 
 ```
 public/arcade/<gamename>/
 ├── index.html    ← page shell: header + canvas + overlays
 ├── style.css     ← layout, overlay, HUD styles
-└── game.js       ← entire game logic as an IIFE
+├── sim.js        ← (recommended) pure rules, no DOM — testable from Node
+└── game.js       ← rendering + input as an IIFE
 ```
 
 **No server files needed. No `game-registry.js` changes needed.**
@@ -49,8 +51,8 @@ Copy the structure from an existing arcade game (e.g. `public/arcade/snake/index
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>게임이름 — 보드게임 온라인</title>
-  <link rel="icon" href="/icons/icon-192.png">
-  <link rel="stylesheet" href="style.css">
+  <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css?v=1.0">
 </head>
 <body>
   <div id="container">
@@ -76,7 +78,9 @@ Copy the structure from an existing arcade game (e.g. `public/arcade/snake/index
     </div>
   </div>
   <script src="/js/admob.js"></script>
-  <script src="game.js"></script>
+  <script src="game.js?v=1.0"></script>
+  <!-- 필수: smoke-check 가 public/ 의 모든 HTML 에 이 스크립트를 요구한다 (없으면 npm run check 실패) -->
+  <script src="/js/sw-update.js"></script>
 </body>
 </html>
 ```
@@ -132,7 +136,7 @@ Structure:
   function gameOver() {
     state = 'dead';
     saveHigh();
-    if (window.AdMob) window.AdMob.showInterstitial();
+    if (window.AdMobHelper) AdMobHelper.showAfterGame();
     showOverlay('다시하기', restart);
   }
 
@@ -147,7 +151,30 @@ Key rules for `game.js`:
 - All constants hardcoded (no config object)
 - Korean UI text in overlays and HUD
 - `localStorage` key: `arcade_<gamename>_high` (or `_best`, `_score`)
-- Call `window.AdMob.showInterstitial()` (from `/js/admob.js`) on game-over — it's a no-op on web
+- Call `AdMobHelper.showAfterGame()` (from `/js/admob.js`) on game-over — it's a no-op on web.
+  (`window.AdMob` does not exist on the page; code written against it silently never shows an ad.)
+- Cache-bust your own assets with `?v=` and bump it when you change them
+
+### Headless `sim.js` + tests (recommended)
+
+Put the rules — state, scoring, drafting, balance numbers — in a `sim.js` with no DOM access,
+exported for both the browser and Node:
+
+```javascript
+(function (root) {
+  'use strict';
+  function createState(seed) { /* ... */ }
+  function step(state, dt) { /* ... */ }
+  const api = { createState, step };
+  if (typeof window !== 'undefined') window.MyGameSim = api;
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+})(typeof window !== 'undefined' ? window : globalThis);
+```
+
+Then `game.js` only renders and forwards input, and a suite in `prototypes/<name>-test.js`
+can play thousands of seeded runs in seconds. That is how this repo found most of its arcade
+balance bugs (see `GAMES.md` → Layer B). Use a seeded RNG, never `Math.random`, so runs are
+reproducible.
 
 ### 5. Add lobby card in `public/index.html`
 
@@ -179,10 +206,13 @@ In `scripts/smoke-test.js`, add to the `ROUTES` array:
 - [ ] `public/arcade/<gamename>/game.js` created (IIFE, Korean UI)
 - [ ] `← 로비` back button links to `/`
 - [ ] High score saved to `localStorage`
-- [ ] `window.AdMob.showInterstitial()` called on game-over
+- [ ] `AdMobHelper.showAfterGame()` called on game-over
+- [ ] `/js/sw-update.js` loaded (required by `npm run check`)
 - [ ] Canvas resizes to fit `#gameWrapper` (call on `resize` event)
 - [ ] Lobby card added in `public/index.html`
-- [ ] Smoke test route added in `scripts/smoke-test.js`
+- [ ] Smoke test route added in `scripts/smoke-test.js` (page, plus `sim.js` if you have one)
+- [ ] If you have a `sim.js`: a suite in `prototypes/` added to `scripts/run-game-flow-tests.js`
+- [ ] `CACHE_NAME` bumped in `public/sw.js` so installed PWAs drop old assets
 - [ ] Manual test: play in browser, game-over, high score saves, back button works
 
 ---

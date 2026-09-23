@@ -56,12 +56,12 @@ npm run sandbox
 | Command | What it does |
 |---------|---------------|
 | `npm run lint` | `scripts/check-js.js` — parses every `.js` file in the repo for syntax errors (no ESLint config) |
-| `npm test` | `scripts/smoke-test.js` — starts the server on port 13001, runs 82 assertions (handler registry, room creation, core routes) |
+| `npm test` | `scripts/smoke-test.js` — starts the server on port 13001 and checks the handler registry, room creation and core routes (including `/sandbox/` and the removed TD runtime alias → 404) |
 | `npm run test:full` | `scripts/smoke-check.js` — starts the server on port 3100, checks routes/static assets/handlers plus JS syntax across the whole repo (slower, more thorough than `npm test`) |
-| `npm run test:games` | `scripts/run-game-flow-tests.js` — runs 15 rule-engine/flow suites from `prototypes/`: Mahjong (engine, flow, timer), BANG! flow, a 36-assertion backgammon/texasholdem/dotsboxes handler suite, a 40-assertion suite covering the other 9 board games (`core-games-handler-test.js`), and the eight arcade progression suites `snake-rogue-test.js` (45), `breakout-rogue-test.js` (41), `neon-amp-test.js` (37), `plant-prestige-test.js` (60), `jackpot-meta-test.js` (68), `jackpot-map-test.js` (37), `bootstrap-loop-test.js` (9), `td-rogue-test.js` (76) and `golden-run-test.js` (10), which assert those games' rules *and* balance. Each is also runnable standalone via `node prototypes/<name>.js`. `golden-run-test.js` is the **port contract** — it pins `tower-defense`/`neon-cascade` rules against `prototypes/golden/*.json` so they can be ported to another engine without drifting; re-record with `node scripts/record-golden-runs.js` only after an intentional rule change, and see `docs/port-contract.md` |
+| `npm run test:games` | `scripts/run-game-flow-tests.js` — runs every suite in its `tests` list: Mahjong (`mahjong-engine-test.js`, `mahjong-flow-test.js`, `mahjong-timer-test.js`) and BANG! (`bang-flow-test.js`); rule tests for all 12 board games (`newer-games-handler-test.js` for backgammon/texasholdem/dotsboxes, `core-games-handler-test.js` for the other nine); `server-hardening-test.js` (regressions for remotely triggerable server defects — handler exception guard, integer board bounds, idempotent `endGame`, omok overline, Indian Poker betting/ties, first mover, BANG! `pick`); the arcade progression suites `snake-rogue-test.js`, `breakout-rogue-test.js`, `neon-amp-test.js`, `plant-prestige-test.js`, `jackpot-meta-test.js`, `jackpot-map-test.js`, `bootstrap-loop-test.js`, `td-rogue-test.js`, which assert those games' rules *and* balance; and `golden-run-test.js`, the **port contract** that pins `tower-defense`/`neon-cascade` rules against `prototypes/golden/*.json` so they can be ported to another engine without drifting (re-record with `node scripts/record-golden-runs.js` only after an intentional rule change; see `docs/port-contract.md`). Each suite prints its own count and is runnable standalone via `node prototypes/<name>.js`. Per-suite counts are deliberately not listed here — they went stale within weeks |
 | `npm run check` | `lint && test && test:games && test:full` — run before considering a change done |
 | `npm run build` | `scripts/no-build.js` — no-op that just prints "there is no build step" (there is genuinely no bundler) |
-| `npm run verify:production` | `scripts/verify-production-version.js` — after a Render deploy, hits `/api/version` to confirm the live commit/branch match what you expect. Pass `EXPECTED_COMMIT=<sha>` to check a specific commit. See `docs/render-version-verification.md`. |
+| `npm run verify:production` | `scripts/verify-production-version.js` — after a Render deploy, hits `/api/version` to confirm the live commit/branch match what you expect. Pass `EXPECTED_COMMIT=<sha>` to check a specific commit. It checks invariants (cache-version floor, served client assets), not pinned versions, and `test:full` runs it against a local server so it cannot silently rot again (it once required `boardgame-v11` and failed on every later deploy). See `docs/render-version-verification.md`. |
 
 There is no single-test-file runner — `smoke-test.js`/`smoke-check.js` are monolithic scripts; to focus on one thing, read the relevant section of the script or run the server manually and hit routes with `curl`.
 
@@ -110,6 +110,7 @@ board_game_online/
 ├── ADDING_AN_ARCADE_GAME.md   # Developer guide: adding a solo arcade game (3 files, zero server changes)
 ├── BUILDING_ANDROID.md         # Capacitor Android build guide
 ├── CHANGELOG.md / ROADMAP.md    # History / forward plan
+├── .github/                       # copilot-instructions.md + workflows/check.yml (CI: npm run check on PRs and main)
 ├── docs/                          # Design docs + deploy runbooks (launch-readiness.md, render-version-verification.md, port-contract.md, new-game-candidates.md, per-game GDDs, versioned release notes under v1.0/v1.1/v1.2)
 ├── prototypes/                     # Three kinds: rule-engine/flow suites (mahjong-*, bang-flow, newer-games-handler, core-games-handler) run by `npm run test:games`, the port contract (`golden-spec.js`, `golden-run-test.js`, `golden/*.json`), AND balance simulators (bootstrap-sim, jackpot-autoplay, civ-mvp-autoplay) that are not wired into any npm script
 ├── sandbox/                         # Layer C design tools, served only by `npm run sandbox` (never in production)
@@ -230,7 +231,7 @@ Sandbox editors (Layer C, `npm run sandbox`, never served in production) save li
 |---|---|---|
 | `sandbox/vampire-survivors/` | `sandbox_vs_config` | `/arcade/vampire/` via `public/js/sandbox-config.js` |
 | `sandbox/plant-growing/` | `sandbox_pg_config` | `/arcade/plant/` via `public/js/sandbox-config.js` |
-| `sandbox/tower-defense/` | `sandbox_td_config` / `td_published_config` | (editor-only) — the arcade `/arcade/tower-defense/` page is now the self-contained 첨탑 대란 roguelite; the `/arcade/tower-defense/runtime/` Express alias still serves the sandbox engine for the editor's publish flow, and a smoke-check gate rejects `runtime/` assets reappearing in the arcade page |
+| `sandbox/tower-defense/` | `sandbox_td_config` / `td_published_config` | (editor-only) — feeds the editor's own play mode. The arcade `/arcade/tower-defense/` page is the self-contained 첨탑 대란 roguelite and reads no sandbox config. The old `/arcade/tower-defense/runtime/` alias that served this engine in production had no consumer left and was removed; the smoke tests require it to 404 |
 
 Tower Defense has an explicit Publish/Import workflow for when the sandbox and main app run on different origins — see `README.md` § "Sandbox to arcade content flow" for the steps.
 
@@ -250,7 +251,7 @@ Tower Defense has an explicit Publish/Import workflow for when the sandbox and m
 
 See **`ADDING_A_GAME.md`** for the complete 10-step guide.
 
-Summary — 10 files, maximum 2 with >1-line edits:
+Summary — 10 files (maximum 2 with >1-line edits) **plus a rules section in `prototypes/core-games-handler-test.js`** (the guide's Step 11):
 
 | File | Action |
 |------|--------|
@@ -279,7 +280,9 @@ See **`ADDING_AN_ARCADE_GAME.md`**. Three files under `public/arcade/<name>/` (`
 
 ### Security Patterns
 - All move validation happens **server-side** — never trust client-side game state
-- Rate limits are applied to room creation (5/min), reconnect (5/min), join (10/min)
+- Rate limits are applied to room creation (5/min), reconnect (5/min), join (10/min) — **per socket connection**, so a new connection gets a fresh budget. What actually bounds room creation is that a socket hosts at most one waiting room (a new create or join releases its previous one), under the global 20-room cap
+- Every socket listener is wrapped by `guardSocketHandlers` (`server/events.js`): a throw is logged instead of killing the process. Before this, one spectator hint of `{row: 0.5}` or one BANG! reaction `{pick: 0.5}` took down every room. Still validate client numbers with `Number.isInteger` and the room's real board size — see `GAMES.md` → "Shared room protocol"
+- Draw offers are tracked server-side (`room.drawOffer`); only the opponent of the offerer can accept. Spectators join the broadcast room only after the host approves (`approveSpectator`), and their nicknames go through `sanitizeNickname`
 - `/admin/*` routes are gated by `server/security.js` to loopback requests only, unless `ENABLE_ADMIN_ROUTES=true`
 - The admin shutdown key is stored in `.shutdown-key` with mode `0o600`; it is in `.gitignore` — never commit it
 - Generated native project dirs (`android/`, `ios/`) are also gitignored — build locally via Capacitor, do not commit them
@@ -297,13 +300,13 @@ See **`ADDING_AN_ARCADE_GAME.md`**. Three files under `public/arcade/<name>/` (`
 **`npm test`** (`scripts/smoke-test.js`) starts a real server on port 13001 and checks:
 1. **Module load** — all 12 board-game handlers load correctly (handler exists + `initRoom`/`handleMove`/`resetRoom` per game)
 2. **Room state creation** — chess and connect4 rooms initialize with correct structure
-3. **Core HTTP routes** — lobby, `/game.html`, `/api/status` (JSON shape), `/mahjong.html`, `/bang.html`, every `/arcade/<name>/` route (including nested runtime assets like `/arcade/tower-defense/runtime/game.js`), and `/sandbox/` → **must be 404** (sandbox must NOT be production-accessible)
+3. **Core HTTP routes** — lobby, `/game.html`, `/api/status` (JSON shape), `/mahjong.html`, `/bang.html`, every `/arcade/<name>/` route and asset, and `/sandbox/` plus the removed `/arcade/tower-defense/runtime/` alias → **must be 404** (sandbox must NOT be production-accessible)
 
 **`npm run test:games`** (`scripts/run-game-flow-tests.js`) runs the rule-engine suites that the smoke tests don't cover: Mahjong engine/flow/timer, BANG! flow, `newer-games-handler-test.js` (36 assertions across backgammon, texasholdem, dotsboxes), and `core-games-handler-test.js` (40 assertions across chess, omok, connect4, othello, checkers, mancala, applegame, battleship, indianpoker). Add new rule-engine suites to the `tests` array in that script.
 
 Between them the two handler suites cover the rules of all 12 Layer A games. They assert real rule edges — forced/multi-jump and king promotion in checkers, Othello's pass-and-continue, Mancala sowing/capture, Battleship placement rejection, size-dependent draw thresholds — and they carry regression coverage for bugs that shipped once (see CHANGELOG).
 
-**`npm run test:full`** (`scripts/smoke-check.js`) does the same route/handler checks as `npm test` plus a JS syntax pass over the whole repo — slower, run it (via `npm run check`) before considering larger changes done.
+**`npm run test:full`** (`scripts/smoke-check.js`) does the same route/handler checks as `npm test` plus a JS syntax pass over the whole repo, source gates for known traps, and **live socket checks** against a real server: malformed payloads, the spectator-hint crash, unilateral draw acceptance, unapproved spectators receiving broadcasts, one socket hoarding waiting rooms, and `verify:production` run against the local server. Negative checks ("this event must NOT arrive") use an ordering barrier (`receivedBeforeBarrier`) rather than aborting long-polls, which engine.io treats as protocol errors. Slower — run it (via `npm run check`) before considering larger changes done.
 
 When adding a new board game handler, add it to `REQUIRED_GAMES` in `scripts/smoke-test.js`. When adding a new arcade route, add it to the `ROUTES` array in the same file.
 
@@ -327,8 +330,9 @@ Deployed on **Render.com** via `render.yaml`:
 After a deploy, run `npm run verify:production` (optionally with `EXPECTED_COMMIT=<sha>`) to confirm the live server is serving the expected commit — see `docs/render-version-verification.md`.
 
 **Branch strategy:**
-- `main` → production (auto-deployed by Render on push)
+- `main` → production (auto-deployed by Render on push — Render does **not** run the tests)
 - Feature branches merge directly to `main`
+- **CI:** `.github/workflows/check.yml` runs `npm ci && npm run check` on every pull request and every push to `main` (Node 18 and 22). It is the only automated gate before production — don't merge a red PR
 
 ---
 

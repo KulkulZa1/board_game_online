@@ -1,4 +1,7 @@
-// server/handlers/mancala.js — 만칼라 핸들러 (Oware 스타일 6-pit)
+// server/handlers/mancala.js — 만칼라 핸들러 (칼라 Kalah 규칙, 6구멍 × 4씨앗)
+// 창고가 있고, 마지막 씨앗이 내 창고면 한 번 더, 내 빈 구멍이면 맞은편을 잡는다.
+// (예전 주석의 'Oware 스타일'은 틀린 이름이었다 — 오와레는 창고 파종·추가 턴이 없고
+//  상대 진영의 2~3개를 잡는 전혀 다른 규칙이다.)
 const state = require('../state');
 const { getRoleColor } = require('../utils');
 
@@ -22,15 +25,19 @@ function initBoard() {
   return pits;
 }
 
+// 선공은 항상 백(white)이다 — 규칙 안내문('백이 먼저 둡니다')·혼자하기('항상 백 선공')와 같다.
+// 예전 서버는 '호스트 색'을 선공으로 두어 두 가지가 틀렸다: 호스트가 흑을 고르면 흑이 먼저 둬
+// 안내문과 달랐고, 재대국은 색을 바꾼 뒤 resetRoom 을 부르므로 선공이 영원히 호스트였다.
+// 고정 색 선공이면 재대국의 색 교체만으로 선공이 번갈아 간다 (체스·사목과 같은 방식).
 function initRoom(base) {
   base.pits        = initBoard();
-  base.currentTurn = base.hostColor; // 호스트(=white) 선공
+  base.currentTurn = 'white'; // 백(하단) 선공
   return base;
 }
 
 function resetRoom(room) {
   room.pits        = initBoard();
-  room.currentTurn = room.hostColor;
+  room.currentTurn = 'white';
 }
 
 function handleMove(socket, room, role, { pit }) {

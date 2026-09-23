@@ -31,10 +31,12 @@ individually runnable: `node prototypes/newer-games-handler-test.js`.
 
 ## Repo-specific traps
 
-- `sandbox/tower-defense/` is served in **production** via the
-  `/arcade/tower-defense/runtime/` alias. `public/arcade/tower-defense/` is just a shell
-  `index.html`. Changes there are user-facing.
-- `/sandbox/` itself must return **404** in production — the smoke test asserts it.
+- Nothing under `sandbox/` is served in production — `/sandbox/` and the removed
+  `/arcade/tower-defense/runtime/` alias must both return **404** (the smoke tests assert it).
+  The arcade tower defense (`public/arcade/tower-defense/`) is a self-contained game.
+- Socket input: validate coordinates and indices with `Number.isInteger` against the room's
+  real board size. `typeof x === 'number'` lets `0.5` through, and a throw in a listener once
+  took down the whole server (every room). See `AGENTS.md` §4.7.
 - Mahjong (`server/mahjong.js`) and BANG! (`server/bang.js`) do **not** use the
   2-player room system or the `game:move` handler registry. They are self-contained.
 - Adding a board game? Also add it to `REQUIRED_GAMES` in `scripts/smoke-test.js`.
@@ -48,4 +50,6 @@ individually runnable: `node prototypes/newer-games-handler-test.js`.
 | `server/events.js` | Socket handlers; `game:move` dispatches via the handler registry |
 | `public/js/game-*.js` | Per-game UI handler | 
 | `public/js/ai-*.js` | Per-game client-side AI (runs in the browser) |
-| `public/arcade/<name>/` | Solo arcade game — single `game.js` IIFE, zero server code |
+| `public/arcade/<name>/` | Solo arcade game — `index.html` + `style.css` + `game.js` (IIFE), zero server code; most keep rules in a headless, Node-testable `sim.js` |
+| `prototypes/` | Test suites run by `npm run test:games` (list in `scripts/run-game-flow-tests.js`) |
+| `.github/workflows/check.yml` | CI — `npm run check` on every PR and push to `main` |

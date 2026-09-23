@@ -49,14 +49,19 @@ window.AIOmok = (function () {
     return best || { row: Math.floor(size/2), col: Math.floor(size/2) };
   }
 
+  // 정확히 5목만 승리 — 6목 이상(장목)은 불계. 규칙 안내문과 온라인(서버)이 이 규칙인데
+  // 혼자하기만 n >= 5 로 장목도 승리 처리해서, 연습한 규칙과 실전 규칙이 달랐다.
+  // 런의 '시작점'에서만 길이를 재야 6목 안의 다섯 칸을 5목으로 잘못 세지 않는다.
   function checkWin(board, color, size) {
     for (let r=0; r<size; r++) {
       for (let c=0; c<size; c++) {
         if (board[r][c] !== color) continue;
         for (const [dr,dc] of DIRS) {
+          const pr = r-dr, pc = c-dc;
+          if (pr>=0&&pr<size&&pc>=0&&pc<size&&board[pr][pc]===color) continue;   // 런의 중간
           let n=1, rr=r+dr, cc=c+dc;
           while (rr>=0&&rr<size&&cc>=0&&cc<size&&board[rr][cc]===color) { n++; rr+=dr; cc+=dc; }
-          if (n >= 5) return true;
+          if (n === 5) return true;
         }
       }
     }

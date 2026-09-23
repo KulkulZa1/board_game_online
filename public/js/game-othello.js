@@ -144,7 +144,7 @@ window.GameHandlers.othello = (function () {
       const nextMoves = computeValidMoves(soloBoard, playerColor);
       OthelloBoard.updateAfterMove(soloBoard, { row, col }, nextMoves);
       if (typeof Sound !== 'undefined') Sound.play('move');
-      if (isGameOver(soloBoard)) { endSoloGame(countWinner(soloBoard), 'board-full'); return; }
+      if (isGameOver(soloBoard)) { endSoloGame(countWinner(soloBoard), 'stone-count'); return; }
       const aiMoves = computeValidMoves(soloBoard, aiColor);
       if (!aiMoves.length) {
         // AI passes — player gets another turn
@@ -177,7 +177,7 @@ window.GameHandlers.othello = (function () {
       OthelloBoard.updateAfterMove(soloBoard, move, pm);
       if (typeof Sound !== 'undefined') Sound.play('move');
       aiThinking = false;
-      if (isGameOver(soloBoard)) { endSoloGame(countWinner(soloBoard), 'board-full'); return; }
+      if (isGameOver(soloBoard)) { endSoloGame(countWinner(soloBoard), 'stone-count'); return; }
       soloTurn = playerColor;
       updateTurnIndicator(soloTurn);
       OthelloBoard.setMyTurn(true);

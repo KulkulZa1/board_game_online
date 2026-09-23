@@ -2,6 +2,31 @@
 
 ## [Unreleased] - Vampire Survivors director-loop readiness
 
+### Security
+- **Any player could crash the whole server.** Socket listeners had no exception handling and
+  there is no process-level handler, so one throw killed every room (board games, Mahjong,
+  BANG!). Two were reachable by anyone: a spectator hint `{row: 0.5}` on any omok board (or row
+  13–14 on 13×13) indexed `board[0.5]`, and a BANG! reaction `{pick: 0.5}` during a Jesse Jones /
+  Pedro Ramirez draw read `options[0.5].kind`. Both are fixed at the source (integer bounds
+  against the room's real board size, `Number.isInteger` for `pick`), and every listener is now
+  wrapped by `guardSocketHandlers` so the next unknown throw is logged, not fatal. The timer tick
+  guards each room the same way.
+- **Draws could be forced unilaterally.** `game:draw:respond {accept:true}` ended any game as a
+  draw without anyone having offered one. Offers are now tracked server-side (`room.drawOffer`),
+  only the offerer's opponent can accept, and an offer lapses when its recipient moves.
+- **Unapproved spectators saw everything.** `spectator:join` put the socket in the broadcast
+  room before the host approved, so pending spectators received every move and the players'
+  chat. The socket now joins only on approval. Spectator nicknames are sanitized (a newline
+  could forge server log lines), a room's own players can't spectate it, and disconnect cleans
+  spectator entries in every room instead of returning early and skipping player cleanup.
+- **One client could lock everyone out of board games.** Rate limits are per socket, so a new
+  connection resets them; four connections filled the 20-room cap for 30 minutes. A socket now
+  hosts at most one waiting room (creating or joining releases the previous one), which also
+  fixes an ordinary leak — create, go back, create again used to orphan the first room.
+  Mahjong/BANG! tables follow the same rule, and a double-clicked join no longer takes two seats.
+- Removed the `/arcade/tower-defense/runtime/` alias, which kept serving `sandbox/tower-defense/`
+  in production after its last consumer was deleted. The smoke tests now require it to 404.
+
 ### Added
 - **NEON CASCADE 임계 사슬 (threshold ladder)** — the game had no loss condition at all: rounds
   repeated forever and the build was frozen at `MAX_AMPS=4`, so a skilled run and a careless one
@@ -23,6 +48,12 @@
   sequences, wave tables, quota integers, draft card-id order and cost tables, which must match
   across engines. Files: `prototypes/golden-spec.js`, `prototypes/golden-run-test.js`,
   `prototypes/golden/*.json`, `scripts/record-golden-runs.js`.
+- **CI**: `.github/workflows/check.yml` runs `npm ci && npm run check` on every pull request and
+  push to `main` (Node 18 and 22). Previously nothing ran the tests automatically, and Render
+  deploys `main` without them.
+- `prototypes/server-hardening-test.js` and live checks in `scripts/smoke-check.js` pin each
+  defect above; `checkDocsMatchReality` fails the build when the docs drift from the code on the
+  points that actually drifted.
 - NEON `?debug=1` automation hooks (`window.__neon`) matching the Tower Defense idiom — a round runs
   ~90 real seconds, so verifying all 8 rounds plus rebirth in a browser is otherwise impractical.
 - Character selection, difficulty selection, local meta progression, permanent upgrades, daily challenge, map unlocks, pause UI, survival win resolution, and rewarded ad hooks for `/arcade/vampire/`.
@@ -107,6 +138,38 @@
 - Snake and breakout expose a `grid()` QA hook behind `?debug=1` so browser-driven balance runs can read real positions instead of scraping pixels.
 
 ### Fixed
+- **Indian Poker betting.** A raise now matches the outstanding bet before adding 5 (it only
+  added 5, so a re-raise was a call that spent a raise); a call that matches an outstanding bet
+  closes the betting (it always handed the host another action); equal cards split the pot (they
+  silently went to the host); a fold stops the clock; the 10-card fold penalty no longer mints
+  chips. Solo mode had its own worse bug — calls were free in both directions, so every raise was
+  a one-sided donation — and it could show the inverse result on the game-over screen when the
+  lobby's hidden colour picker still said black. Solo now uses the same rules as the server.
+- **Omok overline.** The win scan stopped at 4 stones per side, so extending an existing 6-stone
+  line to 7 was judged "exactly five" and won. Solo mode (`ai-omok.js`) accepted any `>= 5`,
+  contradicting the rules text ("6개 이상은 불인정") that the server enforced.
+- **Game-over reasons that contradicted the result.** Othello ended with `'board-full'`, rendered
+  "무승부 (보드 꽉 참)" under a "승리!" title; it now reports `'stone-count'`. `'no-moves'` read
+  "이동 불가 (상대 말 전멸)", a checkers phrase shown at the end of every apple game. Checkers
+  reported a blocked opponent as wiped out.
+- **First mover.** Checkers, mancala, dots-and-boxes and battleship started with the host's colour
+  and — because rematch swaps colours before resetting — the host moved first forever, and a
+  black host contradicted the rules text ("백이 먼저 둡니다"). White now always moves first, as
+  every rules text and solo mode already said; the colour swap alternates the first player.
+- **Battleship reload mid-battle.** The reconnect path always showed the placement screen and
+  the server never sent the player's own fleet, so a reload effectively forfeited. The server
+  now returns the reconnecting player's own grid (`myShipGrid`) and the board restores it.
+- `endGame` is idempotent — a delayed timer can no longer overwrite a finished game's winner.
+- The service worker ignores non-GET requests (admin POSTs used to hit `cache.put` and reject).
+- `npm run verify:production` required `boardgame-v11` and two exact client versions, so it had
+  failed against every deploy since; it now checks invariants and runs inside `test:full`.
+- Player-facing rules text: Indian Poker ties and raises, omok ("렌주" → exactly five, no
+  forbidden moves), and "who moves first" for checkers, mancala and connect four.
+- Docs: `AGENTS.md` (the canonical trap list) and the Copilot instructions taught that the sandbox
+  TD engine ships to production; `CLAUDE.md`/`AGENTS.md` carried stale suite and assertion
+  counts; `ADDING_AN_ARCADE_GAME.md`'s template omitted `sw-update.js` (failing `npm run check`),
+  linked a missing icon, and called a nonexistent `window.AdMob`; `ADDING_A_GAME.md` had no rules
+  test step; the TD editor's Publish message told users to import into a page that can't.
 - NEON CASCADE fused amplifier materials were returned to the draft pool — `ampOffers` filtered on
   `owned` only, but `grantAmp` removes materials from `owned` when they fuse, so the same fusion
   could be farmed indefinitely and stack (this is the same bug class fixed earlier in snake and

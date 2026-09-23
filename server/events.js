@@ -2,7 +2,7 @@
 const { v4: uuidv4 } = require('uuid');
 const state = require('./state');
 const {
-  log, rateCheck, cleanRateLimit,
+  log, rateCheck, cleanRateLimit, sanitizeNickname,
   getRoleColor, getOpponentRole,
   getRoomBySocketId, getSpectatorBySocketId
 } = require('./utils');
@@ -19,9 +19,75 @@ function payloadObject(value) {
   return value && typeof value === 'object' ? value : {};
 }
 
+// 소켓 리스너 하나가 던진 예외가 프로세스 전체를 죽이면 안 된다.
+// socket.io 는 리스너 예외를 잡지 않고, 여기엔 uncaughtException 처리기도 없다 —
+// 실제로 관전자 훈수 좌표 하나(오목 {row:0.5})와 뱅 리액션 pick 하나(0.5)가 서버를
+// 통째로 내렸다. 그러면 진행 중인 모든 방(마작·뱅 포함)이 메모리째 사라진다.
+// 근본 원인은 각 핸들러에서 고친다. 이 가드는 '아직 모르는 다음 버그'를 위한 안전망이다.
+function guardSocketHandlers(socket) {
+  const on = socket.on.bind(socket);
+  socket.on = (event, listener) => on(event, function guarded(...args) {
+    try {
+      const result = listener.apply(this, args);
+      if (result && typeof result.then === 'function') {
+        result.catch((err) => reportHandlerError(socket, event, err));
+      }
+      return result;
+    } catch (err) {
+      reportHandlerError(socket, event, err);
+      return undefined;
+    }
+  });
+}
+
+function reportHandlerError(socket, event, err) {
+  const where = err && err.stack ? err.stack.split('\n').slice(0, 3).join(' | ') : String(err);
+  log(`[!] 소켓 핸들러 예외 — ${event} (socket ${String(socket.id).slice(0, 8)}): ${where}`);
+}
+
+// 좌표가 정수이고 판 안인지 — 훈수처럼 보드를 직접 인덱싱하는 곳은 반드시 이걸 거친다.
+// typeof === 'number' 만 보면 0.5 가 통과해 board[0.5] 가 undefined 가 된다.
+function isCell(row, col, rows, cols) {
+  return Number.isInteger(row) && Number.isInteger(col) &&
+    row >= 0 && row < rows && col >= 0 && col < cols;
+}
+
+// 이 소켓이 호스트인 '대기 중' 방을 지운다. 한 소켓이 대기방을 여러 개 쥐고 있으면
+// (방 만들기 → 뒤로 → 또 만들기) 연결이 살아 있는 한 30분 동안 정리되지 않아
+// 서버 방 상한(20)을 채운다 — 일반 사용자도, 소켓 하나로 막으려는 사람도.
+function releaseWaitingRoomsHostedBy(socket) {
+  for (const [roomId, room] of state.rooms) {
+    if (room.status !== 'waiting' || room.players.host.socketId !== socket.id) continue;
+    clearTimeout(room.cleanupTimer);
+    if (room.hostToken) state.tokenMap.delete(room.hostToken);
+    state.rooms.delete(roomId);
+    socket.leave(roomId);
+    log(`대기 중 방 교체 — ${roomId.slice(0, 8)} (같은 소켓이 새 방을 요청)`);
+  }
+}
+
+// 관전 중인 모든 방에서 이 소켓을 뺀다 (한 소켓 = 관전 방 하나).
+function removeSpectatorEverywhere(io, socket, exceptRoomId) {
+  for (const room of state.rooms.values()) {
+    if (room.id === exceptRoomId) continue;
+    const spec = room.spectators.get(socket.id);
+    if (!spec) continue;
+    room.spectators.delete(socket.id);
+    socket.leave(room.id);
+    if (spec.approved) {
+      const remaining = [...room.spectators.values()].filter(s => s.approved).length;
+      io.to(room.id).emit('spectator:left', { nickname: spec.nickname, count: remaining });
+    }
+  }
+}
+
 function registerEvents(io) {
   io.on('connection', (socket) => {
+    // 모든 리스너 등록(마작·뱅 포함)보다 먼저 감싸야 한다
+    guardSocketHandlers(socket);
+
     // 실제 클라이언트 IP (Cloudflare 경유 시 CF-Connecting-IP 헤더 사용)
+    // ⚠ 헤더는 클라이언트가 위조할 수 있다 — 로그 표시용으로만 쓰고 보안 판단에 쓰지 않는다.
     const clientIp = socket.handshake.headers['cf-connecting-ip']
       || socket.handshake.headers['x-forwarded-for']?.split(',')[0]?.trim()
       || socket.handshake.address;
@@ -74,6 +140,15 @@ function registerEvents(io) {
           rows: (Number.isInteger(rows) && rows >= 4 && rows <= 9)  ? rows : 6,
           cols: (Number.isInteger(cols) && cols >= 4 && cols <= 10) ? cols : 7,
         };
+      }
+
+      // 같은 소켓이 쥔 대기방은 새 방으로 교체한다 (상한을 조용히 갉아먹지 않게)
+      releaseWaitingRoomsHostedBy(socket);
+      // 이미 다른 방의 플레이어면 새 방을 만들 수 없다 — getRoomBySocketId 는 첫 방만
+      // 돌려주므로, 한 소켓이 두 방에 걸치면 수(game:move)가 엉뚱한 방으로 간다.
+      if (getRoomBySocketId(socket.id)) {
+        socket.emit('room:error', { code: 'ALREADY_IN_ROOM', message: '이미 참여 중인 게임이 있습니다.' });
+        return;
       }
 
       // 방 개수 제한 (개인 PC 보호)
@@ -134,8 +209,18 @@ function registerEvents(io) {
         socket.emit('room:error', { code: 'ROOM_FULL', message: '이미 게임이 진행 중입니다.' });
         return;
       }
+      if (room.players.host.socketId === socket.id) {
+        socket.emit('room:error', { code: 'SELF_JOIN', message: '자기 방에는 게스트로 들어갈 수 없습니다.' });
+        return;
+      }
       if (room.guestToken) {
         socket.emit('room:error', { code: 'ROOM_FULL', message: '방이 가득 찼습니다.' });
+        return;
+      }
+      // 검증을 모두 통과한 뒤에만 내 대기방을 정리한다 — 실패한 참가가 방을 지우면 안 된다
+      releaseWaitingRoomsHostedBy(socket);
+      if (getRoomBySocketId(socket.id)) {
+        socket.emit('room:error', { code: 'ALREADY_IN_ROOM', message: '이미 참여 중인 게임이 있습니다.' });
         return;
       }
 
@@ -270,6 +355,9 @@ function registerEvents(io) {
         dice:           room.dice           || null,
         remainingMoves: room.remainingMoves || null,
         attackGrids:    room.attackGrids    || null,
+        // 배틀십 재접속 — 내 함선 위치가 없으면 새로고침한 플레이어는 배치 화면으로 돌아가
+        // (서버는 재배치를 거부) 함대도 못 보고 포격도 못 했다. 자기 격자만 보낸다.
+        myShipGrid:     room.gameType === 'battleship' && room.shipGrids ? (room.shipGrids[yourColor] || null) : null,
         community:      room.community      || null,
         bets:           room.bets           || null,
       });
@@ -293,7 +381,12 @@ function registerEvents(io) {
       if (room.status !== 'active') return;
 
       const handler = handlers.get(room.gameType);
+      const movesBefore = room.moves.length;
       if (handler) handler.handleMove(socket, room, role, data);
+      // 무승부 제안은 '받은 쪽'이 수를 두면 소멸한다 (체스 관례). 제안한 쪽이 두는 건 무관.
+      if (room.drawOffer && room.drawOffer !== role && room.moves.length > movesBefore) {
+        room.drawOffer = null;
+      }
     });
 
     // --- Indian Poker: Action ---
@@ -331,6 +424,8 @@ function registerEvents(io) {
 
       const opponentRole     = getOpponentRole(role);
       const opponentSocketId = room.players[opponentRole].socketId;
+      // 서버가 제안을 기억해야 '수락'을 검증할 수 있다
+      room.drawOffer = role;
       if (opponentSocketId) io.to(opponentSocketId).emit('game:draw:offered');
     });
 
@@ -341,6 +436,10 @@ function registerEvents(io) {
       if (!found) return;
       const { room, role } = found;
       if (room.status !== 'active') return;
+      // ⚠ 상대가 제안하지 않았는데 '수락'을 보내면 안 된다. 예전엔 검증이 없어서
+      //   지고 있는 쪽이 devtools 에서 emit 한 줄로 언제든 무승부를 만들 수 있었다.
+      if (!room.drawOffer || room.drawOffer === role) return;
+      room.drawOffer = null;
 
       if (accept) {
         endGame(room, 'draw', 'agreement');
@@ -348,7 +447,6 @@ function registerEvents(io) {
         const opponentRole     = getOpponentRole(role);
         const opponentSocketId = room.players[opponentRole].socketId;
         if (opponentSocketId) io.to(opponentSocketId).emit('game:draw:declined');
-        room.rematchRequest = { host: false, guest: false };
       }
     });
 
@@ -396,8 +494,8 @@ function registerEvents(io) {
     socket.on('spectator:join', (payload) => {
       let { roomId, nickname } = payloadObject(payload);
       if (!roomId || typeof roomId !== 'string' || roomId.length > 36) return;
-      if (!nickname || typeof nickname !== 'string') nickname = '관전자';
-      nickname = nickname.trim().slice(0, 20) || '관전자';
+      // 제어문자·꺾쇠를 걷어낸다 — 개행이 섞이면 서버 로그에 가짜 줄을 끼워 넣을 수 있다
+      nickname = sanitizeNickname(nickname, '관전자', 20);
 
       const room = state.rooms.get(roomId);
       if (!room) {
@@ -413,10 +511,17 @@ function registerEvents(io) {
         return;
       }
 
-      // 이미 관전 중이거나 플레이어인 경우 제거
+      // 이 방의 플레이어는 자기 방을 관전할 수 없다 (연결 해제 정리가 꼬인다)
+      if (room.players.host.socketId === socket.id || room.players.guest.socketId === socket.id) {
+        socket.emit('spectator:error', { message: '이미 이 방의 플레이어입니다.' });
+        return;
+      }
+      // 한 소켓은 한 방만 관전한다 — 다른 방에 남은 흔적은 지운다
+      removeSpectatorEverywhere(io, socket, roomId);
       room.spectators.delete(socket.id);
       room.spectators.set(socket.id, { nickname, approved: false, socketId: socket.id });
-      socket.join(roomId);
+      // ⚠ 여기서 socket.join(roomId) 하면 안 된다. 방장이 승인하기 전부터 수·채팅이
+      //   전부 흘러 들어가 승인 절차가 무의미해진다. 방 입장은 approveSpectator 가 한다.
 
       const hostSocketId = room.players.host.socketId;
       if (hostSocketId && room.players.host.connected) {
@@ -486,31 +591,35 @@ function registerEvents(io) {
         log(`관전자 훈수(체스) — ${spectator.nickname}: ${move.san} (방 ${room.id.slice(0,8)})`);
 
       } else if (room.gameType === 'omok') {
-        if (typeof row !== 'number' || typeof col !== 'number') return;
-        if (row < 0 || row > 14 || col < 0 || col > 14) return;
+        // ⚠ 예전엔 typeof 만 보고 0~14 로 고정했다 — {row:0.5} 나 13×13 판의 row 14 가
+        //   board[행] 이 undefined 인 채로 인덱싱돼 서버 프로세스가 죽었다.
+        const size = (room.boardSize && room.boardSize.size) || 15;
+        if (!isCell(row, col, size, size)) return;
         if (room.board[row][col] !== null) {
           socket.emit('spectator:hint:invalid', { message: '이미 돌이 있는 곳입니다.' });
           return;
         }
         const colLetter = String.fromCharCode(65 + col);
-        const rowLabel  = 15 - row;
+        const rowLabel  = size - row;
         io.to(room.id).emit('spectator:hint', { row, col, label: `${colLetter}${rowLabel}`, nickname: spectator.nickname });
         log(`관전자 훈수(오목) — ${spectator.nickname}: ${colLetter}${rowLabel} (방 ${room.id.slice(0,8)})`);
       } else if (room.gameType === 'connect4') {
-        if (typeof col !== 'number') return;
-        if (col < 0 || col > 6) return;
-        if (room.colHeights[col] >= 6) {
+        // 판 크기는 4~9행 × 4~10열 — 7열·6행 고정이면 큰 판의 오른쪽은 훈수가 안 되고
+        // 9행 판의 여섯 칸 찬 열은 '꽉 참'으로 잘못 거절됐다
+        const rows = (room.boardSize && room.boardSize.rows) || 6;
+        const cols = (room.boardSize && room.boardSize.cols) || 7;
+        if (!Number.isInteger(col) || col < 0 || col >= cols) return;
+        if (room.colHeights[col] >= rows) {
           socket.emit('spectator:hint:invalid', { message: '이미 꽉 찬 열입니다.' });
           return;
         }
         io.to(room.id).emit('spectator:hint', { col, nickname: spectator.nickname });
       } else if (room.gameType === 'othello') {
-        if (typeof row !== 'number' || typeof col !== 'number') return;
-        if (row < 0 || row > 7 || col < 0 || col > 7) return;
+        if (!isCell(row, col, 8, 8)) return;
         io.to(room.id).emit('spectator:hint', { row, col, nickname: spectator.nickname });
       } else if (room.gameType === 'checkers') {
-        // 훈수: from 좌표 하이라이트
-        if (typeof row !== 'number' || typeof col !== 'number') return;
+        // 훈수: from 좌표 하이라이트 (범위 검사가 없어 어떤 숫자든 그대로 중계됐다)
+        if (!isCell(row, col, 8, 8)) return;
         io.to(room.id).emit('spectator:hint', { row, col, nickname: spectator.nickname });
       }
     });
@@ -674,17 +783,9 @@ function registerEvents(io) {
         }
       }
 
-      // 관전자 정리
-      const specFound = getSpectatorBySocketId(socket.id);
-      if (specFound) {
-        const { room, spectator } = specFound;
-        room.spectators.delete(socket.id);
-        if (spectator.approved) {
-          const remaining = [...room.spectators.values()].filter(s => s.approved).length;
-          io.to(room.id).emit('spectator:left', { nickname: spectator.nickname, count: remaining });
-        }
-        return;
-      }
+      // 관전자 정리 — 모든 방에서. 예전엔 첫 방만 지우고 return 해서,
+      // 관전자이면서 다른 방 플레이어인 소켓은 플레이어 정리를 건너뛰었다.
+      removeSpectatorEverywhere(io, socket, null);
 
       const found = getRoomBySocketId(socket.id);
       if (!found) return;
@@ -742,4 +843,4 @@ function registerEvents(io) {
   });
 }
 
-module.exports = { registerEvents };
+module.exports = { registerEvents, _internal: { guardSocketHandlers, isCell } };

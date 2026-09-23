@@ -32,13 +32,17 @@ Node.js **>= 18** required. There is **no build step** and no `.env` file.
 |---------|--------------|------|
 | `npm start` | Runs the server on `:3000` (alias: `npm run dev`) | Manual testing |
 | `npm run lint` | Parses every `.js` in the repo for **syntax errors only** | After any JS edit |
-| `npm test` | Smoke test on `:13001` — **82 assertions** (handlers, room state, HTTP routes) | After any change |
-| `npm run test:games` | 5 rule-engine/flow suites from `prototypes/` — Mahjong (engine, flow, timer), BANG! flow, and a 36-assertion backgammon/texasholdem/dotsboxes handler suite | After game-logic edits |
+| `npm test` | Smoke test on `:13001` — handler registry, room state, HTTP routes (including `/sandbox/` → 404) | After any change |
+| `npm run test:games` | Every suite listed in `scripts/run-game-flow-tests.js` — Mahjong/BANG! engines and flows, rule tests for all 12 board games, the arcade progression suites, the port contract (`golden-run-test.js`) and `server-hardening-test.js` | After game-logic edits |
 | `npm run test:full` | Routes + static assets + handlers + full-repo JS syntax pass, on `:3100` | Before finishing |
 | `npm run check` | `lint && test && test:games && test:full` | **Run before declaring done** |
 | `npm run sandbox` | Serves Layer C editors on `:3001` (dev-only) | Sandbox work |
 | `npm run build` | Prints "there is no build step" — a deliberate no-op | Never needed |
-| `npm run verify:production` | Hits `/api/version` to confirm the deployed commit | After a Render deploy |
+| `npm run verify:production` | Hits `/api/version` to confirm the deployed commit (also run against a local server by `test:full`, so it can't rot) | After a Render deploy |
+
+**CI:** `.github/workflows/check.yml` runs `npm ci && npm run check` on every pull request and
+every push to `main` (Node 18 and 22). Render still deploys `main` without running tests, so a
+red check on a PR is the only gate — do not merge through it.
 
 **There is no test framework and no single-test runner.** Tests are plain Node scripts
 that assert and exit non-zero. `scripts/smoke-test.js` / `scripts/smoke-check.js` are
@@ -82,16 +86,17 @@ jackpot, neon-cascade.
 
 These are the mistakes that actually break this repo.
 
-### 4.1 `sandbox/tower-defense/` ships to production
+### 4.1 Nothing under `sandbox/` ships to production — not even through an alias
 
-`public/arcade/tower-defense/` contains **only `index.html`**. The engine is served from
-`sandbox/tower-defense/` through an Express alias mounted at
-`/arcade/tower-defense/runtime/` (see `server/index.js`).
+`public/arcade/tower-defense/` is a self-contained game (첨탑 대란: its own `sim.js`,
+`game.js`, `style.css`). It does **not** use `sandbox/tower-defense/`. An old Express alias,
+`/arcade/tower-defense/runtime/`, kept serving the sandbox TD engine in production after its
+last consumer was removed by the 첨탑 대란 rebuild; it is gone, and the smoke tests now require
+that URL to 404. Do not re-add any `express.static(...sandbox...)` mount.
 
-So `sandbox/tower-defense/{config,game,ui}.js` are **production files** despite living
-under `sandbox/`. Test any change to them at `/arcade/tower-defense/`, not just in the
-sandbox editor. The other two sandboxes (`vampire-survivors`, `plant-growing`) are
-genuinely dev-only and feed their arcade games via `localStorage` instead.
+The three sandboxes are dev-only editors (`npm run sandbox` → `:3001`). Vampire and plant feed
+their arcade games through `localStorage`; the TD editor's "Publish" only saves and exports a
+config for its own play mode.
 
 ### 4.2 `/sandbox/` must return 404 in production
 
@@ -119,6 +124,28 @@ dependency-update task bump it.
 No database. Board-game state lives in `state.rooms`; player stats live in browser
 `localStorage`. Do not add a persistence layer without discussing the architecture first.
 
+### 4.7 Validate socket input as integers against the room's real board
+
+One Node process serves every room. An exception in any socket listener used to kill it —
+all board games, Mahjong and BANG! at once — and two were reachable by any player:
+a spectator hint of `{row: 0.5}` (`board[0.5]` is `undefined`) and a BANG! reaction
+`{pick: 0.5}`. `typeof x === 'number'` is **not** validation: use `Number.isInteger` and the
+room's actual `boardSize`, never a hardcoded 15×15 or 6×7. Listeners are now wrapped by
+`guardSocketHandlers` (`server/events.js`), but that is a safety net: a caught throw can
+still leave a room half-updated.
+
+Also server-side: a draw can only be accepted if the opponent offered one (`room.drawOffer`);
+spectators join the broadcast room only when approved; a socket hosts at most one waiting
+room. `GAMES.md` → "Shared room protocol" has the full list.
+
+### 4.8 Don't pin volatile values in checks or docs
+
+Several checks and docs went stale because they hardcoded something that changes on every
+release: `verify:production` required `boardgame-v11` and exact client versions (and failed on
+every deploy since), and the docs listed per-suite assertion counts that were wrong within
+weeks. Assert invariants (a version *floor*, "the referenced asset is served") and name suites
+instead of counting them.
+
 ---
 
 ## 5. Conventions
@@ -136,7 +163,7 @@ No database. Board-game state lives in `state.rooms`; player stats live in brows
 
 | Task | Guide | Shape of the change |
 |------|-------|---------------------|
-| Board game (Layer A) | `ADDING_A_GAME.md` | 10 files; only 2 need multi-line edits |
+| Board game (Layer A) | `ADDING_A_GAME.md` | 10 files (only 2 need multi-line edits) + rule tests |
 | Arcade game (Layer B) | `ADDING_AN_ARCADE_GAME.md` | 3 files, **zero** server changes |
 | Game rules change | — | `server/handlers/<game>.js` → `handleMove` |
 | AI difficulty | — | `public/js/ai-<game>.js` → depth constants at top |
@@ -158,12 +185,13 @@ parses, not that a game is playable. Also do the manual check for your layer:
 | Board game AI | Solo mode ("혼자하기") from the lobby |
 | Mahjong / BANG! | `/mahjong.html`, `/bang.html` — start a table, fill seats with AI |
 | Arcade game | Load `/arcade/<name>/` and play a round |
-| Sandbox | `npm run sandbox` → `:3001`; **if tower-defense, also check `/arcade/tower-defense/`** |
+| Sandbox | `npm run sandbox` → `:3001` |
 | Server routes | `curl http://localhost:3000/api/status` |
 
 `prototypes/` holds two different kinds of script:
-- **Rule-engine/flow suites** (mahjong-*, bang-flow, newer-games-handler) — these *are* CI,
-  run by `npm run test:games`. Keep them passing.
+- **Test suites** — everything listed in `scripts/run-game-flow-tests.js` (rule engines for all
+  board games, arcade progression, the port contract `golden-run-test.js`, and
+  `server-hardening-test.js`). They run in `npm run test:games` and in CI. Keep them passing.
 - **Balance simulators** (`bootstrap-sim/`, `jackpot-autoplay.js`, `civ-mvp-autoplay.js`) —
   not wired into any npm script; run directly with `node` when tuning arcade economies.
 

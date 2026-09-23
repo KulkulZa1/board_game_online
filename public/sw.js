@@ -8,7 +8,7 @@
 // 캐시 무효화:
 //   activate 시 /api/version 호출 → commit 해시가 바뀌면 캐시 전체 삭제
 
-const CACHE_NAME   = 'boardgame-v26';   // v26: NEON 임계 사슬(할당량+환생) — 옛 캐시 퍼지
+const CACHE_NAME   = 'boardgame-v27';   // v27: 서버 결함 수정에 맞춘 클라이언트(인디언 포커·배틀십·오목) — 옛 캐시 퍼지
 const COMMIT_KEY   = 'sw_last_commit';
 
 // 사전 캐시 — HTML 제외, 진짜 정적 자산만 (icons/ 미존재 시 phantom 경로 제외)
@@ -67,6 +67,9 @@ self.addEventListener('activate', (event) => {
 // ── Fetch ─────────────────────────────────────────────────────────
 self.addEventListener('fetch', (event) => {
   const { request } = event;
+  // GET 만 다룬다. POST(관리자 /admin/*)가 아래 cacheFirst 로 떨어지면 cache.put 이
+  // 'POST 는 캐시할 수 없다'며 거부되고, 기다리지 않는 약속이라 처리되지 않은 거부로 남았다.
+  if (request.method !== 'GET') return;
   const url = new URL(request.url);
 
   // 다른 오리진 요청은 SW 개입 안 함 (CDN, Three.js importmap 등)

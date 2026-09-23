@@ -30,6 +30,7 @@ window.BattleshipBoard = (function () {
   let _attackGrids      = { white: null, black: null };
   let _myShipGrid       = null;   // 내 함선 위치 (배치 후 저장)
   let _lastShot         = null;   // { row, col } 마지막 포격
+  let _waitingForOpponent = false; // 배치는 끝냈고 상대 배치를 기다리는 중 (재접속 복원용)
 
   // ===== 공개 API =====
 
@@ -50,6 +51,7 @@ window.BattleshipBoard = (function () {
 
   function setPhase(phase) {
     _phase = phase;
+    if (phase === 'active') _waitingForOpponent = false;
     if (phase === 'active') {
       _renderActive();
     } else {
@@ -492,7 +494,8 @@ window.BattleshipBoard = (function () {
     const statusMsg = document.createElement('div');
     statusMsg.className = 'bs-status-msg' + (_myTurn ? ' bs-my-turn' : '');
     statusMsg.id = 'bs-status-msg';
-    statusMsg.textContent = _myTurn ? '내 차례 — 적 격자를 클릭해 공격하세요' : '상대방 차례...';
+    statusMsg.textContent = _waitingForOpponent ? '배치 완료 — 상대방이 함선을 배치하는 중...'
+      : _myTurn ? '내 차례 — 적 격자를 클릭해 공격하세요' : '상대방 차례...';
     container.appendChild(statusMsg);
 
     _attachAttackEvents();
@@ -629,7 +632,8 @@ window.BattleshipBoard = (function () {
     const statusEl = document.getElementById('bs-status-msg');
     if (statusEl) {
       statusEl.className = 'bs-status-msg' + (_myTurn ? ' bs-my-turn' : '');
-      statusEl.textContent = _myTurn ? '내 차례 — 적 격자를 클릭해 공격하세요' : '상대방 차례...';
+      statusEl.textContent = _waitingForOpponent ? '배치 완료 — 상대방이 함선을 배치하는 중...'
+        : _myTurn ? '내 차례 — 적 격자를 클릭해 공격하세요' : '상대방 차례...';
     }
 
     const grid = document.getElementById('bs-attack-grid');
@@ -647,7 +651,31 @@ window.BattleshipBoard = (function () {
     const el = document.getElementById('bs-status-msg');
     if (!el) return;
     el.className = 'bs-status-msg' + (_myTurn ? ' bs-my-turn' : '');
-    el.textContent = _myTurn ? '내 차례 — 적 격자를 클릭해 공격하세요' : '상대방 차례...';
+    el.textContent = _waitingForOpponent ? '배치 완료 — 상대방이 함선을 배치하는 중...'
+      : _myTurn ? '내 차례 — 적 격자를 클릭해 공격하세요' : '상대방 차례...';
+  }
+
+  // 재접속 복원 — 서버가 돌려준 '내' 함선 격자와 양쪽 포격 기록으로 화면을 되살린다.
+  // 예전엔 재접속하면 무조건 배치 화면이었다. 서버는 재배치를 거부하므로 한창 싸우던
+  // 플레이어가 함대도 못 보고 포격도 못 하는 채로 시간 초과 패배로 끝났다.
+  function restore({ myShipGrid, attackGrids, phase, myTurn }) {
+    _myShipGrid  = myShipGrid;
+    _placedShips = {};
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        const name = myShipGrid[r][c];
+        if (!name) continue;
+        if (!_placedShips[name]) _placedShips[name] = { name, cells: [] };
+        _placedShips[name].cells.push({ r, c });
+      }
+    }
+    if (attackGrids) _attackGrids = attackGrids;
+    _waitingForOpponent = phase !== 'active';
+    _myTurn = !_waitingForOpponent && !!myTurn;
+    _phase  = 'active';          // 배치는 끝났다 — 대기 중이어도 내 함대를 보여 준다
+    _renderActive();
+    _updateStatusMsg();
+    _refreshAttackGridInteractivity();
   }
 
   // ===== 헬퍼 =====
@@ -750,6 +778,7 @@ window.BattleshipBoard = (function () {
     initSpectator,
     setPhase,
     setMyTurn,
+    restore,
     updateAfterShot,
     updateSpectator,
   };

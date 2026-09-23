@@ -415,6 +415,9 @@ function armReactTimer(room, item) {
 }
 
 // 리액션 해소 — use: {cards:[handIdx...]} 또는 {pass:true} 또는 {pick:idx}
+// ⚠ pick 은 클라이언트가 보낸 값이 그대로 온다. typeof === 'number' 로만 거르면 0.5 가
+//   범위 검사를 통과해 options[0.5] === undefined 가 되고, 그 .kind 에서 서버가 죽었다
+//   (제시 존스·페드로 라미레즈는 매 턴 이 선택을 한다). 반드시 정수로 거른다.
 function resolveReact(room, seat, use) {
   const g = room.game;
   const item = g.queue[0];
@@ -470,7 +473,7 @@ function resolveReact(room, seat, use) {
       return;
     }
   } else if (item.type === 'store') {
-    let pick = typeof use.pick === 'number' ? use.pick : 0;
+    let pick = Number.isInteger(use.pick) ? use.pick : 0;
     if (pick < 0 || pick >= item.cards.length) pick = 0;
     const card = item.cards.splice(pick, 1)[0];
     p.hand.push(card);
@@ -485,7 +488,7 @@ function resolveReact(room, seat, use) {
     return;
   } else if (item.type === 'steal') {
     // 패닉!/캣 발루 — 노릴 곳 선택 (무응답 시 손패 우선, 없으면 첫 항목)
-    let ix = typeof use.pick === 'number' ? use.pick : -1;
+    let ix = Number.isInteger(use.pick) ? use.pick : -1;
     if (ix < 0 || ix >= item.options.length) {
       const h = item.options.findIndex((o) => o.kind === 'hand');
       ix = h >= 0 ? h : 0;
@@ -496,7 +499,7 @@ function resolveReact(room, seat, use) {
     return;
   } else if (item.type === 'kit') {
     // 키트 칼슨 — 3장 중 1장을 산 위로 되돌리고 나머지를 가져간다
-    let back = typeof use.pick === 'number' ? use.pick : -1;
+    let back = Number.isInteger(use.pick) ? use.pick : -1;
     if (back < 0 || back >= item.cards.length) back = item.cards.length - 1;
     const returned = item.cards.splice(back, 1)[0];
     p.hand.push(...item.cards);
@@ -507,7 +510,7 @@ function resolveReact(room, seat, use) {
     return;
   } else if (item.type === 'jesse') {
     // 제시 존스 — 첫 장을 지정한 상대 손에서, 나머지는 산에서
-    let ix = typeof use.pick === 'number' ? use.pick : 0;
+    let ix = Number.isInteger(use.pick) ? use.pick : 0;
     if (ix < 0 || ix >= item.options.length) ix = 0;
     const opt = item.options[ix];
     let got = false;
@@ -527,7 +530,7 @@ function resolveReact(room, seat, use) {
     return;
   } else if (item.type === 'pedro') {
     // 페드로 라미레즈 — 첫 장을 버림패에서 가져올 수 있다
-    let ix = typeof use.pick === 'number' ? use.pick : 1;
+    let ix = Number.isInteger(use.pick) ? use.pick : 1;
     if (ix < 0 || ix >= item.options.length) ix = 1;
     if (item.options[ix].kind === 'discard' && g.discard.length) {
       p.hand.push(g.discard.pop());
@@ -1119,9 +1122,24 @@ function maybeAiReact(room, item) {
 
 // ── 소켓 등록 ─────────────────────────────────────────────────────
 function register(io, socket) {
+  // 한 소켓은 테이블 하나만 — findBySocket 은 첫 테이블만 찾으므로, 여러 테이블에 걸치면
+  // 행동이 엉뚱한 테이블로 간다. 새로 만들거나 들어가면 내가 호스트인 대기 테이블은 정리한다.
+  function releaseWaitingTablesHostedBy(socketId) {
+    for (const room of [...rooms.values()]) {
+      if (room.status !== 'waiting') continue;
+      const host = room.seats[room.hostSeat];
+      if (!host || host.socketId !== socketId) continue;
+      emitAll(room, 'bang:error', { message: '방장이 다른 방으로 이동했습니다', fatal: true });
+      socket.leave('bg:' + room.code);
+      destroyRoom(room);
+    }
+  }
+
   socket.on('bang:create', (payload) => {
     const { nickname, size } = payload && typeof payload === 'object' ? payload : {};
     if (!rateCheck(socket.id, 'bg-create', 5, 60 * 1000)) return;
+    releaseWaitingTablesHostedBy(socket.id);
+    if (findBySocket(socket.id)) return socket.emit('bang:error', { message: '이미 진행 중인 대국이 있습니다' });
     const room = createRoom(nickname, size);
     const seat = room.seats[0];
     seat.socketId = socket.id;
@@ -1138,8 +1156,14 @@ function register(io, socket) {
     const room = rooms.get(String(code || '').toUpperCase().trim());
     if (!room) return socket.emit('bang:error', { message: '방을 찾을 수 없습니다' });
     if (room.status !== 'waiting') return socket.emit('bang:error', { message: '이미 시작된 방입니다' });
+    // 같은 테이블에 두 번 앉으면(참가 버튼 연타) 두 번째 자리는 실제 클라이언트가 없는
+    // '연결됨' 유령 좌석이 되어 그 차례에서 대국이 멈춘다 — 이미 앉아 있으면 무시한다.
+    const already = findBySocket(socket.id);
+    if (already && already.room === room) return;
     const seatIdx = room.seats.findIndex((s) => s === null);
     if (seatIdx < 0) return socket.emit('bang:error', { message: '자리가 없습니다' });
+    releaseWaitingTablesHostedBy(socket.id);
+    if (findBySocket(socket.id)) return socket.emit('bang:error', { message: '이미 진행 중인 대국이 있습니다' });
     const seat = seatHuman(room, seatIdx, nickname);
     seat.socketId = socket.id;
     seat.connected = true;

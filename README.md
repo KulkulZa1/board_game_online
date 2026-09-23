@@ -57,12 +57,16 @@ npm run dev  # 또는 npm start
 ```bash
 npm run lint   # 모든 JS 파일 문법 검사
 npm test       # 로컬 서버 기동 + 핵심 라우트/정적 자산/핸들러 스모크 테스트
-npm run check  # lint + test
+npm run test:games  # 규칙 엔진·아케이드 밸런스·서버 방어 회귀 스위트 전체
+npm run test:full   # 라우트·정적 자산·실서버 소켓 검사 + 배포 확인 스크립트
+npm run check  # lint + test + test:games + test:full — 끝내기 전에 반드시
 npm run build  # 별도 빌드 단계 없음 안내
 npm run dev    # 로컬 개발 서버 실행
 ```
 
 이 프로젝트는 번들러 없는 Node/Express + 정적 HTML/CSS/JS 앱입니다. Render.com 배포도 `npm install` 후 `node server.js`로 실행됩니다.
+
+CI(`.github/workflows/check.yml`)가 PR과 `main` 푸시마다 `npm run check`를 돌립니다. Render는 테스트 없이 `main`을 배포하므로, CI가 운영 전 유일한 자동 관문입니다.
 
 ---
 
@@ -94,13 +98,13 @@ They save their live config to browser `localStorage`:
 | `sandbox/plant-growing/` | `sandbox_pg_config` | `/arcade/plant/` via `public/js/sandbox-config.js` |
 | `sandbox/tower-defense/` | `sandbox_td_config` / `td_published_config` | (editor-only — the arcade TD is now a self-contained game) |
 
-Because production does not serve `/sandbox/`, production checks should verify that arcade pages still load, no public arcade HTML requests `/sandbox/` assets, and `/sandbox/` returns 404. The `/arcade/tower-defense/runtime/` alias still serves the sandbox TD engine for the editor's publish flow, but the arcade Tower Defense page (첨탑 대란) is a self-contained game and no longer loads it.
+Because production does not serve `/sandbox/`, production checks should verify that arcade pages still load, no public arcade HTML requests `/sandbox/` assets, and `/sandbox/` returns 404. The arcade Tower Defense page (첨탑 대란) is a self-contained game. The old `/arcade/tower-defense/runtime/` alias, which served the sandbox TD engine in production, had no consumer left and was removed — it must now return 404, like `/sandbox/`.
 
-Tower Defense has an explicit publish/import workflow for the common case where `npm run sandbox` and the main app run on different origins:
+The Tower Defense editor has a publish step that validates and saves the config (nothing outside the editor imports it any more):
 
 1. Run `npm run sandbox` and edit `sandbox/tower-defense/`.
 2. Click `Publish`; the editor validates the config, stores `td_published_config` on the current origin, and exports `td-published-config.json`.
-3. That config feeds the **sandbox editor's own play mode** (and any future consumer). The arcade `/arcade/tower-defense/` page is now the standalone 첨탑 대란 roguelite and does not read sandbox config.
+3. That config feeds the **sandbox editor's own play mode**. The arcade `/arcade/tower-defense/` page is the standalone 첨탑 대란 roguelite and does not read sandbox config — the editor's old publish message told you to import the file there, which was impossible.
 
 See `docs/launch-readiness.md` for the current security, deployment, and manual verification checklist.
 

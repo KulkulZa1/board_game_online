@@ -122,7 +122,9 @@ setTimeout(() => {
     { path: '/arcade/tower-defense/', label: '/arcade/tower-defense/ → 200', expect: 200 },
     { path: '/arcade/tower-defense/sim.js', label: '/arcade/tower-defense/sim.js → 200', expect: 200 },
     { path: '/arcade/tower-defense/game.js', label: '/arcade/tower-defense/game.js → 200', expect: 200 },
-    { path: '/arcade/tower-defense/runtime/game.js', label: '/arcade/tower-defense/runtime/game.js → 200', expect: 200 },
+    // 샌드박스 TD 엔진을 운영에 노출하던 죽은 별칭 — 되살아나면 안 된다
+    { path: '/arcade/tower-defense/runtime/game.js', label: '/arcade/tower-defense/runtime/game.js → 404 (샌드박스 비노출)', expect: 404 },
+    { path: '/arcade/tower-defense/style.css', label: '/arcade/tower-defense/style.css → 200', expect: 200 },
     { path: '/arcade/factory/',  label: '/arcade/factory/ → 200',  expect: 200 },
     { path: '/arcade/factory/game.js', label: '/arcade/factory/game.js → 200', expect: 200 },
     { path: '/arcade/bootstrap/', label: '/arcade/bootstrap/ → 200', expect: 200 },
