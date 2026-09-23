@@ -2,6 +2,19 @@
 
 ## [Unreleased] - Vampire Survivors director-loop readiness
 
+### Added — Godot port (stage 3)
+- `godot/tower-defense/`: a Godot 4 project porting 첨탑 대란's full rules engine (`td_rules.gd`,
+  `td_rng.gd`, `td_run.gd` — method-for-method with `sim.js`'s `Run`) and a minimal playable scene.
+  Source only; `.godot/`, `export/` and `export_presets.cfg` are ignored. Korean text uses
+  `SystemFont` (OS fonts) instead of bundling a font file.
+- `tests/contract_test.gd` checks every Tier B value of `prototypes/golden/tower-defense.json`
+  when run under Godot. `prototypes/godot-port-test.js` guards the port in CI without Godot: it
+  reads the JSON-compatible data tables straight out of `td_rules.gd`, evaluates `td_rng.gd`'s
+  xorshift expression under 64-bit integer semantics against the contract's uint32 sequence
+  (unifying the `>> 17` arithmetic shift into a logical one fails it at the second number), and
+  checks that every `Run` method was ported and that GDScript indentation is tabs only.
+- Not yet run under a real Godot binary — none is installed in this environment.
+
 ### Security
 - **Any player could crash the whole server.** Socket listeners had no exception handling and
   there is no process-level handler, so one throw killed every room (board games, Mahjong,

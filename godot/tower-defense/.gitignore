@@ -1,0 +1,6 @@
+# Godot 이 만드는 캐시·임포트 산출물 — 커밋하지 않는다 (소스만 커밋)
+.godot/
+/export/
+# 내보내기 설정엔 서명 키 경로·암호가 들어갈 수 있다
+export_presets.cfg
+*.tmp

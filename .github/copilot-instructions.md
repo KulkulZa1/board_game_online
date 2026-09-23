@@ -53,3 +53,4 @@ individually runnable: `node prototypes/newer-games-handler-test.js`.
 | `public/arcade/<name>/` | Solo arcade game — `index.html` + `style.css` + `game.js` (IIFE), zero server code; most keep rules in a headless, Node-testable `sim.js` |
 | `prototypes/` | Test suites run by `npm run test:games` (list in `scripts/run-game-flow-tests.js`) |
 | `.github/workflows/check.yml` | CI — `npm run check` on every PR and push to `main` |
+| `godot/tower-defense/` | Godot 4 port of the tower-defense rules — change it together with `public/arcade/tower-defense/sim.js` |

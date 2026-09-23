@@ -1,0 +1,31 @@
+; Engine configuration file.
+; 첨탑 대란 — public/arcade/tower-defense/sim.js 의 Godot 이식.
+; 규칙 동등성은 tests/contract_test.gd 가 prototypes/golden/tower-defense.json 으로 검사한다.
+
+config_version=5
+
+[application]
+
+config/name="첨탑 대란"
+config/description="타워 디펜스 로그라이트 — 웹판 규칙의 Godot 이식"
+run/main_scene="res://scenes/main.tscn"
+config/features=PackedStringArray("4.4", "Mobile")
+config/icon="res://icon.svg"
+
+[display]
+
+window/size/viewport_width=720
+window/size/viewport_height=1280
+window/size/window_width_override=540
+window/size/window_height_override=960
+window/stretch/mode="canvas_items"
+window/stretch/aspect="keep"
+window/handheld/orientation=1
+
+[input_devices]
+
+pointing/emulate_mouse_from_touch=true
+
+[rendering]
+
+renderer/rendering_method="mobile"
