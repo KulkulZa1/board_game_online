@@ -12,6 +12,10 @@ error/
 android/
 ios/
 dist/
+# Godot 임포트 캐시·빌드 결과 (각 프로젝트의 .gitignore 와 이중 방어)
+godot/**/.godot/
+godot/**/export/
+godot/**/export_presets.cfg
 .server.pid
 .server.log
 .chrome-test-profile/

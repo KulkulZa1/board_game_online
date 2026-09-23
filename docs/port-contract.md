@@ -103,3 +103,28 @@ node scripts/record-golden-runs.js
 다시 기록했다면 커밋 메시지에 무엇이 왜 바뀌었는지 남기고, 이식된 쪽이 있다면 같이 고친다.
 
 `specVersion` 은 계약의 *형태*가 바뀔 때만 올린다 (필드 추가/삭제). 값이 바뀐 건 버전이 아니다.
+
+---
+
+## Godot 이식 현황
+
+| 게임 | 위치 | 상태 |
+|---|---|---|
+| 첨탑 대란 (`tower-defense`) | `godot/tower-defense/` | 규칙 전체(`td_run.gd`) + 최소 플레이 화면. 메타 상점 UI·연출·Android 내보내기는 아직 |
+| NEON CASCADE | — | 아직 없음 (계약 파일은 준비됨) |
+
+검사는 두 겹이다:
+
+| 검사 | 어디서 | 무엇을 |
+|---|---|---|
+| `node prototypes/godot-port-test.js` | CI 포함 어디서나 (Godot 불필요) | `td_rules.gd` 표를 JSON 으로 뽑아 `sim.js` 와 비교, `td_rng.gd` 의 식을 64비트 의미로 실행해 계약 난수열과 비교, `Run` 메서드 누락, 탭 들여쓰기 |
+| `godot --headless --path godot/tower-defense --script res://tests/contract_test.gd` | Godot 이 설치된 곳 | 실제 GDScript 를 실행해 Tier B 전 항목을 계약 파일과 대조 |
+
+첫 번째는 GDScript 를 **실행하지 않는다** — 문법 오류나 실행 중 오류는 두 번째로만 잡힌다.
+Godot 을 CI 에 올리면(헤드리스 바이너리를 받아 두 번째 명령을 도는 잡) 이 공백이 닫힌다.
+
+이식하며 드러난 추가 함정 (`godot/tower-defense/README.md` 에 자세히):
+- JS `sort` 는 안정 정렬, Godot `sort_custom` 은 아니다 — 스폰 순서가 달라진다
+- Godot 의 Dictionary `==` 는 내용 비교다 — 객체 동일성은 id 로
+- JS `Math.round` 는 동률을 +∞ 로, GDScript `round()` 는 0 에서 먼 쪽으로
+- Godot 의 JSON 파서는 모든 숫자를 float 로 읽는다

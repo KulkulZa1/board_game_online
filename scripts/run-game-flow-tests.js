@@ -21,6 +21,7 @@ const tests = [
   'prototypes/td-rogue-test.js',
   'prototypes/golden-run-test.js',
   'prototypes/server-hardening-test.js',
+  'prototypes/godot-port-test.js',
 ];
 
 for (const test of tests) {
