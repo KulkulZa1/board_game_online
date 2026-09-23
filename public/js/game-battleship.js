@@ -9,7 +9,17 @@ window.GameHandlers.battleship = (function () {
       myColor,
       onMove:  handleAction,
     });
-    BattleshipBoard.setPhase('placement');
+    // 재접속: 이미 배치했다면(서버가 내 격자를 돌려줌) 배치 화면이 아니라 전투/대기 화면으로.
+    if (state && state.myShipGrid) {
+      BattleshipBoard.restore({
+        myShipGrid:  state.myShipGrid,
+        attackGrids: state.attackGrids,
+        phase:       state.phase,
+        myTurn:      state.currentTurn === myColor,
+      });
+    } else {
+      BattleshipBoard.setPhase('placement');
+    }
     return { board: BattleshipBoard };
   }
 

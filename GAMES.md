@@ -34,7 +34,23 @@ handleMove(socket, room, role, data)    // validates + applies move + emits even
 ```
 
 **Emits on move:** `game:move:made` with `{ move, board, timers, turn, ... }`  
-**Game over:** call `endGame(room, winnerColor, reason, extras)` from `server/endgame.js`
+**Game over:** call `endGame(room, winnerColor, reason, extras)` from `server/endgame.js`.
+`endGame` is idempotent — a room ends once; delayed timers that fire later are ignored
+(they used to overwrite the winner and emit a second `game:over`).
+
+**Shared room protocol (`server/events.js`)** — rules every Layer A game relies on. Each of these
+was a real, remotely triggerable defect before it was written down:
+
+| Concern | Rule |
+|---|---|
+| Handler exceptions | Every socket listener is wrapped by `guardSocketHandlers`; a throw is logged, not fatal. Before this, one bad spectator hint or BANG! `pick` killed the whole process (all rooms, Mahjong and BANG! included). The guard is a safety net — still validate inputs. |
+| Coordinates from clients | Integers only, bounded by the **room's real board size** (`isCell`). `typeof x === 'number'` lets `0.5` through, and `board[0.5]` is `undefined`. |
+| Draw offers | `game:draw:offer` records `room.drawOffer = role`. `game:draw:respond` is honoured only from the *other* player while an offer is pending; the offer lapses when its recipient moves, and on game end / rematch. (Previously `respond {accept:true}` ended any game as a draw with no offer at all.) The draw button is currently shown for chess only. |
+| Spectators | `spectator:join` records a pending request but does **not** join the socket.io room — `approveSpectator` does. Unapproved spectators used to receive every move and the players' chat. Nicknames go through `sanitizeNickname`; a room's own players cannot spectate it; one socket spectates one room. |
+| Spectator hints | Omok bounds follow `boardSize.size` (13–19), Connect Four follows `boardSize.rows/cols` — both were hardcoded to 15×15 and 6×7. |
+| Room creation | A socket hosts at most **one waiting room**: creating (or joining) another releases its previous waiting room. Rate limits are keyed per socket connection, so this — not the rate limit — is what stops one client from filling the 20-room cap. A socket already playing elsewhere gets `ALREADY_IN_ROOM`. Mahjong and BANG! follow the same rule per table, and ignore a repeated `join` from an already-seated socket (a double-click used to take two seats, the second a connected-looking ghost that stalled the game on its turn). |
+| First mover | White moves first in every game (omok/othello: black, by their own rules). Checkers, mancala, dots-and-boxes and battleship used to start with the **host's** colour, which contradicted their rules text whenever the host picked black, and — because rematch swaps colours before `resetRoom` — kept the host moving first forever. A fixed first colour lets the colour swap alternate the first player. |
+| Reconnect | `game:state` carries the reconnecting player's **own** battleship grid as `myShipGrid` (never the opponent's), so a reload mid-battle restores the fleet instead of the placement screen. |
 
 ---
 
@@ -84,7 +100,7 @@ room.lastMove    — { row, col }
 ```
 
 **Win conditions:**
-- Exactly 5 in a row (Renju rule — 6+ is NOT a win): `endGame(room, yourColor, 'five-in-a-row', { winCells })`
+- Exactly 5 in a row for **both** colors — 6+ (overline) is NOT a win: `endGame(room, yourColor, 'five-in-a-row', { winCells })`. The line through the placed stone is counted to its full length; an earlier version stopped counting at 4 per side, so extending an existing 6-stone overline to 7 was misread as "exactly five" and won. Solo mode (`ai-omok.js` `checkWin`) uses the same exactly-five rule — it used to accept `>= 5`. This is standard Gomoku, not Renju: black's 3-3 / 4-4 restrictions are not implemented.
 - Board full (`size × size` moves — scales with the chosen board, **not** a hardcoded 225): `endGame(room, 'draw', 'board-full')`
 
 **Move record:** `{ row, col, color, moveNum }`
@@ -139,7 +155,7 @@ room.consecutivePasses  — 0|1|2 (two passes = game over)
 ```
 
 **Win conditions:**
-- Both players pass (no valid moves on either side): `endGame(room, winner, 'board-full', { scores: { white, black } })`
+- Both players pass (no valid moves on either side): `endGame(room, winner, 'stone-count', { scores: { white, black } })`. Not `'board-full'` — the client renders that reason as "무승부 (보드 꽉 참)", which appeared under a "승리!" title, and the board need not be full.
 - Winner = more stones; equal = `'draw'`
 
 **Move record:** `{ row, col, color, flipped: [{row,col}], moveNum, boardRows }`
@@ -157,7 +173,7 @@ Handler: `server/handlers/checkers.js` | Frontend: `public/js/game-checkers.js`
 **State fields:**
 ```
 room.board       — 8×8 2D array of null|{ color:'white'|'black', king:boolean }
-room.currentTurn — host color
+room.currentTurn — 'white' moves first, always (matches the rules text; the rematch colour swap alternates the first player)
 room.mustJump    — null | { row, col }  (set during forced multi-jump chain)
 room.lastMove    — { row, col }  (endpoint of last move)
 ```
@@ -169,7 +185,7 @@ room.lastMove    — { row, col }  (endpoint of last move)
 
 **Win conditions:**
 - Opponent has no pieces: `endGame(room, yourColor, 'no-pieces')`
-- Opponent has no valid moves: `endGame(room, yourColor, 'no-pieces')`
+- Opponent has pieces but no valid moves: `endGame(room, yourColor, 'no-moves')` (was reported as `'no-pieces'` / "상대 말 전멸")
 
 **Move record:** `{ from, to, captured: {row,col}|null, promoted: boolean, color, moveNum }`
 
@@ -212,9 +228,11 @@ room.raiseCount   — 0-3 (max 3 raises per round)
 - Chips depleted: `endGame(room, loser_chips<=0 ? opponent : player, 'chips-depleted')`
 - Deck exhausted (winCondition===2): more chips wins
 
-**Showdown rule:** Ace(1) beats 10 only; otherwise higher rank wins.  
-**Fold penalty:** Folding with rank 10 costs extra ante.  
-**Raise amount:** Always fixed at 5 (not client-specified). Max 3 raises per round.
+**Showdown rule:** Ace(1) beats 10 only; otherwise higher rank wins. **Equal ranks split the pot** (`winner: 'draw'`; the odd chip goes to the guest, who acts first). It used to award ties to the host — an undocumented edge stacked on top of the host's last-action position.  
+**Fold penalty:** Folding with rank 10 costs an extra ante — transferred only up to what the folder has (it used to clamp the folder at 0 while still paying the winner the full 5, minting chips).  
+**Raise:** match the outstanding bet, then add 5 (not client-specified). Max 3 raises per round. It used to add only 5, so a re-raise over an opponent's raise was really a call that still spent a raise.  
+**Betting closes** when a call matches an outstanding bet, or when the host (second to act) calls. Only the guest's opening check passes the turn to the host. It used to pass back to the host after *any* guest call, giving the host an extra action after being called.  
+**Fold stops the clock** while the result is shown (as showdown already did).
 
 **AI:** `public/js/ai-indianpoker.js` — card comparison heuristic
 
@@ -258,7 +276,7 @@ Handler: `server/handlers/battleship.js` | Frontend: `public/js/game-battleship.
 **State fields:**
 ```
 room.phase       — 'placement' | 'active'
-room.currentTurn — 'white'
+room.currentTurn — 'white' moves first, always (matches the rules text; the rematch colour swap alternates the first player)
 room.shipGrids   — { white: 10×10|null, black: 10×10|null }  (ship name at each cell)
 room.attackGrids — { white: 10×10, black: 10×10 }  (null|'hit'|'miss')
 room.shipStatus  — { white: { shipName: remaining }, black: { shipName: remaining } }
@@ -375,7 +393,7 @@ room.edges       — {
 }
 room.boxes       — size×size  (0=none, 1=white, 2=black)
 room.scores      — { white: 0, black: 0 }
-room.currentTurn — host color
+room.currentTurn — 'white' moves first, always (matches the rules text; the rematch colour swap alternates the first player)
 ```
 
 **Move format (`data`):**
@@ -403,6 +421,8 @@ room.currentTurn — host color
 
 Handler: `server/handlers/mancala.js` | Frontend: `public/js/game-mancala.js`
 
+Rules are **Kalah** (stores, extra turn, capture opposite) — not Oware, whatever older comments said.
+
 **State fields:**
 ```
 room.pits        — 14-element array (0-indexed):
@@ -410,7 +430,7 @@ room.pits        — 14-element array (0-indexed):
   [6]    white store (mancala)
   [7-12] black pits (4 seeds each at start)
   [13]   black store
-room.currentTurn — host color
+room.currentTurn — 'white' moves first, always (matches the rules text; the rematch colour swap alternates the first player)
 ```
 
 **Constants:**
@@ -427,7 +447,7 @@ Opposite pit: oppIdx = 12 - idx
 
 **Win conditions:**
 - One side's pits all empty → remaining seeds go to their store → `endGame(room, winner, 'empty-side')`
-- Winner = more seeds in store; equal = `null`
+- Winner = more seeds in store; equal = `'draw'` (never `null` — the client renders `null` as a loss)
 
 **Sowing rules:**
 - Counter-clockwise (index increases, wraps past 13 back to 0)

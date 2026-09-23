@@ -31,6 +31,7 @@ function createRoomState(hostColor, timeControl, hostToken, gameType, boardSize,
     chat: [],
     winner: null,
     rematchRequest: { host: false, guest: false },
+    drawOffer: null,       // 무승부를 제안한 쪽 ('host'|'guest') — 받은 쪽만 수락할 수 있다
     spectators: new Map(), // socketId → { nickname, approved }
     cleanupTimer: null
   };
@@ -51,6 +52,7 @@ function resetForRematch(room) {
   room.moves  = [];
   room.winner = null;
   room.rematchRequest = { host: false, guest: false };
+  room.drawOffer = null;
 
   const handler = handlers.get(room.gameType);
   if (handler && handler.resetRoom) {

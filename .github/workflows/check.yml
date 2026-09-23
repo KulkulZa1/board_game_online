@@ -1,0 +1,34 @@
+# npm run check 를 PR 과 main 푸시마다 돌린다.
+# 이 저장소엔 CI 가 없었다 — 수많은 회귀 테스트와 smoke-check 게이트가 누군가 로컬에서
+# npm run check 를 돌릴 때만 의미가 있었고, Render 는 main 에 푸시되면 테스트 없이 배포한다.
+name: check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        # package.json engines 의 하한(18)과 현재 LTS(22)
+        node: [18, 22]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run check

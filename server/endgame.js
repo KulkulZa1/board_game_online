@@ -3,7 +3,11 @@ const state = require('./state');
 const { log, getTimerMs } = require('./utils');
 
 function endGame(room, winner, reason, extras = {}) {
+  // 한 판은 한 번만 끝난다. 지연 타이머(인디언 포커의 3초 뒤 '칩 소진' 판정 등)가
+  // 이미 끝난 방을 다시 끝내면 승자가 덮어써지고 game:over 가 두 번 나간다.
+  if (room.status === 'finished') return;
   room.status = 'finished';
+  room.drawOffer = null;
   room.winner = winner;
   room.timers.activeColor = null;
   room.timers.lastTickAt  = null;
@@ -93,6 +97,8 @@ function approveSpectator(room, spectatorSocketId) {
     room.spectators.delete(spectatorSocketId);
     return;
   }
+  // 방 브로드캐스트는 '승인된' 관전자만 받는다 — spectator:join 은 방에 넣지 않는다.
+  if (typeof specSocket.join === 'function') specSocket.join(room.id);
 
   const approvedCount = [...room.spectators.values()].filter(s => s.approved).length;
 

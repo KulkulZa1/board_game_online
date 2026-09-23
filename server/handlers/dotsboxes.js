@@ -13,6 +13,10 @@ function initEdges(size) {
   return { hLines, vLines };
 }
 
+// 선공은 항상 백(white)이다 — 규칙 안내문('백이 먼저 둡니다')·혼자하기('항상 백 선공')와 같다.
+// 예전 서버는 '호스트 색'을 선공으로 두어 두 가지가 틀렸다: 호스트가 흑을 고르면 흑이 먼저 둬
+// 안내문과 달랐고, 재대국은 색을 바꾼 뒤 resetRoom 을 부르므로 선공이 영원히 호스트였다.
+// 고정 색 선공이면 재대국의 색 교체만으로 선공이 번갈아 간다 (체스·사목과 같은 방식).
 function initRoom(base, opts) {
   const size = (opts && Number.isInteger(opts.boardSize) && opts.boardSize >= 3 && opts.boardSize <= 7)
     ? opts.boardSize : DEFAULT_SIZE;
@@ -20,14 +24,14 @@ function initRoom(base, opts) {
   base.edges       = initEdges(size);
   base.boxes       = Array(size).fill(null).map(() => Array(size).fill(0)); // 0=none, 1=white, 2=black
   base.scores      = { white: 0, black: 0 };
-  base.currentTurn = base.hostColor; // 호스트 선공
+  base.currentTurn = 'white'; // 백 선공 (혼자하기와 같음)
 }
 
 function resetRoom(room) {
   room.edges   = initEdges(room.size);
   room.boxes   = Array(room.size).fill(null).map(() => Array(room.size).fill(0));
   room.scores  = { white: 0, black: 0 };
-  room.currentTurn = room.hostColor;
+  room.currentTurn = 'white';
 }
 
 function handleMove(socket, room, role, data) {

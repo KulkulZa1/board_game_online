@@ -907,7 +907,10 @@ window.TDUI = (function () {
     } catch (e) {}
     downloadJSON('td-published-config.json', published);
     if (unsavedDot) unsavedDot.style.display = 'none';
-    alert('Published TD config saved locally and exported as td-published-config.json. Import that file on /arcade/tower-defense/ if sandbox and arcade run on different origins.');
+    // ⚠ 예전 안내문은 '/arcade/tower-defense/ 에서 이 파일을 가져오라'고 했지만, 아케이드 TD 는
+    //   이제 자립형 게임(첨탑 대란)이라 가져오기 기능이 없다 — 따를 수 없는 안내였다.
+    alert('Published TD config saved to this browser and exported as td-published-config.json. ' +
+      'It feeds this editor\'s play mode. The arcade /arcade/tower-defense/ page is a separate game and does not read sandbox configs.');
     return true;
   }
 

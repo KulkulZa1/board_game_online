@@ -90,13 +90,11 @@ app.use('/vendor/chess.js', express.static(
   path.join(__dirname, '..', 'node_modules', 'chess.js', 'chess.js'),
   { setHeaders: (res) => res.set('Content-Type', 'application/javascript') }
 ));
-// sandbox/ is a developer-only design tool — NOT served in production.
-// Local dev: npm run sandbox (serves on port 3001 via npx serve)
-// Tower Defense still reuses the sandbox engine as its production runtime.
-// Serve only those runtime files under the arcade URL; keep /sandbox/ itself 404.
-app.use('/arcade/tower-defense/runtime', express.static(
-  path.join(__dirname, '..', 'sandbox', 'tower-defense')
-));
+// sandbox/ 는 개발자 전용 디자인 도구다 — 운영에서 서빙하지 않는다 (/sandbox/ 는 404).
+// 로컬: npm run sandbox (npx serve 가 3001 포트로 서빙)
+// ⚠ 예전엔 /arcade/tower-defense/runtime 으로 sandbox/tower-defense 를 운영에 노출했다.
+//   아케이드 TD 가 샌드박스 엔진으로 돌던 시절의 흔적인데, 첨탑 대란으로 재건축된 뒤로는
+//   아무도 쓰지 않으면서 '샌드박스는 운영 비노출' 원칙만 깨고 있었다. 되살리지 말 것.
 
 // Cloudflare Tunnel 경유 시 실제 클라이언트 IP를 X-Forwarded-For / CF-Connecting-IP 로 전달
 // trust proxy 활성화로 req.ip 가 실제 IP를 반환

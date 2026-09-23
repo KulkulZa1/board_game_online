@@ -512,14 +512,10 @@ function checkVersionBadgeCoverage() {
 }
 
 function checkProductionArcadeAssetPolicy() {
-  const arcadePages = [
-    'public/arcade/vampire/index.html',
-    'public/arcade/plant/index.html',
-    'public/arcade/factory/index.html',
-    'public/arcade/bootstrap/index.html',
-    'public/arcade/tower-defense/index.html',
-    'public/arcade/neon-cascade/index.html',
-  ];
+  // 손으로 고른 목록이면 새 게임(스네이크·브레이크아웃·잭팟)이 빠진다 — 전부 훑는다
+  const arcadePages = fs.readdirSync(path.join(root, 'public/arcade'), { withFileTypes: true })
+    .filter((d) => d.isDirectory() && fs.existsSync(path.join(root, 'public/arcade', d.name, 'index.html')))
+    .map((d) => `public/arcade/${d.name}/index.html`);
   const offenders = arcadePages.filter((file) =>
     fs.readFileSync(path.join(root, file), 'utf8').includes('/sandbox/')
   );
@@ -580,9 +576,11 @@ function checkProductionArcadeAssetPolicy() {
     throw new Error(`Tower Defense .modal must stack above .overlay (found modal=${zModal}, overlay=${zOverlay}) — otherwise the mana-core shop opens behind the start/game-over screen`);
   }
 
+  // 샌드박스 코드는 어떤 경로로도 운영에 나가면 안 된다. 예전 runtime 별칭은 소비자가 없는
+  // 채로 sandbox/tower-defense 를 운영에 노출하고 있었고, 이 게이트가 오히려 그걸 '요구'했다.
   const server = fs.readFileSync(path.join(root, 'server/index.js'), 'utf8');
-  if (!server.includes("'/arcade/tower-defense/runtime'") || server.includes("app.use('/sandbox'")) {
-    throw new Error('Server should expose Tower Defense runtime under arcade path while keeping /sandbox/ unserved');
+  if (/app\.use\(\s*['"][^'"]*['"]\s*,\s*express\.static\([^)]*sandbox/.test(server) || server.includes("app.use('/sandbox'")) {
+    throw new Error('Server must not serve anything from sandbox/ in production (no /sandbox, no runtime alias)');
   }
 }
 
@@ -625,6 +623,37 @@ function checkPortContract() {
   const runner = fs.readFileSync(path.join(root, 'scripts/run-game-flow-tests.js'), 'utf8');
   if (!runner.includes('golden-run-test.js')) {
     throw new Error('golden-run-test.js must be wired into run-game-flow-tests.js — an unrun contract is not a contract');
+  }
+}
+
+function checkDocsMatchReality() {
+  // 문서가 사실과 어긋나면 사람도 AI 도 잘못된 함정을 배운다. 실제로 있었던 어긋남들:
+  //  - AGENTS.md(정식 함정 목록)가 '샌드박스 TD 엔진이 운영에 나간다'고 가르쳤다 (재건축 뒤 거짓)
+  //  - 스위트 개수·검사 개수를 박아 둬 몇 주 만에 틀렸다
+  //  - 아케이드 가이드 템플릿대로 만들면 sw-update.js 누락으로 이 검사 자체가 실패했다
+  const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
+  const runner = read('scripts/run-game-flow-tests.js');
+  const suites = [...runner.matchAll(/'prototypes\/([\w-]+\.js)'/g)].map((m) => m[1]);
+  const claude = read('CLAUDE.md');
+  const unnamed = suites.filter((suite) => !claude.includes(suite));
+  if (unnamed.length) {
+    throw new Error(`CLAUDE.md should name every suite in run-game-flow-tests.js (missing: ${unnamed.join(', ')})`);
+  }
+  for (const doc of ['CLAUDE.md', 'AGENTS.md', '.github/copilot-instructions.md', 'README.md']) {
+    const text = read(doc);
+    if (/runtime\/?`?\s*(Express\s+)?alias still serves|served in \*\*production\*\* via the/i.test(text)) {
+      throw new Error(`${doc} still claims the sandbox TD engine is served in production`);
+    }
+  }
+  const guide = read('ADDING_AN_ARCADE_GAME.md');
+  if (!guide.includes('<script src="/js/sw-update.js"></script>')) {
+    throw new Error('ADDING_AN_ARCADE_GAME.md template must load /js/sw-update.js — checkServiceWorkerUpdateCoverage rejects pages without it');
+  }
+  if (/window\.AdMob\.showInterstitial\(/.test(guide) || !guide.includes('AdMobHelper.showAfterGame()')) {
+    throw new Error('ADDING_AN_ARCADE_GAME.md must use AdMobHelper.showAfterGame() — window.AdMob does not exist on the page');
+  }
+  if (!read('public/js/admob.js').includes('window.AdMobHelper')) {
+    throw new Error('public/js/admob.js no longer exposes window.AdMobHelper — update ADDING_AN_ARCADE_GAME.md');
   }
 }
 
@@ -944,11 +973,11 @@ function checkTowerDefenseSandboxCoverage() {
     throw new Error('Tower Defense sandbox should include the new barrage and supercharge synergies');
   }
   if (!game.includes("mode === 'support'") || !game.includes('auraBonus')) {
-    throw new Error('Tower Defense runtime should apply amplifier auras and skip support attacks');
+    throw new Error('Tower Defense sandbox editor engine should apply amplifier auras and skip support attacks');
   }
   ['castMeteor', 'findMeteorTarget', 'spendGold', 'waveLeaks', 'Perfect wave!', 'touchstart'].forEach((marker) => {
     if (!game.includes(marker)) {
-      throw new Error(`Tower Defense runtime missing gameplay marker: ${marker}`);
+      throw new Error(`Tower Defense sandbox editor engine missing gameplay marker: ${marker}`);
     }
   });
   if (!ui.includes("label: 'Synergies'") || !ui.includes("type: 'amplifier'")) {
@@ -958,7 +987,7 @@ function checkTowerDefenseSandboxCoverage() {
     throw new Error('Tower Defense UI should expose game-first start, Meteor, and paid rerolls');
   }
   if (!ui.includes('td_published_config') || !ui.includes('validateConfig') || !ui.includes('publishJSON')) {
-    throw new Error('Tower Defense editor should validate and publish configs for arcade import');
+    throw new Error('Tower Defense editor should validate and publish (save + export) configs');
   }
   const sandboxPage = fs.readFileSync(path.join(root, 'sandbox/tower-defense/index.html'), 'utf8');
   if (!sandboxPage.includes('data-action="publish"')) {
@@ -1393,7 +1422,13 @@ async function waitForSocketEvent(socket, eventName, timeoutMs = 5000) {
       const event = parseSocketEvent(socket.buffer.shift());
       if (event && event[0] === eventName) return event[1];
     }
-    socket.buffer.push(...await pollPackets(socket, Math.max(1, deadline - Date.now())));
+    try {
+      socket.buffer.push(...await pollPackets(socket, Math.max(1, deadline - Date.now())));
+    } catch (err) {
+      // 롱폴이 비어 있으면 HTTP 타임아웃으로 끝난다 — 원인을 '어떤 이벤트가 안 왔는지'로 알린다
+      if (/Timeout requesting|poll timed out/.test(err.message)) break;
+      throw err;
+    }
   }
   throw new Error(`Socket.io event not received: ${eventName}`);
 }
@@ -1454,6 +1489,151 @@ async function runMalformedSocketPayloadSmokeCheck() {
     throw new Error('Socket did not recover after malformed payloads');
   }
   await closePollingSocket(socket);
+}
+
+// 받지 '않아야' 하는 이벤트를 확인한다 — 배리어 방식.
+// 롱폴 GET 을 도중에 끊으면 engine.io 가 다음 GET 을 '겹친 폴링'으로 보고 세션을 닫는다.
+// 그래서 기다리지 않고, 같은 소켓에 '반드시 오는' 이벤트를 하나 유발한 뒤(배리어) 그 전까지
+// 금지 이벤트가 섞여 왔는지 본다. socket.io 는 소켓별 전달 순서를 보장한다.
+async function receivedBeforeBarrier(socket, forbiddenEvent, triggerBarrier, barrierEvent) {
+  await triggerBarrier();
+  const deadline = Date.now() + 5000;
+  while (Date.now() < deadline) {
+    while (socket.buffer.length) {
+      const event = parseSocketEvent(socket.buffer.shift());
+      if (!event) continue;
+      if (event[0] === forbiddenEvent) return true;
+      if (event[0] === barrierEvent) return false;
+    }
+    socket.buffer.push(...await pollPackets(socket, Math.max(1, deadline - Date.now())));
+  }
+  throw new Error(`Barrier event ${barrierEvent} never arrived`);
+}
+
+async function openStartedRoom(gameType, extra = {}) {
+  const host = await openPollingSocket();
+  const guest = await openPollingSocket();
+  await emitSocketEvent(host, 'room:create', {
+    hostColor: extra.hostColor || 'white',
+    timeControl: { type: 'unlimited', minutes: null },
+    gameType,
+    boardSize: extra.boardSize || null,
+  });
+  const created = await waitForSocketEvent(host, 'room:created');
+  await emitSocketEvent(guest, 'room:join', { roomId: created.roomId });
+  await waitForSocketEvent(guest, 'room:joined');
+  await waitForSocketEvent(host, 'game:start');
+  await waitForSocketEvent(guest, 'game:start');
+  return { host, guest, roomId: created.roomId };
+}
+
+// 실제로 났던 서버 결함들의 회귀 검사 — 모두 원격에서 누구나 일으킬 수 있었다.
+async function runServerHardeningSmokeCheck() {
+  // ① 관전자 훈수 좌표 하나가 서버 프로세스를 죽였다 (오목 {row:0.5}, 13×13 판의 row 14).
+  {
+    const { host, roomId } = await openStartedRoom('omok', { hostColor: 'black', boardSize: { size: 13 } });
+    const spectator = await openPollingSocket();
+    await emitSocketEvent(spectator, 'spectator:join', { roomId, nickname: 'Hint QA' });
+    const req = await waitForSocketEvent(host, 'spectator:request');
+    await emitSocketEvent(host, 'spectator:approve', { socketId: req.socketId });
+    await waitForSocketEvent(spectator, 'spectator:approved');
+    for (const payload of [{ row: 0.5, col: 0.5 }, { row: 14, col: 0 }, { row: 12, col: 12.5 }, { row: -1, col: 3 }]) {
+      await emitSocketEvent(spectator, 'spectator:hint', payload);
+      const status = await request('/api/status');
+      if (status.statusCode !== 200) {
+        throw new Error(`Server died after spectator:hint ${JSON.stringify(payload)} on a 13x13 omok board`);
+      }
+    }
+  }
+  // 훈수 범위는 실제 판 크기를 따라야 한다 — 0~14 고정이면 19×19 판의 오른쪽 아래는 훈수가 안 됐다.
+  {
+    const { host, roomId } = await openStartedRoom('omok', { hostColor: 'black', boardSize: { size: 19 } });
+    const spectator = await openPollingSocket();
+    await emitSocketEvent(spectator, 'spectator:join', { roomId, nickname: 'Corner QA' });
+    const req = await waitForSocketEvent(host, 'spectator:request');
+    await emitSocketEvent(host, 'spectator:approve', { socketId: req.socketId });
+    await waitForSocketEvent(spectator, 'spectator:approved');
+    await emitSocketEvent(spectator, 'spectator:hint', { row: 18, col: 18 });
+    const hint = await waitForSocketEvent(host, 'spectator:hint').catch(() => null);
+    if (!hint || hint.row !== 18 || hint.col !== 18 || hint.label !== 'S1') {
+      throw new Error(`A legal 19x19 corner hint should reach the players labelled S1 (got ${JSON.stringify(hint)})`);
+    }
+  }
+
+  // ② 제안이 없는데 '수락'을 보내 무승부로 끝낼 수 있었다.
+  {
+    const { host, guest } = await openStartedRoom('connect4', { boardSize: { rows: 6, cols: 7 } });
+    const chatBarrier = (who) => () => emitSocketEvent(who, 'chat:send', { text: 'barrier' });
+    await emitSocketEvent(guest, 'game:draw:respond', { accept: true });
+    if (await receivedBeforeBarrier(host, 'game:over', chatBarrier(host), 'chat:message')) {
+      throw new Error('game:draw:respond ended the game although nobody offered a draw');
+    }
+    await emitSocketEvent(host, 'game:draw:offer', null);
+    await waitForSocketEvent(guest, 'game:draw:offered');
+    await emitSocketEvent(host, 'game:draw:respond', { accept: true });   // 제안자 자기 수락
+    if (await receivedBeforeBarrier(guest, 'game:over', chatBarrier(guest), 'chat:message')) {
+      throw new Error('The player who offered a draw was able to accept it themselves');
+    }
+    await emitSocketEvent(guest, 'game:draw:respond', { accept: true });
+    const over = await waitForSocketEvent(host, 'game:over');
+    if (over.winner !== 'draw' || over.reason !== 'agreement') {
+      throw new Error('A real draw offer accepted by the opponent should end in a draw');
+    }
+  }
+
+  // ③ 방장이 승인하기 전부터 관전자에게 수·채팅이 흘러 들어갔다.
+  {
+    const { host, guest, roomId } = await openStartedRoom('connect4', { boardSize: { rows: 6, cols: 7 } });
+    const spectator = await openPollingSocket();
+    await emitSocketEvent(spectator, 'spectator:join', { roomId, nickname: 'Pending QA' });
+    await waitForSocketEvent(host, 'spectator:request');
+    await waitForSocketEvent(spectator, 'spectator:pending');
+    await emitSocketEvent(host, 'game:move', { col: 3 });
+    await waitForSocketEvent(guest, 'game:move:made');
+    await emitSocketEvent(host, 'chat:send', { text: 'players only' });
+    await waitForSocketEvent(guest, 'chat:message');
+    const pendingBarrier = () => emitSocketEvent(spectator, 'spectator:join', { roomId, nickname: 'Pending QA' });
+    const leakedMove = await receivedBeforeBarrier(spectator, 'game:move:made', pendingBarrier, 'spectator:pending');
+    const leakedChat = !leakedMove && await receivedBeforeBarrier(spectator, 'chat:message', pendingBarrier, 'spectator:pending');
+    if (leakedMove || leakedChat) {
+      throw new Error('An unapproved spectator received room broadcasts before the host approved');
+    }
+  }
+
+  // ④ 한 소켓이 대기방을 계속 쌓아 서버 방 상한(20)을 채울 수 있었다.
+  {
+    const before = JSON.parse((await request('/api/status')).body).rooms.waiting;
+    const hoarder = await openPollingSocket();
+    for (let i = 0; i < 4; i++) {
+      await emitSocketEvent(hoarder, 'room:create', {
+        hostColor: 'white', timeControl: { type: 'unlimited', minutes: null }, gameType: 'omok', boardSize: { size: 15 },
+      });
+      await waitForSocketEvent(hoarder, 'room:created');
+    }
+    const after = JSON.parse((await request('/api/status')).body).rooms.waiting;
+    if (after - before !== 1) {
+      throw new Error(`One socket should hold at most one waiting room (created 4, waiting grew by ${after - before})`);
+    }
+  }
+
+  // ⑤ 마작·뱅 테이블에 같은 소켓이 두 번 앉을 수 있었다 (참가 버튼 연타) — 두 번째 자리는
+  //    실제 클라이언트 없는 '연결됨' 유령 좌석이 되어 그 차례에서 대국이 멈춘다.
+  for (const kind of ['mahjong', 'bang']) {
+    const host = await openPollingSocket();
+    const guest = await openPollingSocket();
+    const third = await openPollingSocket();
+    await emitSocketEvent(host, `${kind}:create`, { nickname: 'Host', size: 4 });
+    const { code } = await waitForSocketEvent(host, `${kind}:created`);
+    await emitSocketEvent(guest, `${kind}:join`, { code, nickname: 'Twice' });
+    await emitSocketEvent(guest, `${kind}:join`, { code, nickname: 'Twice' });
+    await emitSocketEvent(third, `${kind}:join`, { code, nickname: 'Third' });   // 배리어 겸 관찰자
+    await waitForSocketEvent(third, `${kind}:joined`);
+    const lobby = await waitForSocketEvent(third, `${kind}:room`);
+    const humans = lobby.seats.filter((seat) => seat && seat.type === 'human').length;
+    if (humans !== 3) {
+      throw new Error(`${kind}: a socket that joins twice must keep one seat (3 humans expected, saw ${humans})`);
+    }
+  }
 }
 
 async function runTexasSpectatorPrivacySmokeCheck() {
@@ -1755,10 +1935,9 @@ async function main() {
       '/arcade/neon-cascade/game.js',
       '/arcade/neon-cascade/style.css',
       '/arcade/tower-defense/',
-      '/arcade/tower-defense/runtime/config.js',
-      '/arcade/tower-defense/runtime/game.js',
-      '/arcade/tower-defense/runtime/ui.js',
-      '/arcade/tower-defense/runtime/graphics/sprites.css',
+      '/arcade/tower-defense/sim.js',
+      '/arcade/tower-defense/game.js',
+      '/arcade/tower-defense/style.css',
       '/games3d/chess3d/',
       '/games3d/chess3d/scene.js',
     ];
@@ -1773,9 +1952,13 @@ async function main() {
 
     await runSocketSmokeCheck();
     await runMalformedSocketPayloadSmokeCheck();
+    await runServerHardeningSmokeCheck();
     await runTexasSpectatorPrivacySmokeCheck();
     await runCommonReconnectTimerSmokeCheck();
     await runVampireCoopSocketSmokeCheck();
+    // 배포 확인 스크립트를 로컬 서버에 돌린다 — 아무도 안 돌리던 시절 캐시 버전을 박아 둔
+    // 검사가 v11 이후 모든 배포에서 실패하는 상태로 방치됐다. 여기서 매번 돌면 다시 썩지 않는다.
+    await require('./verify-production-version').verifyDeployment(baseUrl);
     await runReconnectCleanupSmokeCheck('bang', { nickname: 'QA', size: 4 });
     await runReconnectCleanupSmokeCheck('mahjong', { nickname: 'QA' });
     checkChatBubbleUi();
@@ -1790,6 +1973,7 @@ async function main() {
     checkNeonCascadeCoverage();
     checkNeonLadderCoverage();
     checkPortContract();
+    checkDocsMatchReality();
     checkBootstrapArcadeCoverage();
     checkSandboxConfigBridgeRead();
     checkTowerDefenseSandboxCoverage();

@@ -287,6 +287,26 @@ mygame: '🎯 내게임',
 
 ---
 
+## Step 11 — Rule tests (required)
+
+`npm run check` only proves the handler *loads*. Rules are pinned by
+`prototypes/core-games-handler-test.js` (and `newer-games-handler-test.js`), which drive
+`handleMove` directly with a fake `state.io` — copy an existing section. Cover at least:
+
+- a legal move and an illegal one (`game:move:invalid`, state unchanged)
+- a move out of turn (ignored)
+- **type-confused input**: fractional, negative and out-of-range coordinates, strings, `null`.
+  Validate with `Number.isInteger` against the room's real board size — `typeof x === 'number'`
+  lets `0.5` through, and an exception in a socket handler once took down every room on the server.
+- every way the game ends, with the exact `reason` string (the client renders it — see the
+  reason map in `public/js/game.js`), and a draw reported as `'draw'`, never `null`
+- rematch: `resetRoom` restores a clean board and the first move alternates between the players
+
+If the game accepts spectator hints, add its branch to `spectator:hint` in `server/events.js`
+using the same integer + real-board-size checks.
+
+---
+
 ## Files touched summary
 
 | File | Action |
@@ -301,5 +321,6 @@ mygame: '🎯 내게임',
 | `public/index.html`          | **EDIT** — 1 card block |
 | `public/game.html`           | **EDIT** — board area div + 3 script tags |
 | `public/js/stats.js`         | **EDIT** — 1 line |
+| `prototypes/core-games-handler-test.js` | **EDIT** — a rules section (Step 11) |
 
-**10 files, maximum 2 of which are more than 1-line edits.**
+**10 files plus the rule tests, maximum 2 of the 10 being more than 1-line edits.**

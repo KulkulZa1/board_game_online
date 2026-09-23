@@ -77,7 +77,9 @@ function handleMove(socket, room, role, { row, col }) {
     });
 
     const { endGame } = require('../endgame');
-    endGame(room, winner, 'board-full', { scores: counts });
+    // 'board-full' 이 아니다 — 그 사유는 클라이언트에서 '무승부 (보드 꽉 참)'으로 그려져,
+    // 승자가 있는 판인데 '승리!' 아래에 '무승부'가 떴다. 판이 다 차지 않아도 끝날 수 있다.
+    endGame(room, winner, 'stone-count', { scores: counts });
     return;
   }
 

@@ -59,7 +59,7 @@ function handleMove(socket, room, role, { row, col }) {
 
   const { endGame } = require('../endgame');
 
-  // 승리 체크 (렌주룰: 정확히 5개)
+  // 승리 체크 (정확히 5목 — 장목 불계)
   if (checkOmokWin(room.board, row, col, yourColor, omokSize)) {
     const winCells = getWinCells(room.board, row, col, yourColor, omokSize);
     endGame(room, yourColor, 'five-in-a-row', { winCells });
@@ -73,45 +73,36 @@ function handleMove(socket, room, role, { row, col }) {
   }
 }
 
+// 놓은 돌을 지나는 한 방향의 연속 돌을 끝까지 센다.
+// ⚠ 예전엔 양쪽을 4칸까지만 셌다. 그러면 이미 있던 장목(6목)에 한 점을 이어 7목을
+//   만들어도 한쪽이 4에서 잘려 '정확히 5'로 읽히고 승리가 됐다 — 규칙(장목 불계)과 반대.
+function lineThrough(board, row, col, color, sz, dr, dc) {
+  const cells = [{ row, col }];
+  for (let r = row + dr, c = col + dc; r >= 0 && r < sz && c >= 0 && c < sz && board[r][c] === color; r += dr, c += dc) {
+    cells.push({ row: r, col: c });
+  }
+  for (let r = row - dr, c = col - dc; r >= 0 && r < sz && c >= 0 && c < sz && board[r][c] === color; r -= dr, c -= dc) {
+    cells.push({ row: r, col: c });
+  }
+  return cells;
+}
+
+const OMOK_DIRECTIONS = [[0, 1], [1, 0], [1, 1], [1, -1]];
+
+// 흑백 모두 '정확히 5목'만 승리 (6목 이상 장목은 불계). 렌주의 금수(3-3·4-4)는 없다 —
+// 이 규칙은 엄밀히는 렌주가 아니라 표준 고모쿠다.
 function checkOmokWin(board, row, col, color, size) {
   const sz = size || 15;
-  const directions = [[0, 1], [1, 0], [1, 1], [1, -1]];
-  for (const [dr, dc] of directions) {
-    let count = 1;
-    for (let i = 1; i <= 4; i++) {
-      const r = row + dr * i, c = col + dc * i;
-      if (r < 0 || r >= sz || c < 0 || c >= sz || board[r][c] !== color) break;
-      count++;
-    }
-    for (let i = 1; i <= 4; i++) {
-      const r = row - dr * i, c = col - dc * i;
-      if (r < 0 || r >= sz || c < 0 || c >= sz || board[r][c] !== color) break;
-      count++;
-    }
-    // 렌주룰: 정확히 5개만 승리 (6목 이상은 불계)
-    if (count === 5) return true;
-  }
-  return false;
+  return OMOK_DIRECTIONS.some(([dr, dc]) => lineThrough(board, row, col, color, sz, dr, dc).length === 5);
 }
 
 function getWinCells(board, row, col, color, size) {
   const sz = size || board.length || 15;
-  const directions = [[0, 1], [1, 0], [1, 1], [1, -1]];
-  for (const [dr, dc] of directions) {
-    const cells = [{ row, col }];
-    for (let i = 1; i <= 4; i++) {
-      const r = row + dr * i, c = col + dc * i;
-      if (r < 0 || r >= sz || c < 0 || c >= sz || board[r][c] !== color) break;
-      cells.push({ row: r, col: c });
-    }
-    for (let i = 1; i <= 4; i++) {
-      const r = row - dr * i, c = col - dc * i;
-      if (r < 0 || r >= sz || c < 0 || c >= sz || board[r][c] !== color) break;
-      cells.push({ row: r, col: c });
-    }
+  for (const [dr, dc] of OMOK_DIRECTIONS) {
+    const cells = lineThrough(board, row, col, color, sz, dr, dc);
     if (cells.length === 5) return cells;
   }
   return [];
 }
 
-module.exports = { initRoom, resetRoom, handleMove };
+module.exports = { initRoom, resetRoom, handleMove, checkOmokWin };

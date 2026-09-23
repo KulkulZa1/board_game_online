@@ -31,9 +31,13 @@ function buildGridAndStatus(ships) {
   return { grid, status };
 }
 
+// 선공은 항상 백(white)이다 — 규칙 안내문('백이 먼저 둡니다')·혼자하기('항상 백 선공')와 같다.
+// 예전 서버는 '호스트 색'을 선공으로 두어 두 가지가 틀렸다: 호스트가 흑을 고르면 흑이 먼저 둬
+// 안내문과 달랐고, 재대국은 색을 바꾼 뒤 resetRoom 을 부르므로 선공이 영원히 호스트였다.
+// 고정 색 선공이면 재대국의 색 교체만으로 선공이 번갈아 간다 (체스·사목과 같은 방식).
 function initRoom(base) {
   base.phase        = 'placement';
-  base.currentTurn  = 'white';
+  base.currentTurn  = 'white';   // 첫 판은 호스트(항상 white) 선공
   base.shipGrids    = { white: null, black: null }; // null = 아직 배치 안 함
   base.attackGrids  = { white: createEmptyGrid(), black: createEmptyGrid() };
   base.shipStatus   = { white: {}, black: {} }; // shipName → 남은 셀 수
@@ -41,7 +45,7 @@ function initRoom(base) {
 
 function resetRoom(room) {
   room.phase        = 'placement';
-  room.currentTurn  = room.hostColor;
+  room.currentTurn  = 'white';
   room.shipGrids    = { white: null, black: null };
   room.attackGrids  = { white: createEmptyGrid(), black: createEmptyGrid() };
   room.shipStatus   = { white: {}, black: {} };

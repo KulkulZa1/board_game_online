@@ -20,6 +20,7 @@ const tests = [
   'prototypes/bootstrap-loop-test.js',
   'prototypes/td-rogue-test.js',
   'prototypes/golden-run-test.js',
+  'prototypes/server-hardening-test.js',
 ];
 
 for (const test of tests) {

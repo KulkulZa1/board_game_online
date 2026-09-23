@@ -8,38 +8,45 @@ function startTimerTick() {
   state.tickInterval = setInterval(() => {
     const now = Date.now();
     for (const [, room] of state.rooms) {
-      if (room.status !== 'active') continue;
-      if (!room.timers.activeColor) continue;
-      if (room.timers.white === null) continue;       // unlimited
-      if (room.timers.lastTickAt === null) continue;  // paused (player disconnected)
-
-      const elapsed = now - room.timers.lastTickAt;
-      room.timers.lastTickAt = now;
-
-      const color = room.timers.activeColor;
-      room.timers[color] = Math.max(0, room.timers[color] - elapsed);
-
-      state.io.to(room.id).emit('timer:tick', {
-        white:       room.timers.white,
-        black:       room.timers.black,
-        activeColor: room.timers.activeColor,
-        paused:      false,
-      });
-
-      if (room.timers[color] <= 0) {
-        if (room.gameType === 'indianpoker') {
-          // 베팅 시간 초과 → 자동 call
-          const timedOutRole = color === 'white' ? 'host' : 'guest';
-          const { handleIndianPokerAction } = require('./handlers/indianpoker');
-          handleIndianPokerAction(null, room, timedOutRole, { action: 'call' });
-        } else {
-          const winner = color === 'white' ? 'black' : 'white';
-          const { endGame } = require('./endgame');
-          endGame(room, winner, 'timeout');
-        }
+      // 방 하나의 예외가 틱 전체(=모든 방의 시계)와 프로세스를 멈추면 안 된다
+      try { tickRoom(room, now); } catch (err) {
+        log(`[!] 타이머 틱 예외 — 방 ${String(room.id).slice(0, 8)}: ${err && err.message}`);
       }
     }
   }, TICK_INTERVAL);
+}
+
+function tickRoom(room, now) {
+  if (room.status !== 'active') return;
+  if (!room.timers.activeColor) return;
+  if (room.timers.white === null) return;       // unlimited
+  if (room.timers.lastTickAt === null) return;  // paused (player disconnected)
+
+  const elapsed = now - room.timers.lastTickAt;
+  room.timers.lastTickAt = now;
+
+  const color = room.timers.activeColor;
+  room.timers[color] = Math.max(0, room.timers[color] - elapsed);
+
+  state.io.to(room.id).emit('timer:tick', {
+    white:       room.timers.white,
+    black:       room.timers.black,
+    activeColor: room.timers.activeColor,
+    paused:      false,
+  });
+
+  if (room.timers[color] <= 0) {
+    if (room.gameType === 'indianpoker') {
+      // 베팅 시간 초과 → 자동 call
+      const timedOutRole = color === 'white' ? 'host' : 'guest';
+      const { handleIndianPokerAction } = require('./handlers/indianpoker');
+      handleIndianPokerAction(null, room, timedOutRole, { action: 'call' });
+    } else {
+      const winner = color === 'white' ? 'black' : 'white';
+      const { endGame } = require('./endgame');
+      endGame(room, winner, 'timeout');
+    }
+  }
 }
 
 function stopTimerTick() {

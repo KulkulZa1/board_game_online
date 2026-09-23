@@ -21,16 +21,20 @@ function initCheckersBoard() {
   return board;
 }
 
+// 선공은 항상 백(white)이다 — 규칙 안내문('백이 먼저 둡니다')·혼자하기('항상 백 선공')와 같다.
+// 예전 서버는 '호스트 색'을 선공으로 두어 두 가지가 틀렸다: 호스트가 흑을 고르면 흑이 먼저 둬
+// 안내문과 달랐고, 재대국은 색을 바꾼 뒤 resetRoom 을 부르므로 선공이 영원히 호스트였다.
+// 고정 색 선공이면 재대국의 색 교체만으로 선공이 번갈아 간다 (체스·사목과 같은 방식).
 function initRoom(base, opts) {
   base.board       = initCheckersBoard();
-  base.currentTurn = base.hostColor; // 호스트 색이 선공 (기본 white=red)
+  base.currentTurn = 'white'; // 빨강(=white) 선공
   base.mustJump    = null;
   base.lastMove    = null;
 }
 
 function resetRoom(room) {
   room.board       = initCheckersBoard();
-  room.currentTurn = room.hostColor; // 재대국 후 호스트 색 교체됨
+  room.currentTurn = 'white';
   room.mustJump    = null;
   room.lastMove    = null;
 }
@@ -130,7 +134,8 @@ function handleMove(socket, room, role, { from, to }) {
       timers: { white: room.timers.white, black: room.timers.black, activeColor: null },
       turn: nextTurn, validMoves: []
     });
-    endGame(room, yourColor, 'no-pieces');
+    // 전멸과 '말은 남았는데 둘 곳이 없음'은 다른 결말이다 — 예전엔 둘 다 '상대 말 전멸'로 표시됐다
+    endGame(room, yourColor, oppPieces.length === 0 ? 'no-pieces' : 'no-moves');
     return;
   }
 
