@@ -234,7 +234,7 @@ room.raiseCount   — 0-3 (max 3 raises per round)
 **Betting closes** when a call matches an outstanding bet, or when the host (second to act) calls. Only the guest's opening check passes the turn to the host. It used to pass back to the host after *any* guest call, giving the host an extra action after being called.  
 **Fold stops the clock** while the result is shown (as showdown already did).
 
-**AI:** `public/js/ai-indianpoker.js` — card comparison heuristic
+**AI:** `public/js/ai-indianpoker.js` — plays blind like a human: it sees only the player's card and the pool of cards it has not seen (remaining deck + its own), estimates its win chance from that, and weighs the 10-fold penalty before folding
 
 ---
 
@@ -413,7 +413,7 @@ room.currentTurn — 'white' moves first, always (matches the rules text; the re
 
 **Move record:** `{ edge, color, boxesCompleted, scores, moveNum }`
 
-**AI:** `public/js/ai-dotsboxes.js` — chain avoidance strategy
+**AI:** `public/js/ai-dotsboxes.js` — takes boxes, plays safe edges, and when none are left gives away the move that lets the opponent collect the fewest boxes (the shortest chain)
 
 ---
 

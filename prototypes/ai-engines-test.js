@@ -313,5 +313,68 @@ console.log('\n[백개먼 — 수 고르기]');
   ok(!illegal && finished === 20, `AI 끼리 20판 — 모든 수가 합법이고 모든 판이 끝난다 (${finished}/20)`, illegal || '');
 }
 
+console.log('\n[도트앤박스 — 끝내기]');
+{
+  const AI = load('ai-dotsboxes.js', 'AIDotsBoxes');
+  const size = 5;
+  const sides = (ed, r, c) => (ed.hLines[r][c] ? 1 : 0) + (ed.hLines[r + 1][c] ? 1 : 0) + (ed.vLines[r][c] ? 1 : 0) + (ed.vLines[r][c + 1] ? 1 : 0);
+  const avail = (ed) => {
+    const out = [];
+    for (let r = 0; r <= size; r++) for (let c = 0; c < size; c++) if (!ed.hLines[r][c]) out.push({ type: 'h', row: r, col: c });
+    for (let r = 0; r < size; r++) for (let c = 0; c <= size; c++) if (!ed.vLines[r][c]) out.push({ type: 'v', row: r, col: c });
+    return out;
+  };
+  // 기준선 = 예전 AI: 상자 완성 → 안전한 수 → '바로 생기는 3변 상자'가 가장 적은 수 (사슬 길이를 모른다)
+  const rand = rng(9);
+  const oldPick = (ed, bx) => {
+    const list = avail(ed);
+    if (!list.length) return null;
+    const after = (e) => AI.applyMove(ed, bx, { white: 0, black: 0 }, size, e, 1);
+    const take = list.find((e) => after(e).completed > 0);
+    if (take) return take;
+    const danger = (e) => { const r = after(e); let d = 0; for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) if (!r.boxes[y][x] && sides(r.edges, y, x) === 3) d++; return d; };
+    const safe = list.filter((e) => danger(e) === 0);
+    if (safe.length) return safe[Math.floor(rand() * safe.length)];
+    return list.reduce((a, b) => (danger(b) < danger(a) ? b : a));
+  };
+  let wins = 0; const G = 20;
+  for (let g = 0; g < G; g++) {
+    let ed = { hLines: Array.from({ length: size + 1 }, () => Array(size).fill(0)), vLines: Array.from({ length: size }, () => Array(size + 1).fill(0)) };
+    let bx = Array.from({ length: size }, () => Array(size).fill(0)), sc = { white: 0, black: 0 };
+    const aiC = g % 2 ? 'black' : 'white'; let turn = 'white';
+    for (;;) {
+      const m = turn === aiC ? AI.getBestMove(ed, bx, size, turn) : oldPick(ed, bx);
+      if (!m) break;
+      const r = AI.applyMove(ed, bx, sc, size, m, turn === 'white' ? 1 : 2);
+      ed = r.edges; bx = r.boxes; sc = r.scores;
+      if (!r.completed) turn = turn === 'white' ? 'black' : 'white';
+    }
+    if (sc[aiC] > sc[aiC === 'white' ? 'black' : 'white']) wins++;
+  }
+  ok(wins >= 14, `예전 AI(바로 생기는 3변 상자만 셈)에게 5×5 ${G}판 중 14판 이상 이긴다 — 가장 짧은 사슬을 내준다 (${wins}/${G})`);
+}
+
+console.log('\n[인디언 포커 — AI 도 자기 카드를 모른다]');
+{
+  const AI = load('ai-indianpoker.js', 'AIIndianPoker', 4);
+  const all = [1,2,3,4,5,6,7,8,9,10];
+  const tally = (playerCard, n = 400) => {
+    const t = { raise: 0, call: 0, fold: 0 };
+    for (let i = 0; i < n; i++) t[AI.decideAction(playerCard, all, 10, 0, 0)]++;
+    return t;
+  };
+  const vsAce = tally(1), vsTen = tally(10), vsNine = tally(9);
+  // 상대가 A 면 2~9 로 이긴다(80%) → 자주 레이즈. 상대가 10 이면 A 로만 이긴다(10%) → 레이즈는 블러프 정도
+  ok(vsAce.raise > 200, '보이는 상대 카드가 A 면 자주 레이즈한다', JSON.stringify(vsAce));
+  ok(vsTen.raise < 80, '보이는 상대 카드가 10 이면 레이즈는 가끔(블러프)뿐이다', JSON.stringify(vsTen));
+  ok(vsNine.fold + vsNine.call > vsNine.raise, '상대 카드가 9 면 대개 레이즈하지 않는다', JSON.stringify(vsNine));
+  // 혼자하기 호출부가 AI 자신의 카드를 넘기면 안 된다 — 예전엔 decideAction(aiCard.rank, playerCard.rank, …) 로
+  // 쇼다운 승패를 미리 알고 베팅했다 (플레이어는 자기 카드를 못 보는데)
+  const src = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'game-indianpoker.js'), 'utf8');
+  const call = (src.match(/AIIndianPoker\.decideAction\(([^;]*)\);/) || [])[1] || '';
+  ok(/^playerCard\.rank,/.test(call) && !/^aiCard/.test(call), '혼자하기는 플레이어 카드와 못 본 카드 묶음만 넘긴다', call);
+  ok(AI.decideAction.length === 5, 'decideAction(playerCard, unknownRanks, pot, raiseCount, toCall) 모양이다');
+}
+
 console.log(`\n결과: ${passed}/${passed + failed} 통과`);
 process.exit(failed ? 1 : 0);

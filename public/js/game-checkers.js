@@ -47,10 +47,11 @@ window.GameHandlers.checkers = (function () {
       switchBoardArea, updateTurnIndicator, showGameOver,
       setActiveBoard, setGameStatus,
       connectingOverlay, spectatorJoinOverlay,
-      myLabel, oppLabel, myDot, oppDot,
+      myLabel, oppLabel, myDot, oppDot, setupUndo,
     } = helpers;
 
     const aiColor = playerColor === 'white' ? 'black' : 'white';
+    const history = [];   // 무르기용 — 내 턴이 시작될 때의 판 (연속 점프 중간은 저장하지 않는다)
 
     function makeInitialBoard() {
       const b = Array.from({length:8}, () => Array(8).fill(null));
@@ -103,11 +104,25 @@ window.GameHandlers.checkers = (function () {
 
     const hasPieces = (color) => soloBoard.some((row) => row.some((p) => p && p.color === color));
 
+    // 무르기 — 내 마지막 턴(연속 점프 전체)과 AI 응수를 되돌린다. 연속 점프 도중에 누르면 그 턴의 시작으로.
+    // (예전엔 무르기 버튼이 보였지만 등록된 동작이 없어 눌러도 아무 일도 없었다)
+    if (typeof setupUndo === 'function') {
+      setupUndo(() => {
+        if (soloGameOver || aiThinking || soloTurn !== playerColor || !history.length) return;
+        soloBoard = history.pop();
+        mustJumpFrom = null;
+        CheckersBoard.updateAfterMove(soloBoard, null, AICheckers.getValidMoves(soloBoard, playerColor).moves, null);
+        CheckersBoard.setMyTurn(true);
+        updateTurnIndicator(playerColor);
+      });
+    }
+
     function handlePlayerMove({ from, to }) {
       if (soloGameOver || aiThinking || soloTurn !== playerColor) return;
       const step = AICheckers.getValidMoves(soloBoard, playerColor, mustJumpFrom).moves
         .find((m) => m.from.row === from.row && m.from.col === from.col && m.to.row === to.row && m.to.col === to.col);
       if (!step) return;
+      if (!mustJumpFrom) history.push(soloBoard);   // applyStep 은 새 판을 만든다
       const r = AICheckers.applyStep(soloBoard, step);
       soloBoard = r.board;
       if (typeof Sound !== 'undefined') Sound.play(step.isJump ? 'capture' : 'move');

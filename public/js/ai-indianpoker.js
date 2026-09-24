@@ -1,40 +1,38 @@
 // ai-indianpoker.js — Indian Poker AI (cards: 1-10, A beats only 10)
 window.AIIndianPoker = (function () {
-  // aiCard: AI's own card (it sees this in solo mode)
-  // playerCard: the player's card (AI can see this — it's on the player's forehead)
-  // pot: current pot
-  // raiseCount: how many raises have happened
-  function decideAction(aiCard, playerCard, pot, raiseCount) {
+  // 인디언 포커의 핵심은 '내 카드는 모른다'는 것이다. AI 도 같은 조건으로 둔다:
+  //   playerCard   — 상대(플레이어)의 카드: 이마에 붙어 있으니 AI 도 본다
+  //   unknownRanks — AI 가 아직 못 본 카드들의 숫자 (남은 덱 + AI 자신의 카드). 없으면 1~10 균등으로 본다
+  //   pot, raiseCount, toCall — 지금 팟, 레이즈 횟수, 콜하려면 더 내야 하는 칩
+  // ⚠ 예전 AI 는 자기 카드를 보고 쇼다운 승패를 미리 알고 베팅했다(플레이어는 자기 카드를 못 본다) —
+  //   이길 때만 레이즈하고 질 때는 접는, 사람이 이길 수 없는 상대였다.
+  function decideAction(playerCard, unknownRanks, pot, raiseCount, toCall) {
     const maxRaises = 3;
     const rand = Math.random();
+    const pool = unknownRanks && unknownRanks.length ? unknownRanks : [1,2,3,4,5,6,7,8,9,10];
+    let win = 0, tens = 0;
+    for (const r of pool) {
+      const c = compareRanks(r, playerCard);
+      win += c > 0 ? 1 : c === 0 ? 0.5 : 0;
+      if (r === 10) tens++;
+    }
+    const p = win / pool.length;          // 쇼다운에서 이길 확률 (비기면 절반)
+    const p10 = tens / pool.length;       // 내가 10 을 들고 있을 확률 — 10 을 들고 접으면 벌칙 5
+    const owe = Math.max(0, toCall || 0);
 
-    // Determine if AI wins at showdown
-    let aiBeatsPlayer;
-    if (aiCard === 1 && playerCard === 10) aiBeatsPlayer = true;   // A beats 10
-    else if (playerCard === 1 && aiCard === 10) aiBeatsPlayer = false; // A beats 10
-    else aiBeatsPlayer = aiCard > playerCard;
-
-    const diff = Math.abs(aiCard - playerCard);
-    // "close" only if neither card is A (A creates unusual gaps)
-    const isClose = diff <= 2 && aiCard !== 1 && playerCard !== 1;
-
-    // Special: AI holds 10 — never fold (would incur penalty)
-    if (aiCard === 10) {
-      if (raiseCount < maxRaises && rand < 0.5) return 'raise';
+    if (p >= 0.7) {
+      if (raiseCount < maxRaises && rand < 0.75) return 'raise';
       return 'call';
     }
-
-    if (aiBeatsPlayer) {
-      if (raiseCount < maxRaises && rand < 0.7) return 'raise';
-      return 'call';
-    } else if (isClose) {
-      if (raiseCount < maxRaises && rand < 0.2) return 'raise';
-      if (rand < 0.3) return 'fold';
-      return 'call';
-    } else {
-      if (rand < 0.55) return 'fold';
+    if (p >= 0.45) {
+      if (raiseCount < maxRaises && rand < 0.15) return 'raise';
       return 'call';
     }
+    // 불리할 때: 가끔 블러프, 아니면 기댓값으로 콜/폴드 (접으면 10 벌칙 위험을 진다)
+    if (raiseCount < maxRaises && rand < 0.1) return 'raise';
+    const evCall = p * (pot + owe) - owe;
+    const evFold = -p10 * 5;
+    return evCall >= evFold ? 'call' : 'fold';
   }
 
   // Generates a random card { rank:1-10, suit:'♠'|'♥'|'♦'|'♣' }

@@ -61,10 +61,11 @@ window.GameHandlers.othello = (function () {
       switchBoardArea, updateTurnIndicator, showGameOver,
       setActiveBoard, setGameStatus,
       connectingOverlay, spectatorJoinOverlay,
-      myLabel, oppLabel, myDot, oppDot,
+      myLabel, oppLabel, myDot, oppDot, setupUndo,
     } = helpers;
 
     const aiColor = playerColor === 'black' ? 'white' : 'black';
+    const history = [];   // 무르기용 — 내 수 직전의 판
     let soloBoard = [
       [null,null,null,null,null,null,null,null],
       [null,null,null,null,null,null,null,null],
@@ -110,6 +111,18 @@ window.GameHandlers.othello = (function () {
 
     if (playerColor !== 'black') setTimeout(aiMove, 600);
 
+    // 무르기 — 내 마지막 수와 그 뒤 AI 의 수(패스 포함)를 되돌린다
+    // (예전엔 무르기 버튼이 보였지만 등록된 동작이 없어 눌러도 아무 일도 없었다)
+    if (typeof setupUndo === 'function') {
+      setupUndo(() => {
+        if (soloGameOver || aiThinking || soloTurn !== playerColor || !history.length) return;
+        soloBoard = history.pop();
+        OthelloBoard.updateAfterMove(soloBoard, null, computeValidMoves(soloBoard, playerColor));
+        OthelloBoard.setMyTurn(true);
+        updateTurnIndicator(playerColor);
+      });
+    }
+
     function applyOthelloMove(board, row, col, color) {
       const b = board.map(r => [...r]);
       const opp  = color==='white'?'black':'white';
@@ -140,6 +153,7 @@ window.GameHandlers.othello = (function () {
     function handlePlayerMove({ row, col }) {
       if (soloGameOver || aiThinking) return;
       if (soloTurn !== playerColor) return;
+      history.push(soloBoard);   // applyOthelloMove 는 새 배열을 만든다 — 참조를 그대로 둬도 된다
       soloBoard = applyOthelloMove(soloBoard, row, col, playerColor);
       const nextMoves = computeValidMoves(soloBoard, playerColor);
       OthelloBoard.updateAfterMove(soloBoard, { row, col }, nextMoves);

@@ -651,6 +651,33 @@ function checkBoardGameClientTraps() {
   if (!branch('check').includes('betTurn = opp') || !(th.match(/action === 'call'\) \{([\s\S]*?)\} else/) || [])[1].includes('betTurn = opp')) {
     throw new Error('game-texasholdem.js solo check/call must pass betTurn to the opponent — otherwise the hand freezes');
   }
+  // ⑥ 게임오버 사유 코드는 모두 한글 문구가 있어야 한다 — 없으면 'deck-exhausted' 처럼 코드가 그대로 보인다
+  const gameJs = read('public/js/game.js');
+  const mapSrc = (gameJs.match(/const reasonMap = \{([\s\S]*?)\n    \};/) || [])[1];
+  if (!mapSrc) throw new Error('game.js reasonMap not found');
+  const known = new Set([...mapSrc.matchAll(/^\s*'?([\w-]+)'?\s*:/gm)].map((m) => m[1]));
+  const used = new Set();
+  const scan = (dir, re) => {
+    for (const f of fs.readdirSync(path.join(root, dir))) {
+      if (!f.endsWith('.js')) continue;
+      for (const m of read(`${dir}/${f}`).matchAll(re)) used.add(m[1]);
+    }
+  };
+  scan('server', /endGame\(room, [^,]+, '([\w-]+)'/g);
+  scan('server/handlers', /endGame\(room, [^,]+, '([\w-]+)'/g);
+  for (const m of read('server/handlers/chess.js').matchAll(/reason = '([\w-]+)'/g)) used.add(m[1]);   // 체스 무승부 사유
+  scan('public/js', /endSoloGame\([^,]+, '([\w-]+)'\)/g);
+  scan('public/js', /finishSolo\('([\w-]+)'\)/g);
+  const missing = [...used].filter((r) => !known.has(r));
+  if (missing.length) throw new Error(`game.js reasonMap has no label for: ${missing.join(', ')} — the raw code would be shown on the game-over screen`);
+  // ⑤ 혼자하기 무르기 버튼을 보여 주는 게임은 실제로 무르기를 등록해야 한다 — 체스·오델로·체커는 버튼만 있고 동작이 없었다
+  const undoList = (read('public/js/game.js').match(/const UNDO_SUPPORTED = \[([^\]]*)\]/) || [])[1];
+  if (!undoList) throw new Error('game.js UNDO_SUPPORTED list not found');
+  for (const g of [...undoList.matchAll(/'(\w+)'/g)].map((m) => m[1])) {
+    if (!/setupUndo\(/.test(read(`public/js/game-${g}.js`))) {
+      throw new Error(`public/js/game-${g}.js shows the solo undo button (UNDO_SUPPORTED) but never calls setupUndo — the button does nothing`);
+    }
+  }
 }
 
 function checkDocsMatchReality() {
