@@ -820,7 +820,16 @@
     moveListEl.scrollTop = moveListEl.scrollHeight;
   }
 
+  // 두 가지 호출형을 받는다: showGameOver(winner, reason) 와 showGameOver({ winner, reason, isDraw }).
+  // ⚠ 신규 4종(만칼라·도트앤박스·홀덤·백가몬)의 혼자하기는 객체형으로 불렀는데 이 함수는
+  //   위치 인자만 받아서, 객체가 winner 로 들어가 myColor 와 절대 같지 않았다 — 결과와 무관하게
+  //   언제나 '패배', 부제는 undefined 였다.
   function showGameOver(winner, reason) {
+    if (winner && typeof winner === 'object') {
+      const opts = winner;
+      reason = opts.reason;
+      winner = opts.isDraw ? 'draw' : opts.winner;
+    }
     const reasonMap = {
       checkmate:        '체크메이트',
       'five-in-a-row':  '5목 완성',
@@ -981,6 +990,16 @@
 
     const handler = GameHandlers[gameType];
     if (handler && typeof handler.startSolo === 'function') {
+      // 공통 혼자하기 화면 — 핸들러가 따로 설정하지 않아도 온라인용 UI 가 남지 않게 한다.
+      // (신규 4종은 이걸 안 해서 상대가 '상대방'으로, 무승부 제안 버튼이 AI 상대로 떠 있었다)
+      gameStatus = 'active';
+      connectingOverlay.style.display    = 'none';
+      spectatorJoinOverlay.style.display = 'none';
+      myLabel.textContent  = '나';
+      oppLabel.textContent = 'AI 봇';
+      myDot.className  = 'player-color-dot ' + soloColor;
+      oppDot.className = 'player-color-dot ' + (soloColor === 'white' ? 'black' : 'white');
+      document.getElementById('draw-btn').style.display = 'none';   // AI 에게 무승부를 제안할 수는 없다
       if (window.AdMobHelper) AdMobHelper.init();
       handler.startSolo(soloColor, {
         switchBoardArea,

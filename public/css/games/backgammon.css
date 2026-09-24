@@ -187,6 +187,16 @@
 }
 
 /* 이동 대상 하이라이트 */
+/* 탈출 가능할 때 내 탈출 칸을 강조 — 여기를 눌러 말을 내보낸다 */
+.bg-off-section.valid-dest {
+  outline: 2px dashed #7bd389;
+  outline-offset: 2px;
+  border-radius: 8px;
+  background: rgba(123, 211, 137, 0.18);
+  animation: bgOffPulse 1s ease-in-out infinite;
+}
+@keyframes bgOffPulse { 50% { background: rgba(123, 211, 137, 0.35); } }
+
 .bg-point.valid-dest::after {
   content: '';
   position: absolute;

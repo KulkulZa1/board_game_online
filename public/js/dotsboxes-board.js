@@ -21,7 +21,9 @@ window.DotsBoxesBoard = (function () {
     _render();
   }
 
-  function setMyTurn(v) { _myTurn = v && !_spectator; }
+  // 다시 그려야 한다 — 클릭 가능 여부는 _render() 가 요소를 만들 때 정해진다.
+  // 예전엔 플래그만 바꿔서, 혼자하기 첫 수(init → setMyTurn(true))에 아무 칸도 눌리지 않았다.
+  function setMyTurn(v) { _myTurn = v && !_spectator; _render(); }
 
   function update(opts) {
     if (opts.edges  !== undefined) _edges  = opts.edges;
