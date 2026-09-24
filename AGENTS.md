@@ -70,7 +70,7 @@ not scope creep.**
 |-------|------|----------|--------------------|
 | **A — Board games** | 12 turn-based 1v1 games | `server/handlers/` + `public/js/game-*.js` | Full: rooms, sockets, validation |
 | **A′ — Multiplayer specials** | Mahjong (4p), BANG! (4–7p) | `server/mahjong.js`, `server/bang.js` | Own lifecycle, **not** the registry |
-| **B — Arcade** | 9 solo games | `public/arcade/<name>/` | **None** — static pages |
+| **B — Arcade** | 10 solo games | `public/arcade/<name>/` | **None** — static pages |
 | **C — Sandbox** | 3 design tools | `sandbox/` | **Dev-only, never in production** |
 | *(experimental)* | 3D chess prototype | `public/games3d/chess3d/` | None — no socket wiring |
 | *(port)* | Godot 4 port of 첨탑 대란 | `godot/tower-defense/` | None — source only; rules must match `sim.js` (`prototypes/godot-port-test.js`, and `tests/contract_test.gd` under Godot) |
@@ -79,7 +79,7 @@ Layer A games: chess, omok, connect4, othello, checkers, indianpoker, applegame,
 battleship, backgammon, texasholdem, dotsboxes, mancala.
 
 Layer B games: snake, breakout, vampire, plant, tower-defense, factory, bootstrap,
-jackpot, neon-cascade.
+jackpot, neon-cascade, chalna.
 
 ---
 

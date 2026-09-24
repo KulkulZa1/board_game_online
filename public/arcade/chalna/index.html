@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>찰나 CHALNA — 0.1초의 도파민</title>
+  <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css?v=1.0">
+</head>
+<body>
+  <div id="container">
+    <header id="hdr">
+      <a href="/" class="back-btn">← 로비</a>
+      <span class="game-title">⚡ 찰나</span>
+      <button id="muteBtn" class="icon-btn" type="button" title="음소거">🔊</button>
+    </header>
+
+    <main id="gameWrapper">
+      <canvas id="c" tabindex="0" aria-label="점이 과녁 안에 있을 때 화면을 누르세요"></canvas>
+
+      <div id="topHud">
+        <div class="hud-stat"><span>BEST</span><strong id="highDisplay">0</strong></div>
+        <div class="hud-stat"><span>시도</span><strong id="triesDisplay">0</strong></div>
+      </div>
+
+      <div id="overlay" class="visible">
+        <div id="overlayBox">
+          <div id="overlayIcon">⚡</div>
+          <h1 id="overlayTitle">찰나</h1>
+          <p id="overlayMsg">
+            점이 <b class="c-target">하얀 과녁</b> 안에 있을 때 누르세요.<br>
+            한가운데면 <b class="c-perfect">PERFECT</b> — 점수 3배.<br>
+            <b class="c-bomb">빨간 폭탄</b>은 절대 누르지 마세요.<br>
+            <span class="dim">탭 · 클릭 · 스페이스</span>
+          </p>
+          <div id="deathStats" class="hidden"></div>
+          <button id="startBtn" type="button">시작하기</button>
+          <p id="retryHint" class="dim hidden">아무 곳이나 누르면 바로 다시</p>
+        </div>
+      </div>
+    </main>
+  </div>
+  <script src="/js/admob.js"></script>
+  <script src="sim.js?v=1.0"></script>
+  <script src="game.js?v=1.0"></script>
+  <script src="/js/sw-update.js"></script>
+</body>
+</html>
