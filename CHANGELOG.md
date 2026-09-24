@@ -2,6 +2,19 @@
 
 ## [Unreleased] - Vampire Survivors director-loop readiness
 
+### Added — 찰나 CHALNA, a one-button timing arcade (`/arcade/chalna/`)
+- A dot orbits a ring; tap while it is inside the target arc. Every hit reverses the dot, speeds it up and
+  narrows the next arc; the centre band is PERFECT (×3), 5 PERFECTs in a row start FEVER (×2), every
+  10-combo adds ×1. Red bomb arcs (from hit 8) must not be tapped, chain arcs (from hit 14) keep the
+  direction, gold arcs pay ×5. One input to learn — at top speed the window is about ±18 ms.
+- Built for "one more try": synthesized hit sounds climb a semitone per combo, screen shake and particles
+  scale with the streak, the death screen measures how early you were ("0.012초. 이건 억울하다."), shows the
+  gap to your best, counts attempts, and Space/tap restarts instantly (450 ms guard against panic taps).
+- Rules live in a headless `sim.js`; `prototypes/chalna-test.js` (in `test:games`) holds the fairness
+  promises: an exact-centre bot never dies, a 60 Hz frame bot clears 300 hits, every new arc leaves
+  ≥ 0.32 s of reaction time, bombs never overlap the target or sit on the dot, and random tapping dies
+  almost immediately (median 0 hits).
+
 ### Fixed — solo undo did nothing in 3 games; the Indian Poker AI could see its own card
 - **The solo undo button (↩ 무르기) did nothing in chess, Othello and checkers.** `game.js` shows it for
   `UNDO_SUPPORTED = ['chess','omok','othello','checkers']`, but only omok ever registered `setupUndo`. All

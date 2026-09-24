@@ -19,6 +19,7 @@ const tests = [
   'prototypes/jackpot-map-test.js',
   'prototypes/bootstrap-loop-test.js',
   'prototypes/td-rogue-test.js',
+  'prototypes/chalna-test.js',
   'prototypes/golden-run-test.js',
   'prototypes/server-hardening-test.js',
   'prototypes/ai-engines-test.js',
