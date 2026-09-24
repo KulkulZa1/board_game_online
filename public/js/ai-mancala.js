@@ -1,55 +1,54 @@
-// ai-mancala.js — 만칼라 AI (간단한 휴리스틱)
+// ai-mancala.js — 만칼라 규칙(서버와 같음) + 알파베타 AI
 window.AIMancala = (function () {
   const WHITE_STORE = 6, BLACK_STORE = 13;
 
-  // AI의 색에 따라 최선의 pit 선택
-  function getBestPit(pits, color) {
-    const myPits  = color === 'white' ? [0,1,2,3,4,5]   : [7,8,9,10,11,12];
-    const myStore = color === 'white' ? WHITE_STORE : BLACK_STORE;
-    const available = myPits.filter(i => pits[i] > 0);
-    if (available.length === 0) return null;
+  const SEARCH_DEPTH = 8;   // 수 단위 (보너스 턴도 한 수)
 
-    let best = null, bestScore = -Infinity;
+  // 한쪽 진영이 비면 끝 — 남은 씨앗은 각자 창고로 (서버·혼자하기와 같은 규칙)
+  function _finish(p) {
+    const wE = [0,1,2,3,4,5].every((i) => p[i] === 0), bE = [7,8,9,10,11,12].every((i) => p[i] === 0);
+    if (!wE && !bE) return null;
+    const q = [...p];
+    for (let i = 0; i <= 5; i++)  { q[WHITE_STORE] += q[i]; q[i] = 0; }
+    for (let i = 7; i <= 12; i++) { q[BLACK_STORE] += q[i]; q[i] = 0; }
+    return q;
+  }
 
-    for (const pit of available) {
-      let score = 0;
-
-      // 보너스 턴: 마지막 씨앗이 창고에 들어가면 큰 점수
-      const seeds = pits[pit];
-      const landIdx = _landingIdx(pit, seeds, myStore);
-      if (landIdx === myStore) score += 15;
-
-      // 캡처: 마지막이 자신의 빈 pit + 상대 씨앗 있으면
-      const oppPits = color === 'white' ? [7,8,9,10,11,12] : [0,1,2,3,4,5];
-      if (myPits.includes(landIdx) && pits[landIdx] === 0 && landIdx !== pit) {
-        const oppIdx = 12 - landIdx;
-        if (oppPits.includes(oppIdx) && pits[oppIdx] > 0) {
-          score += 10 + pits[oppIdx];
-        }
-      }
-
-      // 많은 씨앗 이동 선호
-      score += seeds * 0.3;
-
-      // 약간의 랜덤성
-      score += Math.random() * 2;
-
-      if (score > bestScore) { bestScore = score; best = pit; }
+  // 알파베타 — 보너스 턴이면 같은 쪽이 한 번 더 둔다. 점수 = AI 창고 - 상대 창고
+  function _search(p, toMove, ai, depth, alpha, beta) {
+    const done = _finish(p);
+    const store = (q, c) => q[c === 'white' ? WHITE_STORE : BLACK_STORE];
+    const other = ai === 'white' ? 'black' : 'white';
+    if (done) { const d = store(done, ai) - store(done, other); return d * 100 + Math.sign(d) * depth; }   // 확정 승패는 크게, 빨리 이길수록
+    if (depth === 0) return store(p, ai) - store(p, other);
+    const pits = (toMove === 'white' ? [0,1,2,3,4,5] : [7,8,9,10,11,12]).filter((i) => p[i] > 0);
+    const maxing = toMove === ai;
+    let best = maxing ? -Infinity : Infinity;
+    for (const pit of pits) {
+      const r = applyMove(p, toMove, pit);
+      const next = r.bonusTurn ? toMove : (toMove === 'white' ? 'black' : 'white');
+      const v = _search(r.pits, next, ai, depth - 1, alpha, beta);
+      if (maxing) { if (v > best) best = v; if (v > alpha) alpha = v; }
+      else        { if (v < best) best = v; if (v < beta) beta = v; }
+      if (alpha >= beta) break;
     }
-
     return best;
   }
 
-  function _landingIdx(startPit, seeds, myStore) {
-    const oppStore = myStore === WHITE_STORE ? BLACK_STORE : WHITE_STORE;
-    let idx = startPit;
-    let remaining = seeds;
-    while (remaining > 0) {
-      idx = (idx + 1) % 14;
-      if (idx === oppStore) continue;
-      remaining--;
+  // AI의 색에 따라 최선의 pit 선택 — 예전엔 한 수만 보고(보너스 턴·캡처 가산) 상대의 되갚기를 못 봤다
+  function getBestPit(pits, color) {
+    const myPits = color === 'white' ? [0,1,2,3,4,5] : [7,8,9,10,11,12];
+    const available = myPits.filter(i => pits[i] > 0);
+    if (available.length === 0) return null;
+    let best = [], bestScore = -Infinity;
+    for (const pit of available) {
+      const r = applyMove(pits, color, pit);
+      const next = r.bonusTurn ? color : (color === 'white' ? 'black' : 'white');
+      const v = _search(r.pits, next, color, SEARCH_DEPTH - 1, -Infinity, Infinity);
+      if (v > bestScore) { bestScore = v; best = [pit]; }
+      else if (v === bestScore) best.push(pit);
     }
-    return idx;
+    return best[Math.floor(Math.random() * best.length)];   // 동점이면 무작위
   }
 
   // 이동 적용 (솔로 모드 로컬 상태)

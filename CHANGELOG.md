@@ -2,6 +2,33 @@
 
 ## [Unreleased] - Vampire Survivors director-loop readiness
 
+### Fixed — solo checkers was unplayable; solo AIs rebuilt and put under test
+- **Solo checkers could not be played at all.** Its AI file doubles as the solo rulebook, and it produced
+  moves as `{ r, c }` while the board renderer (and the server) use `{ row, col }` — selecting a piece
+  highlighted no destination, so the first move never happened. It also had no multi-jump: after one
+  jump the turn went to the AI, unlike online play. The rules were rewritten to match the server
+  move-for-move (forced capture, multi-jump with the same piece, promotion ends the turn), and the AI —
+  documented as "minimax depth-4" but actually one-ply greedy — is now a 4-turn alpha-beta that plays
+  whole multi-jump turns (40–0 against a random mover; it no longer steps into an immediate capture).
+- **Chess AI froze the page for 1.5–3.7 s per middlegame move.** chess.js 0.12 builds SAN for every
+  generated move, and every leaf called `game_over()`/`in_checkmate()`/`in_draw()` — each a full move
+  generation. The AI now searches with its own 0x88 move generator (perft-exact against the standard
+  positions, including castling, en passant and promotion) and uses chess.js only to return the chosen
+  move: 25–135 ms per move. It adds capture quiescence (no more "capture on the last ply, ignore the
+  recapture"), prefers faster mates, and a light piece-square evaluation. 4–0 against the old engine.
+- **Omok AI** summed raw run lengths: it ignored whether ends were open, missed gapped shapes, and scored a
+  six-in-a-row (not a win here) as a win. It now plays by threat tiers (win → block five → own open four
+  or double threat → block the opponent's) and then scores 5-cell windows. 40–0 against the old AI.
+- **Mancala** (one-ply heuristic → 8-move alpha-beta, 58–2), **Othello** (corner bonus + disc count →
+  square-weight table with X/C squares + mobility, 40–0) and **backgammon** (die-by-die, and it penalised
+  moving a lone checker — which removes a blot — instead of leaving one → plans the whole roll and scores
+  the position, 192–8) all beat their previous versions decisively. Every AI still answers in ≤ 160 ms.
+- New `prototypes/ai-engines-test.js` (in `npm run test:games`): solo rules = server rules for checkers and
+  mancala over seeded random games, chess perft, tactical puzzles for each game, and strength floors.
+  Each game's section fails on its previous AI.
+- Played in a real browser: Mahjong (a full East round vs 3 AI, reload mid-game) and BANG! (two full games
+  vs AI, reload mid-game) — no page or server errors, correct results and role reveal.
+
 ### Fixed — board games, found by playing every game in a real browser (solo and two-player)
 - **Solo mode was unplayable in 4 of the 12 board games** — mancala, dots-and-boxes, Texas Hold'em
   and backgammon. Their boards' `setMyTurn()` only flipped a flag without re-rendering, and click

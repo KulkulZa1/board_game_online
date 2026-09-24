@@ -33,7 +33,7 @@ Node.js **>= 18** required. There is **no build step** and no `.env` file.
 | `npm start` | Runs the server on `:3000` (alias: `npm run dev`) | Manual testing |
 | `npm run lint` | Parses every `.js` in the repo for **syntax errors only** | After any JS edit |
 | `npm test` | Smoke test on `:13001` — handler registry, room state, HTTP routes (including `/sandbox/` → 404) | After any change |
-| `npm run test:games` | Every suite listed in `scripts/run-game-flow-tests.js` — Mahjong/BANG! engines and flows, rule tests for all 12 board games, the arcade progression suites, the port contract (`golden-run-test.js`) and `server-hardening-test.js` | After game-logic edits |
+| `npm run test:games` | Every suite listed in `scripts/run-game-flow-tests.js` — Mahjong/BANG! engines and flows, rule tests for all 12 board games, the arcade progression suites, the port contract (`golden-run-test.js`), `server-hardening-test.js` and `ai-engines-test.js` (solo AI rules = server rules, tactical puzzles, strength floors) | After game-logic edits |
 | `npm run test:full` | Routes + static assets + handlers + full-repo JS syntax pass, on `:3100` | Before finishing |
 | `npm run check` | `lint && test && test:games && test:full` | **Run before declaring done** |
 | `npm run sandbox` | Serves Layer C editors on `:3001` (dev-only) | Sandbox work |

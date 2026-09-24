@@ -69,8 +69,12 @@ window.GameHandlers.checkers = (function () {
     setGameStatus('active');
     switchBoardArea('checkers');
 
-    const { moves: initMoves, mustJump: initMJ } = AICheckers.getValidMoves(soloBoard, playerColor);
-    CheckersBoard.init({ board: soloBoard, myColor: playerColor, onMove: handlePlayerMove, validMoves: initMoves, mustJump: initMJ });
+    // 규칙·좌표는 AICheckers(= 서버와 같은 규칙, { row, col })가 정한다.
+    // ⚠ 예전 혼자하기는 { r, c } 이동을 { row, col } 을 기대하는 보드에 넘겨 갈 곳이 하나도 표시되지 않았고
+    //   (한 수도 둘 수 없었다), 연속 점프도 없어서 점프 한 번이면 차례가 AI 로 넘어갔다.
+    let mustJumpFrom = null;   // 연속 점프 중인 내 말
+    CheckersBoard.init({ board: soloBoard, myColor: playerColor, onMove: handlePlayerMove,
+                         validMoves: AICheckers.getValidMoves(soloBoard, playerColor).moves, mustJump: null });
     CheckersBoard.setMyTurn(playerColor === 'white');
 
     connectingOverlay.style.display    = 'none';
@@ -97,19 +101,25 @@ window.GameHandlers.checkers = (function () {
 
     if (playerColor !== 'white') setTimeout(aiMove, 600);
 
-    function handlePlayerMove(move) {
-      if (soloGameOver || aiThinking) return;
-      if (soloTurn !== playerColor) return;
-      soloBoard = AICheckers.applyMove(soloBoard, {
-        from: { r: move.fromRow, c: move.fromCol },
-        to:   { r: move.toRow,   c: move.toCol   },
-        captured: move.capturedRow != null ? { r: move.capturedRow, c: move.capturedCol } : null,
-      });
-      const { moves: nm, mustJump: nj } = AICheckers.getValidMoves(soloBoard, playerColor);
-      CheckersBoard.updateAfterMove(soloBoard, move, nm, nj);
-      if (typeof Sound !== 'undefined') Sound.play(move.captured ? 'capture' : 'move');
-      const { moves: aiMoves } = AICheckers.getValidMoves(soloBoard, aiColor);
-      if (!aiMoves.length) { endSoloGame(playerColor, 'no-moves'); return; }
+    const hasPieces = (color) => soloBoard.some((row) => row.some((p) => p && p.color === color));
+
+    function handlePlayerMove({ from, to }) {
+      if (soloGameOver || aiThinking || soloTurn !== playerColor) return;
+      const step = AICheckers.getValidMoves(soloBoard, playerColor, mustJumpFrom).moves
+        .find((m) => m.from.row === from.row && m.from.col === from.col && m.to.row === to.row && m.to.col === to.col);
+      if (!step) return;
+      const r = AICheckers.applyStep(soloBoard, step);
+      soloBoard = r.board;
+      if (typeof Sound !== 'undefined') Sound.play(step.isJump ? 'capture' : 'move');
+      if (r.continueFrom) {   // 같은 말로 계속 잡는다 — 차례는 넘어가지 않는다
+        mustJumpFrom = r.continueFrom;
+        CheckersBoard.updateAfterMove(soloBoard, step, AICheckers.getValidMoves(soloBoard, playerColor, mustJumpFrom).moves, mustJumpFrom);
+        return;
+      }
+      mustJumpFrom = null;
+      CheckersBoard.updateAfterMove(soloBoard, step, [], null);
+      if (!hasPieces(aiColor)) { endSoloGame(playerColor, 'no-pieces'); return; }
+      if (!AICheckers.getValidMoves(soloBoard, aiColor).moves.length) { endSoloGame(playerColor, 'no-moves'); return; }
       soloTurn = aiColor;
       updateTurnIndicator(soloTurn);
       CheckersBoard.setMyTurn(false);
@@ -117,21 +127,30 @@ window.GameHandlers.checkers = (function () {
       setTimeout(aiMove, 400 + Math.random() * 300);
     }
 
+    // AI 턴 — 연속 점프는 한 걸음씩 보여 준다
     function aiMove() {
       if (soloGameOver) return;
-      const best = AICheckers.getBestMove(soloBoard, aiColor);
-      if (!best) { endSoloGame(playerColor, 'no-moves'); return; }
-      soloBoard = AICheckers.applyMove(soloBoard, best);
-      const fakeMove = { fromRow: best.from.r, fromCol: best.from.c, toRow: best.to.r, toCol: best.to.c,
-                         captured: !!best.captured, capturedRow: best.captured?.r, capturedCol: best.captured?.c };
-      const { moves: pm, mustJump: pj } = AICheckers.getValidMoves(soloBoard, playerColor);
-      CheckersBoard.updateAfterMove(soloBoard, fakeMove, pm, pj);
-      if (typeof Sound !== 'undefined') Sound.play(best.captured ? 'capture' : 'move');
-      aiThinking = false;
-      if (!pm.length) { endSoloGame(aiColor, 'no-moves'); return; }
-      soloTurn = playerColor;
-      updateTurnIndicator(soloTurn);
-      CheckersBoard.setMyTurn(true);
+      const steps = AICheckers.getBestTurn(soloBoard, aiColor);
+      if (!steps) { endSoloGame(playerColor, 'no-moves'); return; }
+      (function play(i) {
+        if (soloGameOver) return;
+        const step = steps[i];
+        soloBoard = AICheckers.applyStep(soloBoard, step).board;
+        if (typeof Sound !== 'undefined') Sound.play(step.isJump ? 'capture' : 'move');
+        if (i + 1 < steps.length) {
+          CheckersBoard.updateAfterMove(soloBoard, step, [], null);
+          setTimeout(() => play(i + 1), 450);
+          return;
+        }
+        const next = AICheckers.getValidMoves(soloBoard, playerColor).moves;
+        CheckersBoard.updateAfterMove(soloBoard, step, next, null);
+        aiThinking = false;
+        if (!hasPieces(playerColor)) { endSoloGame(aiColor, 'no-pieces'); return; }
+        if (!next.length) { endSoloGame(aiColor, 'no-moves'); return; }
+        soloTurn = playerColor;
+        updateTurnIndicator(soloTurn);
+        CheckersBoard.setMyTurn(true);
+      })(0);
     }
 
     function endSoloGame(winner, reason) {

@@ -78,7 +78,7 @@ room.pgn     — PGN record
 
 **Move record:** `{ san, from, to, fen, captured, timestamp }`
 
-**AI:** `public/js/ai-chess.js` — minimax depth-3, alpha-beta pruning
+**AI:** `public/js/ai-chess.js` — 3-ply alpha-beta + capture quiescence over its own 0x88 move generator (perft-checked against chess.js in `prototypes/ai-engines-test.js`); chess.js is only used to hand back the chosen move. Material + light piece-square terms; faster mates score higher
 
 ---
 
@@ -105,7 +105,7 @@ room.lastMove    — { row, col }
 
 **Move record:** `{ row, col, color, moveNum }`
 
-**AI:** `public/js/ai-omok.js` — heuristic pattern scoring
+**AI:** `public/js/ai-omok.js` — threat tiers (win → block five → own open four/double threat → block the opponent's) then 5-cell-window scoring; knows exact-five (an overline is not a win)
 
 ---
 
@@ -133,7 +133,7 @@ room.lastMove    — { row, col }
 
 **Move record:** `{ col, row, color, moveNum }`
 
-**AI:** `public/js/ai-connect4.js` — minimax depth-6, alpha-beta
+**AI:** `public/js/ai-connect4.js` — minimax depth-7, alpha-beta
 
 ---
 
@@ -162,7 +162,7 @@ room.consecutivePasses  — 0|1|2 (two passes = game over)
 
 **Note:** If the current player has no valid moves, they must pass — `consecutivePasses++`. If the game-end check triggers only after TWO consecutive passes.
 
-**AI:** `public/js/ai-othello.js` — minimax depth-4, corner weighting
+**AI:** `public/js/ai-othello.js` — minimax depth-4, square-weight table (X/C squares negative until the corner is taken) + mobility
 
 ---
 
@@ -194,7 +194,7 @@ room.lastMove    — { row, col }  (endpoint of last move)
 - `mustJump`: after a capture, if more captures exist from the landing square, same piece must continue — turn does NOT pass
 - King promotion: piece reaching opposite back row becomes king; kings move diagonally in both directions
 
-**AI:** `public/js/ai-checkers.js` — minimax depth-4
+**AI:** `public/js/ai-checkers.js` — owns the solo rules (identical to the server: forced capture, multi-jump with the same piece, promotion ends the turn, `{row, col}` coordinates) and a 4-turn alpha-beta that plays a whole multi-jump turn
 
 ---
 
@@ -335,7 +335,7 @@ room.remainingMoves — array of die values still to use this turn
 
 **Move record:** `{ type, from, to, dieUsed, color, hitPiece: boolean }`
 
-**AI:** `public/js/ai-backgammon.js` — heuristic evaluation
+**AI:** `public/js/ai-backgammon.js` — plans the whole roll (every ordering of the remaining dice) and scores the resulting position: pip race, made points/primes, blots weighted by direct shots, checkers on the bar
 
 ---
 
@@ -457,7 +457,7 @@ Opposite pit: oppIdx = 12 - idx
 
 **Move record:** `{ pit, color, bonusTurn: boolean, pits: snapshot, moveNum }`
 
-**AI:** `public/js/ai-mancala.js` — heuristic (store difference + seed distribution)
+**AI:** `public/js/ai-mancala.js` — 8-move alpha-beta on store difference (bonus turns and the end-of-game sweep included); `applyMove` is also the solo rulebook and is checked against the server
 
 ---
 

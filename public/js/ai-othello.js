@@ -1,7 +1,6 @@
 // ai-othello.js — Othello minimax AI (depth 3)
 window.AIOthello = (function () {
   const DIRS = [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]];
-  const CORNER_BONUS = [[0,0],[0,7],[7,0],[7,7]];
 
   function validMoves(board, color) {
     const opp = color==='white'?'black':'white';
@@ -31,18 +30,36 @@ window.AIOthello = (function () {
     return b;
   }
 
+  // 칸 가치표 — 모서리는 크고, 모서리 옆(X·C 칸)은 모서리를 내주므로 음수.
+  // 예전 평가는 '모서리 +25, 나머지 돌 수'뿐이라 모서리 옆 칸을 스스로 채워 모서리를 내줬다.
+  const W = [
+    [100, -20, 10,  5,  5, 10, -20, 100],
+    [-20, -50, -2, -2, -2, -2, -50, -20],
+    [ 10,  -2,  1,  1,  1,  1,  -2,  10],
+    [  5,  -2,  1,  0,  0,  1,  -2,   5],
+    [  5,  -2,  1,  0,  0,  1,  -2,   5],
+    [ 10,  -2,  1,  1,  1,  1,  -2,  10],
+    [-20, -50, -2, -2, -2, -2, -50, -20],
+    [100, -20, 10,  5,  5, 10, -20, 100],
+  ];
+
   function evaluate(board, color) {
     const opp = color==='white'?'black':'white';
-    let score = 0;
-    CORNER_BONUS.forEach(([r,c]) => {
-      if (board[r][c]===color) score += 25;
-      else if (board[r][c]===opp) score -= 25;
-    });
-    for (const row of board) for (const cell of row) {
-      if (cell===color) score++;
-      else if (cell===opp) score--;
+    let pos = 0, mine = 0, theirs = 0, empty = 0;
+    for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+      const v = board[r][c];
+      if (!v) { empty++; continue; }
+      // 모서리를 이미 가졌으면 그 옆 칸은 더 이상 위험하지 않다
+      let w = W[r][c];
+      if (w < 0) {
+        const cr = r < 4 ? 0 : 7, cc = c < 4 ? 0 : 7;
+        if (board[cr][cc]) w = 5;
+      }
+      if (v === color) { pos += w; mine++; } else { pos -= w; theirs++; }
     }
-    return score;
+    if (empty === 0) return (mine - theirs) * 1000;          // 끝난 판은 돌 수가 전부
+    const mob = validMoves(board, color).length - validMoves(board, opp).length;
+    return pos + mob * 5 + (empty < 14 ? (mine - theirs) * 3 : 0);   // 막판엔 돌 수도 센다
   }
 
   function minimax(board, depth, alpha, beta, aiColor, curColor) {
