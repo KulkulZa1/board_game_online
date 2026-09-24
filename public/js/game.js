@@ -842,6 +842,7 @@
       'stone-count':    '돌 개수 판정',
       'chips-depleted': '칩 소진',
       'out-of-chips':   '칩 소진',
+      'deck-exhausted': '덱 소진 — 칩 비교',   // 인디언 포커 (예전엔 사유 코드가 그대로 보였다)
       resign:           '기권',
       timeout:          '시간 초과',
       agreement:        '합의 무승부',

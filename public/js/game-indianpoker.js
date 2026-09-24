@@ -177,7 +177,9 @@ window.GameHandlers.indianpoker = (function () {
     function aiRespond() {
       setTimeout(() => {
         if (soloGameOver) return;
-        const aiAction = AIIndianPoker.decideAction(aiCard.rank, playerCard.rank, pot, raiseCount);
+        // AI 는 자기 카드를 모른다 — 보이는 것(플레이어 카드)과 못 본 카드 묶음(남은 덱 + 자기 카드)만 넘긴다
+        const unseen = deck.map((c) => c.rank).concat(aiCard.rank);
+        const aiAction = AIIndianPoker.decideAction(playerCard.rank, unseen, pot, raiseCount, Math.max(0, playerBet - aiBet));
         if (aiAction === 'fold') {
           playerChips += pot;
           pot = 0;

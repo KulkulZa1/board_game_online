@@ -49,11 +49,15 @@ window.GameHandlers.chess = (function () {
       switchBoardArea, updateTurnIndicator, showGameOver,
       setActiveBoard, setGameStatus,
       connectingOverlay, spectatorJoinOverlay,
-      myLabel, oppLabel, myDot, oppDot,
+      myLabel, oppLabel, myDot, oppDot, setupUndo,
     } = helpers;
 
     const aiColor = playerColor === 'white' ? 'black' : 'white';
     _chess = new Chess();
+    // 무르기용 — 내 수 직전의 포지션. (chess.undo() 는 못 쓴다: 보드가 매 수 chess.load(fen) 으로
+    // 같은 객체를 다시 읽어 기보가 지워진다)
+    const history = [];   // [{ fen, lastMove }]
+    let lastMove = null;
     let soloGameOver = false;
     let aiThinking   = false;
 
@@ -87,11 +91,28 @@ window.GameHandlers.chess = (function () {
 
     if (playerColor !== 'white') setTimeout(aiMove, 600);
 
+    // 무르기 — 내 마지막 수와 그에 대한 AI 응수를 함께 되돌린다
+    // (예전엔 무르기 버튼이 보였지만 등록된 동작이 없어 눌러도 아무 일도 없었다)
+    if (typeof setupUndo === 'function') {
+      setupUndo(() => {
+        if (soloGameOver || aiThinking || _chess.turn() !== playerColor[0] || !history.length) return;
+        const prev = history.pop();
+        _chess.load(prev.fen);
+        lastMove = prev.lastMove;
+        Board.updateAfterMove(prev.fen, lastMove || { from: null, to: null });
+        Board.setMyTurn(true);
+        updateTurnIndicator(playerColor);
+      });
+    }
+
     function handlePlayerMove({ from, to, promotion }) {
       if (soloGameOver || aiThinking) return;
       if (_chess.turn() !== playerColor[0]) return;
+      const before = { fen: _chess.fen(), lastMove };
       const move = _chess.move({ from, to, promotion: promotion || 'q' });
       if (!move) return;
+      history.push(before);
+      lastMove = { from: move.from, to: move.to };
       Board.updateAfterMove(_chess.fen(), move);
       if (_chess.in_checkmate()) { endSoloGame(playerColor, 'checkmate'); return; }
       if (_chess.in_draw() || _chess.in_stalemate()) { endSoloGame('draw', 'draw'); return; }
@@ -106,6 +127,7 @@ window.GameHandlers.chess = (function () {
       const move = AIChess.getBestMove(_chess, aiColor);
       if (!move) { endSoloGame(playerColor, 'no-moves'); return; }
       _chess.move(move);
+      lastMove = { from: move.from, to: move.to };
       Board.updateAfterMove(_chess.fen(), move);
       aiThinking = false;
       if (_chess.in_checkmate()) { endSoloGame(aiColor, 'checkmate'); return; }

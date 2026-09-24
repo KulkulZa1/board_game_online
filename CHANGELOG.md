@@ -2,6 +2,24 @@
 
 ## [Unreleased] - Vampire Survivors director-loop readiness
 
+### Fixed — solo undo did nothing in 3 games; the Indian Poker AI could see its own card
+- **The solo undo button (↩ 무르기) did nothing in chess, Othello and checkers.** `game.js` shows it for
+  `UNDO_SUPPORTED = ['chess','omok','othello','checkers']`, but only omok ever registered `setupUndo`. All
+  three now undo your last move together with the AI's reply (checkers: your whole multi-jump turn; pressed
+  mid-jump, back to the start of the turn). Chess keeps its own position stack — the board reloads the FEN
+  into the same chess.js object every move, which wipes chess.js's own history, so `chess.undo()` can't work.
+  A smoke-check gate now requires every game in `UNDO_SUPPORTED` to call `setupUndo`.
+- **The solo Indian Poker AI knew who would win before betting.** It was called with its own card, so it
+  raised when ahead and folded when behind — while the player, by the rules of the game, cannot see their
+  own card. It now gets only what a player could know (your card, and the unseen pool = remaining deck plus
+  its own card), estimates its win chance, and weighs the 10-fold penalty before folding.
+- The game-over screen showed the raw code `deck-exhausted` when an Indian Poker game ran out of cards
+  (online and solo). It now reads "덱 소진 — 칩 비교", and a smoke-check gate requires every end reason the
+  server or a solo handler can send to have a label.
+- **Dots & boxes AI** counted only the 3-sided boxes a move creates immediately, so it could not tell a
+  one-box sacrifice from opening a long chain. With no safe edge left it now gives away the fewest boxes the
+  opponent can collect in a row (the shortest chain): 52–8 against the old AI on 5×5.
+
 ### Fixed — solo checkers was unplayable; solo AIs rebuilt and put under test
 - **Solo checkers could not be played at all.** Its AI file doubles as the solo rulebook, and it produced
   moves as `{ r, c }` while the board renderer (and the server) use `{ row, col }` — selecting a piece
