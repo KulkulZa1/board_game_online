@@ -2,6 +2,29 @@
 
 ## [Unreleased] - Vampire Survivors director-loop readiness
 
+### Fixed — board games, found by playing every game in a real browser (solo and two-player)
+- **Solo mode was unplayable in 4 of the 12 board games** — mancala, dots-and-boxes, Texas Hold'em
+  and backgammon. Their boards' `setMyTurn()` only flipped a flag without re-rendering, and click
+  handlers are attached at render time, so the player's first move could never be made. The same
+  four handlers called `showGameOver({ winner, reason, isDraw })`, but `game.js` only took
+  positional arguments, so every finished solo game read "패배" whatever the score. They also left
+  the online UI in place (opponent labelled "상대방", a draw-offer button against the AI).
+  `setMyTurn` now re-renders, `showGameOver` accepts both forms, and `game.js` sets the shared solo
+  UI (AI label, no draw button) before handing off to any game.
+- **Backgammon could not be finished by a human, online or solo.** `_validDests()` filtered out
+  bear-off moves, `_canBearOff()` was defined but never called, and the borne-off area had no click
+  handler — only the AI (which moves in code) could bear off. Your own borne-off area now lights up
+  when a bear-off is legal and bears off the selected checker when clicked.
+- **Two-player Texas Hold'em froze at the first check or call.** The server broadcast the action
+  before `_maybeAdvanceStreet()` passed the turn, and passed it without broadcasting, so both
+  clients kept the old turn: the actor's buttons were rejected and the opponent never got any.
+  The action is now broadcast after the turn is decided. Solo Hold'em had the mirror bug — only a
+  raise passed the turn to the AI — and its showdown screen showed pre-award chips beside the old
+  pot, which looked like chips going missing.
+- Two-player sweep of all 12 games (two browser sessions per room, one reloading mid-game): no page
+  errors, every reconnect restores the board. `server-hardening-test.js` pins the Hold'em broadcast
+  turn; `checkBoardGameClientTraps` in `smoke-check.js` pins the client fixes above.
+
 ### Added — Godot port (stage 3)
 - `godot/tower-defense/`: a Godot 4 project porting 첨탑 대란's full rules engine (`td_rules.gd`,
   `td_rng.gd`, `td_run.gd` — method-for-method with `sim.js`'s `Run`) and a minimal playable scene.

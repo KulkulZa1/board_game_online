@@ -626,6 +626,33 @@ function checkPortContract() {
   }
 }
 
+function checkBoardGameClientTraps() {
+  // 실제 브라우저 플레이에서 드러난 클라이언트 결함들 — 브라우저 테스트가 CI 에 없으니 모양으로라도 고정한다.
+  const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
+  // ① 신규 4종은 showGameOver 를 객체로 불렀는데 위치 인자만 받아서 늘 '패배'였다
+  if (!/function showGameOver\(winner, reason\) \{[\s\S]{0,900}typeof winner === 'object'/.test(read('public/js/game.js'))) {
+    throw new Error('game.js showGameOver must accept the object form { winner, reason, isDraw } used by solo handlers');
+  }
+  // ② setMyTurn 이 다시 그리지 않으면 혼자하기 첫 수에 아무 칸도 눌리지 않는다 (클릭 가능 여부는 _render 에서 정해진다)
+  for (const f of ['mancala-board', 'dotsboxes-board', 'texas-holdem', 'backgammon-board']) {
+    const m = read(`public/js/${f}.js`).match(/function setMyTurn\(v\) \{([\s\S]*?)\n?  ?\}/);
+    if (!m || !m[1].includes('_render()')) {
+      throw new Error(`public/js/${f}.js setMyTurn must re-render — otherwise solo mode cannot make its first move`);
+    }
+  }
+  // ③ 백가몬 탈출(베어오프)은 탈출 칸을 눌러야 한다 — 예전엔 _canBearOff 가 정의만 되고 연결이 없어 사람은 끝낼 수 없었다
+  const bg = read('public/js/backgammon-board.js');
+  if ((bg.match(/_canBearOff\(\)/g) || []).length < 1 || !/_tryMove\(_selected, 'off'\)/.test(bg)) {
+    throw new Error('backgammon-board.js must let the player bear off (click the borne-off area → _tryMove(_selected, "off"))');
+  }
+  // ④ 혼자하기 홀덤 — 체크·콜도 차례를 넘겨야 AI 가 행동한다
+  const th = read('public/js/game-texasholdem.js');
+  const branch = (name) => (th.match(new RegExp(`if \\(action === '${name}'\\) \\{([\\s\\S]*?)\\} else`)) || [])[1] || '';
+  if (!branch('check').includes('betTurn = opp') || !(th.match(/action === 'call'\) \{([\s\S]*?)\} else/) || [])[1].includes('betTurn = opp')) {
+    throw new Error('game-texasholdem.js solo check/call must pass betTurn to the opponent — otherwise the hand freezes');
+  }
+}
+
 function checkDocsMatchReality() {
   // 문서가 사실과 어긋나면 사람도 AI 도 잘못된 함정을 배운다. 실제로 있었던 어긋남들:
   //  - AGENTS.md(정식 함정 목록)가 '샌드박스 TD 엔진이 운영에 나간다'고 가르쳤다 (재건축 뒤 거짓)
@@ -1974,6 +2001,7 @@ async function main() {
     checkNeonLadderCoverage();
     checkPortContract();
     checkDocsMatchReality();
+    checkBoardGameClientTraps();
     checkBootstrapArcadeCoverage();
     checkSandboxConfigBridgeRead();
     checkTowerDefenseSandboxCoverage();

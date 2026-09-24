@@ -132,13 +132,18 @@ window.GameHandlers.texasholdem = (function () {
           return;
         }
 
+        // ⚠ 체크·콜도 차례를 상대에게 넘겨야 한다. 예전엔 레이즈만 betTurn 을 바꿔서,
+        //   플레이어가 체크하거나 콜하면 차례가 플레이어에게 남은 채 AI 가 영영 호출되지 않았다 —
+        //   혼자하기 홀덤은 첫 체크/콜에서 멈췄다. (스트리트가 끝나면 advanceStreet 가 차례를 다시 정한다)
         if (action === 'check') {
           acted[role] = true;
+          betTurn = opp;
           if (window.Sound) Sound.play('move');
         } else if (action === 'call') {
           const amt = Math.min(toCall, chips[role]);
           chips[role] -= amt; bets[role] += amt; pot += amt;
           acted[role] = true;
+          betTurn = opp;
           if (window.Sound) Sound.play('move');
         } else if (action === 'raise') {
           if (raiseCount >= MAX_RAISES) { action = 'call'; processAction('call', role); return; }

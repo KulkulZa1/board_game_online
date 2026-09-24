@@ -170,6 +170,29 @@ console.log('\n[인디언 포커 — 베팅과 동점]');
   ok(r.chips.host + r.chips.guest === 107, '10 폴드 벌칙은 가진 만큼만 옮긴다 (칩이 생겨나지 않는다)', JSON.stringify(r.chips));
 }
 
+console.log('\n[텍사스 홀덤 — 방송된 차례가 실제 차례와 같다]');
+{
+  // ⚠ 실제로 났던 버그: 체크/콜을 방송한 '뒤에' 차례를 넘기고 다시 방송하지 않아, 클라이언트는
+  //    계속 행동한 쪽 차례라고 믿었다 — 2인 홀덤이 첫 체크/콜에서 멈췄다.
+  const texas = require('../server/handlers/texasholdem');
+  const log = installIo();
+  const room = createRoomState('white', { minutes: 10 }, 't', 'texasholdem', null, null);
+  room.id = 'th-turn'; room.status = 'active';
+  room.players.host = { socketId: 'h', connected: true };
+  room.players.guest = { socketId: 'g', connected: true };
+  texas.startTHRound(room);
+  const sb = room.betTurn;                                  // 프리플랍은 버튼(SB)부터
+  const bb = sb === 'host' ? 'guest' : 'host';
+  texas.handleMove(sock, room, sb, { action: 'call' });     // SB 콜 → BB 에게 옵션
+  const moved = log.filter((e) => e.event === 'game:move:made').pop();
+  ok(room.betTurn === bb, 'SB 콜 뒤 서버 차례는 BB');
+  ok(moved && moved.payload.betTurn === bb, '방송된 betTurn 도 BB (예전엔 콜한 SB 로 남았다)', moved && moved.payload.betTurn);
+  texas.handleMove(sock, room, bb, { action: 'check' });    // BB 체크 → 플랍
+  const flop = log.filter((e) => e.event === 'game:move:made').pop();
+  ok(room.phase === 'flop' && flop.payload.phase === 'flop' && flop.payload.betTurn === room.betTurn, '두 사람이 맞추면 플랍으로 가고 방송도 그 상태');
+  clearTimeout(room.cleanupTimer);
+}
+
 console.log('\n[BANG! — pick 은 정수만]');
 {
   state.io = { to: () => ({ emit() {} }), sockets: { sockets: new Map() } };

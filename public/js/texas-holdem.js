@@ -38,7 +38,9 @@ window.TexasHoldemBoard = (function () {
     _render();
   }
 
-  function setMyTurn(v) { _myTurn = v && !_spectator; }
+  // 다시 그려야 한다 — 클릭 가능 여부는 _render() 가 요소를 만들 때 정해진다.
+  // 예전엔 플래그만 바꿔서, 혼자하기 첫 수(init → setMyTurn(true))에 아무 칸도 눌리지 않았다.
+  function setMyTurn(v) { _myTurn = v && !_spectator; _render(); }
 
   // 서버에서 내 홀 카드 수신
   function showDeal(data) {
@@ -69,6 +71,11 @@ window.TexasHoldemBoard = (function () {
   function showShowdown(data) {
     _showdown  = data;
     _community = data.community || _community;
+    // 정산이 끝난 칩과 빈 팟을 반영한다 — 예전엔 쇼다운 화면이 '정산 전' 칩과 옛 팟을 그대로
+    // 보여 줘서, 이긴 판인데 칩이 그대로이고 합계가 모자라 보였다.
+    if (data.chips) _chips = data.chips;
+    _pot  = 0;
+    _bets = { host: 0, guest: 0 };
     _oppHand   = _myRole === 'host' ? data.hands.guest : data.hands.host;
     _phase     = 'showdown';
     _myTurn    = false;

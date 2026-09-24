@@ -25,8 +25,10 @@ window.BackgammonBoard = (function () {
     _render();
   }
 
+  // 다시 그려야 한다 — 클릭 가능 여부는 _render() 가 요소를 만들 때 정해진다
   function setMyTurn(v) {
     _myTurn = v && !_spectator;
+    _render();
   }
 
   function update(opts) {
@@ -202,6 +204,17 @@ window.BackgammonBoard = (function () {
     const botCnt = _ce('div', 'bg-off-count black');
     botCnt.textContent = _board ? _board.borneOff.black : 0;
     botSec.appendChild(botLbl); botSec.appendChild(botCnt);
+
+    // ⚠ 탈출(베어오프)은 여기를 눌러야 한다. 예전엔 _validDests() 가 'off' 를 걸러 내고
+    //   이 영역엔 클릭 처리가 없어서(_canBearOff 는 정의만 되고 쓰이지 않았다), 사람은
+    //   말을 하나도 내보낼 수 없었다 — 백가몬을 끝낼 방법이 없었다 (AI 는 코드로 두니 가능).
+    const mySec = _myColor === 'white' ? topSec : botSec;
+    if (!_spectator && _canBearOff()) {
+      mySec.classList.add('valid-dest');
+      mySec.style.cursor = 'pointer';
+      mySec.title = '선택한 말을 내보내기';
+      mySec.addEventListener('click', () => _tryMove(_selected, 'off'));
+    }
 
     area.appendChild(topSec);
     area.appendChild(sep);

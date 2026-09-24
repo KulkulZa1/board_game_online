@@ -153,8 +153,7 @@ function handleMove(socket, room, role, data) {
       return;
     }
     room.acted[role] = true;
-    state.io.to(room.id).emit('game:move:made', _publicState(room, { type: 'check', role }));
-    _maybeAdvanceStreet(room);
+    _maybeAdvanceStreet(room, { type: 'check', role });
     return;
   }
 
@@ -165,8 +164,7 @@ function handleMove(socket, room, role, data) {
     room.pot         += callAmt;
     room.acted[role]  = true;
     _settleUncalledBet(room);
-    state.io.to(room.id).emit('game:move:made', _publicState(room, { type: 'call', role, amount: callAmt }));
-    _maybeAdvanceStreet(room);
+    _maybeAdvanceStreet(room, { type: 'call', role, amount: callAmt });
     return;
   }
 
@@ -220,18 +218,25 @@ function _doFold(room, role) {
   }
 }
 
-function _maybeAdvanceStreet(room) {
+// move: 방금 한 행동(check/call). 방송은 '차례가 정해진 뒤'에 한다.
+// ⚠ 예전엔 check/call 이 이 함수보다 먼저 방송하고, 여기서 차례를 상대에게 넘길 땐 아무것도
+//   보내지 않았다. 클라이언트는 차례가 그대로라고 믿어서 — 행동한 쪽 버튼은 서버가 거부하고
+//   상대에겐 버튼이 안 떠 — 2인 홀덤이 첫 체크/콜에서 멈췄다(시간 초과까지).
+function _maybeAdvanceStreet(room, move) {
   const opp = room.betTurn === 'host' ? 'guest' : 'host';
 
   // 두 플레이어 모두 행동 완료 + 베팅 동일 → 다음 스트리트
   const balanced = room.bets.host === room.bets.guest;
   const bothActed = room.acted.host && room.acted.guest;
   if (!bothActed || !balanced) {
-    // 상대 차례로 넘김
+    // 상대 차례로 넘김 — 넘긴 뒤의 상태를 방송한다
     room.betTurn = opp;
     _setTimer(room, opp);
+    state.io.to(room.id).emit('game:move:made', _publicState(room, move));
     return;
   }
+  // 스트리트가 끝났다 — 행동 자체를 먼저 알리고 아래에서 다음 스트리트를 방송한다 (예전과 같은 순서)
+  if (move) state.io.to(room.id).emit('game:move:made', _publicState(room, move));
 
   // 스트리트 진행
   if (room.chips.host === 0 || room.chips.guest === 0) {
