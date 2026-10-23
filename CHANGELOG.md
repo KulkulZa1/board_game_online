@@ -2,6 +2,35 @@
 
 ## [Unreleased] - Vampire Survivors director-loop readiness
 
+### Added — 스침 GRAZE, a dodge game where only near misses score (`/arcade/graze/`)
+- Move left/right (relative drag on touch so the finger never covers you, mouse follow, ←→ with Shift for
+  precision). Blocks, gapped walls and telegraphed beams fall; one touch ends the run. Simply dodging earns
+  almost nothing: passing close accrues points × closeness² × multiplier, a PERFECT graze (< 0.8u) pays a
+  bonus, and the multiplier **leaks** when you stop grazing — so safe play bleeds and greed kills. Grazing
+  fills OVERDRIVE (world slow-motion, your speed unchanged, ×2 points). The hitbox is the small white core,
+  far smaller than the glow, which is what makes hair's-breadth grazes possible.
+- Dopamine/toxicity: continuous "sizzle" whose loudness tracks closeness and whose pitch tracks the
+  multiplier, PERFECT chimes climbing a semitone per streak, a "털끝!" call for grazes under 0.25u, sparks at
+  the contact point, a best-score progress bar, and a death screen that names what you lost ("×8.2 배율이
+  증발했다"), how deep the hit was ("0.09 차이. 털끝 하나였다."), your closest graze, the gap to your best and
+  your attempt count; Space/tap restarts. The menu runs a grazing demo of skilled play behind the title.
+- Fair by construction and measured: an invisible corridor moves at ≤ 45% of player speed and no hazard
+  ever enters it while crossing the player line; spawning depends only on seed + world time.
+  `prototypes/graze-test.js` (in `test:games`) checks all ~20k spawned hazards against the corridor, pins
+  0.6 s sight and beam warning as literal promises, runs a planner that only reacts to hazards it has seen
+  for 0.22 s (survives 60 s on 6/6 seeds), shows idle, edge-hugging and random play dying, and a grazing
+  planner earning ~17× more per second than a safe one while dying in 5/6 runs. Every fairness claim was
+  mutation-tested: removing the corridor, speeding the fall, shortening warnings, or lowering the engine's
+  own sight constant each fails the suite.
+
+### Fixed — 찰나 ended the run whenever you left the tab
+- The loop stepped the sim by the raw time since the last frame. While a tab is hidden (or the phone is
+  locked, or a notification shade is open) `requestAnimationFrame` stops, so on return the dot advanced
+  the whole absence in one step: any gap of 0.7 s or more killed the run as "놓침", longer ones teleported
+  the dot a full turn. Steps are now capped at 0.1 s, so the game simply waits. Reproduced and verified in
+  Chromium by freezing the main thread for 0.7/1.2/1.6 s (dead before, alive after); a smoke-check gate
+  (`checkArcadeTimeStepClamp`) keeps both 찰나 and 스침 clamped.
+
 ### Added — 찰나 CHALNA, a one-button timing arcade (`/arcade/chalna/`)
 - A dot orbits a ring; tap while it is inside the target arc. Every hit reverses the dot, speeds it up and
   narrows the next arc; the centre band is PERFECT (×3), 5 PERFECTs in a row start FEVER (×2), every
