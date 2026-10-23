@@ -95,6 +95,10 @@
   }
   const pos = (ang, rad) => [cx + Math.cos(ang) * rad, cy + Math.sin(ang) * rad];
 
+  // 지난 진행 뒤로 흐른 시간 (초). 0.1초보다 길면 잘라 낸다 — 탭을 떠났다 돌아오면(그동안 rAF 가 멈춘다)
+  // 예전엔 그 몇 초를 한꺼번에 진행해서 점이 과녁을 지나쳐 '놓침'으로 죽었다. 이제는 멈춰 있던 것처럼 이어진다.
+  function gapSince(now) { return Math.min(Math.max(0, now - lastStep), 100) / 1000; }
+
   // ── 게임 흐름 ─────────────────────────────────────────────────
   function newRun() {
     s = Sim.createState((Date.now() ^ (Math.random() * 1e9)) >>> 0);
@@ -114,7 +118,7 @@
     }
     // 누른 '그 순간'까지 시뮬을 당겨서 판정 — 프레임 사이 입력도 정확하게
     const now = performance.now();
-    const ev0 = Sim.step(s, (now - lastStep) / 1000);
+    const ev0 = Sim.step(s, gapSince(now));
     lastStep = now;
     if (ev0) { onDeath(ev0); return; }
     const ev = Sim.tap(s);
@@ -326,7 +330,7 @@
   function loop(now) {
     const dt = Math.min(0.05, (now - prev) / 1000); prev = now;
     if (mode === 'playing' && s) {
-      const ev = Sim.step(s, (now - lastStep) / 1000);
+      const ev = Sim.step(s, gapSince(now));
       lastStep = now;
       if (ev) onDeath(ev);
     }

@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>스침 GRAZE — 피하지 말고 스쳐라</title>
+  <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css?v=1.0">
+</head>
+<body>
+  <div id="container">
+    <header id="hdr">
+      <a href="/" class="back-btn">← 로비</a>
+      <span class="game-title">☄️ 스침</span>
+      <button id="muteBtn" class="icon-btn" type="button" title="음소거">🔊</button>
+    </header>
+
+    <main id="gameWrapper">
+      <canvas id="c" tabindex="0" aria-label="좌우로 움직여 떨어지는 것들을 아슬아슬하게 스치세요"></canvas>
+
+      <div id="topHud">
+        <div class="hud-stat"><span>BEST</span><strong id="highDisplay">0</strong></div>
+        <div class="hud-stat"><span>시도</span><strong id="triesDisplay">0</strong></div>
+      </div>
+
+      <div id="overlay" class="visible">
+        <div id="overlayBox">
+          <div id="overlayIcon">☄️</div>
+          <h1 id="overlayTitle">스침</h1>
+          <p id="overlayMsg">
+            떨어지는 것에 <b class="c-bomb">닿으면 끝</b>.<br>
+            그런데 그냥 피하면 점수가 안 된다.<br>
+            <b class="c-gold">가까이 스칠수록</b> 점수와 배율이 오르고,<br>
+            털끝 차이는 <b class="c-perfect">PERFECT</b>.<br>
+            안 스치면 배율이 새어 나간다.<br>
+            <span class="dim">드래그 · 마우스 · ←→ (Shift 정밀)</span>
+          </p>
+          <div id="deathStats" class="hidden"></div>
+          <button id="startBtn" type="button">시작하기</button>
+          <p id="retryHint" class="dim hidden">아무 곳이나 누르면 바로 다시</p>
+        </div>
+      </div>
+    </main>
+  </div>
+  <script src="/js/admob.js"></script>
+  <script src="sim.js?v=1.0"></script>
+  <script src="game.js?v=1.0"></script>
+  <script src="/js/sw-update.js"></script>
+</body>
+</html>

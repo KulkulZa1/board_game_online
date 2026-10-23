@@ -1,0 +1,60 @@
+/* 스침 — 검은 바탕, 뜨거운 분홍 위험물, 금색 스침. */
+:root {
+  --bg: #05040b;
+  --panel: rgba(16, 12, 30, 0.93);
+  --ink: #f4f1ff;
+  --dim: #8d86b3;
+  --hot: #ff2e63;
+  --gold: #ffd23f;
+  --perfect: #3dfcff;
+  --od: #8b5cff;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; background: var(--bg); color: var(--ink); overflow: hidden;
+  font-family: 'Pretendard', 'Apple SD Gothic Neo', 'Noto Sans KR', system-ui, sans-serif;
+  -webkit-tap-highlight-color: transparent; user-select: none; -webkit-user-select: none; overscroll-behavior: none; }
+#container { height: 100%; display: flex; flex-direction: column; }
+
+#hdr { flex: 0 0 48px; display: flex; align-items: center; gap: 10px; padding: 0 12px;
+  padding-top: env(safe-area-inset-top); background: rgba(8, 6, 18, 0.92); border-bottom: 1px solid #1c1733; z-index: 5; }
+.back-btn { color: var(--dim); text-decoration: none; font-size: 0.9rem; }
+.back-btn:hover { color: var(--ink); }
+.game-title { flex: 1; text-align: center; font-weight: 800; letter-spacing: 0.08em; }
+.icon-btn { background: none; border: 0; font-size: 1.2rem; cursor: pointer; color: var(--ink); }
+
+#gameWrapper { position: relative; flex: 1; min-height: 0; }
+/* 드래그가 스크롤·확대로 새지 않게 */
+#c { position: absolute; inset: 0; width: 100%; height: 100%; display: block; outline: none; touch-action: none; cursor: crosshair; }
+
+#topHud { position: absolute; top: 8px; left: 12px; right: 12px; display: flex; justify-content: space-between;
+  pointer-events: none; z-index: 2; }
+.hud-stat { display: flex; flex-direction: column; align-items: flex-start; }
+.hud-stat:last-child { align-items: flex-end; }
+.hud-stat span { font-size: 0.62rem; letter-spacing: 0.2em; color: var(--dim); }
+.hud-stat strong { font-size: 1rem; font-variant-numeric: tabular-nums; }
+
+#overlay { position: absolute; inset: 0; display: none; align-items: center; justify-content: center;
+  background: rgba(5, 4, 11, 0.7); backdrop-filter: blur(2px); z-index: 4; padding: 16px; touch-action: none; }
+#overlay.visible { display: flex; }
+#overlayBox { width: min(390px, 100%); background: var(--panel); border: 1px solid #2c2450; border-radius: 18px;
+  padding: 20px 18px; text-align: center; box-shadow: 0 0 44px rgba(255, 46, 99, 0.14); }
+#overlayIcon { font-size: 2.3rem; }
+#overlayTitle { font-size: 1.8rem; letter-spacing: 0.2em; margin: 2px 0 10px; }
+#overlayMsg { line-height: 1.7; font-size: 0.93rem; }
+.c-bomb { color: var(--hot); } .c-gold { color: var(--gold); } .c-perfect { color: var(--perfect); }
+.dim { color: var(--dim); font-size: 0.8rem; }
+.hidden { display: none !important; }
+
+#deathStats { margin: 4px 0 2px; }
+#deathStats .big { font-size: 2.9rem; font-weight: 900; font-variant-numeric: tabular-nums; line-height: 1.1; }
+#deathStats .taunt { color: var(--hot); font-weight: 700; margin: 8px 0 4px; font-size: 1.02rem; }
+#deathStats .detail { color: var(--gold); font-weight: 800; margin-bottom: 6px; }
+#deathStats .row { display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--dim); padding: 2px 8px; }
+#deathStats .row b { color: var(--ink); font-variant-numeric: tabular-nums; }
+#deathStats .newbest { color: var(--gold); font-weight: 900; letter-spacing: 0.1em; animation: pulse 0.6s ease-in-out infinite alternate; }
+@keyframes pulse { from { transform: scale(1); } to { transform: scale(1.08); } }
+
+#startBtn { margin-top: 14px; width: 100%; padding: 13px; font-size: 1.05rem; font-weight: 800; letter-spacing: 0.05em;
+  color: #1a0410; background: linear-gradient(90deg, var(--gold), var(--hot)); border: 0; border-radius: 12px; cursor: pointer; }
+#startBtn:active { transform: scale(0.98); }
+#retryHint { margin-top: 8px; }

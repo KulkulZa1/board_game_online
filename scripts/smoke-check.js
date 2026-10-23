@@ -532,7 +532,8 @@ function checkProductionArcadeAssetPolicy() {
     'public/arcade/plant/index.html': ['sim.js?v=2.0', 'game.js?v=2.0'],
     'public/arcade/jackpot/index.html': ['meta.js?v=3.0', 'sim.js?v=3.0', 'game.js?v=3.0'],
     'public/arcade/tower-defense/index.html': ['style.css?v=1.0', 'sim.js?v=1.0', 'game.js?v=1.0'],
-    'public/arcade/chalna/index.html': ['style.css?v=1.0', 'sim.js?v=1.0', 'game.js?v=1.0'],
+    'public/arcade/chalna/index.html': ['style.css?v=1.0', 'sim.js?v=1.0', 'game.js?v=1.1'],
+    'public/arcade/graze/index.html': ['style.css?v=1.0', 'sim.js?v=1.0', 'game.js?v=1.0'],
   };
   // 여기 적힌 버전은 "이 아래로는 내려가면 안 되는 하한선"이다.
   // 예전에는 문자열이 정확히 일치해야 해서, 자산을 고치고 버전을 올리는 정상적인 행동이
@@ -678,6 +679,22 @@ function checkBoardGameClientTraps() {
     if (!/setupUndo\(/.test(read(`public/js/game-${g}.js`))) {
       throw new Error(`public/js/game-${g}.js shows the solo undo button (UNDO_SUPPORTED) but never calls setupUndo — the button does nothing`);
     }
+  }
+}
+
+function checkArcadeTimeStepClamp() {
+  // 숨은 탭(알림창·잠금 화면·다른 탭)에서 돌아오면 rAF 사이 간격이 몇 초가 된다. 그 간격을 그대로 시뮬에 넘기면
+  // 찰나는 0.7초만 비워도 점이 과녁을 지나쳐 '놓침'으로 죽었다 (더 길면 한 바퀴를 순간이동).
+  // 시뮬로 가는 시간은 반드시 잘라서 넘긴다 — 브라우저 검사가 CI 에 없으니 모양으로 고정한다.
+  const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
+  const chalna = read('public/arcade/chalna/game.js');
+  if (/Sim\.step\(s, \(now - lastStep\)/.test(chalna) || !/function gapSince\(now\) \{ return Math\.min\(/.test(chalna) ||
+      (chalna.match(/Sim\.step\(s, gapSince\(now\)\)/g) || []).length !== 2) {
+    throw new Error('chalna/game.js must step the sim through gapSince() (clamped) — a raw rAF gap kills the run after a tab switch');
+  }
+  const graze = read('public/arcade/graze/game.js');
+  if (!/const dt = clamp\(\(nowMs - prev\) \/ 1000, 0, 0\.05\)/.test(graze)) {
+    throw new Error('graze/game.js must clamp the frame dt to 0.05s before stepping the sim');
   }
 }
 
@@ -1993,6 +2010,10 @@ async function main() {
       '/arcade/chalna/sim.js',
       '/arcade/chalna/game.js',
       '/arcade/chalna/style.css',
+      '/arcade/graze/',
+      '/arcade/graze/sim.js',
+      '/arcade/graze/game.js',
+      '/arcade/graze/style.css',
       '/arcade/tower-defense/',
       '/arcade/tower-defense/sim.js',
       '/arcade/tower-defense/game.js',
@@ -2034,6 +2055,7 @@ async function main() {
     checkPortContract();
     checkDocsMatchReality();
     checkBoardGameClientTraps();
+    checkArcadeTimeStepClamp();
     checkBootstrapArcadeCoverage();
     checkSandboxConfigBridgeRead();
     checkTowerDefenseSandboxCoverage();
