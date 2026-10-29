@@ -35,7 +35,8 @@
 
 .th-opponent-label {
   font-size: 0.8rem;
-  color: #8892a4;
+  /* 녹색 펠트(#1a3a2a) 위에서 #8892a4는 3.98:1 */
+  color: #a8b4c4;
 }
 
 /* ── 커뮤니티 카드 ─────────────────────────────────── */
@@ -153,7 +154,8 @@
 
 .th-phase-label {
   font-size: 0.8rem;
-  color: #8892a4;
+  /* 녹색 펠트(#1a3a2a) 위에서 #8892a4는 3.98:1 */
+  color: #a8b4c4;
   text-align: center;
 }
 
@@ -182,13 +184,16 @@
   min-width: 70px;
 }
 
+/* 좁은 화면에서 33px까지 줄었다 — 베팅 버튼은 실수로 잘못 누르면 되돌릴 수 없다 */
+.th-btn { min-height: 40px; }
 .th-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .th-btn:hover:not(:disabled) { transform: translateY(-2px); }
 
 .th-btn-fold  { background: #c02020; color: #fff; }
 .th-btn-check { background: #204080; color: #fff; }
 .th-btn-call  { background: #208040; color: #fff; }
-.th-btn-raise { background: #d09020; color: #fff; }
+/* 흰 글자 on 금색은 2.73:1 — 로비의 '플레이' 버튼처럼 어두운 글자를 쓴다 (6.25:1) */
+.th-btn-raise { background: #d09020; color: #1a1a2e; }
 
 /* 대기 중 메시지 */
 .th-waiting-msg {

@@ -34,6 +34,9 @@
   transition: background 0.15s;
 }
 
+/* 칸을 눌러도 둘 수 있으므로 내 차례에는 보드 위에서도 누를 수 있다는 표시를 한다 */
+.c4-my-turn .c4-cell { cursor: pointer; }
+
 .c4-my-turn .c4-arrow-btn:not(:disabled):hover {
   background: #3a4a60;
 }

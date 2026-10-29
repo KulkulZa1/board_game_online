@@ -24,7 +24,7 @@
 }
 
 .ag-score-white { color: #e8e8e8; }
-.ag-score-sep   { color: #666; }
+.ag-score-sep   { color: #8892a4; }   /* #666은 2.97:1 */
 .ag-score-black { color: #aaa; }
 
 .ag-sum-display {
@@ -110,11 +110,12 @@
 }
 
 @media (max-width: 620px) {
-  .ag-cell { width: 26px; height: 26px; font-size: 10px; }
+  .ag-cell { width: 26px; height: 26px; font-size: 12px; }
   .ag-grid  { gap: 1px; padding: 4px; }
 }
 
 @media (max-width: 420px) {
-  .ag-cell { width: 20px; height: 20px; font-size: 8px; }
+  /* 숫자가 게임의 전부인데 8px였다. 칸(20px)은 17열이 화면을 채워 못 키우지만 한 자리 숫자는 11px까지 들어간다 */
+  .ag-cell { width: 20px; height: 20px; font-size: 11px; }
   .ag-grid  { gap: 1px; padding: 3px; border-radius: 6px; }
 }

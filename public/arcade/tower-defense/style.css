@@ -204,3 +204,8 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
   .ov-rules li { font-size: 0.74rem; padding: 5px 8px; }
   #hint { display: none; }
 }
+
+/* ── 헤더 조작 요소 탭 영역 ──
+   20~27px 높이라 손가락으로 누르기 어려웠다. neon-cascade(42px)처럼 최소 36px로 맞춘다. */
+.back-btn { display: inline-flex; align-items: center; justify-content: center; min-height: 36px; min-width: 36px; }
+.hdr-btn { min-height: 36px; min-width: 36px; }

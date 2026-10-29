@@ -1,6 +1,7 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
+  --focus-ring: var(--sand);   /* a11y.css 포커스 링 색 */
   --bg: #241407;
   --panel: #33200f;
   --panel2: #402a15;
@@ -32,12 +33,15 @@ html, body {
 
 /* ── Header ── */
 #hdr { display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
-.back-btn { color: var(--sand); text-decoration: none; font-size: 0.82rem; padding: 4px 8px; border-radius: 6px; }
+.back-btn { color: var(--sand); text-decoration: none; font-size: 0.82rem; padding: 4px 8px; border-radius: 6px;
+  display: inline-flex; align-items: center; min-height: 36px; }
 .game-title { font-weight: 800; font-size: 0.98rem; letter-spacing: 0.04em; }
 #roomChip { font-size: 0.74rem; font-weight: 800; letter-spacing: 0.12em; color: var(--sand);
   background: var(--panel); border: 1px solid var(--border); border-radius: 99px; padding: 3px 10px; }
 #hdrRight { display: flex; align-items: center; gap: 8px; }
-#muteBtn { background: none; border: none; font-size: 0.95rem; cursor: pointer; padding: 2px; line-height: 1; }
+/* 23×19px라 손가락으로 누르기 어려웠다 — 헤더 높이를 크게 늘리지 않는 선에서 36px로 맞춘다. */
+#muteBtn { background: none; border: none; font-size: 0.95rem; cursor: pointer; padding: 2px; line-height: 1;
+  min-width: 36px; min-height: 36px; border-radius: 8px; }
 
 /* ── 카드 ── */
 .card {
@@ -394,3 +398,5 @@ body.my-turn #myHand .card:not(.dim):not(.idle):hover { transform: translateY(-6
   .pp-avatar { width: 36px; height: 36px; font-size: 1.15rem; }
   #logDrawer { max-height: 46%; }
 }
+
+/* 접근성 공통 규칙(포커스 링·모션 최소화·한국어 줄바꿈)은 /css/a11y.css 에 있다. */

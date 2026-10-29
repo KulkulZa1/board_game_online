@@ -50,7 +50,8 @@
 .ip-action-btn:hover { filter: brightness(1.15); }
 
 .ip-fold  { background: #c0392b; color: #fff; }
-.ip-call  { background: #27ae60; color: #fff; }
+/* 흰 글자 on #27ae60은 2.87:1 — 초록을 조금 낮춰 4.72:1 (폴드/레이즈와 같은 흰·어두운 글자 체계 유지) */
+.ip-call  { background: #1e8449; color: #fff; }
 .ip-raise { background: #f0c040; color: #1a1a2e; }
 
 @media (max-width: 480px) {
