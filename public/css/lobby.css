@@ -7,6 +7,9 @@
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   background: #1a1a2e;
+  /* 기본 글자색이 없으면 색을 직접 지정하지 않은 요소가 검정으로 떨어져
+     어두운 배경에서 읽히지 않는다 (game.css의 --text와 같은 값). */
+  color: #e0e6f0;
   min-height: 100vh;
   display: flex;
   align-items: center;
@@ -23,6 +26,9 @@ body {
   text-align: center;
   margin-bottom: 32px;
   position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
 .logo-piece {
@@ -407,6 +413,10 @@ h2 {
   font-size: 40px;
   line-height: 1;
   margin-bottom: 4px;
+  /* ♟(체스)·⬤(오목)은 이모지가 아니라 글자라서 상속된 색을 그대로 쓴다.
+     색을 지정하지 않으면 어두운 카드 위에서 거의 보이지 않으므로 밝게 고정한다.
+     나머지 아이콘은 이모지라 자체 색을 가지므로 영향이 없다. */
+  color: #e0e6f0;
 }
 
 .game-card-name {
@@ -432,6 +442,7 @@ h2 {
 
 .btn-rules {
   padding: 8px 10px;
+  min-height: 44px;
   background: rgba(74,158,255,0.15);
   color: #4a9eff;
   border: 1px solid rgba(74,158,255,0.35);
@@ -449,6 +460,7 @@ h2 {
 
 .btn-solo {
   padding: 8px 10px;
+  min-height: 44px;
   background: rgba(76,175,80,0.15);
   color: #4caf50;
   border: 1px solid rgba(76,175,80,0.35);
@@ -498,6 +510,7 @@ h2 {
 
 .btn-play {
   padding: 8px 10px;
+  min-height: 44px;
   background: linear-gradient(135deg, #f0c040, #e6a800);
   color: #1a1a2e;
   border: none;
@@ -613,11 +626,12 @@ h2 {
 }
 
 /* ===== 로고 액션 영역 ===== */
+/* 가운데 로고 이모지 위에 겹쳐 떠 있던 것을 자체 행으로 내린다.
+   (절대 배치 + top:50%라 좁은 화면에서 🎮를 덮고 있었다) */
 .logo-actions {
-  position: absolute;
-  right: 0;
-  top: 50%;
-  transform: translateY(-50%);
+  align-self: flex-end;
+  order: -1;
+  margin-bottom: 4px;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -630,6 +644,7 @@ h2 {
   color: #c8cdd8;
   font-size: 13px;
   padding: 6px 10px;
+  min-height: 44px;
   cursor: pointer;
   transition: background 0.2s;
   display: flex;
@@ -649,8 +664,8 @@ h2 {
   border-radius: 8px;
   color: #e0e6f0;
   font-size: 20px;
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   cursor: pointer;
   transition: background 0.2s;
   display: flex;
@@ -661,6 +676,15 @@ h2 {
 
 /* ===== 게스트 프로필 모달 내용 ===== */
 .guest-profile-section { margin-bottom: 4px; }
+
+/* 프로필 모달의 항목 레이블 — .form-group label과 같은 톤을 쓴다. */
+.create-label {
+  display: block;
+  color: #8892a4;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+}
 
 .guest-name-row {
   display: flex;
@@ -934,4 +958,35 @@ h2 {
   .arcade-card { padding: 12px 8px; }
   .arcade-card-icon { font-size: 1.6rem; }
   .arcade-card-name { font-size: 0.75rem; }
+}
+
+/* ========== 접근성 ========== */
+
+/* 키보드 포커스 표시 — 로비의 버튼/링크에는 포커스 링이 없어
+   키보드로 이동할 때 현재 위치를 알 수 없었다.
+   :focus-visible이라 마우스 클릭 시에는 링이 뜨지 않는다. */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid #4a9eff;
+  outline-offset: 2px;
+  border-radius: 6px;
+  /* transition: all을 쓰는 버튼에서는 outline-width까지 애니메이션돼
+     포커스 링이 0.2초 뒤에야 보인다. 링은 즉시 떠야 하므로
+     전환 대상에서 outline을 뺀다. */
+  transition-property: background, background-color, border-color, transform, color, box-shadow;
+}
+
+/* 움직임 최소화 설정을 켠 사용자에게는 전환/애니메이션을 끈다. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
