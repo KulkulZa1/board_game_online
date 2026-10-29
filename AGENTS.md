@@ -154,6 +154,9 @@ instead of counting them.
 - **Vanilla JavaScript (ES6+)** — no TypeScript, no frameworks, no bundler
 - **2-space** indentation; camelCase functions/variables, PascalCase classes
 - **Comments in Korean** — match the surrounding file's style
+- **Every page links `/css/a11y.css`** after its own stylesheet (focus ring, reduced motion,
+  Korean `word-break: keep-all`). A new page — including a new arcade game — must link it too;
+  set `--focus-ring` in the page's `:root` to change the ring colour
 - Socket events are namespaced with a colon: `room:create`, `game:move`, `mahjong:*`, `bang:*`
 - **All move validation is server-side.** Never trust client-supplied game state
 - **No new dependencies** unless genuinely essential (there are only 4 runtime deps)

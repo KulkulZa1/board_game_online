@@ -53,6 +53,8 @@ Copy the structure from an existing arcade game (e.g. `public/arcade/snake/index
   <title>게임이름 — 보드게임 온라인</title>
   <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="style.css?v=1.0">
+  <!-- 공통 접근성 규칙(포커스 링, 움직임 최소화, 한국어 줄바꿈) — 자체 CSS 뒤에 둔다 -->
+  <link rel="stylesheet" href="/css/a11y.css?v=1">
 </head>
 <body>
   <div id="container">

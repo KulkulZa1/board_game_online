@@ -511,6 +511,23 @@ function checkVersionBadgeCoverage() {
   }
 }
 
+function checkA11yStylesheetLinked() {
+  // 포커스 링·움직임 최소화·한국어 줄바꿈(keep-all)은 /css/a11y.css 한 곳에 있다.
+  // 페이지가 링크를 빠뜨리면 조용히 사라지므로, 최상위 페이지와 아케이드 게임을 전부 훑는다
+  // (손으로 고른 목록이면 새 게임이 빠진다).
+  const topPages = fs.readdirSync(path.join(root, 'public'))
+    .filter((f) => f.endsWith('.html'))
+    .map((f) => `public/${f}`);
+  const arcadePages = fs.readdirSync(path.join(root, 'public/arcade'), { withFileTypes: true })
+    .filter((d) => d.isDirectory() && fs.existsSync(path.join(root, 'public/arcade', d.name, 'index.html')))
+    .map((d) => `public/arcade/${d.name}/index.html`);
+  const missing = [...topPages, ...arcadePages]
+    .filter((file) => !fs.readFileSync(path.join(root, file), 'utf8').includes('/css/a11y.css'));
+  if (missing.length) {
+    throw new Error(`Pages missing /css/a11y.css (focus ring, reduced motion, Korean line breaks): ${missing.join(', ')}`);
+  }
+}
+
 function checkProductionArcadeAssetPolicy() {
   // 손으로 고른 목록이면 새 게임(스네이크·브레이크아웃·잭팟)이 빠진다 — 전부 훑는다
   const arcadePages = fs.readdirSync(path.join(root, 'public/arcade'), { withFileTypes: true })
@@ -1961,6 +1978,7 @@ async function main() {
     checkConnectionBannerBehavior();
     checkPausedTimerInterpolation();
     checkLobbyMobileLayoutCoverage();
+    checkA11yStylesheetLinked();
 
     const gameIds = [
       'chess', 'omok', 'connect4', 'othello', 'checkers', 'indianpoker',
@@ -1976,6 +1994,7 @@ async function main() {
       '/js/game-registry.js',
       '/js/sw-update.js',
       '/js/version-badge.js',
+      '/css/a11y.css',
       '/js/game.js',
       '/js/admob.js',
       '/js/sandbox-config.js',

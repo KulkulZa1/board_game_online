@@ -11,7 +11,7 @@
   --nutrient:#8e44ad;
   --star:    #e74c3c;
   --text:    #d0f0c0;
-  --muted:   #6a8a6a;
+  --muted:   #86a886;   /* #6a8a6a는 카드 위에서 4.1~4.2:1 */
 }
 
 html, body {
@@ -451,3 +451,14 @@ html, body {
 }
 #rebirthCancel { background: rgba(255,255,255,0.12); color: inherit; }
 #rebirthConfirm { background: linear-gradient(135deg, #f0b429, #d98324); color: #2a1a05; }
+
+/* ── 헤더 조작 요소 탭 영역 ──
+   20~27px 높이라 손가락으로 누르기 어려웠다. neon-cascade(42px)처럼 최소 36px로 맞춘다. */
+.back-btn { display: inline-flex; align-items: center; justify-content: center; min-height: 36px; min-width: 36px; }
+.reset-btn { min-height: 36px; min-width: 36px; }
+.upg-buy { min-height: 36px; }
+
+/* '성장 폭발'의 비용 표시가 절대 배치(right: 12px)라, 비용이 길면("15💧 10☀ 6🌿")
+   가운데 라벨 위에 겹쳐 그려졌다. 라벨 아래 줄로 흐르게 한다. */
+.action-btn { flex-direction: column; gap: 2px; }
+.btn-rate { position: static; }

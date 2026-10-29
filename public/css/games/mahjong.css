@@ -1,6 +1,7 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
+  --focus-ring: var(--gold);   /* a11y.css 포커스 링 색 */
   --bg: #0b3d2e;
   --felt: #0e4a38;
   --panel: #0a2f24;
@@ -317,29 +318,4 @@ html, body {
   .hand-tile { flex: 0 0 auto; }
 }
 
-/* ========== 접근성 ========== */
-
-/* 이 페이지는 자체 CSS만 불러오므로 로비/게임 화면의 포커스 링이 적용되지 않았다.
-   :focus-visible이라 키보드로 이동할 때만 보인다. */
-a:focus-visible,
-button:focus-visible,
-input:focus-visible,
-select:focus-visible,
-[tabindex]:focus-visible {
-  outline: 2px solid var(--gold);
-  outline-offset: 2px;
-  /* transition: all에 걸려 링이 늦게 뜨지 않도록 outline은 전환 대상에서 뺀다 */
-  transition-property: background, background-color, border-color, transform, color, box-shadow, opacity;
-}
-
-/* 움직임 최소화 설정 존중 */
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
-  }
-}
+/* 접근성 공통 규칙(포커스 링·모션 최소화·한국어 줄바꿈)은 /css/a11y.css 에 있다. */

@@ -762,29 +762,4 @@ html, body {
   #volume-slider { width: 48px; }
 }
 
-/* ========== 접근성 ========== */
-
-/* 키보드 포커스 표시 — 게임 화면의 버튼에도 포커스 링이 없었다. */
-a:focus-visible,
-button:focus-visible,
-input:focus-visible,
-select:focus-visible,
-[tabindex]:focus-visible {
-  outline: 2px solid var(--blue);
-  outline-offset: 2px;
-  border-radius: 6px;
-  /* 포커스 링이 transition: all에 걸려 늦게 뜨지 않도록 한다. */
-  transition-property: background, background-color, border-color, transform, color, box-shadow;
-}
-
-/* 움직임 최소화 설정 존중 — 말 이동/하이라이트 전환을 끈다. */
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
-  }
-}
+/* 접근성 공통 규칙(포커스 링·모션 최소화·한국어 줄바꿈)은 /css/a11y.css 에 있다. */

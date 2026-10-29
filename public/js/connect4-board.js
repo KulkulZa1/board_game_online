@@ -101,6 +101,9 @@ window.Connect4Board = (function () {
         const stone = _board[row][col];
         piece.className = 'c4-piece' + (stone ? ' ' + getPieceClass(stone) : '');
         cell.appendChild(piece);
+        // 열 전체를 눌러도 둘 수 있게 한다. 전에는 보드 위 작은 ▼(28px)만 반응해서
+        // 칸을 누르면 아무 일도 없었다. 차례·꽉 찬 열 검사는 _onColClick 이 똑같이 한다.
+        cell.addEventListener('click', () => _onColClick(col));
 
         grid.appendChild(cell);
       }

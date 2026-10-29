@@ -9,7 +9,7 @@
   --hp:      #e74c3c;
   --xp:      #f39c12;
   --text:    #e0d6f0;
-  --muted:   #7a7a9a;
+  --muted:   #9393b3;   /* #7a7a9a는 밝은 패널 위에서 4.07:1 */
 }
 
 html, body {
@@ -44,7 +44,8 @@ html, body {
 }
 
 .back-btn {
-  color: #8e44ad;
+  /* #8e44ad는 배경 위에서 3.37:1 — game.css와 같은 보라로 6.63:1 */
+  color: #b07fe8;
   text-decoration: none;
   font-size: 0.82rem;
   padding: 4px 8px;
@@ -1019,3 +1020,9 @@ html, body {
   transition: background 0.15s, color 0.15s;
 }
 .infinite-btn-no:hover { background: rgba(255,255,255,0.12); color: var(--text); }
+
+/* ── 헤더 조작 요소 탭 영역 ──
+   20~27px 높이라 손가락으로 누르기 어려웠다. neon-cascade(42px)처럼 최소 36px로 맞춘다. */
+.back-btn { display: inline-flex; align-items: center; justify-content: center; min-height: 36px; min-width: 36px; }
+/* ⚔ 장비(JS가 만듦)와 📖 가이드가 같은 클래스를 쓴다 */
+.guide-btn { min-height: 36px; min-width: 36px; }

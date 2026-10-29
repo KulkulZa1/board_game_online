@@ -127,6 +127,7 @@ board_game_online/
     │                                        # Layer B: index.html + style.css + game.js (IIFE) per game
     ├── css/
     │   ├── lobby.css / game.css            # Shared lobby + game-page layout, chat, modals, spectator UI
+    │   ├── a11y.css                         # Linked by EVERY page, after its own CSS: :focus-visible ring (colour via --focus-ring), prefers-reduced-motion, Korean word-break: keep-all
     │   └── games/<gamename>.css             # One file per Layer A game (+ mahjong.css, bang.css)
     └── js/
         ├── game-registry.js                 # Single source of truth for Layer A game metadata (names, rules, icons, titles)

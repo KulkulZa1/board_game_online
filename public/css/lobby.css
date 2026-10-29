@@ -960,33 +960,4 @@ h2 {
   .arcade-card-name { font-size: 0.75rem; }
 }
 
-/* ========== 접근성 ========== */
-
-/* 키보드 포커스 표시 — 로비의 버튼/링크에는 포커스 링이 없어
-   키보드로 이동할 때 현재 위치를 알 수 없었다.
-   :focus-visible이라 마우스 클릭 시에는 링이 뜨지 않는다. */
-a:focus-visible,
-button:focus-visible,
-input:focus-visible,
-select:focus-visible,
-[tabindex]:focus-visible {
-  outline: 2px solid #4a9eff;
-  outline-offset: 2px;
-  border-radius: 6px;
-  /* transition: all을 쓰는 버튼에서는 outline-width까지 애니메이션돼
-     포커스 링이 0.2초 뒤에야 보인다. 링은 즉시 떠야 하므로
-     전환 대상에서 outline을 뺀다. */
-  transition-property: background, background-color, border-color, transform, color, box-shadow;
-}
-
-/* 움직임 최소화 설정을 켠 사용자에게는 전환/애니메이션을 끈다. */
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
-  }
-}
+/* 접근성 공통 규칙(포커스 링·모션 최소화·한국어 줄바꿈)은 /css/a11y.css 에 있다. */

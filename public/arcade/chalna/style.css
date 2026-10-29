@@ -58,3 +58,8 @@ html, body { height: 100%; background: var(--bg); color: var(--ink); overflow: h
   color: #06121a; background: linear-gradient(90deg, var(--perfect), var(--fever)); border: 0; border-radius: 12px; cursor: pointer; }
 #startBtn:active { transform: scale(0.98); }
 #retryHint { margin-top: 8px; }
+
+/* ── 헤더 조작 요소 탭 영역 ──
+   20~27px 높이라 손가락으로 누르기 어려웠다. neon-cascade(42px)처럼 최소 36px로 맞춘다. */
+.back-btn { display: inline-flex; align-items: center; justify-content: center; min-height: 36px; min-width: 36px; }
+.icon-btn { min-height: 36px; min-width: 36px; }
