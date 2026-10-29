@@ -1001,6 +1001,10 @@
       myDot.className  = 'player-color-dot ' + soloColor;
       oppDot.className = 'player-color-dot ' + (soloColor === 'white' ? 'black' : 'white');
       document.getElementById('draw-btn').style.display = 'none';   // AI 에게 무승부를 제안할 수는 없다
+      // 채팅도 온라인 전용이다. 솔로에서는 Chat.init 이 불리지 않아(소켓도 더미)
+      // '💬 채팅' 버튼은 눌러도 반응이 없고, 데스크톱 입력창은 어디로도 보내지 못했다.
+      document.getElementById('chat-toggle-btn').style.display = 'none';
+      document.getElementById('chat-panel').style.display      = 'none';
       if (window.AdMobHelper) AdMobHelper.init();
       handler.startSolo(soloColor, {
         switchBoardArea,

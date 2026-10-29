@@ -130,7 +130,12 @@ html, body {
   color: var(--text-muted);
   cursor: pointer;
   font-size: 14px;
-  padding: 2px 6px;
+  padding: 0 6px;
+  /* 26×20px라 손가락으로 누르기 어려웠다 (display는 미디어쿼리가 제어) */
+  min-width: 36px;
+  min-height: 36px;
+  line-height: 36px;
+  text-align: center;
   display: none;
 }
 
@@ -181,9 +186,11 @@ html, body {
   padding: 4px;
 }
 
+/* 칸 폭을 균등하게 — flex-wrap이면 둘째 줄의 남은 버튼들이 늘어나 크기가 들쭉날쭉했다.
+   모바일(≥320px)에서는 8개가 한 줄, 데스크톱 사이드바(260px)에서는 6+2로 같은 폭을 유지한다. */
 .emote-bar {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(36px, 1fr));
   gap: 4px;
   padding: 8px 12px;
   border-top: 1px solid var(--border);
@@ -195,6 +202,8 @@ html, body {
   border-radius: 6px;
   font-size: 18px;
   padding: 4px 6px;
+  /* 23×28px였다 — 폭은 .emote-bar 그리드가 나눠 준다 */
+  min-height: 40px;
   cursor: pointer;
   transition: background 0.15s;
   line-height: 1;
@@ -216,7 +225,11 @@ html, body {
   border-radius: 8px;
   color: var(--text);
   padding: 8px 10px;
-  font-size: 14px;
+  /* 16px 미만이면 iOS Safari가 입력창 포커스 때 페이지를 확대해 버린다 */
+  font-size: 16px;
+  min-height: 40px;
+  /* flex: 1이어도 input은 고유 폭 아래로 줄지 않아 '전송' 버튼을 패널 밖으로 밀어냈다 */
+  min-width: 0;
   outline: none;
 }
 
@@ -224,7 +237,12 @@ html, body {
 
 #chat-send-btn {
   background: var(--blue);
-  color: #fff;
+  /* 흰 글자는 2.75:1이라 읽기 어려웠다. 플레이 버튼(금색)처럼 어두운 글자를 쓴다 → 6.19:1 */
+  color: var(--bg);
+  min-height: 40px;
+  /* 좁은 데스크톱 사이드바에서 '전/송'으로 줄바꿈되며 패널 밖으로 넘쳤다 */
+  white-space: nowrap;
+  flex-shrink: 0;
   border: none;
   border-radius: 8px;
   padding: 8px 14px;
@@ -374,26 +392,42 @@ html, body {
   color: var(--text-muted);
   font-size: 16px;
   padding: 6px 8px;
+  /* 38×30px였다 — 같은 줄의 .btn-control(44px)과 맞춘다 */
+  min-width: 44px;
+  min-height: 44px;
   cursor: pointer;
   line-height: 1;
   transition: background 0.15s;
 }
 .btn-sound:hover { background: rgba(255,255,255,0.12); }
 
+/* 요소 높이(4px)가 곧 터치 영역이라 거의 누를 수 없었다.
+   요소는 32px로 키우고, 4px 트랙은 runnable-track/track 의사요소로 그린다. */
 #volume-slider {
   -webkit-appearance: none;
   appearance: none;
   width: 64px;
+  height: 36px;
+  background: transparent;
+  outline: none;
+  cursor: pointer;
+}
+#volume-slider::-webkit-slider-runnable-track {
   height: 4px;
   border-radius: 2px;
   background: rgba(255,255,255,0.15);
-  outline: none;
-  cursor: pointer;
+}
+#volume-slider::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255,255,255,0.15);
 }
 #volume-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   width: 14px;
   height: 14px;
+  /* runnable-track 안에서 썸을 세로 가운데로 (트랙 4px, 썸 14px) */
+  margin-top: -5px;
   border-radius: 50%;
   background: var(--gold);
   cursor: pointer;
@@ -419,7 +453,8 @@ html, body {
   transition: all 0.15s;
 }
 
-.btn-danger  { background: rgba(224,85,85,0.1); color: var(--red); border-color: rgba(224,85,85,0.3); }
+/* 글자색 var(--red)는 옅은 붉은 바탕 위에서 3.85:1이었다 — 글자만 밝혀 5.21:1 */
+.btn-danger  { background: rgba(224,85,85,0.1); color: #ff6b6b; border-color: rgba(224,85,85,0.3); }
 .btn-danger:hover { background: rgba(224,85,85,0.2); }
 .btn-neutral { background: rgba(255,255,255,0.05); color: var(--text-muted); }
 .btn-neutral:hover { background: rgba(255,255,255,0.1); }
