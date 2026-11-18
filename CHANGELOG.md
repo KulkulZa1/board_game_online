@@ -2,6 +2,20 @@
 
 ## [Unreleased] - Vampire Survivors director-loop readiness
 
+### Fixed — 뱀서: a level-up from the 진공 청소기 item box was lost; once-frozen enemies were never knocked back again
+- Picking a choice ran `c.choose()` and only then hid the overlay and set `state = 'playing'`. The 진공 청소기
+  (`sweep`) item box absorbs every XP gem through `gainXP()`, which can open a level-up, and the click handler
+  closed it straight away: the level rose with no choice. The state is now reset before `choose()`, so a choice
+  that opens another one keeps it open.
+- The enemy loop counts `frozen` down by `dt`, so a thawed enemy ends slightly negative, and the knockback guard
+  `!e.frozen` is false for that. Any enemy frozen once (tempest chain, 빙결 폭탄, freezing hits) was never
+  knocked back again. The guard now checks `(e.frozen || 0) <= 0`; frozen enemies still ignore knockback.
+- Reproduced and verified in Chromium against the real `game.js`: before, level 1→2 with the level-up overlay
+  already closed, and a thawed enemy stuck at `knockVx` 500; after, the level-up choice stays on screen and the
+  thawed enemy moves exactly like a never-frozen one. Two smoke-check gates in
+  `checkVampireDirectorLoopCoverage` keep the reset order and the sign check. Both bugs surfaced while porting
+  the game to Godot.
+
 ### Added — 스침 GRAZE, a dodge game where only near misses score (`/arcade/graze/`)
 - Move left/right (relative drag on touch so the finger never covers you, mouse follow, ←→ with Shift for
   precision). Blocks, gapped walls and telegraphed beams fall; one touch ends the run. Simply dodging earns
