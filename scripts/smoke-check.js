@@ -1170,6 +1170,21 @@ function checkVampireDirectorLoopCoverage() {
     throw new Error('Vampire Survivors level-up choice text should be rendered with DOM text nodes, not innerHTML');
   }
 
+  // 선택 효과가 새 선택 창을 열 수 있다(진공 청소기 → XP 흡수 → 레벨업) — 상태 복귀가 choose() 뒤에 오면
+  // 그 창을 덮어써서 레벨만 오르고 고를 기회가 사라진다
+  const appendChoiceAt = game.indexOf('function appendChoiceButton(');
+  const appendChoiceBody = game.slice(appendChoiceAt, game.indexOf('\n  function ', appendChoiceAt + 1));
+  const choiceResetAt = appendChoiceBody.indexOf("state = 'playing'");
+  const choiceChooseAt = appendChoiceBody.indexOf('c.choose()');
+  if (appendChoiceAt < 0 || choiceResetAt < 0 || choiceChooseAt < 0 || choiceResetAt > choiceChooseAt) {
+    throw new Error('Vampire Survivors choice click should reset state before c.choose(), or a level-up opened by the choice (sweep item box) is lost');
+  }
+
+  // 빙결이 풀리면 frozen 이 0 이 아니라 살짝 음수로 남는다 — 진릿값으로 보면 그 적은 다시는 넉백되지 않는다
+  if (/!\s*\w+\.frozen\b/.test(game)) {
+    throw new Error('Vampire Survivors should test frozen by sign (<= 0), not truthiness: a thawed enemy keeps a small negative frozen');
+  }
+
   if (!page.includes('/socket.io/socket.io.js')) {
     throw new Error('Vampire Survivors page should load Socket.io for co-op relay');
   }

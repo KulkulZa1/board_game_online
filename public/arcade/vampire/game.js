@@ -4105,9 +4105,11 @@
     }
 
     btn.onclick = () => {
-      c.choose();
+      // 상태를 먼저 되돌린다 — 선택 효과가 새 선택 창을 열 수 있다(진공 청소기 → XP 흡수 → 레벨업).
+      //   예전엔 choose() 뒤에 덮어써서 그 레벨업 창이 바로 닫히고 레벨만 올랐다.
       document.getElementById('levelOverlay').style.display = 'none';
       state = 'playing';
+      c.choose();
       updateHUD();
     };
     list.appendChild(btn);
@@ -5242,7 +5244,8 @@
       }
 
       // 피격 넉백 감속 처리 (빙결 중에는 적용 안 함)
-      if (!e.frozen && (e.knockVx || e.knockVy)) {
+      //   빙결이 풀리면 frozen 이 0 이 아니라 살짝 음수로 남으므로 진릿값이 아니라 부호(<= 0)로 판정한다
+      if ((e.frozen || 0) <= 0 && (e.knockVx || e.knockVy)) {
         e.x += (e.knockVx || 0) * dt;
         e.y += (e.knockVy || 0) * dt;
         const kDecay = Math.exp(-10 * dt);

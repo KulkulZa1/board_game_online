@@ -8,7 +8,7 @@
 // 캐시 무효화:
 //   activate 시 /api/version 호출 → commit 해시가 바뀌면 캐시 전체 삭제
 
-const CACHE_NAME   = 'boardgame-v32';   // v32: 새 아케이드 '스침', 찰나 탭 전환 사망 수정 — 옛 캐시 퍼지
+const CACHE_NAME   = 'boardgame-v33';   // v33: 뱀서 진공 청소기 레벨업 유실·해동 후 넉백 불가 수정 — 옛 캐시 퍼지
 const COMMIT_KEY   = 'sw_last_commit';
 
 // 사전 캐시 — HTML 제외, 진짜 정적 자산만 (icons/ 미존재 시 phantom 경로 제외)
