@@ -804,7 +804,7 @@ func _draw_hud(vp: Vector2) -> void:
 	var bar_w := vp.x - 24.0
 	draw_rect(Rect2(12, 36, bar_w, 12), Color(0, 0, 0, 0.5))
 	draw_rect(Rect2(12, 36, bar_w * hp_ratio, 12), Color("#e74c3c") if hp_ratio <= R.LOW_HP_THRESHOLD else Color("#2ecc71"))
-	draw_string(font, Vector2(12, 47), "❤ %d/%d" % [ceili(p.hp), roundi(p.max_hp)], HORIZONTAL_ALIGNMENT_RIGHT, bar_w - 4.0, 11, Color.WHITE)
+	draw_string(font, Vector2(12, 47), "❤ %d/%d" % [maxi(ceili(p.hp), 0), roundi(p.max_hp)], HORIZONTAL_ALIGNMENT_RIGHT, bar_w - 4.0, 11, Color.WHITE)
 	var need: int = R.xp_needed(p.level)
 	draw_rect(Rect2(12, 52, bar_w, 7), Color(0, 0, 0, 0.5))
 	draw_rect(Rect2(12, 52, bar_w * clampf(p.xp / need, 0.0, 1.0), 7), Color("#3498db"))
@@ -858,19 +858,28 @@ func _draw_hud(vp: Vector2) -> void:
 		draw_circle(joy_center + joy_vec * JOY_R, 18.0, Color(1, 1, 1, 0.45))
 
 
-## 보물 고블린이 화면 밖이면 가장자리에 방향 화살표
+## 보물 고블린이 화면 밖(여백 56px 안쪽 기준)이면 화면 가장자리 타원 위에 방향 화살표 + 거리·남은 시간
+## (웹판 drawGoblinArrow 와 같은 배치 — 세로 화면에선 원이 아니라 타원이어야 가장자리에 붙는다)
 func _draw_goblin_arrow(vp: Vector2) -> void:
-	var cam := _cam()
-	var vs: float = run.view_scale
+	var goblin = null
 	for e in run.enemies:
-		if not e.goblin:
-			continue
-		var sp: Vector2 = (Vector2(e.x, e.y) - cam) * vs
-		if sp.x > 0 and sp.x < vp.x and sp.y > 0 and sp.y < vp.y:
-			continue
-		var center := vp / 2.0
-		var dir := (sp - center).normalized()
-		var edge := center + dir * minf(vp.x, vp.y) * 0.42
-		draw_colored_polygon(_rot_poly(edge, dir.angle(), [Vector2(14, 0), Vector2(-8, -9), Vector2(-8, 9)]), Color("#f1c40f"))
-		_text_c(edge - dir * 22.0 + Vector2(0, 6), "💰", 16, Color.WHITE)
+		if e.goblin:
+			goblin = e
+			break
+	if goblin == null:
 		return
+	var dx: float = goblin.x - run.player.x
+	var dy: float = goblin.y - run.player.y
+	var ang := atan2(dy, dx)
+	var center := vp / 2.0
+	var margin := 56.0
+	var gs: Vector2 = center + Vector2(dx, dy) * run.view_scale
+	if gs.x > margin and gs.x < vp.x - margin and gs.y > margin and gs.y < vp.y - margin:
+		return
+	var rx := vp.x / 2.0 - margin
+	var ry := vp.y / 2.0 - margin
+	var tip := center + Vector2(cos(ang) * rx, sin(ang) * ry)
+	var pulse: float = 0.85 + sin(run.elapsed * 8.0) * 0.15
+	draw_colored_polygon(_rot_poly(tip, ang, [Vector2(20, 0) * pulse, Vector2(-11, -13) * pulse, Vector2(-11, 13) * pulse]), Color("#f1c40f"))
+	var label := "💰 %d  ⏱%ds" % [roundi(sqrt(dx * dx + dy * dy)), ceili(goblin.goblin_life)]
+	_text_c(center + Vector2(cos(ang) * (rx - 26.0), sin(ang) * (ry - 26.0)) + Vector2(0, 5), label, 12, Color("#f1c40f"))

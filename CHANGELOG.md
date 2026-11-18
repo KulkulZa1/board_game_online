@@ -21,8 +21,15 @@
   the JS `apply` functions, the XP curve, and rule-function coverage; mutation-checked (a changed weapon
   damage, passive multiplier, medkit heal, XP exponent, pool order or a missing function each fails it).
   `tests/sim_test.gd` runs the real GDScript under `godot --headless`.
-- Not yet run under a real Godot binary — downloading one was not permitted in this environment. The
-  GDScript was checked with `gdparse` (gdtoolkit 4.5) for syntax and by hand for type-inference traps.
+- Run under Godot 4.4.1 (official build, checksum-matched): `tests/sim_test.gd` passes 116/116 with no
+  script errors. A hands-on QA pass on a virtual display (keys and mouse through the X server, the touch
+  joystick and OD button through injected touch events) covered option cycling, level-up and item picks by
+  key and by mouse, reroll, evolutions, pause, overdrive, main-weapon swap, boss, goblin, blood moon, the
+  10-minute prompt both ways, infinite mode, death, restart and a landscape window. It found and fixed:
+  the off-screen goblin arrow sat mid-screen in portrait (now on the screen-edge ellipse with distance and
+  time left, as on the web), the HP readout went negative on death, and the sim test's enemy cap check
+  would have failed once a boss spawned at the 650 cap (bosses and goblins bypass it, as on the web).
+  Rule cost measured headless: about 2 ms per tick at 650 enemies.
 
 ### Added — 스침 GRAZE, a dodge game where only near misses score (`/arcade/graze/`)
 - Move left/right (relative drag on touch so the finger never covers you, mouse follow, ←→ with Shift for
