@@ -25,6 +25,7 @@ const tests = [
   'prototypes/server-hardening-test.js',
   'prototypes/ai-engines-test.js',
   'prototypes/godot-port-test.js',
+  'prototypes/godot-vampire-port-test.js',
 ];
 
 for (const test of tests) {

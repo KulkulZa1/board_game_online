@@ -54,3 +54,4 @@ individually runnable: `node prototypes/newer-games-handler-test.js`.
 | `prototypes/` | Test suites run by `npm run test:games` (list in `scripts/run-game-flow-tests.js`) |
 | `.github/workflows/check.yml` | CI — `npm run check` on every PR and push to `main` |
 | `godot/tower-defense/` | Godot 4 port of the tower-defense rules — change it together with `public/arcade/tower-defense/sim.js` |
+| `godot/vampire/` | Godot 4 port of the vampire-survivors game — change it together with `public/arcade/vampire/game.js` |

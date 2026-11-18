@@ -2,6 +2,28 @@
 
 ## [Unreleased] - Vampire Survivors director-loop readiness
 
+### Added — Godot port of the vampire-survivors game (`godot/vampire/`)
+- A standalone Godot 4 project with one run's full rules from `public/arcade/vampire/game.js`: 12 weapons
+  and 12 evolutions, main/aux weapon overlays, 12 passives and 13 synergies, dash slash with chain dashes and
+  slash supports, enemy tiers/archers/elites/bosses, treasure goblins, gold rush, blood moon, item boxes,
+  power-ups, overdrive, combo milestones, straggler repositioning, weighted level-up choices with rerolls,
+  and the 10-minute goal with the infinite-wave option. All 4 characters, 4 difficulties and 3 maps are
+  selectable (their unlocks are meta progression, which is not ported). `vs_rules.gd` holds the tables,
+  `vs_run.gd` the rules function-for-function, `main.gd` the drawing, HUD, touch joystick and panels.
+  The web version is unchanged.
+- Not ported yet: equipment, meta progression (coins, unlocks, achievements, daily, revive), co-op, hybrid
+  towers, sandbox config, sound, and the damage/combo-guide/evolution-plan panels — listed in its README.
+- Two web bugs are fixed in the port only: a level-up opened by the 진공 청소기 item box was closed by the
+  choice handler (level gained, no pick), and an enemy that had ever been frozen was never knocked back
+  again (`!e.frozen` is false once `frozen` ends slightly negative).
+- `prototypes/godot-vampire-port-test.js` (in `test:games`) guards the port without Godot: every data
+  table compared whole against `game.js`, the GDScript passive/power-up/item effect lines executed against
+  the JS `apply` functions, the XP curve, and rule-function coverage; mutation-checked (a changed weapon
+  damage, passive multiplier, medkit heal, XP exponent, pool order or a missing function each fails it).
+  `tests/sim_test.gd` runs the real GDScript under `godot --headless`.
+- Not yet run under a real Godot binary — downloading one was not permitted in this environment. The
+  GDScript was checked with `gdparse` (gdtoolkit 4.5) for syntax and by hand for type-inference traps.
+
 ### Added — 스침 GRAZE, a dodge game where only near misses score (`/arcade/graze/`)
 - Move left/right (relative drag on touch so the finger never covers you, mouse follow, ←→ with Shift for
   precision). Blocks, gapped walls and telegraphed beams fall; one touch ends the run. Simply dodging earns

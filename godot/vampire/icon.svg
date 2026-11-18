@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">뱀파이어 서바이버</title>
+  <rect width="512" height="512" rx="96" fill="#101827"/>
+  <circle cx="256" cy="256" r="176" fill="none" stroke="#3498db" stroke-width="10" stroke-dasharray="40 30"/>
+  <circle cx="104" cy="168" r="26" fill="#e74c3c"/>
+  <circle cx="404" cy="140" r="22" fill="#9b59b6"/>
+  <circle cx="420" cy="372" r="30" fill="#c0392b"/>
+  <circle cx="120" cy="388" r="20" fill="#1abc9c"/>
+  <path d="M256 150 L281 224 L360 226 L297 272 L320 348 L256 302 L192 348 L215 272 L152 226 L231 224 Z" fill="#d7a3f5"/>
+</svg>

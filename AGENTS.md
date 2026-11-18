@@ -74,6 +74,7 @@ not scope creep.**
 | **C — Sandbox** | 3 design tools | `sandbox/` | **Dev-only, never in production** |
 | *(experimental)* | 3D chess prototype | `public/games3d/chess3d/` | None — no socket wiring |
 | *(port)* | Godot 4 port of 첨탑 대란 | `godot/tower-defense/` | None — source only; rules must match `sim.js` (`prototypes/godot-port-test.js`, and `tests/contract_test.gd` under Godot) |
+| *(port)* | Godot 4 port of the vampire-survivors game | `godot/vampire/` | None — source only; tables and effects must match `public/arcade/vampire/game.js` (`prototypes/godot-vampire-port-test.js`, and `tests/sim_test.gd` under Godot) |
 
 Layer A games: chess, omok, connect4, othello, checkers, indianpoker, applegame,
 battleship, backgammon, texasholdem, dotsboxes, mancala.
