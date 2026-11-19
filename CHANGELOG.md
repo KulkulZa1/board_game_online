@@ -2,6 +2,81 @@
 
 ## [Unreleased] - Vampire Survivors director-loop readiness
 
+### Added — Godot vampire: gear growth, equipment window, procs, 30-minute run (`godot/vampire/`)
+- **Gear grows by farming**: a picked-up item that is worse than the equipped one of its slot is salvaged into
+  that equipped item's EXP. Items level up to Lv20 (+8% affix values per level) and awaken at Lv5/10/15 with a
+  random proc. Better, rarer, set and legendary pieces go to an 8-slot bag instead.
+- **Equipment window** (I / Tab / 🎒, pauses): equipped slots with level and EXP, the bag, item details with
+  comparison, equip (the removed item keeps its level and goes back to the bag), salvage (refunds 60% of the
+  EXP invested), and "salvage everything weaker".
+- **Procs**: 6 triggers (kill, crit, hurt, dash, every 7 s, massacre) × 8 effects (fire nova, frost burst,
+  meteor shower, chain lightning, black hole, blade storm, thunder, frenzy). Damage is a multiple of the current
+  trash HP up to the 20-minute mark, then grows only with gear level. Procs queue with short delays so kills
+  chain into more procs, bounded by a per-frame budget and per-proc cooldowns.
+- **Shrines** (fury, frenzy, chaos, greed, storm, doom) every 75–115 s, and **massacre** feedback when kills
+  chain inside 0.35 s windows (12/30/60/120): shake, hit-stop, shockwaves, aberration, a final kill count.
+- **30-minute clear on every map**. Enemy growth runs on a stage clock (`C.stage_seconds`): the web 10-minute
+  curve at half speed for the first 20 minutes, waves and bosses included, then faster. Enemy ranged damage
+  starts gentler (`C.enemy_dmg_curve`).
+- `tests/balance_sim.gd`: a headless bot (dodges enemies, telegraphs, charge lines and arrow fans; hunts archers;
+  picks up loot when safe; dashes when swarmed; takes sustain when hurt; manages the bag every 20 s) used to tune
+  the survival curve. Each run prints one `RUN {json}` line with the death time, build, per-minute enemy count and
+  the damage sources of its last 8 seconds.
+- **Balance for 30 minutes** (all Godot-only, measured with the bot; the README has the table): unlimited web
+  multipliers capped (`dmg_up` ×1.18 at 6 stacks, the ×1.2 damage item box at 5 picks, regen and speed passives at
+  3, total regen 4%/s, on-hit healing 4% max HP/s); enemies at the 650 cap are recycled instead of freezing the
+  crowd; enemy speed ramps after 20 minutes; at most 30 living archers; gentler early enemy damage (bosses ×0.7,
+  tier-2 archer fans ×0.65), +50 starting HP, 0.8%/s base regen and +3%/s after 3 s without a hit; procs follow
+  trash HP only up to 20 minutes; infinite mode after the clear runs the stage clock at 2×. Measured over 48 bot
+  runs: 98% alive at 20 min, 90% at 25, 75% clear at 30 (target 99/90/70).
+
+### Added — Godot vampire: hack-and-slash rework (`godot/vampire/`)
+- The Godot game now grows past the web version. Shared tables still have to match `game.js`; intentional
+  differences are allowed only when listed with a reason in the port test (`GODOT_OVERRIDES`/`GODOT_ONLY`).
+- **Lower drop rates**: item boxes every 75 s (was 40), bosses drop 1 box (was 4), goblins 1 (was 2), elite
+  power-ups 30% (was 100%), reroll tokens 1% per kill (was 5%).
+- **Loot**: 4 gear slots, 5 rarities, 12 affixes, auto-equip-or-salvage on pickup (no modal), rarity light
+  pillars, 4 sets with 2- and 4-piece effects (Ember Lord, Storm Hunter, Blood Oath, Frost Crown) and 4
+  legendaries (Berserker's Helm, Thornmail, Shadow Treads, Ring of Greed).
+- **Monsters**: 9 types with their own behaviour (zig-zag bats, reassembling skeletons, splitting slimes,
+  phasing wraiths, telegraphed golem slams, self-destructing imps, charging boars) and 9 elite affixes.
+- **Weapons**: whip, axe and thunderstorm, each with an evolution.
+- **Soul shards**: earned per run, spent on 5 permanent upgrades; best records saved to `user://`.
+- **Presentation**: SVG sprites, 2D HDR glow with an additive FX layer, a post-process shader (shockwave
+  refraction, chromatic aberration, vignette, low-HP pulse, tints), a world-space ground shader, silhouette
+  hit flashes, blood decals, bouncing gibs, camera punch, and 20 synthesized sound effects.
+- `tests/sim_test.gd` covers the new systems (168/168 under Godot 4.4.1); `draw_string_outline` drew no
+  outline in this project, so text outlines are faked with four offset shadows.
+
+### Added — Godot port of the vampire-survivors game (`godot/vampire/`)
+- A standalone Godot 4 project with one run's full rules from `public/arcade/vampire/game.js`: 12 weapons
+  and 12 evolutions, main/aux weapon overlays, 12 passives and 13 synergies, dash slash with chain dashes and
+  slash supports, enemy tiers/archers/elites/bosses, treasure goblins, gold rush, blood moon, item boxes,
+  power-ups, overdrive, combo milestones, straggler repositioning, weighted level-up choices with rerolls,
+  and the 10-minute goal with the infinite-wave option. All 4 characters, 4 difficulties and 3 maps are
+  selectable (their unlocks are meta progression, which is not ported). `vs_rules.gd` holds the tables,
+  `vs_run.gd` the rules function-for-function, `main.gd` the drawing, HUD, touch joystick and panels.
+  The web version is unchanged.
+- Not ported yet: equipment, meta progression (coins, unlocks, achievements, daily, revive), co-op, hybrid
+  towers, sandbox config, sound, and the damage/combo-guide/evolution-plan panels — listed in its README.
+- Two web bugs are fixed in the port only: a level-up opened by the 진공 청소기 item box was closed by the
+  choice handler (level gained, no pick), and an enemy that had ever been frozen was never knocked back
+  again (`!e.frozen` is false once `frozen` ends slightly negative).
+- `prototypes/godot-vampire-port-test.js` (in `test:games`) guards the port without Godot: every data
+  table compared whole against `game.js`, the GDScript passive/power-up/item effect lines executed against
+  the JS `apply` functions, the XP curve, and rule-function coverage; mutation-checked (a changed weapon
+  damage, passive multiplier, medkit heal, XP exponent, pool order or a missing function each fails it).
+  `tests/sim_test.gd` runs the real GDScript under `godot --headless`.
+- Run under Godot 4.4.1 (official build, checksum-matched): `tests/sim_test.gd` passes 116/116 with no
+  script errors. A hands-on QA pass on a virtual display (keys and mouse through the X server, the touch
+  joystick and OD button through injected touch events) covered option cycling, level-up and item picks by
+  key and by mouse, reroll, evolutions, pause, overdrive, main-weapon swap, boss, goblin, blood moon, the
+  10-minute prompt both ways, infinite mode, death, restart and a landscape window. It found and fixed:
+  the off-screen goblin arrow sat mid-screen in portrait (now on the screen-edge ellipse with distance and
+  time left, as on the web), the HP readout went negative on death, and the sim test's enemy cap check
+  would have failed once a boss spawned at the 650 cap (bosses and goblins bypass it, as on the web).
+  Rule cost measured headless: about 2 ms per tick at 650 enemies.
+
 ### Added — 스침 GRAZE, a dodge game where only near misses score (`/arcade/graze/`)
 - Move left/right (relative drag on touch so the finger never covers you, mouse follow, ←→ with Shift for
   precision). Blocks, gapped walls and telegraphed beams fall; one touch ends the run. Simply dodging earns

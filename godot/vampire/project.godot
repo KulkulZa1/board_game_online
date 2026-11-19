@@ -1,0 +1,32 @@
+; Engine configuration file.
+; 뱀파이어 서바이버 — public/arcade/vampire/game.js 의 Godot 이식.
+; 규칙 표는 prototypes/godot-vampire-port-test.js 가 game.js 와 대조하고,
+; tests/sim_test.gd 가 Godot 안에서 실제 GDScript 로 한 판을 돌려 본다.
+
+config_version=5
+
+[application]
+
+config/name="뱀파이어 서바이버"
+config/description="뱀서류 생존 액션 — 웹판 규칙의 Godot 이식"
+run/main_scene="res://scenes/main.tscn"
+config/features=PackedStringArray("4.4", "Mobile")
+config/icon="res://icon.svg"
+
+[display]
+
+window/size/viewport_width=540
+window/size/viewport_height=960
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+window/handheld/orientation=1
+
+[input_devices]
+
+pointing/emulate_mouse_from_touch=true
+
+[rendering]
+
+renderer/rendering_method="mobile"
+viewport/hdr_2d=true
+environment/defaults/default_clear_color=Color(0.0627, 0.0941, 0.1529, 1)

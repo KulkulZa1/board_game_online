@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+<defs><radialGradient id="m" cx="0.3" cy="0.25" r="0.85"><stop offset="0.26" stop-color="#ffffff"/><stop offset="0.26" stop-color="#dde2e8"/><stop offset="0.64" stop-color="#dde2e8"/><stop offset="0.64" stop-color="#a3abb6"/></radialGradient><path id="p1" d="M18 13L26 9C29 14 35 14 38 9L46 13L50 26L50 50C44 58 20 58 14 50L14 26Z"/><path id="p2" d="M4 27C4 17 12 12 21 14L23 27L9 34Z"/><path id="p3" d="M60 27C60 17 52 12 43 14L41 27L55 34Z"/></defs>
+<g fill="#0b0f1a" stroke="#0b0f1a" stroke-width="4.5" stroke-linejoin="round" stroke-linecap="round"><use href="#p1"/><use href="#p2"/><use href="#p3"/></g>
+<g stroke-linejoin="round" stroke-linecap="round"><use href="#p1" fill="url(#m)" stroke="#0b0f1a" stroke-width="1.5"/>
+<path d="M26 9.6C29 15 35 15 38 9.6" fill="none" stroke="#0b0f1a" stroke-width="2"/>
+<path d="M32 17L32 55" fill="none" stroke="#ffffff" stroke-width="1.8"/>
+<path d="M33.6 17L33.6 55" fill="none" stroke="#a3abb6" stroke-width="1.2"/>
+<path d="M16 41C26 45 38 45 48 41M16 48C26 52 38 52 48 48" fill="none" stroke="#8a929e" stroke-width="1.5"/>
+<path d="M32 23L36 28L32 33L28 28Z" fill="#ffffff" stroke="#0b0f1a" stroke-width="1.2"/>
+<path d="M18 22C18 30 18 36 19 40" fill="none" stroke="#ffffff" stroke-width="2"/>
+<use href="#p2" fill="url(#m)" stroke="#0b0f1a" stroke-width="1.5"/>
+<use href="#p3" fill="url(#m)" stroke="#0b0f1a" stroke-width="1.5"/>
+<path d="M7 27L21 22M57 27L43 22" fill="none" stroke="#a3abb6" stroke-width="1.4"/></g>
+</svg>

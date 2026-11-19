@@ -112,6 +112,7 @@ node scripts/record-golden-runs.js
 |---|---|---|
 | 첨탑 대란 (`tower-defense`) | `godot/tower-defense/` | 규칙 전체(`td_run.gd`) + 최소 플레이 화면. 메타 상점 UI·연출·Android 내보내기는 아직 |
 | NEON CASCADE | — | 아직 없음 (계약 파일은 준비됨) |
+| 뱀파이어 서바이버 (`vampire`) | `godot/vampire/` | 웹판 규칙 전체 + Godot 판 전용 확장(장비·세트·몬스터 9종·정예 특성·새 무기·셰이더·효과음·영혼석). 웹판에 `sim.js` 가 없어 골든 계약 대신 공유 표·효과식 대조로 지키고, 일부러 갈라진 부분은 대조 검사의 목록에 사유와 함께 둔다 |
 
 검사는 두 겹이다:
 
@@ -119,9 +120,11 @@ node scripts/record-golden-runs.js
 |---|---|---|
 | `node prototypes/godot-port-test.js` | CI 포함 어디서나 (Godot 불필요) | `td_rules.gd` 표를 JSON 으로 뽑아 `sim.js` 와 비교, `td_rng.gd` 의 식을 64비트 의미로 실행해 계약 난수열과 비교, `Run` 메서드 누락, 탭 들여쓰기 |
 | `godot --headless --path godot/tower-defense --script res://tests/contract_test.gd` | Godot 이 설치된 곳 | 실제 GDScript 를 실행해 Tier B 전 항목을 계약 파일과 대조 |
+| `node prototypes/godot-vampire-port-test.js` | CI 포함 어디서나 (Godot 불필요) | `vs_rules.gd` 표를 `game.js` 표와 통째로 비교, 효과 `match` 분기의 대입식을 그대로 실행해 JS `apply` 와 비교, XP 곡선, 규칙 함수 누락, 탭 들여쓰기 |
+| `godot --headless --path godot/vampire --script res://tests/sim_test.gd` | Godot 이 설치된 곳 | 실제 GDScript 로 무기 24종·아이템·시너지·승리/사망·봇 플레이를 돌린다 |
 
-첫 번째는 GDScript 를 **실행하지 않는다** — 문법 오류나 실행 중 오류는 두 번째로만 잡힌다.
-Godot 을 CI 에 올리면(헤드리스 바이너리를 받아 두 번째 명령을 도는 잡) 이 공백이 닫힌다.
+Node 쪽 검사는 GDScript 를 **실행하지 않는다** — 문법 오류나 실행 중 오류는 Godot 쪽 명령으로만 잡힌다.
+Godot 을 CI 에 올리면(헤드리스 바이너리를 받아 Godot 쪽 명령을 도는 잡) 이 공백이 닫힌다.
 
 이식하며 드러난 추가 함정 (`godot/tower-defense/README.md` 에 자세히):
 - JS `sort` 는 안정 정렬, Godot `sort_custom` 은 아니다 — 스폰 순서가 달라진다

@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+<defs><radialGradient id="rk" cx="0.3" cy="0.25" r="0.85"><stop offset="0.26" stop-color="#bcc4cf"/><stop offset="0.26" stop-color="#838b97"/><stop offset="0.64" stop-color="#838b97"/><stop offset="0.64" stop-color="#535a67"/></radialGradient><radialGradient id="rd" cx="0.3" cy="0.25" r="0.85"><stop offset="0.26" stop-color="#8f97a3"/><stop offset="0.26" stop-color="#5f6672"/><stop offset="0.64" stop-color="#5f6672"/><stop offset="0.64" stop-color="#3d434d"/></radialGradient><path id="p1" d="M18 44L38 36L44 60L30 72L16 64Z"/><path id="p2" d="M14 66L32 66L34 92L16 94Z"/><path id="p3" d="M10 90L36 88L40 106L30 114L12 112L8 100Z"/><path id="p4" d="M40 92L58 92L58 117L36 117Z"/><path id="p5" d="M64 92L84 92L88 117L64 117Z"/><path id="p6" d="M30 42L50 22L82 18L104 30L108 60L96 92L44 96L32 74Z"/><path id="p7" d="M62 26L76 14L94 16L100 30L92 40L68 40Z"/><path id="p8" d="M70 16L80 11L90 13L84 17L76 18Z"/><path id="p9" d="M88 34L110 28L120 46L112 62L92 56Z"/><path id="p10" d="M98 58L116 56L119 84L100 86Z"/><path id="p11" d="M94 82L120 80L122 98L116 112L98 114L92 100Z"/></defs>
+<g fill="#0b0f1a" stroke="#0b0f1a" stroke-width="7.5" stroke-linejoin="round" stroke-linecap="round"><use href="#p1"/><use href="#p2"/><use href="#p3"/><use href="#p4"/><use href="#p5"/><use href="#p6"/><use href="#p7"/><use href="#p8"/><use href="#p9"/><use href="#p10"/><use href="#p11"/></g>
+<g stroke-linejoin="round" stroke-linecap="round"><use href="#p1" fill="url(#rd)" stroke="#0b0f1a" stroke-width="2"/>
+<use href="#p2" fill="url(#rd)" stroke="#0b0f1a" stroke-width="2"/>
+<use href="#p3" fill="url(#rd)" stroke="#0b0f1a" stroke-width="2"/>
+<path d="M14 100L34 99" fill="none" stroke="#3d434d" stroke-width="2"/>
+<use href="#p4" fill="url(#rd)" stroke="#0b0f1a" stroke-width="2"/>
+<use href="#p5" fill="url(#rk)" stroke="#0b0f1a" stroke-width="2"/>
+<use href="#p6" fill="url(#rk)" stroke="#0b0f1a" stroke-width="2"/>
+<path d="M34 72L48 64L46 94M50 24L56 36L44 46" fill="none" stroke="#535a67" stroke-width="2"/>
+<path d="M60 30L66 44L58 56L68 70L62 88" fill="none" stroke="#ff7a00" stroke-width="8" opacity="0.35"/>
+<path d="M60 30L66 44L58 56L68 70L62 88" fill="none" stroke="#ffa53a" stroke-width="3"/>
+<path d="M60 30L66 44L58 56L68 70L62 88" fill="none" stroke="#fff1c2" stroke-width="1.2"/>
+<path d="M84 50L91 58L84 66L77 58Z" fill="none" stroke="#ff7a00" stroke-width="7.6" opacity="0.35"/>
+<path d="M84 50L91 58L84 66L77 58Z" fill="none" stroke="#ffa53a" stroke-width="2.6"/>
+<path d="M84 50L91 58L84 66L77 58Z" fill="none" stroke="#fff1c2" stroke-width="1.04"/>
+<path d="M40 52L48 58" fill="none" stroke="#ff7a00" stroke-width="7.2" opacity="0.35"/>
+<path d="M40 52L48 58" fill="none" stroke="#ffa53a" stroke-width="2.2"/>
+<path d="M40 52L48 58" fill="none" stroke="#fff1c2" stroke-width="0.88"/>
+<use href="#p7" fill="url(#rk)" stroke="#0b0f1a" stroke-width="2"/>
+<use href="#p8" fill="#6fa64a" stroke="#0b0f1a" stroke-width="2"/>
+<path d="M76 23L98 21L97 33L78 34Z" fill="#2b2f38" stroke="#0b0f1a" stroke-width="1.6"/>
+<path d="M77.5 28a5.5 5.5 0 1 0 11 0a5.5 5.5 0 1 0 -11 0ZM88 27.5a5 5 0 1 0 10 0a5 5 0 1 0 -10 0Z" fill="#ff7a00" opacity="0.45"/>
+<path d="M80.2 28a2.8 2.8 0 1 0 5.6 0a2.8 2.8 0 1 0 -5.6 0ZM90.5 27.5a2.5 2.5 0 1 0 5 0a2.5 2.5 0 1 0 -5 0Z" fill="#ffd27a"/>
+<path d="M81.9 28a1.1 1.1 0 1 0 2.2 0a1.1 1.1 0 1 0 -2.2 0ZM92 27.5a1 1 0 1 0 2 0a1 1 0 1 0 -2 0Z" fill="#ffffff"/>
+<path d="M75 22L99 19.5" fill="none" stroke="#0b0f1a" stroke-width="3.4"/>
+<path d="M66 34L74 37" fill="none" stroke="#535a67" stroke-width="2"/>
+<use href="#p9" fill="url(#rk)" stroke="#0b0f1a" stroke-width="2"/>
+<path d="M98 34L104 32" fill="none" stroke="#e7ecf2" stroke-width="2.4"/>
+<use href="#p10" fill="url(#rk)" stroke="#0b0f1a" stroke-width="2"/>
+<path d="M104 62L110 71L106 80" fill="none" stroke="#ff7a00" stroke-width="7.4" opacity="0.35"/>
+<path d="M104 62L110 71L106 80" fill="none" stroke="#ffa53a" stroke-width="2.4"/>
+<path d="M104 62L110 71L106 80" fill="none" stroke="#fff1c2" stroke-width="0.96"/>
+<use href="#p11" fill="url(#rk)" stroke="#0b0f1a" stroke-width="2"/>
+<path d="M96 96L119 94M98 105L117 104" fill="none" stroke="#535a67" stroke-width="2"/></g>
+</svg>

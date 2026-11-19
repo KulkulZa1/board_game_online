@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+<defs><radialGradient id="sl" cx="0.32" cy="0.28" r="0.85"><stop offset="0" stop-color="#a8f7b4" stop-opacity="0.88"/><stop offset="0.3" stop-color="#a8f7b4" stop-opacity="0.88"/><stop offset="0.3" stop-color="#4cd06f" stop-opacity="0.78"/><stop offset="0.72" stop-color="#4cd06f" stop-opacity="0.78"/><stop offset="0.72" stop-color="#24a14b" stop-opacity="0.86"/><stop offset="1" stop-color="#24a14b" stop-opacity="0.86"/></radialGradient><path id="p1" d="M12 110C10 92 22 74 36 62C48 52 54 36 68 32C84 28 98 42 106 58C116 76 122 96 116 110C113 116 106 118 96 118L30 118C20 118 13 116 12 110Z"/></defs>
+<g fill="#0b0f1a" stroke="#0b0f1a" stroke-width="7.5" stroke-linejoin="round" stroke-linecap="round"><use href="#p1" fill="none"/></g>
+<g stroke-linejoin="round" stroke-linecap="round"><use href="#p1" fill="url(#sl)" stroke="#0b0f1a" stroke-width="2"/>
+<path d="M34 104C34 92 50 84 64 86C80 88 92 100 84 110C74 118 42 116 34 104Z" fill="#137a35" opacity="0.32"/>
+<path d="M26.4 96a3.6 3.6 0 1 0 7.2 0a3.6 3.6 0 1 0 -7.2 0ZM41.6 80a2.4 2.4 0 1 0 4.8 0a2.4 2.4 0 1 0 -4.8 0ZM99 100a3 3 0 1 0 6 0a3 3 0 1 0 -6 0ZM54 104a2 2 0 1 0 4 0a2 2 0 1 0 -4 0Z" fill="#ffffff" opacity="0.45"/>
+<path d="M28 84C30 70 42 56 56 46C54 56 44 70 36 86Z" fill="#ffffff" opacity="0.8"/>
+<path d="M62.8 40a3.2 3.2 0 1 0 6.4 0a3.2 3.2 0 1 0 -6.4 0Z" fill="#ffffff" opacity="0.9"/>
+<path d="M26 112Q64 118 106 112" fill="none" stroke="#d8ffe0" stroke-width="2" opacity="0.5"/>
+<path d="M62.5 74a9.5 11.5 0 1 0 19 0a9.5 11.5 0 1 0 -19 0ZM86.5 73a8.5 10.5 0 1 0 17 0a8.5 10.5 0 1 0 -17 0Z" fill="#ffffff" stroke="#0b0f1a" stroke-width="2.2"/>
+<path d="M70.1 76a5.4 5.4 0 1 0 10.8 0a5.4 5.4 0 1 0 -10.8 0ZM93.1 75.5a4.9 4.9 0 1 0 9.8 0a4.9 4.9 0 1 0 -9.8 0Z" fill="#0b0f1a"/>
+<path d="M71.6 73a1.9 1.9 0 1 0 3.8 0a1.9 1.9 0 1 0 -3.8 0ZM94.5 72.6a1.7 1.7 0 1 0 3.4 0a1.7 1.7 0 1 0 -3.4 0Z" fill="#ffffff"/>
+<path d="M80 92Q87 98 94 91" fill="none" stroke="#0b0f1a" stroke-width="2.6"/></g>
+</svg>
