@@ -10,6 +10,9 @@ extends RefCounted
 ##    밖으로 안 나온다 — 그래서 enemies_near() 가 후보 배열을 돌려주고 호출부가 직접 돈다.
 ##  - Math.random() 은 [0,1) 이고 randf() 는 [0,1] 이다. 배열 인덱스를 뽑을 땐 _pick() 을 쓴다.
 ##  - Dictionary == 는 내용 비교다. 적·투사체는 내부 클래스(참조 비교)이고, 타격 기록은 적 id 로 한다.
+##  - Godot 판은 30분 판이다. 적 성장(체력·공격·속도·종류·웨이브·보스)은 elapsed 가 아니라 stage_t(C.stage_seconds)
+##    로 잰다. 웹판에서 무제한인 배율(공격력 패시브·상자·재생·이속·흡혈)엔 상한이 있다 — 값과 이유는 vs_content.gd,
+##    측정은 tests/balance_sim.gd.
 ##  - 장비(vps-equipment.js)·협동·하이브리드 타워·메타 진행(코인·해금·업적)은 옮기지 않았다.
 ##    JS 식에 곱해지던 장비 배율(equipStats.*)은 장비가 없을 때의 값 1 로 지웠다. README 참고.
 
@@ -215,6 +218,7 @@ var goblin_timer := 0.0
 var infinite_mode := false
 var infinite_dialog_shown := false
 var infinite_elapsed := 0.0
+var stage_t := 0.0                # 적 성장용 시간 — C.stage_seconds(elapsed)
 var meteor_call_timer := 7.0
 var kill_streak_timestamps: Array = []
 var dash_chain_window := 0.0
@@ -247,6 +251,29 @@ var bosses_killed := 0
 var legendaries_found := 0
 var loot_found := 0
 var meta_levels := {}             # 영혼석 강화 레벨 (id → 레벨)
+var bag: Array = []               # 가방 — 바꿔 낄 후보 장비 (최대 C.BAG_SIZE)
+var gear_levelups := 0
+var salvaged := 0
+var _next_uid := 1
+var _procs: Array = []            # 장착 장비의 발동 옵션 {proc, mult, key}
+var proc_icd := {}                # key → 남은 재발동 대기
+var proc_queue: Array = []        # {effect, x, y, t, mult} — 살짝 늦게 터져 줄줄이 이어진다
+var proc_timer := 0.0
+var procs_fired := 0
+var vortices: Array = []          # 블랙홀 {x, y, r, t, max_t, dmg}
+var shrines: Array = []           # 제단 {x, y, type, life, pulse_t}
+var shrine_timer := 60.0
+var buffs := {}                   # 제단·광란 버프 id → 남은 시간
+var storm_buff_tick := 0.0
+var burst_kills := 0              # 학살 — BURST_WINDOW 안에 이어진 처치 수
+var burst_timer := 0.0
+var burst_tier := -1
+var best_burst := 0
+var dmg_total := 0.0
+var hurt_src := ""                # 다음 피격의 출처 (hurt 사건에 실려 나간다 — 밸런스 측정·화면용)
+var last_hurt_t := -99.0          # 마지막으로 맞은 시각 — 숨 고르기 재생용
+var leech_budget := 0.0           # 때려서 얻는 회복의 남은 한도 (C.LEECH_CAP_PER_SEC)
+var dmgperm_taken := 0            # 아이템 상자 '공격력 강화'를 고른 횟수 (C.ITEM_DMGPERM_CAP 까지)              # 이 판에 적 체력에서 깎은 총량 (결과·밸런스 측정용)
 
 var _enemy_grid := {}             # Vector2i → Array[Enemy]
 var _next_enemy_id := 1
@@ -268,7 +295,9 @@ func _init(character_id: String = "knight", difficulty_id: String = "normal", ma
 	map_def = R.find_def(R.MAP_DEFS, map_id)
 	if map_def.is_empty():
 		map_def = R.MAP_DEFS[0]
-	survive_goal = float(map_def["durationSeconds"])
+	# Godot 판은 맵과 상관없이 30분 생존이 클리어다 (웹판 표의 durationSeconds 는 웹판 몫)
+	survive_goal = C.RUN_GOAL
+	shrine_timer = 50.0 + _rand() * 30.0
 	_init_game()
 
 
@@ -338,6 +367,8 @@ func has_legendary(id: String) -> bool:
 ## 무기 피해에 곱하는 추가 배율 — 장비 공격력, 광전사의 투구, 피의 서약 4세트
 func _dmg_bonus() -> float:
 	var m := 1.0 + _gear("dmg")
+	if buffs.has("fury"):
+		m *= 2.0
 	if has_legendary("berserker"):
 		m *= 1.0 + minf(floorf(combo_count / 20.0) * 0.10, 0.60)
 	if set_count("blood") >= 4 and get_player_hp_ratio() < 0.5:
@@ -347,6 +378,8 @@ func _dmg_bonus() -> float:
 
 func _cd_bonus() -> float:
 	var m := 1.0 - _gear("cd")
+	if buffs.has("frenzy") or buffs.has("frenzy_proc"):
+		m *= 0.6
 	if set_count("blood") >= 4 and get_player_hp_ratio() < 0.5:
 		m *= 0.8
 	return m
@@ -369,7 +402,7 @@ func _refresh_gear() -> void:
 		if it == null:
 			continue
 		for a in it["affixes"]:
-			g[a["stat"]] = float(g.get(a["stat"], 0.0)) + float(a["val"])
+			g[a["stat"]] = float(g.get(a["stat"], 0.0)) + C.affix_value(it, a)
 	if has_legendary("greed"):
 		g["xp"] = float(g.get("xp", 0.0)) + 0.25
 	if set_count("blood") >= 2:
@@ -380,59 +413,181 @@ func _refresh_gear() -> void:
 	if diff > 0.0:
 		player.hp += diff
 	player.hp = minf(player.hp, player.max_hp)
+	# 발동 옵션 목록 — 장비 레벨 배율을 같이 담아 둔다
+	_procs = []
+	for slot in C.GEAR_SLOTS:
+		var it = player.equip[slot]
+		if it == null:
+			continue
+		var k := 0
+		for pr in it["procs"]:
+			_procs.append({"proc": pr, "mult": C.gear_level_mult(int(it["lv"])), "key": "%s%d" % [slot, k]})
+			k += 1
 
 
-## 장비를 주웠을 때: 더 좋으면 장착, 아니면 분해해서 경험치로
+## 장비를 주웠을 때 — 빈 부위면 장착, 더 좋거나 세트·전설이면 가방, 아니면 끼고 있는 장비에 분해
 func pick_up_gear(item: Dictionary) -> void:
-	var slot: String = item["slot"]
-	var cur = player.equip[slot]
-	var new_p := C.item_power(item) + _set_keep_bonus(item)
-	var cur_p := -1.0 if cur == null else C.item_power(cur) + _set_keep_bonus(cur)
+	if int(item.get("uid", 0)) == 0:
+		item["uid"] = _next_uid
+		_next_uid += 1
 	loot_found += 1
 	if item["rarity"] == "legendary":
 		legendaries_found += 1
-	if new_p > cur_p:
-		var before := {}
-		for sid in C.SET_ORDER:
-			before[sid] = set_count(sid)
-		player.equip[slot] = item
-		_refresh_gear()
-		_emit("equip", {"item": item})
-		var rdef: Dictionary = C.RARITIES[item["rarity"]]
-		_screen_text("%s %s 장착!" % ["★" if item["rarity"] == "legendary" else "▲", item["name"]], 2.4, rdef["color"], 19)
-		for sid in C.SET_ORDER:
-			var n := set_count(sid)
-			if (n >= 2 and int(before[sid]) < 2) or (n >= 4 and int(before[sid]) < 4):
-				var sd: Dictionary = C.SETS[sid]
-				_screen_text("%s %s %d세트 효과 발동!" % [sd["icon"], sd["name"], 4 if n >= 4 else 2], 3.0, sd["color"], 21)
-				_emit("set", {"set": sid, "count": n})
+	if player.equip[item["slot"]] == null:
+		_equip(item)
+	elif is_upgrade(item):
+		_stash(item)
 	else:
-		var xp := 6.0 + C.item_power(item) * 2.0 * (1.0 + elapsed / 300.0)
-		gain_xp(xp)
-		_emit("salvage", {"item": item})
-		_screen_text("⚗ %s 분해 +%d XP" % [item["name"], roundi(xp)], 1.6, "#a78bfa", 14)
+		_salvage_into(item)
 
 
-## 세트 조각은 이미 같은 세트를 차고 있을수록 가치가 크다 (세트를 깨지 않도록)
-func _set_keep_bonus(item: Dictionary) -> float:
-	if item["set"] == "":
-		return 0.0
-	var same := 0
-	for slot in C.GEAR_SLOTS:
-		var it = player.equip[slot]
-		if it != null and it["set"] == item["set"] and slot != item["slot"]:
-			same += 1
-	return same * 4.0
+## 가방에 둘 만한가 — 지금 낀 것보다 강하거나 희귀도가 높거나, 아직 없는 세트·전설
+func is_upgrade(item: Dictionary) -> bool:
+	var cur = player.equip[item["slot"]]
+	if cur == null:
+		return true
+	var same_special: bool = (item["legendary"] != "" and cur["legendary"] == item["legendary"]) or (item["set"] != "" and cur["set"] == item["set"])
+	if (item["set"] != "" or item["legendary"] != "") and not same_special:
+		return true
+	if not same_special and C.RARITY_ORDER.find(item["rarity"]) > C.RARITY_ORDER.find(cur["rarity"]):
+		return true
+	return C.item_power(item) > C.item_power(cur)
+
+
+## 장착 — 빼낸 장비를 돌려준다 (없으면 null)
+func _equip(item: Dictionary):
+	var slot: String = item["slot"]
+	var before := {}
+	for sid in C.SET_ORDER:
+		before[sid] = set_count(sid)
+	var old = player.equip[slot]
+	player.equip[slot] = item
+	item["new"] = false
+	_refresh_gear()
+	_emit("equip", {"item": item})
+	var rdef: Dictionary = C.RARITIES[item["rarity"]]
+	_screen_text("%s %s 장착!" % ["★" if item["rarity"] == "legendary" else "▲", item["name"]], 2.4, rdef["color"], 19)
+	for sid in C.SET_ORDER:
+		var n := set_count(sid)
+		if (n >= 2 and int(before[sid]) < 2) or (n >= 4 and int(before[sid]) < 4):
+			var sd: Dictionary = C.SETS[sid]
+			_screen_text("%s %s %d세트 효과 발동!" % [sd["icon"], sd["name"], 4 if n >= 4 else 2], 3.0, sd["color"], 21)
+			_emit("set", {"set": sid, "count": n})
+	return old
+
+
+## 가방에 넣는다 — 가득 차면 가장 약한 것을 분해해 자리를 만든다
+func _stash(item: Dictionary) -> void:
+	if bag.size() >= C.BAG_SIZE:
+		var wi := 0
+		for i in range(1, bag.size()):
+			if C.item_power(bag[i]) < C.item_power(bag[wi]):
+				wi = i
+		if C.item_power(bag[wi]) >= C.item_power(item):
+			_salvage_into(item)
+			return
+		var old: Dictionary = bag[wi]
+		bag.remove_at(wi)
+		_salvage_into(old)
+	item["new"] = true
+	bag.append(item)
+	_emit("stash", {"item": item})
+	_screen_text("🎒 %s — 가방에 보관 (I 장비창)" % item["name"], 2.4, C.RARITIES[item["rarity"]]["color"], 16)
+
+
+## 분해 — 그 부위에 끼고 있는 장비가 경험치를 먹는다. 빈 부위면 그냥 낀다
+func _salvage_into(item: Dictionary) -> void:
+	var cur = player.equip[item["slot"]]
+	if cur == null:
+		_equip(item)
+		return
+	var gexp := C.salvage_exp(item)
+	salvaged += 1
+	_emit("salvage", {"item": item, "slot": item["slot"], "exp": gexp})
+	feed_gear(cur, gexp)
+
+
+## 장비 경험치 — 레벨이 오르면 옵션이 강해지고, 각성 레벨엔 발동 옵션이 하나 붙는다
+func feed_gear(item: Dictionary, gexp: float) -> void:
+	if int(item["lv"]) >= C.GEAR_MAX_LEVEL:
+		gain_xp(gexp * 0.5)    # 다 큰 장비에 넘친 경험치는 캐릭터에게
+		return
+	item["exp"] = float(item["exp"]) + gexp
+	item["spent"] = float(item["spent"]) + gexp
+	var leveled := false
+	while int(item["lv"]) < C.GEAR_MAX_LEVEL and float(item["exp"]) >= C.gear_exp_needed(int(item["lv"])):
+		item["exp"] = float(item["exp"]) - C.gear_exp_needed(int(item["lv"]))
+		item["lv"] = int(item["lv"]) + 1
+		leveled = true
+		gear_levelups += 1
+		if C.AWAKEN_LEVELS.has(int(item["lv"])) and item["procs"].size() < C.MAX_PROCS:
+			var pr := C.roll_proc(rng)
+			item["procs"].append(pr)
+			_screen_text("✨ %s 각성! %s" % [item["name"], C.proc_text(pr)], 3.4, "#ffd56b", 20)
+			_emit("awaken", {"item": item, "proc": pr})
+			_shake(0.35, 0.7)
+	if int(item["lv"]) >= C.GEAR_MAX_LEVEL:
+		item["exp"] = 0.0
+	if leveled:
+		_refresh_gear()
+		_screen_text("⬆ %s Lv %d" % [item["name"], int(item["lv"])], 2.0, C.RARITIES[item["rarity"]]["color"], 17)
+		_emit("gear_level", {"item": item, "lv": int(item["lv"])})
+
+
+## 장비창: 가방 i 번 장비를 낀다 — 빼낸 장비는 그 자리로 (레벨을 지닌 채)
+func equip_from_bag(i: int) -> void:
+	if i < 0 or i >= bag.size():
+		return
+	var old = _equip(bag[i])
+	if old != null:
+		old["new"] = false
+		bag[i] = old
+	else:
+		bag.remove_at(i)
+
+
+## 장비창: 가방 i 번 장비를 분해
+func salvage_from_bag(i: int) -> void:
+	if i < 0 or i >= bag.size():
+		return
+	var item: Dictionary = bag[i]
+	bag.remove_at(i)
+	_salvage_into(item)
+
+
+## 장비창: 지금 낀 것보다 못한 가방 장비를 모두 분해 — 분해한 개수
+func salvage_weaker() -> int:
+	var n := 0
+	for item in bag.duplicate():
+		if not is_upgrade(item):
+			bag.erase(item)
+			_salvage_into(item)
+			n += 1
+	return n
+
+
+func clear_new_flags() -> void:
+	for item in bag:
+		item["new"] = false
+
+
+func bag_has_new() -> bool:
+	for item in bag:
+		if item["new"]:
+			return true
+	return false
 
 
 ## 장비 드롭 굴림 — source: normal / elite / boss / goblin / mini_goblin
 func _maybe_drop_gear(x: float, y: float, source: String) -> void:
-	if _rand() >= float(C.LOOT_CHANCE[source]) * _luck():
+	if _rand() >= float(C.LOOT_CHANCE[source]) * _luck() * (3.0 if buffs.has("greed") else 1.0):
 		return
 	var minute := elapsed / 60.0
 	var rarity := C.roll_rarity(rng, String(C.LOOT_MIN_RARITY.get(source, "")), minute)
 	var slot: String = C.GEAR_SLOTS[_pick(C.GEAR_SLOTS.size())]
 	var item := C.roll_item(rng, slot, rarity, floori(minute) + 1)
+	item["uid"] = _next_uid
+	_next_uid += 1
 	gear_drops.append({"x": x, "y": y, "item": item, "life": 40.0, "pulse_t": 0.0})
 	_emit("loot", {"x": x, "y": y, "rarity": rarity})
 
@@ -443,7 +598,8 @@ func _hurt_player(amount: float, inv: float, contact: bool) -> bool:
 	player.hp -= amount
 	player.invincible = inv
 	hurt_screen_flash = 0.28
-	_emit("hurt", {"amount": amount})
+	_emit("hurt", {"amount": amount, "contact": contact, "src": hurt_src})
+	last_hurt_t = elapsed
 	if contact and has_legendary("thornmail"):
 		var r := 100.0 * _rb()
 		for e in enemies.duplicate():
@@ -460,7 +616,17 @@ func _hurt_player(amount: float, inv: float, contact: bool) -> bool:
 	if player.hp <= 0.0:
 		end_game("dead")
 		return true
+	_proc_trigger("hurt", player.x, player.y)
 	return false
+
+
+## 때리고 잡아서 얻는 회복 — 초당 한도 안에서만
+func _leech(amount: float) -> void:
+	var h := minf(amount, leech_budget)
+	if h <= 0.0:
+		return
+	leech_budget -= h
+	player.hp = minf(player.hp + h, player.max_hp)
 
 
 func _shake(add: float, cap: float) -> void:
@@ -576,7 +742,7 @@ func nearest_enemy() -> Enemy:
 
 func _init_game() -> void:
 	player = Player.new()
-	var max_hp := float(R.BASE_HP + int(character["hpBonus"]))
+	var max_hp := float(R.BASE_HP + int(character["hpBonus"])) + C.PLAYER_BONUS_HP
 	player.hp = max_hp
 	player.max_hp = max_hp
 	player.speed = R.PLAYER_SPEED * float(character["speedMult"])
@@ -690,7 +856,8 @@ func passive_level(id: String) -> int:
 
 
 func is_passive_maxed(pv: Dictionary) -> bool:
-	return pv["max"] != null and passive_level(pv["id"]) >= int(pv["max"])
+	var cap := C.passive_cap(pv)    # Godot 판: 웹판 무제한 패시브에도 상한
+	return cap >= 0 and passive_level(pv["id"]) >= cap
 
 
 func slash_mod_level(id: String) -> int:
@@ -936,10 +1103,7 @@ func spawn_wave() -> void:
 	if is_horde:
 		_screen_text("🔥 HORDE WAVE!", 2.0, "#e74c3c", 20)
 	# 난이도 곡선 — 1 + 0.9m + 0.06m², 5분 이후 압박 배율 +12%/스택
-	var m := elapsed / 60.0
-	var pressure_stacks := floori((m - 5.0) * 0.8) if m > 5.0 else 0
-	var pressure_mult := 1.0 + pressure_stacks * 0.12
-	var diff := (1.0 + 0.9 * m + 0.06 * m * m) * pressure_mult
+	var diff := C.enemy_hp_curve(stage_t / 60.0)
 	# 무한 모드 — 체력은 초지수로 폭증
 	var inf_m := infinite_elapsed / 60.0 if infinite_mode else 0.0
 	var inf_hp_mult := pow(1.5, inf_m + inf_m * inf_m * 0.06) if infinite_mode else 1.0
@@ -948,13 +1112,18 @@ func spawn_wave() -> void:
 	var mega_horde := infinite_mode and wave_count % 35 == 0
 	if mega_horde:
 		_screen_text("🌀 무한 메가 호드!!", 3.0, "#9b59b6", 28)
-	var et := floori(elapsed / 7.0)
+	var et := floori(stage_t / 7.0)
 	var normal_max := mini(20 + et, 160) if infinite_mode else mini(20 + et, 120)
 	var horde_max := normal_max
 	if is_horde or mega_horde:
-		var et6 := floori(elapsed / 6.0)
+		var et6 := floori(stage_t / 6.0)
 		horde_max = mini(70 + et6, 320) if infinite_mode else mini(50 + et6, 200)
 	var base_count := ceili(horde_max * spawn_mult)
+	_recycle_for(base_count)
+	var archers := 0
+	for ae in enemies:
+		if ae.behavior == "archer":
+			archers += 1
 	for i in range(base_count):
 		if enemies.size() >= R.MAX_ENEMIES:
 			break
@@ -964,41 +1133,48 @@ func spawn_wave() -> void:
 		var tier := 0
 		if infinite_mode:
 			tier = 2 if tier_roll < minf(0.1 + inf_m * 0.12, 0.7) else 1
-		elif elapsed < 45:
+		elif stage_t < 45:
 			tier = 0
-		elif elapsed < 120:
+		elif stage_t < 120:
 			tier = 1 if tier_roll < 0.25 else 0
-		elif elapsed < 180:
+		elif stage_t < 180:
 			tier = 1 if tier_roll < 0.35 else 0
-		elif elapsed < 300:
+		elif stage_t < 300:
 			tier = 2 if tier_roll < 0.12 else (1 if tier_roll < 0.45 else 0)
-		elif elapsed < 450:
+		elif stage_t < 450:
 			tier = 2 if tier_roll < 0.22 else (1 if tier_roll < 0.5 else 0)
 		else:
 			tier = 2 if tier_roll < 0.32 else (1 if tier_roll < 0.55 else 0)
 		# 원거리 공격형(archer): tier1 40%, tier2 100%
 		var b_roll := _rand()
-		var behavior := "archer" if (tier == 2 or (tier == 1 and b_roll < 0.4)) else "chase"
+		# Godot 판: 1단계 궁수 40% → 25% — 궁수는 뒤에 남아 쌓여서, 30분 판 중반엔 살아 있는 적의 절반이 된다
+		var behavior := "archer" if (tier == 2 or (tier == 1 and b_roll < 0.25)) else "chase"
+		if behavior == "archer" and archers >= C.ARCHER_CAP:
+			behavior = "chase"
 		# Godot 판: 몬스터 종류. 상급(tier2)은 궁수만이 아니라 룬 골렘·돌격 멧돼지도 나온다
 		var etype := _pick_enemy_type(tier, behavior)
 		if etype == "golem" or etype == "charger":
 			behavior = "chase"
+		if behavior == "archer":
+			archers += 1
 		var attack_base := (4.0 if tier == 2 else 3.2) if behavior == "archer" else 0.0
 		var e := _new_enemy()
 		e.x = player.x + cos(angle) * spawn_dist
 		e.y = player.y + sin(angle) * spawn_dist
 		e.hp = [30.0, 80.0, 200.0][tier] * diff * hp_mult * inf_hp_mult
 		e.max_hp = e.hp
-		e.speed = ([75.0, 55.0, 35.0][tier] + _rand() * 20.0) * float(difficulty["enemySpeedMult"]) * inf_spd_mult
+		e.speed = ([75.0, 55.0, 35.0][tier] + _rand() * 20.0) * float(difficulty["enemySpeedMult"]) * inf_spd_mult * C.enemy_speed_curve(stage_t)
 		e.size = [10.0, 15.0, 22.0][tier]
 		e.color = Color(["#e74c3c", "#1abc9c" if behavior == "archer" else "#9b59b6", "#c0392b"][tier])
-		e.xp_val = roundi([5, 13, 30][tier] * (1.0 + elapsed / 500.0))
+		e.xp_val = roundi([5, 13, 30][tier] * (1.0 + stage_t / 500.0))
 		e.tier = tier
 		e.behavior = behavior
 		e.attack_cd = _rand() * attack_base
 		e.attack_base = attack_base
 		e.attack_range = (280.0 if tier == 2 else 220.0) if behavior == "archer" else 0.0
-		e.attack_dmg = roundf([10, 20, 38][tier] * (1.0 + elapsed / 500.0) * float(difficulty["enemyDmgMult"]))
+		e.attack_dmg = roundf([10, 20, 38][tier] * C.enemy_dmg_curve(stage_t) * float(difficulty["enemyDmgMult"]))
+		if tier == 2 and behavior == "archer":
+			e.attack_dmg = roundf(e.attack_dmg * C.ARCHER2_DMG_MULT)
 		# 정예 승격 — 6%, 무한 모드는 inf_elite_rate
 		if tier >= 1 and _rand() < inf_elite_rate:
 			e.elite = true
@@ -1018,7 +1194,7 @@ func spawn_wave() -> void:
 				e.max_shield = e.shield
 		_apply_enemy_type(e, etype)
 		if e.elite:
-			_roll_elite_affixes(e, 3 if infinite_mode else (2 if elapsed >= 300.0 else 1))
+			_roll_elite_affixes(e, 3 if infinite_mode else (2 if stage_t >= 300.0 else 1))
 		# 혈월 중 스폰된 적: 강화된 위협 + XP 1.6배
 		if blood_moon_active > 0:
 			e.speed *= 1.4
@@ -1030,15 +1206,33 @@ func spawn_wave() -> void:
 		enemies.append(e)
 
 
+## Godot 판: 적이 상한(MAX_ENEMIES)이면 가장 먼 일반 적을 걷어 내고 새로 뽑는다.
+## 웹판은 상한에서 스폰을 멈추는데, 30분 판에선 그러면 몇 분 전 체력·공격·속도의 낡은 무리가 화면을 채워 오히려 안전해진다 (봇 측정)
+func _recycle_for(n: int) -> void:
+	var over := enemies.size() + n - R.MAX_ENEMIES
+	if over <= 0:
+		return
+	var cands: Array = []
+	for e in enemies:
+		if not e.is_boss and not e.goblin and not e.elite and not e.dying:
+			cands.append(e)
+	var px := player.x
+	var py := player.y
+	cands.sort_custom(func(a, b): return (a.x - px) * (a.x - px) + (a.y - py) * (a.y - py) > (b.x - px) * (b.x - px) + (b.y - py) * (b.y - py))
+	for i in range(mini(over, mini(cands.size(), n))):
+		cands[i].dying = true
+	enemies = enemies.filter(func(e): return not e.dying)
+
+
 # ── Godot 판: 몬스터 종류·정예 특성 ─────────────────────────────────
 
 func _pick_enemy_type(tier: int, behavior: String) -> String:
 	if behavior == "archer":
 		if tier == 2:
 			var r2 := _rand()
-			if r2 < 0.3:
+			if r2 < 0.35:
 				return "golem"
-			if r2 < 0.5:
+			if r2 < 0.6:
 				return "charger"
 		return "archer"
 	if tier == 0:
@@ -1048,9 +1242,9 @@ func _pick_enemy_type(tier: int, behavior: String) -> String:
 		return "skeleton"
 	if r1 < 0.65:
 		return "slime"
-	if r1 < 0.83 and elapsed > 60.0:
+	if r1 < 0.83 and stage_t > 60.0:
 		return "bomber"
-	if elapsed > 90.0:
+	if stage_t > 90.0:
 		return "wraith"
 	return "skeleton"
 
@@ -1105,7 +1299,7 @@ func _spawn_minion(etype: String, x: float, y: float, tier: int, hp: float, size
 	e.behavior = "chase"
 	e.type = etype
 	e.color = Color(String(C.ENEMY_TYPES[etype]["color"]))
-	e.attack_dmg = roundf([10, 20, 38][mini(tier, 2)] * (1.0 + elapsed / 500.0) * float(difficulty["enemyDmgMult"]))
+	e.attack_dmg = roundf([10, 20, 38][mini(tier, 2)] * C.enemy_dmg_curve(stage_t) * float(difficulty["enemyDmgMult"]))
 	e.spawn_t = 0.25
 	enemies.append(e)
 	return e
@@ -1121,6 +1315,7 @@ func _enemy_blast(x: float, y: float, r: float, dmg: float, enemies_too: bool, c
 				deal_damage(e, dmg * 2.0, true, true)
 	if player.invincible <= 0.0 and _dist(x, y, player.x, player.y) < r + 12.0:
 		_shake(0.3, 0.6)
+		hurt_src = "blast"
 		return _hurt_player(dmg, 0.25, false)
 	return false
 
@@ -1167,6 +1362,262 @@ func _update_godot_hazards(dt: float) -> bool:
 	return true
 
 
+# ── Godot 판: 발동 옵션·블랙홀·제단·학살 ─────────────────────────────
+
+## 발동 옵션 피해의 기준 — 잡몹(1단계) 체력을 따라가되 C.PROC_STAGE_CAP 까지만
+func _trash_hp() -> float:
+	var hp_mult := float(difficulty["enemyHpMult"]) * float(map_def["enemyHpMult"])
+	return 30.0 * C.enemy_hp_curve(minf(stage_t, C.PROC_STAGE_CAP) / 60.0) * hp_mult
+
+
+func _proc_dmg(scale: float, mult: float) -> float:
+	return scale * _trash_hp() * mult * _dmg_bonus() * player.temp_dmg_mult
+
+
+## 조건이 맞은 발동 옵션을 굴린다 — 바로 터뜨리지 않고 줄에 세운다 (적 루프 안에서 불려도 안전)
+func _proc_trigger(trigger: String, x: float, y: float) -> void:
+	if _procs.is_empty():
+		return
+	var chance_mult := 2.0 if buffs.has("chaos") else 1.0
+	for entry in _procs:
+		var pr: Dictionary = entry["proc"]
+		if pr["trigger"] != trigger:
+			continue
+		var key: String = entry["key"]
+		if float(proc_icd.get(key, 0.0)) > 0.0:
+			continue
+		var ch := float(pr["chance"]) * chance_mult
+		if ch < 1.0 and _rand() >= ch:
+			continue
+		proc_icd[key] = float(C.PROC_TRIGGERS[trigger]["icd"])
+		_queue_proc(pr["effect"], x, y, float(entry["mult"]))
+
+
+func _queue_proc(effect: String, x: float, y: float, mult: float) -> void:
+	if proc_queue.size() >= 24:
+		return
+	proc_queue.append({"effect": effect, "x": x, "y": y, "t": 0.05 + _rand() * 0.12, "mult": mult})
+
+
+func _fire_proc(q: Dictionary) -> void:
+	var eff: Dictionary = C.PROC_EFFECTS[q["effect"]]
+	var x: float = q["x"]
+	var y: float = q["y"]
+	var mult: float = q["mult"]
+	procs_fired += 1
+	dmg_source = "proc"
+	_emit("proc", {"effect": q["effect"], "x": x, "y": y})
+	match String(q["effect"]):
+		"nova":
+			var r := float(eff["r"]) * _rb()
+			var dmg := _proc_dmg(float(eff["scale"]), mult)
+			for e in enemies_near(x, y, r):
+				if not e.dying and _dist(e.x, e.y, x, y) < r + e.size:
+					deal_damage(e, dmg, true)
+			_ring(x, y, 10, r, 0.4, eff["color"])
+			_ring(x, y, 6, r * 0.6, 0.3, "#ffd56b")
+			_emit("explosion", {"x": x, "y": y, "r": r, "color": eff["color"]})
+			_shake(0.22, 0.7)
+		"frost":
+			var r := float(eff["r"]) * _rb()
+			var dmg := _proc_dmg(float(eff["scale"]), mult)
+			for e in enemies_near(x, y, r):
+				if e.dying or _dist(e.x, e.y, x, y) > r + e.size:
+					continue
+				deal_damage(e, dmg, true)
+				if not e.dying and not e.is_boss:
+					e.frozen = maxf(e.frozen, float(eff["freeze"]))
+			_ring(x, y, 10, r, 0.5, eff["color"])
+			_emit("freeze", {"x": x, "y": y, "r": r})
+			_shake(0.18, 0.6)
+		"meteor":
+			var dmg := _proc_dmg(float(eff["scale"]), mult)
+			for k in range(int(eff["n"])):
+				var a := _rand() * TAU
+				var d := 30.0 + _rand() * 150.0
+				spawn_meteor_strike(x + cos(a) * d, y + sin(a) * d, dmg, float(eff["r"]) * _rb(), true, "proc", k * 0.12)
+		"chain":
+			var dmg := _proc_dmg(float(eff["scale"]), mult)
+			var cx := x
+			var cy := y
+			var hit := {}
+			for b in range(int(eff["n"])):
+				var best: Enemy = null
+				var bd := 240.0
+				for e in enemies_near(cx, cy, 240.0):
+					if e.dying or hit.has(e.id):
+						continue
+					var dd := _dist(cx, cy, e.x, e.y)
+					if dd < bd:
+						bd = dd
+						best = e
+				if best == null:
+					break
+				hit[best.id] = true
+				var arc := _new_proj("arc", cx, cy)
+				arc.tx = best.x
+				arc.ty = best.y
+				arc.life = 0.25
+				cx = best.x
+				cy = best.y
+				deal_damage(best, dmg, true)
+			_emit("thunder", {"x": cx, "y": cy, "r": 40.0, "evolved": false})
+		"blackhole":
+			var r := float(eff["r"]) * _rb()
+			vortices.append({"x": x, "y": y, "r": r, "t": 1.0, "max_t": 1.0, "dmg": _proc_dmg(float(eff["scale"]), mult)})
+			_emit("vortex", {"x": x, "y": y, "r": r})
+		"blades":
+			var dmg := _proc_dmg(float(eff["scale"]), mult)
+			var n := int(eff["n"])
+			var a0 := _rand() * TAU
+			for k in range(n):
+				var a := a0 + float(k) / n * TAU
+				var ar := _new_proj("arrow", player.x, player.y)
+				ar.vx = cos(a) * 480.0
+				ar.vy = sin(a) * 480.0
+				ar.r = 6
+				ar.dmg = dmg
+				ar.life = 0.85
+				ar.pierce = 5
+				ar.src = "proc"
+			_ring(player.x, player.y, 8, 90, 0.3, eff["color"])
+		"thunder":
+			_thunder_strikes(_proc_dmg(float(eff["scale"]), mult), 460.0, int(eff["n"]), false, 0.5)
+			_shake(0.2, 0.6)
+		"frenzy":
+			buffs["frenzy_proc"] = maxf(float(buffs.get("frenzy_proc", 0.0)), float(eff["dur"]))
+			_world_text(player.x, player.y - 40.0, "💢 광란!", 1.2, eff["color"], 16)
+
+
+## 발동 대기열·재발동 대기·주기 발동·블랙홀·버프·학살 마무리
+func _update_procs(dt: float) -> void:
+	for k in proc_icd.keys():
+		proc_icd[k] = float(proc_icd[k]) - dt
+	proc_timer += dt
+	if proc_timer >= C.PROC_TIMER_PERIOD:
+		proc_timer = 0.0
+		_proc_trigger("timer", player.x, player.y)
+	# 한 프레임에 너무 많이 터지지 않게 4개까지만
+	var fired := 0
+	var rest: Array = []
+	for q in proc_queue:
+		q["t"] -= dt
+		if q["t"] <= 0.0 and fired < 4:
+			fired += 1
+			_fire_proc(q)
+		else:
+			rest.append(q)
+	proc_queue = rest
+	# 블랙홀 — 1초 동안 끌어당긴 뒤 터진다 (보스는 안 끌려온다)
+	for v in vortices.duplicate():
+		v["t"] -= dt
+		var r: float = v["r"]
+		for e in enemies_near(v["x"], v["y"], r):
+			if e.dying or e.is_boss:
+				continue
+			var d := _dist(e.x, e.y, v["x"], v["y"])
+			if d < r and d > 4.0:
+				var pull := (260.0 + 420.0 * (1.0 - d / r)) * dt
+				e.x += (v["x"] - e.x) / d * minf(pull, d)
+				e.y += (v["y"] - e.y) / d * minf(pull, d)
+		if v["t"] <= 0.0:
+			vortices.erase(v)
+			dmg_source = "proc"
+			var br := r * 0.6
+			for e in enemies_near(v["x"], v["y"], br):
+				if not e.dying and _dist(e.x, e.y, v["x"], v["y"]) < br + e.size:
+					deal_damage(e, v["dmg"], true)
+			_ring(v["x"], v["y"], 10, br * 1.4, 0.5, "#a29bfe")
+			_ring(v["x"], v["y"], 6, br, 0.35, "#ffffff")
+			_emit("explosion", {"x": v["x"], "y": v["y"], "r": br * 1.4, "color": "#a29bfe"})
+			_shake(0.4, 0.8)
+			hit_stop = maxf(hit_stop, 0.05)
+	# 버프 — 제단·광란
+	for k in buffs.keys():
+		buffs[k] = float(buffs[k]) - dt
+		if float(buffs[k]) <= 0.0:
+			buffs.erase(k)
+	if buffs.has("storm"):
+		storm_buff_tick -= dt
+		if storm_buff_tick <= 0.0:
+			storm_buff_tick = 0.4
+			_thunder_strikes(_proc_dmg(2.0, 1.0), 440.0, 2, false, 0.4)
+	# 학살 — 이어진 처치가 끊기면 최종 수를 띄운다
+	if burst_timer > 0.0:
+		burst_timer -= dt
+		if burst_timer <= 0.0:
+			if burst_kills >= int(C.MASSACRE_TIERS[0][0]):
+				_screen_text("☠ ×%d" % burst_kills, 2.0, C.MASSACRE_TIERS[maxi(burst_tier, 0)][2], 30 + 4 * maxi(burst_tier, 0))
+				_emit("massacre_end", {"n": burst_kills, "tier": burst_tier})
+			best_burst = maxi(best_burst, burst_kills)
+			burst_kills = 0
+			burst_tier = -1
+
+
+## 처치 하나 — 짧은 틈으로 이어지면 학살 단계가 오른다
+func _count_burst() -> void:
+	burst_kills += 1
+	burst_timer = C.BURST_WINDOW
+	var tier := -1
+	for i in range(C.MASSACRE_TIERS.size()):
+		if burst_kills >= int(C.MASSACRE_TIERS[i][0]):
+			tier = i
+	if tier <= burst_tier:
+		return
+	burst_tier = tier
+	var mt: Array = C.MASSACRE_TIERS[tier]
+	_screen_text("☠ %s!" % mt[1], 1.8, mt[2], 30 + tier * 6)
+	_shake(0.3 + tier * 0.15, 1.0)
+	hit_stop = maxf(hit_stop, 0.03 + tier * 0.02)
+	_emit("massacre", {"n": burst_kills, "tier": tier, "x": player.x, "y": player.y})
+	if tier == 0:
+		_proc_trigger("massacre", player.x, player.y)
+
+
+## 제단 — 가끔 근처에 나타난다. 밟으면 무작위 버프 (파멸은 즉시 대폭발)
+func _update_shrines(dt: float) -> void:
+	shrine_timer -= dt
+	if shrine_timer <= 0.0:
+		shrine_timer = lerpf(C.SHRINE_INTERVAL_MIN, C.SHRINE_INTERVAL_MAX, _rand())
+		var a := _rand() * TAU
+		var d := 240.0 + _rand() * 120.0
+		var type: String = C.SHRINE_ORDER[_pick(C.SHRINE_ORDER.size())]
+		shrines.append({"x": player.x + cos(a) * d, "y": player.y + sin(a) * d, "type": type, "life": C.SHRINE_LIFE, "pulse_t": 0.0})
+		_screen_text("%s %s 출현!" % [C.SHRINES[type]["icon"], C.SHRINES[type]["name"]], 2.2, C.SHRINES[type]["color"], 17)
+		_emit("shrine_spawn", {"type": type})
+	for sh in shrines.duplicate():
+		sh["life"] -= dt
+		sh["pulse_t"] += dt
+		if sh["life"] <= 0.0:
+			shrines.erase(sh)
+			continue
+		if _dist(sh["x"], sh["y"], player.x, player.y) < 34.0:
+			shrines.erase(sh)
+			activate_shrine(sh["type"])
+
+
+func activate_shrine(type: String) -> void:
+	var sd: Dictionary = C.SHRINES[type]
+	_screen_text("%s %s — %s" % [sd["icon"], sd["name"], sd["desc"]], 3.0, sd["color"], 20)
+	_emit("shrine", {"type": type, "x": player.x, "y": player.y})
+	_shake(0.3, 0.7)
+	if type == "doom":
+		var r := 430.0
+		dmg_source = "proc"
+		var dmg := _proc_dmg(7.0, 1.0)
+		for e in enemies_near(player.x, player.y, r):
+			if not e.dying and _dist(e.x, e.y, player.x, player.y) < r:
+				deal_damage(e, dmg * (0.25 if e.is_boss else 1.0), true)
+		_ring(player.x, player.y, 20, r, 0.7, sd["color"])
+		_ring(player.x, player.y, 10, r * 0.6, 0.5, "#ffffff")
+		_emit("explosion", {"x": player.x, "y": player.y, "r": r, "color": sd["color"]})
+		_shake(0.9, 1.2)
+		hit_stop = maxf(hit_stop, 0.1)
+		evolve_flash = 0.4
+		return
+	buffs[type] = float(sd["dur"])
+
+
 func drop_powerup(x: float, y: float) -> void:
 	var def: Dictionary = R.POWERUP_POOL[_pick(R.POWERUP_POOL.size())]
 	powerups.append({"x": x, "y": y, "def": def, "life": 16.0, "max_life": 16.0, "pulse_t": 0.0})
@@ -1194,7 +1645,7 @@ func _spawn_goblin_at(x: float, y: float, hp: float, speed: float, size: float, 
 ## 보물 고블린 — 도망치는 황금 적. 처치 시 잭팟, 17초 안에 못 잡으면 도주
 func spawn_treasure_goblin() -> void:
 	var ang := _rand() * TAU
-	var hp := (450.0 + elapsed * 1.6) * float(difficulty["enemyHpMult"])
+	var hp := (450.0 + stage_t * 1.6) * float(difficulty["enemyHpMult"])
 	_spawn_goblin_at(player.x + cos(ang) * 280.0, player.y + sin(ang) * 280.0, hp, 130.0 * float(difficulty["enemySpeedMult"]), 16, "#f1c40f", 40, 17.0, false)
 	_screen_text("💰 보물 고블린 출현! 잡아라!", 2.4, "#f1c40f", 20)
 	_emit("goblin")
@@ -1222,7 +1673,7 @@ func spawn_gold_rush() -> void:
 	for k in range(count):
 		var ang := (float(k) / count) * TAU + _rand() * 0.8
 		var d := 240.0 + _rand() * 100.0
-		var hp := (180.0 + elapsed * 0.8) * float(difficulty["enemyHpMult"])
+		var hp := (180.0 + stage_t * 0.8) * float(difficulty["enemyHpMult"])
 		_spawn_goblin_at(player.x + cos(ang) * d, player.y + sin(ang) * d, hp, 145.0 * float(difficulty["enemySpeedMult"]), 12, "#ffd700", 25, 11.0, true)
 	_screen_text("💰 골드 러시! 황금 무리를 쫓아라!", 2.8, "#ffd700", 22)
 	_shake(0.2, 0.5)
@@ -1266,16 +1717,16 @@ func spawn_boss() -> void:
 	boss_active = true
 	boss_warning = 2.5
 	var interval := float(difficulty["bossInterval"])
-	var boss_num := floori(elapsed / interval)
+	var boss_num := floori(stage_t / interval)
 	# 보스 HP — 그 시점 플레이어 DPS 로 15~25초 교전이 되도록 시간 비례
-	var hp := roundf((5000.0 + boss_num * 4000) * (1.0 + elapsed / 200.0) * float(difficulty["enemyHpMult"]) * float(map_def["enemyHpMult"]))
+	var hp := roundf((5000.0 + boss_num * 4000) * (1.0 + stage_t / 200.0) * C.hp_adjust(stage_t / 60.0) * float(difficulty["enemyHpMult"]) * float(map_def["enemyHpMult"]))
 	var ang := _rand() * TAU
 	var e := _new_enemy()
 	e.x = player.x + cos(ang) * 430.0
 	e.y = player.y + sin(ang) * 430.0
 	e.hp = hp
 	e.max_hp = hp
-	e.speed = (44.0 + boss_num * 3) * float(difficulty["enemySpeedMult"])
+	e.speed = (44.0 + boss_num * 3) * float(difficulty["enemySpeedMult"]) * C.enemy_speed_curve(stage_t)
 	e.size = 36
 	e.color = Color("#f1c40f")
 	e.xp_val = 80 + boss_num * 25
@@ -1286,7 +1737,7 @@ func spawn_boss() -> void:
 	e.attack_cd = 0.6
 	e.attack_base = 2.5
 	e.attack_range = 390
-	e.attack_dmg = roundf((40.0 + boss_num * 15) * float(difficulty["enemyDmgMult"]))
+	e.attack_dmg = roundf((40.0 + boss_num * 15) * C.enemy_dmg_curve(stage_t) * C.BOSS_SHOT_MULT * float(difficulty["enemyDmgMult"]))
 	enemies.append(e)
 	_screen_text("⚠ BOSS APPROACHING ⚠", 2.5, "#e74c3c", 22)
 	_emit("boss")
@@ -1581,7 +2032,7 @@ func _whip_strike(dmg: float, reach: float, lvl_extra: int, evolved: bool, scale
 				hits += 1
 				if evolved and healed < player.max_hp * 0.03:
 					var h := player.max_hp * 0.006
-					player.hp = minf(player.hp + h, player.max_hp)
+					_leech(h)
 					healed += h
 		_emit("slash", {"x": player.x, "y": player.y, "dir": side, "reach": reach, "height": height, "evolved": evolved, "hits": hits})
 
@@ -1843,7 +2294,8 @@ func fire_enemy_projectile(enemy: Enemy, spread: float) -> void:
 	var ang := atan2(player.y - enemy.y, player.x - enemy.x) + spread
 	var spd: float = [220.0, 260.0, 190.0][enemy.tier] if enemy.tier < 3 else 220.0
 	var r := 5.0 + enemy.tier * 2
-	enemy_projectiles.append({"x": enemy.x, "y": enemy.y, "vx": cos(ang) * spd, "vy": sin(ang) * spd, "r": r, "dmg": enemy.attack_dmg, "life": 1.6})
+	enemy_projectiles.append({"x": enemy.x, "y": enemy.y, "vx": cos(ang) * spd, "vy": sin(ang) * spd, "r": r, "dmg": enemy.attack_dmg, "life": 1.6,
+		"src": "boss_shot" if enemy.is_boss else ("elite_arrow" if enemy.elite else "arrow%d" % enemy.tier)})
 	for i in range(2):
 		spawn_particle(enemy.x, enemy.y, "#ff6b35", 3, 0.2)
 
@@ -1865,7 +2317,7 @@ func deal_damage(enemy: Enemy, dmg: float, skip_chain: bool = false, is_dot: boo
 		dmg *= 3.0 if has_synergy("executioner") else 2.0
 		is_crit_roll = true
 		if has_synergy("bloodlust"):
-			player.hp = minf(player.hp + player.max_hp * 0.10, player.max_hp)
+			_leech(player.max_hp * 0.10)
 	# 보호막(정예): 보호막이 0 이 될 때까지 HP 피해 없음
 	if enemy.shield > 0.0:
 		if dmg <= enemy.shield:
@@ -1877,12 +2329,13 @@ func deal_damage(enemy: Enemy, dmg: float, skip_chain: bool = false, is_dot: boo
 		enemy.shield = 0.0
 		_ring(enemy.x, enemy.y, enemy.size, enemy.size * 4.0, 0.25, "#74b9ff")
 		_world_text(enemy.x, enemy.y - 28.0, "🛡 방어막 파괴!", 1.0, "#74b9ff", 12)
+	dmg_total += minf(dmg, maxf(enemy.hp, 0.0))
 	enemy.hp -= dmg
 	enemy.hurt_flash = 0.12
 	if not is_dot:
 		var ls := player.lifesteal + _gear("lifesteal")
 		if ls > 0.0 and player.hp < player.max_hp:
-			player.hp = minf(player.hp + dmg * ls, player.max_hp)
+			_leech(dmg * ls)
 		# 서리 왕관 2세트: 직접 타격 10% 확률로 1초 빙결
 		if not skip_chain and enemy.hp > 0.0 and not enemy.is_boss and set_count("frost") >= 2 and _rand() < 0.10:
 			enemy.frozen = maxf(enemy.frozen, 1.0)
@@ -1953,6 +2406,8 @@ func deal_damage(enemy: Enemy, dmg: float, skip_chain: bool = false, is_dot: boo
 				ms.aoe = 55.0 * _rb()
 				ms.life = 2.6
 				ms.src = "missile"
+	if is_crit_roll and dmg_source != "proc":
+		_proc_trigger("crit", enemy.x, enemy.y)
 	# 폭풍 사냥꾼 2세트: 치명타가 주변 적 2명에게 번개로 튄다
 	if is_crit_roll and not skip_chain and set_count("storm") >= 2:
 		var hit := {enemy.id: true}
@@ -2006,7 +2461,7 @@ func _on_kill_godot(enemy: Enemy) -> void:
 		_chain_explosion(enemy.x, enemy.y, 80.0, 40.0 * player.dmg_mult, 0.05, "etc")
 	# 피의 서약 2세트 — 처치마다 체력 +1
 	if set_count("blood") >= 2:
-		player.hp = minf(player.hp + 1.0, player.max_hp)
+		_leech(1.0)
 	# 잿불 군주 2세트 — 처치 시 30% 불씨 폭발 (지연 폭발로 줄줄이 터진다)
 	if set_count("ember") >= 2 and _rand() < 0.3:
 		_chain_explosion(enemy.x, enemy.y, 70.0 * _rb(), 30.0 * player.dmg_mult * _dmg_bonus(), 0.08, "etc")
@@ -2019,6 +2474,10 @@ func _on_kill_godot(enemy: Enemy) -> void:
 		_maybe_drop_gear(enemy.x, enemy.y, "elite")
 	else:
 		_maybe_drop_gear(enemy.x, enemy.y, "normal")
+	_proc_trigger("kill", enemy.x, enemy.y)
+	if buffs.has("chaos") and _rand() < 0.2:
+		_queue_proc(C.PROC_EFFECT_ORDER[_pick(C.PROC_EFFECT_ORDER.size())], enemy.x, enemy.y, 1.0)
+	_count_burst()
 
 
 ## 콤보 마일스톤 — XP 다발 지급 (웨이브판은 코인도 주지만 코인은 메타 진행이라 옮기지 않았다)
@@ -2050,7 +2509,7 @@ func kill_enemy(enemy: Enemy) -> void:
 	# 오버드라이브 충전 — 보스 +20, 정예 +5, 일반 +1
 	overdrive_charge = minf(100.0, overdrive_charge + (20.0 if enemy.is_boss else (5.0 if enemy.elite else 1.0)))
 	if has_synergy("vital_surge"):
-		player.hp = minf(player.hp + 3.0, player.max_hp)
+		_leech(3.0)
 	if has_synergy("pyromaniac") and enemy.burn_stacks > 0:
 		var pyro_range := 85.0 * _rb()
 		_chain_explosion(enemy.x, enemy.y, pyro_range, 28.0 * player.dmg_mult * maxi(enemy.burn_stacks, 1), 0.0, "")
@@ -2173,7 +2632,9 @@ func show_level_up() -> void:
 
 ## 즉시 효과가 무의미한 아이템 제외 (체력 가득일 때 치료킷)
 func usable_item_boxes() -> Array:
-	return R.ITEM_BOX_POOL.filter(func(item): return not (item["id"] == "medkit" and player.hp >= player.max_hp))
+	var full_hp := player.hp >= player.max_hp
+	var dmg_capped := dmgperm_taken >= C.ITEM_DMGPERM_CAP
+	return R.ITEM_BOX_POOL.filter(func(item): return not (item["id"] == "medkit" and full_hp) and not (item["id"] == "dmgperm" and dmg_capped))
 
 
 func show_item_box_choices() -> void:
@@ -2351,7 +2812,7 @@ func passive_choices() -> Array:
 		var lvl := passive_level(pv["id"])
 		var stack := ""
 		if lvl > 0:
-			stack = (" (Lv.%d/%d)" % [lvl, int(pv["max"])]) if pv["max"] != null else (" (Lv.%d · 무제한)" % lvl)
+			stack = (" (Lv.%d/%d)" % [lvl, C.passive_cap(pv)]) if C.passive_cap(pv) >= 0 else (" (Lv.%d · 무제한)" % lvl)
 		var combo := false
 		for evo in R.EVOLUTION_DEFS:
 			if evo["req"] == pv["id"] and player.weapons.has(evo["base"]):
@@ -2445,6 +2906,8 @@ func apply_powerup(def: Dictionary) -> void:
 
 func apply_item_box(item_id: String) -> void:
 	var p := player
+	if item_id == "dmgperm":
+		dmgperm_taken += 1    # Godot 판 상한 (C.ITEM_DMGPERM_CAP) — 효과 줄은 웹판과 같게 둔다
 	match item_id:
 		"medkit":
 			p.hp = minf(p.hp + p.max_hp * 0.5, p.max_hp)
@@ -2511,6 +2974,7 @@ func tick(dt: float, move: Vector2, dash_held: bool) -> void:
 		hit_stop -= dt
 		return
 	elapsed += dt
+	stage_t = C.stage_seconds(elapsed)
 	if elapsed >= survive_goal and not infinite_mode:
 		if not infinite_dialog_shown:
 			infinite_dialog_shown = true
@@ -2618,7 +3082,7 @@ func update(dt: float, move: Vector2, dash_held: bool) -> void:
 		player.invincible -= dt
 
 	# 골드 러시 — 4:30 에 1회
-	if not infinite_mode and not gold_rush_done and elapsed >= 270.0:
+	if not infinite_mode and not gold_rush_done and stage_t >= 270.0:
 		gold_rush_done = true
 		spawn_gold_rush()
 
@@ -2639,14 +3103,14 @@ func update(dt: float, move: Vector2, dash_held: bool) -> void:
 				_shake(0.4, 0.8)
 
 	# 웨이브 — 8분 이후 간격 단축
-	var m := elapsed / 60.0
+	var m := stage_t / 60.0
 	var dyn_wave_interval: float = maxf(1.8, R.WAVE_INTERVAL - (m - 8.0) * 0.12) if m > 8.0 else R.WAVE_INTERVAL
-	wave_timer += dt
+	wave_timer += dt * C.stage_rate(elapsed)
 	if wave_timer >= dyn_wave_interval:
 		wave_timer = 0.0
 		spawn_wave()
 
-	if not boss_active and elapsed >= next_boss_time:
+	if not boss_active and stage_t >= next_boss_time:
 		next_boss_time += float(difficulty["bossInterval"])
 		spawn_boss()
 	if boss_warning > 0.0:
@@ -2729,7 +3193,9 @@ func update(dt: float, move: Vector2, dash_held: bool) -> void:
 		overdrive_active = maxf(0.0, overdrive_active - dt)
 	if overdrive_flash > 0.0:
 		overdrive_flash = maxf(0.0, overdrive_flash - dt)
-	var regen := player.regen_rate + _gear("regen")
+	leech_budget = minf(leech_budget + player.max_hp * C.LEECH_CAP_PER_SEC * dt, player.max_hp * C.LEECH_CAP_PER_SEC)
+	var calm := C.CALM_REGEN if elapsed - last_hurt_t >= C.CALM_DELAY else 0.0
+	var regen := minf(player.regen_rate + _gear("regen") + C.PLAYER_BASE_REGEN + calm, C.REGEN_CAP)
 	if regen > 0.0 and player.hp < player.max_hp:
 		player.hp = minf(player.hp + player.max_hp * regen * dt, player.max_hp)
 
@@ -2752,6 +3218,8 @@ func update(dt: float, move: Vector2, dash_held: bool) -> void:
 		return
 	if not _update_godot_hazards(dt):
 		return
+	_update_procs(dt)
+	_update_shrines(dt)
 
 	update_low_hp_feedback(dt)
 
@@ -2797,7 +3265,7 @@ func update(dt: float, move: Vector2, dash_held: bool) -> void:
 			g["y"] += sin(ang) * speed * dt
 			g["attracting"] = true
 		if _dist(g["x"], g["y"], player.x, player.y) < maxf(_xp_range(), 20.0):
-			gain_xp(float(g["val"]) * (1.0 + _gear("xp")))
+			gain_xp(float(g["val"]) * (1.0 + _gear("xp")) * (2.0 if buffs.has("greed") else 1.0))
 			gems_taken += 1
 			var v: float = g["val"]
 			var gc := "#ffd700" if v >= 80 else ("#f39c12" if v >= 30 else ("#f1c40f" if v >= 10 else "#ffe082"))
@@ -2871,6 +3339,7 @@ func _update_dash(dt: float, dash_held: bool) -> void:
 	hit_stats["damage_mult"] = float(stats["damage_mult"]) * chain_mult
 	var hit_count := perform_dash_slash(sx, sy, ex, ey, hit_stats)
 	_emit("dash", {"x": sx, "y": sy, "ex": ex, "ey": ey, "hits": hit_count, "chain": is_chain})
+	_proc_trigger("dash", ex, ey)
 	if has_legendary("shadow"):
 		player.invincible = maxf(player.invincible, 1.0)
 	# 잿불 군주 4세트: 대쉬 경로에 3초 불길
@@ -3136,7 +3605,7 @@ func _update_enemies(dt: float) -> bool:
 					e.summon_cd = 6.0
 					for k in range(3):
 						var sa := _rand() * TAU
-						var mhp := 30.0 * (1.0 + elapsed / 120.0) * float(difficulty["enemyHpMult"])
+						var mhp := 30.0 * (1.0 + stage_t / 120.0) * float(difficulty["enemyHpMult"])
 						_spawn_minion("bat" if k % 2 == 0 else "ghoul", e.x + cos(sa) * 40.0, e.y + sin(sa) * 40.0, 0, mhp, 9.0, 95.0, 3)
 					_ring(e.x, e.y, 6, 60, 0.35, "#9b59b6")
 			if e.affixes.has("blink"):
@@ -3300,7 +3769,7 @@ func _update_enemies(dt: float) -> bool:
 		if not e.goblin and player.invincible <= 0.0 and d < e.size + 12.0:
 			# 접촉 피해: 이산 타격 + 0.15초 무적. 시간 배율(최대 3배)로 후반 밀도가 위협이 되도록
 			var contact_base: float = 55.0 if e.is_boss else [8.0, 18.0, 38.0][mini(e.tier, 2)]
-			var time_scale := minf(1.0 + elapsed / 480.0, 3.0)
+			var time_scale := C.contact_scale(stage_t)
 			var contact_dmg := contact_base * 0.10 * time_scale
 			var aux_shield_mult := 0.70 if player.aux_shield_time > 0.0 else 1.0
 			var dmg_in := contact_dmg * (0.70 if has_synergy("iron_fortress") else aux_shield_mult)
@@ -3309,6 +3778,7 @@ func _update_enemies(dt: float) -> bool:
 			if e.affixes.has("vampiric"):
 				e.hp = minf(e.hp + e.max_hp * 0.2, e.max_hp)
 			_shake(0.15, 0.35)
+			hurt_src = "boss" if e.is_boss else "contact"
 			if _hurt_player(dmg_in, 0.15, true):
 				return false
 	return true
@@ -3321,6 +3791,7 @@ func _update_enemy_projectiles(dt: float) -> bool:
 		ep["y"] += ep["vy"] * dt
 		if player.invincible <= 0.0 and _dist(ep["x"], ep["y"], player.x, player.y) < ep["r"] + 12.0:
 			_shake(0.22, 0.45)
+			hurt_src = ep.get("src", "arrow")
 			if _hurt_player(ep["dmg"] * (0.70 if has_synergy("iron_fortress") else 1.0), 0.1, false):
 				enemy_projectiles = left
 				return false

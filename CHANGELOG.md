@@ -2,6 +2,33 @@
 
 ## [Unreleased] - Vampire Survivors director-loop readiness
 
+### Added — Godot vampire: gear growth, equipment window, procs, 30-minute run (`godot/vampire/`)
+- **Gear grows by farming**: a picked-up item that is worse than the equipped one of its slot is salvaged into
+  that equipped item's EXP. Items level up to Lv20 (+8% affix values per level) and awaken at Lv5/10/15 with a
+  random proc. Better, rarer, set and legendary pieces go to an 8-slot bag instead.
+- **Equipment window** (I / Tab / 🎒, pauses): equipped slots with level and EXP, the bag, item details with
+  comparison, equip (the removed item keeps its level and goes back to the bag), salvage (refunds 60% of the
+  EXP invested), and "salvage everything weaker".
+- **Procs**: 6 triggers (kill, crit, hurt, dash, every 7 s, massacre) × 8 effects (fire nova, frost burst,
+  meteor shower, chain lightning, black hole, blade storm, thunder, frenzy). Damage is a multiple of the current
+  trash HP up to the 20-minute mark, then grows only with gear level. Procs queue with short delays so kills
+  chain into more procs, bounded by a per-frame budget and per-proc cooldowns.
+- **Shrines** (fury, frenzy, chaos, greed, storm, doom) every 75–115 s, and **massacre** feedback when kills
+  chain inside 0.35 s windows (12/30/60/120): shake, hit-stop, shockwaves, aberration, a final kill count.
+- **30-minute clear on every map**. Enemy growth runs on a stage clock (`C.stage_seconds`): the web 10-minute
+  curve at half speed for the first 20 minutes, waves and bosses included, then faster. Enemy ranged damage
+  starts gentler (`C.enemy_dmg_curve`).
+- `tests/balance_sim.gd`: a headless bot (dodges enemies, telegraphs, charge lines and arrow fans; hunts archers;
+  picks up loot when safe; dashes when swarmed; takes sustain when hurt; manages the bag every 20 s) used to tune
+  the survival curve. Each run prints one `RUN {json}` line with the death time, build, per-minute enemy count and
+  the damage sources of its last 8 seconds.
+- **Balance for 30 minutes** (all Godot-only, measured with the bot; the README has the table): unlimited web
+  multipliers capped (`dmg_up` ×1.18 at 6 stacks, the ×1.2 damage item box at 5 picks, regen and speed passives at
+  3, total regen 4%/s, on-hit healing 4% max HP/s); enemies at the 650 cap are recycled instead of freezing the
+  crowd; enemy speed ramps after 20 minutes; at most 30 living archers; gentler early enemy damage (bosses ×0.7,
+  tier-2 archer fans ×0.75), +50 starting HP and 0.8%/s base regen; procs follow trash HP only up to 20 minutes;
+  infinite mode after the clear runs the stage clock at 2×.
+
 ### Added — Godot vampire: hack-and-slash rework (`godot/vampire/`)
 - The Godot game now grows past the web version. Shared tables still have to match `game.js`; intentional
   differences are allowed only when listed with a reason in the port test (`GODOT_OVERRIDES`/`GODOT_ONLY`).

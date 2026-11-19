@@ -92,6 +92,12 @@ var level_list: VBoxContainer
 var reroll_btn: Button
 var pause_root: Control
 var pause_info: VBoxContainer
+var inv_equip_row: HBoxContainer
+var inv_bag_grid: GridContainer
+var inv_bag_title: Label
+var inv_detail: VBoxContainer
+var inv_sel := {"where": "", "key": ""}   # 장비창 선택 — where: equip(key=부위) / bag(key=uid)
+var bag_btn: Button
 var victory_root: Control
 var pause_btn: Button
 var weapon_bar: HFlowContainer
@@ -285,6 +291,14 @@ func _build_ui() -> void:
 	pause_btn.offset_top = 118.0
 	pause_btn.offset_bottom = 160.0
 	root.add_child(pause_btn)
+	bag_btn = _button("🎒", _open_inventory)
+	bag_btn.anchor_left = 1.0
+	bag_btn.anchor_right = 1.0
+	bag_btn.offset_left = -56.0
+	bag_btn.offset_right = -8.0
+	bag_btn.offset_top = 166.0
+	bag_btn.offset_bottom = 208.0
+	root.add_child(bag_btn)
 
 	# 시작/게임오버
 	var m := _modal(root, 470.0)
@@ -344,16 +358,41 @@ func _build_ui() -> void:
 	reroll_btn = _button("", _on_reroll)
 	box.add_child(reroll_btn)
 
-	# 일시정지 — 장비·세트 현황
-	m = _modal(root, 470.0)
+	# 일시정지 = 장비창 — 낀 장비 4칸, 가방, 고른 장비 설명·장착·분해, 세트 현황
+	m = _modal(root, 510.0)
 	pause_root = m["root"]
 	box = m["box"]
-	_label(box, "⏸ 일시정지", 26)
+	box.add_theme_constant_override("separation", 8)
+	_label(box, "🎒 장비창 (일시정지)", 22)
+	inv_equip_row = HBoxContainer.new()
+	inv_equip_row.add_theme_constant_override("separation", 6)
+	box.add_child(inv_equip_row)
+	inv_bag_title = _label(box, "", 14)
+	inv_bag_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	inv_bag_grid = GridContainer.new()
+	inv_bag_grid.columns = 4
+	inv_bag_grid.add_theme_constant_override("h_separation", 6)
+	inv_bag_grid.add_theme_constant_override("v_separation", 6)
+	box.add_child(inv_bag_grid)
+	var detail_panel := PanelContainer.new()
+	var dsb := _box_style(Color(0.03, 0.04, 0.08, 1.0), Color("#3a3358"))
+	dsb.set_content_margin_all(10)
+	detail_panel.add_theme_stylebox_override("panel", dsb)
+	detail_panel.custom_minimum_size = Vector2(0, 230)
+	box.add_child(detail_panel)
+	inv_detail = VBoxContainer.new()
+	inv_detail.add_theme_constant_override("separation", 3)
+	detail_panel.add_child(inv_detail)
 	pause_info = VBoxContainer.new()
-	pause_info.add_theme_constant_override("separation", 4)
+	pause_info.add_theme_constant_override("separation", 2)
 	box.add_child(pause_info)
-	box.add_child(_button("▶ 계속하기", _on_pause_pressed))
-	box.add_child(_button("🏳 포기하고 결과 보기", _on_give_up))
+	var prow := HBoxContainer.new()
+	prow.add_theme_constant_override("separation", 6)
+	box.add_child(prow)
+	for b in [_button("▶ 계속하기", _on_pause_pressed), _button("⚗ 약한 장비 모두 분해", _on_salvage_weaker), _button("🏳 포기", _on_give_up)]:
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.custom_minimum_size = Vector2(0, 46)
+		prow.add_child(b)
 
 	# 목표 시간 생존 → 무한 웨이브?
 	m = _modal(root, 420.0)
@@ -449,10 +488,10 @@ func _refresh_start_options() -> void:
 	char_desc.text = "%s\n시작 무기: %s" % [ch["desc"], ", ".join(starts)]
 	var df: Dictionary = R.DIFFICULTY_DEFS[sel_diff]
 	diff_btn.text = "난이도: %s ▶" % df["name"]
-	diff_desc.text = df["desc"]
+	diff_desc.text = String(df["desc"]).replace("10 minute", "30 minute")    # 웹판 설명 — Godot 판은 30분
 	var mp: Dictionary = R.MAP_DEFS[sel_map]
 	map_btn.text = "맵: %s ▶" % mp["name"]
-	map_desc.text = "%s (%s)" % [mp["desc"], R.fmt_time(float(mp["durationSeconds"]))]
+	map_desc.text = "%s — %s 생존이 클리어" % [String(mp["desc"]).replace("10 minute", "30 minute"), R.fmt_time(C.RUN_GOAL)]
 	shards_label.text = "💠 영혼석 %d   ·   최고 %s / %d킬 / Lv.%d" % [int(meta["shards"]), R.fmt_time(float(meta["best_time"])), int(meta["best_kills"]), int(meta["best_level"])]
 
 
@@ -551,8 +590,70 @@ func _on_pause_pressed() -> void:
 		return
 	run.set_paused(run.state == "playing")
 	if run.state == "paused":
+		inv_sel = {"where": "", "key": ""}
 		_fill_pause_info()
+	else:
+		run.clear_new_flags()
 	_sync_ui()
+
+
+## 🎒 버튼 / I · Tab — 장비창을 연다 (새 장비가 있으면 그것을 먼저 고른다)
+func _open_inventory() -> void:
+	if run == null or run.state != "playing":
+		return
+	_on_pause_pressed()
+	for it in run.bag:
+		if it["new"]:
+			inv_sel = {"where": "bag", "key": int(it["uid"])}
+			break
+	_fill_pause_info()
+
+
+func _on_salvage_weaker() -> void:
+	if run == null or run.state != "paused":
+		return
+	var n: int = run.salvage_weaker()
+	sfx.play("gem", 0.7, -4.0 if n > 0 else -14.0)
+	if inv_sel["where"] == "bag" and _sel_item() == null:
+		inv_sel = {"where": "", "key": ""}
+	_fill_pause_info()
+
+
+func _sel_item() -> Variant:
+	if inv_sel["where"] == "equip":
+		return run.player.equip.get(inv_sel["key"])
+	if inv_sel["where"] == "bag":
+		for it in run.bag:
+			if int(it["uid"]) == int(inv_sel["key"]):
+				return it
+	return null
+
+
+func _inv_select(where: String, key) -> void:
+	inv_sel = {"where": where, "key": key}
+	sfx.play("gem", 1.4, -12.0)
+	_fill_pause_info()
+
+
+func _inv_equip() -> void:
+	var it = _sel_item()
+	if it == null or inv_sel["where"] != "bag":
+		return
+	run.equip_from_bag(run.bag.find(it))
+	inv_sel = {"where": "equip", "key": String(it["slot"])}
+	_consume_events()
+	_fill_pause_info()
+
+
+func _inv_salvage() -> void:
+	var it = _sel_item()
+	if it == null or inv_sel["where"] != "bag":
+		return
+	var slot := String(it["slot"])
+	run.salvage_from_bag(run.bag.find(it))
+	inv_sel = {"where": "equip", "key": slot}
+	_consume_events()
+	_fill_pause_info()
 
 
 func _on_give_up() -> void:
@@ -592,36 +693,130 @@ func _on_weapon_slot(id: String) -> void:
 
 
 func _fill_pause_info() -> void:
-	for c in pause_info.get_children():
-		c.queue_free()
-	var head := _label(pause_info, "🛡 장비", 18)
-	head.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	for n in [inv_equip_row, inv_bag_grid, inv_detail, pause_info]:
+		for c in n.get_children():
+			c.queue_free()
+	# 낀 장비 4칸
 	for slot in C.GEAR_SLOTS:
 		var it = run.player.equip[slot]
-		if it == null:
-			var l := _label(pause_info, "%s — 비어 있음" % C.SLOT_NAMES[slot], 14)
-			l.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-			l.modulate = Color(1, 1, 1, 0.5)
-			continue
-		var name_l := _label(pause_info, "%s — %s" % [C.SLOT_NAMES[slot], it["name"]], 15)
-		name_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-		name_l.modulate = Color(String(C.RARITIES[it["rarity"]]["color"]))
-		var lines := PackedStringArray()
-		for a in it["affixes"]:
-			lines.append(C.affix_text(a))
-		if it["legendary"] != "":
-			lines.append("★ " + String(C.LEGENDARIES[it["legendary"]]["desc"]))
-		var d := _label(pause_info, "   " + " · ".join(lines), 12)
-		d.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-		d.modulate = Color(1, 1, 1, 0.8)
+		var cell := _inv_cell(it, slot, inv_sel["where"] == "equip" and inv_sel["key"] == slot, false)
+		cell.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		cell.gui_input.connect(_on_inv_cell_input.bind("equip", slot))
+		inv_equip_row.add_child(cell)
+	# 가방
+	inv_bag_title.text = "🎒 가방 %d/%d  — 줍는 장비 중 더 좋은 것·세트·전설만 여기 온다. 나머지는 낀 장비의 경험치로 분해" % [run.bag.size(), C.BAG_SIZE]
+	for i in range(C.BAG_SIZE):
+		var it = run.bag[i] if i < run.bag.size() else null
+		var key = int(it["uid"]) if it != null else -1
+		var cell := _inv_cell(it, "", it != null and inv_sel["where"] == "bag" and int(inv_sel["key"]) == key, true)
+		cell.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		if it != null:
+			cell.gui_input.connect(_on_inv_cell_input.bind("bag", key))
+		inv_bag_grid.add_child(cell)
+	_fill_inv_detail()
+	# 세트 현황
 	for sid in C.SET_ORDER:
 		var n: int = run.set_count(sid)
 		if n == 0:
 			continue
 		var s: Dictionary = C.SETS[sid]
-		var sl := _label(pause_info, "%s %s (%d/4)\n  (2) %s%s\n  (4) %s%s" % [s["icon"], s["name"], n, s["bonus2"], " ✔" if n >= 2 else "", s["bonus4"], " ✔" if n >= 4 else ""], 12)
+		var sl := _label(pause_info, "%s %s (%d/4)  (2) %s%s  (4) %s%s" % [s["icon"], s["name"], n, s["bonus2"], " ✔" if n >= 2 else "", s["bonus4"], " ✔" if n >= 4 else ""], 11)
 		sl.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		sl.modulate = Color(String(s["color"]))
+
+
+## 장비 칸 하나 — 희귀도 테두리, 부위 그림, Lv, 경험치 막대, NEW·▲ 표시
+func _inv_cell(it, slot: String, selected: bool, in_bag: bool) -> PanelContainer:
+	var rc := Color(String(C.RARITIES[it["rarity"]]["color"])) if it != null else Color(1, 1, 1, 0.18)
+	var cell := PanelContainer.new()
+	cell.mouse_filter = Control.MOUSE_FILTER_STOP
+	var sb := _box_style(Color(0.12, 0.1, 0.2, 1.0) if selected else Color(0.06, 0.07, 0.12, 1.0), Color.WHITE if selected else rc)
+	sb.set_content_margin_all(5)
+	sb.set_border_width_all(3 if selected else 2)
+	sb.shadow_size = 0
+	cell.add_theme_stylebox_override("panel", sb)
+	cell.custom_minimum_size = Vector2(0, 74 if not in_bag else 58)
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 0)
+	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cell.add_child(v)
+	if it == null:
+		var e := _label(v, (C.SLOT_NAMES[slot] + "\n비어 있음") if slot != "" else "·", 11)
+		e.modulate = Color(1, 1, 1, 0.35)
+		e.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		return cell
+	var icon := TextureRect.new()
+	icon.texture = tex.get("item_" + String(it["slot"]))
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icon.custom_minimum_size = Vector2(0, 26 if in_bag else 30)
+	icon.modulate = rc
+	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	v.add_child(icon)
+	var tag := ""
+	if in_bag:
+		if it["new"]:
+			tag = "NEW "
+		if run.is_upgrade(it):
+			tag += "▲"
+	var l := _label(v, "%sLv%d %s" % [tag, int(it["lv"]), "✦".repeat(it["procs"].size())], 11)
+	l.modulate = rc.lerp(Color.WHITE, 0.3)
+	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if not in_bag:
+		var bar := ProgressBar.new()
+		bar.show_percentage = false
+		bar.custom_minimum_size = Vector2(0, 5)
+		bar.max_value = float(C.gear_exp_needed(int(it["lv"])))
+		bar.value = float(it["exp"]) if int(it["lv"]) < C.GEAR_MAX_LEVEL else bar.max_value
+		bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var fill := StyleBoxFlat.new()
+		fill.bg_color = Color("#a78bfa")
+		bar.add_theme_stylebox_override("fill", fill)
+		v.add_child(bar)
+	return cell
+
+
+func _on_inv_cell_input(event: InputEvent, where: String, key) -> void:
+	var mb := event as InputEventMouseButton
+	if mb != null and mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT:
+		_inv_select(where, key)
+
+
+## 고른 장비 설명 — 옵션(레벨 반영)·발동 옵션·전설·세트, 낀 장비와 비교, 장착·분해 버튼
+func _fill_inv_detail() -> void:
+	var it = _sel_item()
+	if it == null:
+		var hint := _label(inv_detail, "칸을 눌러 장비를 본다.\n같은 부위 장비를 주우면 낀 장비가 경험치를 먹고 자란다 — Lv %s 에서 각성(무작위 발동 옵션)." % "·".join(PackedStringArray(C.AWAKEN_LEVELS.map(func(x): return str(x)))), 13)
+		hint.modulate = Color(1, 1, 1, 0.6)
+		return
+	var rc := Color(String(C.RARITIES[it["rarity"]]["color"]))
+	var maxed := int(it["lv"]) >= C.GEAR_MAX_LEVEL
+	var head := _label(inv_detail, "%s  (%s · %s)" % [it["name"], C.RARITIES[it["rarity"]]["name"], C.SLOT_NAMES[it["slot"]]], 16)
+	head.modulate = rc
+	var lvl := _label(inv_detail, "Lv %d%s   · 옵션 ×%.2f   · 장착 점수 %d" % [int(it["lv"]),
+		" (최대)" if maxed else "  경험치 %d/%d" % [int(it["exp"]), C.gear_exp_needed(int(it["lv"]))],
+		C.gear_level_mult(int(it["lv"])), roundi(C.item_power(it))], 12)
+	lvl.modulate = Color("#c3b8f5")
+	for line in C.item_lines(it):
+		var l := _label(inv_detail, String(line), 12)
+		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		l.modulate = Color("#ffd56b") if String(line).begins_with("✦") or String(line).begins_with("★") else Color(1, 1, 1, 0.9)
+	if inv_sel["where"] != "bag":
+		return
+	var cur = run.player.equip[it["slot"]]
+	if cur != null:
+		var cmp := _label(inv_detail, "지금 낀 것: %s Lv%d (점수 %d)" % [cur["name"], int(cur["lv"]), roundi(C.item_power(cur))], 12)
+		cmp.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		cmp.modulate = Color(1, 1, 1, 0.55)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 6)
+	inv_detail.add_child(row)
+	var eb := _button("▲ 장착 (빼낸 것은 가방으로)", _inv_equip)
+	var sb := _button("⚗ 분해 → %s +%d 경험치" % [C.SLOT_NAMES[it["slot"]], roundi(C.salvage_exp(it))] if cur != null else "⚗ 분해", _inv_salvage)
+	for b in [eb, sb]:
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.custom_minimum_size = Vector2(0, 42)
+		row.add_child(b)
 
 
 # ── 패널 표시 상태를 규칙 상태에 맞춘다 ─────────────────────────────
@@ -637,6 +832,9 @@ func _sync_ui() -> void:
 	pause_root.visible = st == "paused"
 	victory_root.visible = st == "victory_prompt"
 	pause_btn.visible = st == "playing"
+	bag_btn.visible = st == "playing"
+	if bag_btn.visible:
+		bag_btn.text = "🎒%s" % ("!" if run.bag_has_new() else "")
 	weapon_bar.visible = run != null and not ended
 	if level_root.visible and not is_same(_shown_choices, run.choices):
 		_rebuild_choices()
@@ -800,6 +998,11 @@ func _on_key(code: Key) -> void:
 	match code:
 		KEY_P, KEY_ESCAPE:
 			_on_pause_pressed()
+		KEY_I, KEY_TAB:
+			if run.state == "playing":
+				_open_inventory()
+			elif run.state == "paused":
+				_on_pause_pressed()
 		KEY_Q:
 			run.activate_overdrive()
 		KEY_1, KEY_2, KEY_3:
@@ -996,6 +1199,40 @@ func _consume_events() -> void:
 				sfx.play("goblin", 1.6, -10.0)
 			"blink":
 				sfx.play("freeze", 1.3, -10.0)
+			"stash":
+				sfx.play("loot", 0.9)
+			"gear_level":
+				sfx.play("levelup", 1.35, -4.0)
+				_burst_bits(run.player.x, run.player.y, 14, _hdr(Color("#a78bfa"), 1.6), 220.0, 2.5)
+			"awaken":
+				sfx.play("evolve", 1.1)
+				aberr = 12.0
+				punch = maxf(punch, 0.7)
+				_wave(run.player.x, run.player.y, 340.0, 22.0, 0.7)
+			"proc":
+				if ev["effect"] == "frenzy":
+					sfx.play("overdrive", 1.4, -8.0)
+			"freeze":
+				sfx.play("freeze", 1.0, -3.0)
+				_wave(ev["x"], ev["y"], float(ev["r"]) * 1.3, 16.0, 0.5)
+			"vortex":
+				sfx.play("boss", 1.6, -8.0)
+				_wave(ev["x"], ev["y"], float(ev["r"]), -14.0, 0.9)
+			"massacre":
+				var tier := int(ev["tier"])
+				sfx.play("explosion", 0.55 - tier * 0.05, 0.0)
+				sfx.play("evolve", 1.5 + tier * 0.15, -6.0)
+				punch = 1.0
+				aberr = maxf(aberr, 10.0 + tier * 4.0)
+				flash = maxf(flash, 0.12 + tier * 0.06)
+				_wave(ev["x"], ev["y"], 380.0 + tier * 120.0, 24.0 + tier * 6.0, 0.7)
+			"shrine_spawn":
+				sfx.play("chest", 0.8, -4.0)
+			"shrine":
+				sfx.play("overdrive", 0.9)
+				punch = 1.0
+				aberr = 12.0
+				_wave(ev["x"], ev["y"], 360.0, 24.0, 0.7)
 	if hits > 0:
 		sfx.play("hit", randf_range(0.9, 1.15), -12.0 + minf(hits, 8) * 0.6)
 
@@ -1225,6 +1462,16 @@ func _draw_bodies(ci: CanvasItem, view: Rect2) -> void:
 		var p := Vector2(pu["x"], pu["y"])
 		ci.draw_circle(p, (12.0 + sin(pu["pulse_t"] * 6.0) * 1.5) * inv, _a(pc, 0.9))
 		_ring_arc(ci, p, 14.0 * inv, Color(1, 1, 1, 0.7), 2.0)
+	for sh in run.shrines:
+		var sc := Color(String(C.SHRINES[sh["type"]]["color"]))
+		var p := Vector2(sh["x"], sh["y"])
+		_shadow(ci, p + Vector2(0, 14), 20.0)
+		var pts := PackedVector2Array([p + Vector2(-16, 14), p + Vector2(16, 14), p + Vector2(11, -26), p + Vector2(-11, -26)])
+		ci.draw_colored_polygon(pts, Color(0.16, 0.15, 0.22))
+		ci.draw_polyline(pts + PackedVector2Array([pts[0]]), sc, 2.0)
+		_text_c(ci, p + Vector2(0, -2 + sin(sh["pulse_t"] * 3.0) * 2.0), String(C.SHRINES[sh["type"]]["icon"]), 18, Color.WHITE)
+		if float(sh["life"]) < 8.0:
+			_text_c(ci, p + Vector2(0, 32), "%ds" % ceili(sh["life"]), 11, sc, 3)
 	# 적 — 화면 안의 것만, 아래쪽이 앞에 오도록 정렬
 	var vis: Array = []
 	for e in run.enemies:
@@ -1352,6 +1599,25 @@ func _draw_fx(ci: CanvasItem, view: Rect2) -> void:
 	if run.set_count("frost") >= 4:
 		_ring_arc(ci, ppos, 140.0 * pl.range_bonus, _hdr(Color("#a8e6ff"), 1.4, 0.35), 2.0)
 		_glow(ci, ppos, 150.0 * pl.range_bonus, Color(0.3, 0.6, 1.0, 0.08))
+	# 블랙홀 — 빨려 들어가는 소용돌이
+	for v in run.vortices:
+		var vp := Vector2(v["x"], v["y"])
+		var k: float = 1.0 - float(v["t"]) / float(v["max_t"])
+		var r: float = v["r"]
+		_glow(ci, vp, r * (1.1 - k * 0.5), Color(0.35, 0.2, 0.9, 0.25 + 0.2 * k))
+		for j in range(3):
+			var rr := r * fposmod(1.0 - k * 1.5 - j / 3.0, 1.0)
+			_ring_arc(ci, vp, maxf(rr, 4.0), _hdr(Color("#a29bfe"), 1.8, 0.7), 3.0)
+		for j in range(6):
+			var a := anim_t * 9.0 + j * TAU / 6.0
+			ci.draw_arc(vp, r * 0.35 * (1.0 - k * 0.6), a, a + 1.2, 10, _hdr(Color("#d7c4ff"), 2.2, 0.8), 3.0)
+		ci.draw_circle(vp, 10.0 + 14.0 * k, Color(0, 0, 0, 0.9))
+	# 제단 빛
+	for sh in run.shrines:
+		var sc := Color(String(C.SHRINES[sh["type"]]["color"]))
+		var fade := minf(1.0, float(sh["life"]) / 4.0)
+		_glow(ci, Vector2(sh["x"], sh["y"]), 46.0 + sin(sh["pulse_t"] * 4.0) * 6.0, _hdr(sc, 1.5, 0.55 * fade))
+		ci.draw_texture_rect(soft_tex, Rect2(sh["x"] - 12.0, sh["y"] - 190.0, 24.0, 200.0), false, _hdr(sc, 1.8, 0.4 * fade))
 	# 정예 오라
 	for e in run.enemies:
 		if not e.elite and not e.is_boss and not e.goblin:
@@ -1556,6 +1822,11 @@ func _draw_hud(ci: CanvasItem) -> void:
 			ci.draw_rect(r, rc, false, 2.0)
 			if not _spr(ci, "item_" + slot, r.get_center(), 26.0, 0.0, false, rc):
 				ci.draw_circle(r.get_center(), 8.0, rc)
+			var maxed: bool = int(it["lv"]) >= C.GEAR_MAX_LEVEL
+			var ek: float = 1.0 if maxed else clampf(float(it["exp"]) / C.gear_exp_needed(int(it["lv"])), 0.0, 1.0)
+			ci.draw_rect(Rect2(r.position.x, r.end.y + 1.0, r.size.x, 3.0), Color(0, 0, 0, 0.6))
+			ci.draw_rect(Rect2(r.position.x, r.end.y + 1.0, r.size.x * ek, 3.0), Color("#ffd56b") if maxed else Color("#a78bfa"))
+			_text(ci, r.position + Vector2(1, 28), str(int(it["lv"])), 11, Color.WHITE, 3)
 		else:
 			ci.draw_rect(r, Color(1, 1, 1, 0.15), false, 1.0)
 		sx += 34.0
@@ -1572,6 +1843,14 @@ func _draw_hud(ci: CanvasItem) -> void:
 		var cc := Color("#e74c3c") if run.combo_count >= 50 else (Color("#f39c12") if run.combo_count >= 25 else Color("#f1c40f"))
 		_text(ci, Vector2(vp.x - 172, 100), "%d COMBO" % run.combo_count, cs, cc, 5, HORIZONTAL_ALIGNMENT_RIGHT, 160)
 		ci.draw_rect(Rect2(vp.x - 112, 106, 100.0 * clampf(run.combo_timer / 1.5, 0.0, 1.0), 3), cc)
+	# 제단·광란 버프
+	var bx_ := 12.0
+	for bk in run.buffs:
+		var bdef: Dictionary = C.SHRINES.get(bk, C.PROC_EFFECTS["frenzy"] if bk == "frenzy_proc" else {})
+		if bdef.is_empty():
+			continue
+		_text(ci, Vector2(bx_, 124), "%s%d" % [bdef["icon"], ceili(float(run.buffs[bk]))], 14, Color(String(bdef["color"])), 3)
+		bx_ += 46.0
 	if run.blood_moon_active > 0.0:
 		_text_c(ci, Vector2(vp.x / 2.0, 132), "🌑 혈월 %ds — 적 대폭 강화" % ceili(run.blood_moon_active), 15, Color("#ff6b6b"), 3)
 	# 보스 체력바

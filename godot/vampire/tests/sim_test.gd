@@ -26,6 +26,7 @@ func _initialize() -> void:
 	_check_loot_and_sets()
 	_check_monsters_and_affixes()
 	_check_new_weapons_and_drops()
+	_check_procs_and_shrines()
 	_check_bot_runs()
 	print("\n결과: %d/%d 통과" % [_pass, _pass + _fail])
 	quit(1 if _fail > 0 else 0)
@@ -211,7 +212,7 @@ func _check_victory_and_death() -> void:
 	_drive(run, 3.0)
 	_ok(run.infinite_mode and run.infinite_elapsed > 2.0 and run.state == "playing", "무한 웨이브로 이어진다")
 	run = Run.new("knight", "easy", "snow", 17)
-	_ok(run.get_survive_goal() == 720.0, "눈 맵은 12분")
+	_ok(run.get_survive_goal() == 1800.0 and Run.new("knight", "normal", "meadow", 1).get_survive_goal() == 1800.0, "Godot 판은 맵과 상관없이 30분 생존이 클리어")
 	run.elapsed = run.get_survive_goal()
 	run.tick(DT, Vector2.ZERO, false)
 	run.resolve_victory(false)
@@ -256,7 +257,7 @@ func _check_bot_runs() -> void:
 			var lv := int(p.weapon_levels.get(w, 0))
 			if lv < 1 or lv > R.MAX_WEAPON_LEVEL:
 				bad.append("%s Lv%d" % [w, lv])
-		if run.elapsed > float(R.find_def(R.DIFFICULTY_DEFS, c[1])["bossInterval"]) + 1.0 and run.next_boss_time <= run.elapsed - 1.0 and not run.boss_active:
+		if run.stage_t > float(R.find_def(R.DIFFICULTY_DEFS, c[1])["bossInterval"]) + 1.0 and run.next_boss_time <= run.stage_t - 1.0 and not run.boss_active:
 			bad.append("보스가 안 나옴")
 		_ok(bad.is_empty(), "%s / %s / %s — %s, Lv%d, 처치 %d, %s" % [c[0], c[1], c[2], R.fmt_time(run.elapsed), p.level, run.kills, run.state], ", ".join(PackedStringArray(bad)))
 
@@ -264,6 +265,7 @@ func _check_bot_runs() -> void:
 ## 장비를 직접 만들어 쥐여 준다 (드롭 운에 기대지 않는다)
 func _give(run, slot: String, rarity: String, set_id: String = "", legendary: String = "") -> Dictionary:
 	var it: Dictionary = C.roll_item(run.rng, slot, rarity, 5)
+	it["procs"] = []    # 전설에 붙는 발동 옵션이 세트·전설 검사를 흔들지 않게
 	if set_id != "":
 		it["set"] = set_id
 		it["rarity"] = "set"
@@ -295,21 +297,8 @@ func _check_loot_and_sets() -> void:
 		minr[C.roll_rarity(rng, "rare", 3.0)] = true
 	_ok(not minr.has("common") and not minr.has("magic"), "보스 드롭(최소 희귀)은 일반·마법이 안 나온다", str(minr.keys()))
 
+	_check_gear_growth()
 	var run = Run.new("knight", "normal", "meadow", 31)
-	var hp0: float = run.player.max_hp
-	var good := {"slot": "helm", "rarity": "rare", "name": "t", "set": "", "legendary": "", "ilvl": 3,
-		"affixes": [{"stat": "max_hp", "val": 30.0}, {"stat": "dmg", "val": 0.2}]}
-	run.pick_up_gear(good)
-	_ok(run.player.equip["helm"] == good and is_equal_approx(run.player.max_hp, hp0 + 30.0), "빈 칸 장비는 장착, 최대 체력 옵션이 바로 반영")
-	var lv0: int = run.player.level
-	var xp0: float = run.player.xp
-	var junk := {"slot": "helm", "rarity": "common", "name": "j", "set": "", "legendary": "", "ilvl": 1, "affixes": [{"stat": "luck", "val": 0.01}]}
-	run.pick_up_gear(junk)
-	_ok(run.player.equip["helm"] == good and (run.player.xp > xp0 or run.player.level > lv0), "더 나쁜 장비는 분해해서 경험치로")
-	run.player.equip["helm"] = null
-	run._refresh_gear()
-	_ok(is_equal_approx(run.player.max_hp, hp0), "장비를 빼면 최대 체력도 돌아온다")
-
 	for slot in C.GEAR_SLOTS:
 		_give(run, slot, "set", "ember")
 	_ok(run.set_count("ember") == 4, "잿불 군주 4부위 → 세트 4")
@@ -365,7 +354,7 @@ func _check_loot_and_sets() -> void:
 	_ok(is_equal_approx(run._dmg_bonus(), base_bonus * 1.2), "광전사의 투구: 콤보 40 → 피해 +20%")
 
 	var meta_run = Run.new("knight", "normal", "meadow", 36, {"might": 2, "vitality": 3, "fortune": 1})
-	_ok(is_equal_approx(meta_run._gear("dmg"), 0.10) and is_equal_approx(meta_run.player.max_hp, 130.0) and meta_run._luck() >= 1.15,
+	_ok(is_equal_approx(meta_run._gear("dmg"), 0.10) and is_equal_approx(meta_run.player.max_hp, R.BASE_HP + C.PLAYER_BONUS_HP + 30.0) and meta_run._luck() >= 1.15,
 		"영혼석 강화: 힘 2 → 피해 +10%, 활력 3 → 최대 체력 +30, 행운 1 → +15%")
 	_ok(C.shards_earned(400, 300.0, 1, 1, false) == 28 + 15 + 5 and C.soul_upgrade_cost("might", 2) == 60, "영혼석 정산식과 강화 비용")
 
@@ -378,8 +367,216 @@ func _affix_sum(run, stat: String) -> float:
 			continue
 		for a in it["affixes"]:
 			if a["stat"] == stat:
-				v += float(a["val"])
+				v += C.affix_value(it, a)
 	return v
+
+
+## 시험용 장비 — roll_item 으로 만든 뒤 옵션만 바꾼다 (lv·exp·procs 같은 키가 다 들어 있게)
+func _item(run, slot: String, rarity: String, affixes: Array) -> Dictionary:
+	var it: Dictionary = C.roll_item(run.rng, slot, rarity, 3)
+	it["affixes"] = affixes
+	it["procs"] = []
+	return it
+
+
+func _check_gear_growth() -> void:
+	print("\n[Godot 판 장비 성장 — 분해 경험치·레벨·각성·가방·장비창]")
+	var run = Run.new("knight", "normal", "meadow", 31)
+	var hp0: float = run.player.max_hp
+	var good := _item(run, "helm", "magic", [{"stat": "max_hp", "val": 30.0}, {"stat": "dmg", "val": 0.2}])
+	run.pick_up_gear(good)
+	_ok(run.player.equip["helm"] == good and is_equal_approx(run.player.max_hp, hp0 + 30.0), "빈 칸 장비는 장착, 최대 체력 옵션이 바로 반영")
+	var xp0: float = run.player.xp
+	var lv0: int = run.player.level
+	var junk := _item(run, "helm", "common", [{"stat": "luck", "val": 0.01}])
+	run.pick_up_gear(junk)
+	_ok(run.player.equip["helm"] == good and run.bag.is_empty() and float(good["exp"]) > 0.0 and run.player.xp == xp0 and run.player.level == lv0,
+		"더 나쁜 장비는 끼고 있는 같은 부위 장비의 경험치로 분해 (캐릭터 경험치 아님)", "exp %.1f" % float(good["exp"]))
+	var better := _item(run, "helm", "rare", [{"stat": "dmg", "val": 0.5}, {"stat": "crit", "val": 0.2}, {"stat": "cd", "val": 0.1}])
+	run.pick_up_gear(better)
+	_ok(run.player.equip["helm"] == good and run.bag.size() == 1 and run.bag[0] == better and better["new"] and run.bag_has_new(), "더 좋은 장비는 가방으로 (NEW)")
+	var set_piece := _item(run, "armor", "set", [{"stat": "luck", "val": 0.01}])
+	set_piece["set"] = "ember"
+	run.player.equip["armor"] = _item(run, "armor", "rare", [{"stat": "dmg", "val": 0.9}])
+	run._refresh_gear()
+	run.pick_up_gear(set_piece)
+	_ok(run.bag.has(set_piece), "약해도 세트·전설은 가방으로")
+	# 레벨업 — 옵션 수치가 커지고, 최대 체력도 따라 오른다
+	var hp1: float = run.player.max_hp
+	run.feed_gear(good, C.gear_exp_needed(1) + C.gear_exp_needed(2) + 1.0)
+	var lv: int = good["lv"]
+	_ok(lv >= 3, "장비 경험치가 차면 레벨이 오른다 (Lv %d)" % lv)
+	_ok(is_equal_approx(run.player.max_hp - hp1, roundf(30.0 * C.gear_level_mult(lv)) - 30.0) and is_equal_approx(run._gear("dmg"), 0.2 * C.gear_level_mult(lv) + 0.9),
+		"레벨만큼 옵션 수치가 커진다 (×%.1f)" % C.gear_level_mult(lv), "hp %.1f dmg %.3f" % [run.player.max_hp - hp1, run._gear("dmg")])
+	var need := 0.0
+	for l in range(lv, C.AWAKEN_LEVELS[0]):
+		need += C.gear_exp_needed(l)
+	run.feed_gear(good, need - float(good["exp"]) + 0.5)
+	_ok(int(good["lv"]) == C.AWAKEN_LEVELS[0] and good["procs"].size() == 1, "Lv %d 에서 각성 — 무작위 발동 옵션이 붙는다" % C.AWAKEN_LEVELS[0], "lv %d procs %d" % [int(good["lv"]), good["procs"].size()])
+	_ok(run._procs.size() == 1, "낀 장비의 발동 옵션이 발동 목록에 오른다")
+	# 장비창 — 바꿔 끼면 빼낸 장비가 레벨을 지닌 채 가방 그 자리로
+	var good_lv: int = good["lv"]
+	run.equip_from_bag(run.bag.find(better))
+	_ok(run.player.equip["helm"] == better and run.bag.has(good) and int(good["lv"]) == good_lv and run._procs.is_empty(), "장비창: 가방 장비를 끼면 빼낸 장비는 레벨 그대로 가방에")
+	var e0 := float(better["exp"])
+	var gexp := C.salvage_exp(good)
+	run.salvage_from_bag(run.bag.find(good))
+	_ok(not run.bag.has(good) and (float(better["exp"]) > e0 or int(better["lv"]) > 1) and gexp > float(good["spent"]) * C.SALVAGE_REFUND,
+		"장비창: 분해하면 키운 경험치의 %d%% 가 지금 낀 장비로 돌아간다 (+%d)" % [roundi(C.SALVAGE_REFUND * 100), roundi(gexp)])
+	# 가방이 차면 가장 약한 것부터 분해
+	run.bag.clear()
+	for i in range(C.BAG_SIZE):
+		var it := _item(run, "boots", "legendary", [{"stat": "speed", "val": 0.01 * (i + 1)}])
+		it["legendary"] = "shadow"
+		run._stash(it)
+	var weakest: Dictionary = run.bag[0]
+	var strong := _item(run, "boots", "legendary", [{"stat": "speed", "val": 0.5}])
+	strong["legendary"] = "shadow"
+	run._stash(strong)
+	_ok(run.bag.size() == C.BAG_SIZE and run.bag.has(strong) and not run.bag.has(weakest), "가방이 가득 차면 가장 약한 것을 분해하고 넣는다")
+	run.bag.clear()
+	run.bag.append(_item(run, "helm", "common", [{"stat": "luck", "val": 0.001}]))
+	run.bag.append(set_piece)
+	_ok(run.salvage_weaker() == 1 and run.bag.size() == 1 and run.bag[0] == set_piece, "약한 장비 모두 분해 — 세트·전설·더 좋은 것은 남긴다")
+	# 최대 레벨 — 넘친 경험치는 캐릭터에게
+	var top := _item(run, "ring", "rare", [{"stat": "xp", "val": 0.01}])
+	top["lv"] = C.GEAR_MAX_LEVEL
+	var xp1: float = run.player.xp
+	var plv: int = run.player.level
+	run.feed_gear(top, 10.0)
+	_ok(int(top["lv"]) == C.GEAR_MAX_LEVEL and (run.player.xp > xp1 or run.player.level > plv), "최대 레벨 장비에 넘친 경험치는 캐릭터 경험치로")
+	run.player.equip["helm"] = null
+	run.player.equip["armor"] = null
+	run._refresh_gear()
+	_ok(is_equal_approx(run.player.max_hp, hp0), "장비를 다 빼면 최대 체력이 처음으로 돌아온다", "%.1f vs %.1f" % [run.player.max_hp, hp0])
+
+
+func _check_procs_and_shrines() -> void:
+	print("\n[Godot 판 발동 옵션 · 블랙홀 · 제단 · 학살 · 30분 곡선]")
+	# 효과 8종 — 하나씩 직접 터뜨려 본다
+	for eff in C.PROC_EFFECT_ORDER:
+		var run = Run.new("knight", "normal", "meadow", 60)
+		run.player.invincible = 1e9
+		run.player.weapon_cds.clear()
+		var k0: int = run.kills
+		var e = run.enemies[0]
+		run._queue_proc(eff, e.x, e.y, 1.0)
+		run.proc_queue[0]["t"] = 0.0
+		for i in range(45):
+			run.tick(DT, Vector2.ZERO, false)
+			if run.state != "playing":
+				run.choose(0)
+		var ok: bool = run.procs_fired == 1
+		if eff == "frenzy":
+			ok = ok and run._cd_bonus() < 0.7 and run.buffs.has("frenzy_proc")
+		else:
+			ok = ok and run.kills > k0
+		_ok(ok, "발동 효과 %s %s — 터지고 %s" % [C.PROC_EFFECTS[eff]["icon"], C.PROC_EFFECTS[eff]["name"], "쿨다운 -40%" if eff == "frenzy" else "잡몹을 쓸어 낸다"], "fired %d kills %d→%d" % [run.procs_fired, k0, run.kills])
+	# 처치 시 100% 화염 신성 — 처치가 연쇄로 이어진다
+	var run = Run.new("knight", "normal", "meadow", 61)
+	run.player.invincible = 1e9
+	var it := _item(run, "ring", "rare", [])
+	it["procs"] = [{"trigger": "kill", "effect": "nova", "chance": 1.0}]
+	run.player.equip["ring"] = it
+	run._refresh_gear()
+	run.deal_damage(run.enemies[0], 1e9)
+	for i in range(15):
+		run.tick(DT, Vector2.ZERO, false)
+	_ok(run.procs_fired >= 1, "처치 시 발동 옵션이 처치에 걸린다 (%d회)" % run.procs_fired)
+	# 주기 발동
+	run = Run.new("knight", "normal", "meadow", 62)
+	run.player.invincible = 1e9
+	it = _item(run, "ring", "rare", [])
+	it["procs"] = [{"trigger": "timer", "effect": "thunder", "chance": 1.0}]
+	run.player.equip["ring"] = it
+	run._refresh_gear()
+	for i in range(int((C.PROC_TIMER_PERIOD + 0.5) * 30)):
+		run.tick(DT, Vector2.ZERO, false)
+		if run.state != "playing":
+			run.choose(0)
+	_ok(run.procs_fired >= 1, "주기 발동 옵션은 %d초마다" % int(C.PROC_TIMER_PERIOD))
+	# 블랙홀은 끌어당긴다
+	run = Run.new("knight", "normal", "meadow", 63)
+	run.player.invincible = 1e9
+	var bx: float = run.player.x + 200.0
+	var e = run.enemies[0]
+	e.x = bx + 150.0
+	e.y = run.player.y
+	e.hp = 1e9
+	e.max_hp = 1e9
+	run.vortices.append({"x": bx, "y": run.player.y, "r": 230.0, "t": 1.0, "max_t": 1.0, "dmg": 1.0})
+	run.tick(DT, Vector2.ZERO, false)
+	run.tick(DT, Vector2.ZERO, false)
+	_ok(absf(e.x - bx) < 150.0, "블랙홀: 반경 안의 적을 끌어당긴다", "%.1f" % absf(e.x - bx))
+	# 학살 — 한순간에 12킬
+	run = Run.new("knight", "normal", "meadow", 64)
+	run.player.invincible = 1e9
+	var massacre := false
+	for i in range(14):
+		var m = run._spawn_minion("ghoul", run.player.x + 300.0, run.player.y, 0, 1.0, 10.0, 0.0, 1)
+		run.deal_damage(m, 10.0)
+	for ev in run.events:
+		if ev["t"] == "massacre":
+			massacre = true
+	_ok(massacre and run.burst_tier == 0, "순식간에 12킬 → 학살(SLAUGHTER) — 흔들림·멈칫·글자")
+	# 제단
+	run = Run.new("knight", "normal", "meadow", 65)
+	run.player.invincible = 1e9
+	var b0: float = run._dmg_bonus()
+	run.activate_shrine("fury")
+	run.activate_shrine("frenzy")
+	run.activate_shrine("greed")
+	_ok(is_equal_approx(run._dmg_bonus(), b0 * 2.0) and run._cd_bonus() < 0.7 and run.buffs.has("greed"), "제단: 분노 피해 ×2, 광란 쿨다운 -40%, 탐욕")
+	run.tick(DT, Vector2.ZERO, false)    # 적 격자는 프레임 처음에 만들어진다
+	var k1: int = run.kills
+	run.activate_shrine("doom")
+	_ok(run.kills > k1, "파멸의 제단: 주변 적을 날려 버린다 (%d킬)" % (run.kills - k1))
+	run.shrine_timer = 0.0
+	run.hit_stop = 0.0
+	run.tick(DT, Vector2.ZERO, false)
+	_ok(run.shrines.size() == 1, "제단이 때가 되면 근처에 나타난다")
+	# 웹판 무제한 패시브의 Godot 판 상한
+	run = Run.new("knight", "normal", "meadow", 66)
+	var dmg_def: Dictionary = R.find_def(R.PASSIVE_POOL, "dmg_up")
+	for i in range(int(C.PASSIVE_CAPS["dmg_up"])):
+		run.apply_passive(dmg_def)
+	var offered := false
+	for c in run.passive_choices():
+		if c["passive_id"] == "dmg_up":
+			offered = true
+	_ok(run.is_passive_maxed(dmg_def) and not offered and dmg_def["max"] == null, "공격력 패시브는 웹판에선 무제한, Godot 판은 %d스택에서 멈춘다" % int(C.PASSIVE_CAPS["dmg_up"]))
+	var unreachable: Array = []
+	for syn in R.SYNERGY_DEFS:
+		for req in syn["requires"]:
+			var cap := C.passive_cap(R.find_def(R.PASSIVE_POOL, req["id"]))
+			if cap >= 0 and int(req["count"]) > cap:
+				unreachable.append("%s(%s %d > %d)" % [syn["id"], req["id"], int(req["count"]), cap])
+	_ok(unreachable.is_empty(), "Godot 판 패시브 상한으로도 시너지 %d종을 모두 만들 수 있다" % R.SYNERGY_DEFS.size(), str(unreachable))
+	# 숨 고르기 재생 — 안 맞은 지 CALM_DELAY 초가 지나면 재생이 붙는다
+	run = Run.new("knight", "normal", "meadow", 67)
+	run.enemies.clear()
+	run.wave_timer = -1e9
+	run.player.weapon_cds.clear()
+	run.player.hp = run.player.max_hp * 0.3
+	run.last_hurt_t = 0.0
+	var hp_a: float = run.player.hp
+	for i in range(int(2.0 * 30)):
+		run.tick(DT, Vector2.ZERO, false)
+	var early_gain: float = run.player.hp - hp_a
+	for i in range(int(C.CALM_DELAY * 30) - 60 + 2):
+		run.tick(DT, Vector2.ZERO, false)
+	var hp_b: float = run.player.hp
+	for i in range(int(2.0 * 30)):
+		run.tick(DT, Vector2.ZERO, false)
+	var calm_gain: float = run.player.hp - hp_b
+	_ok(calm_gain > early_gain * 3.0, "안 맞은 지 %d초 뒤 재생이 크게 붙는다 (2초 회복 %.1f → %.1f)" % [int(C.CALM_DELAY), early_gain, calm_gain])
+	# 30분 곡선
+	_ok(is_equal_approx(C.stage_seconds(C.PACE_KNEE), C.PACE_KNEE * C.PACE_EARLY) and C.stage_seconds(C.RUN_GOAL) > C.stage_seconds(C.PACE_KNEE),
+		"단계 시간 — 20분까지 절반 속도, 그 뒤 빨라진다")
+	run.stage_t = C.PROC_STAGE_CAP + 600.0
+	var capped: float = run._trash_hp()
+	run.stage_t = C.PROC_STAGE_CAP
+	_ok(is_equal_approx(capped, run._trash_hp()), "발동 피해 기준은 PROC_STAGE_CAP 뒤로 더 크지 않는다 — 20분 뒤의 벽")
 
 
 func _check_monsters_and_affixes() -> void:
@@ -388,7 +585,8 @@ func _check_monsters_and_affixes() -> void:
 	run.player.weapon_cds.clear()
 	run.player.invincible = 1e9
 	var seen := {}
-	run.elapsed = 400.0
+	run.elapsed = 800.0
+	run.stage_t = C.stage_seconds(run.elapsed)    # 적 종류·등급은 단계 시간(6분 40초)으로 정해진다
 	for i in range(30):
 		run.spawn_wave()
 	for e in run.enemies:
@@ -397,7 +595,7 @@ func _check_monsters_and_affixes() -> void:
 	for t in C.ENEMY_TYPES:
 		if not seen.has(t):
 			missing.append(t)
-	_ok(missing.is_empty(), "6분대 웨이브에서 9종이 모두 나온다", str(missing))
+	_ok(missing.is_empty(), "단계 6분대 웨이브에서 9종이 모두 나온다", "안 나온 것 " + str(missing))
 
 	run = Run.new("knight", "normal", "meadow", 42)
 	run.player.weapon_cds.clear()

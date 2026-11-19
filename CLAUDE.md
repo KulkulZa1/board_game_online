@@ -112,7 +112,7 @@ board_game_online/
 ├── CHANGELOG.md / ROADMAP.md    # History / forward plan
 ├── .github/                       # copilot-instructions.md + workflows/check.yml (CI: npm run check on PRs and main)
 ├── godot/tower-defense/           # Godot 4 port of 첨탑 대란 — source only (.godot/, export/ ignored); see its README.md and docs/port-contract.md
-├── godot/vampire/                 # Godot 4 game grown from the vampire-survivors arcade game (loot, sets, new monsters/weapons, shaders, synthesized SFX; the web version stays) — source only; see its README.md
+├── godot/vampire/                 # Godot 4 game grown from the vampire-survivors arcade game (30-minute clear, loot that levels up the equipped gear, equipment window, procs, shrines, sets, new monsters/weapons, shaders, synthesized SFX; the web version stays) — source only; balance tuned with tests/balance_sim.gd; see its README.md
 ├── docs/                          # Design docs + deploy runbooks (launch-readiness.md, render-version-verification.md, port-contract.md, new-game-candidates.md, per-game GDDs, versioned release notes under v1.0/v1.1/v1.2)
 ├── prototypes/                     # Three kinds: rule-engine/flow suites (mahjong-*, bang-flow, newer-games-handler, core-games-handler) run by `npm run test:games`, the port contract (`golden-spec.js`, `golden-run-test.js`, `golden/*.json`), AND balance simulators (bootstrap-sim, jackpot-autoplay, civ-mvp-autoplay) that are not wired into any npm script
 ├── sandbox/                         # Layer C design tools, served only by `npm run sandbox` (never in production)
