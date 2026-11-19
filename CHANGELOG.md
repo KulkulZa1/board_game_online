@@ -26,8 +26,9 @@
   multipliers capped (`dmg_up` ×1.18 at 6 stacks, the ×1.2 damage item box at 5 picks, regen and speed passives at
   3, total regen 4%/s, on-hit healing 4% max HP/s); enemies at the 650 cap are recycled instead of freezing the
   crowd; enemy speed ramps after 20 minutes; at most 30 living archers; gentler early enemy damage (bosses ×0.7,
-  tier-2 archer fans ×0.75), +50 starting HP and 0.8%/s base regen; procs follow trash HP only up to 20 minutes;
-  infinite mode after the clear runs the stage clock at 2×.
+  tier-2 archer fans ×0.65), +50 starting HP, 0.8%/s base regen and +3%/s after 3 s without a hit; procs follow
+  trash HP only up to 20 minutes; infinite mode after the clear runs the stage clock at 2×. Measured over 48 bot
+  runs: 98% alive at 20 min, 90% at 25, 75% clear at 30 (target 99/90/70).
 
 ### Added — Godot vampire: hack-and-slash rework (`godot/vampire/`)
 - The Godot game now grows past the web version. Shared tables still have to match `game.js`; intentional

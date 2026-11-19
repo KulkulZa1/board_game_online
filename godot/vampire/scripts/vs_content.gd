@@ -9,7 +9,7 @@ const RUN_GOAL := 1800.0
 # 그 뒤엔 빨라진다. 그래서 0~20분은 거의 다 살아남고, 20~30분에 벽이 온다 (balance_sim.gd 로 맞춘 값)
 const PACE_KNEE := 1200.0
 const PACE_EARLY := 0.5
-const PACE_LATE := 0.9
+const PACE_LATE := 1.05
 const PACE_INFINITE := 2.0       # 30분 클리어 뒤 무한 웨이브 — 벽이 빠르게 닫힌다
 
 
@@ -29,7 +29,7 @@ static func stage_rate(t: float) -> float:
 
 
 ## 적 공격(화살·하수인·보스 탄·장판) 피해 배율 (st = 단계 초). 웹판은 1 + st/500.
-## 30분 판은 순하게 시작해 20분(단계 600초) 뒤 가파르게 오른다: 0분 0.3 · 10분 0.46 · 20분 1.2 · 25분 2.2 · 30분 4.2
+## 30분 판은 순하게 시작해 20분(단계 600초) 뒤 가파르게 오른다: 0분 0.3 · 10분 0.41 · 20분 1.2 · 25분 3.5 · 30분 8.1
 static func enemy_dmg_curve(st: float) -> float:
 	var k := st / 600.0
 	return DMG_CURVE_BASE + DMG_CURVE_GROWTH * pow(k, DMG_CURVE_EXP)
@@ -37,7 +37,7 @@ static func enemy_dmg_curve(st: float) -> float:
 
 const DMG_CURVE_BASE := 0.3
 const DMG_CURVE_GROWTH := 0.9
-const DMG_CURVE_EXP := 2.5
+const DMG_CURVE_EXP := 3.0
 # 보스 원형 탄막 한 발 배율 — 8~12발이 한꺼번에 날아와서 초반 보스전이 사망 원인 1위였다 (봇 측정)
 const BOSS_SHOT_MULT := 0.7
 
@@ -86,7 +86,7 @@ const PLAYER_BONUS_HP := 50.0
 # 넘으면 새로 뽑는 궁수는 근접형으로 나온다
 const ARCHER_CAP := 30
 # 2단계 궁수 3연발 한 발 배율 — 사망 피해의 대부분이 이 부채꼴이었다 (봇 측정)
-const ARCHER2_DMG_MULT := 0.75
+const ARCHER2_DMG_MULT := 0.65
 
 # 발동 옵션 피해는 '그때 잡몹 체력' 을 따라가되 이 단계 시간까지만 — 그 뒤로는 장비 레벨로만 큰다.
 # 끝없이 따라가면 잡몹을 언제나 한 방에 지워서 벽이 생기지 않는다 (봇 측정: 36분을 넘겨도 안 죽었다)
@@ -115,7 +115,7 @@ static func enemy_speed_curve(st: float) -> float:
 
 const SPEED_LATE := 1.0
 const HP_EARLY := 0.55
-const HP_LATE_RATE := 0.18
+const HP_LATE_RATE := 0.22
 
 
 # ── 몬스터 종류 ─────────────────────────────────────────────────────
