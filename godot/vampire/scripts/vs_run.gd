@@ -14,6 +14,7 @@ extends RefCounted
 ##    JS 식에 곱해지던 장비 배율(equipStats.*)은 장비가 없을 때의 값 1 로 지웠다. README 참고.
 
 const R := preload("res://scripts/vs_rules.gd")
+const C := preload("res://scripts/vs_content.gd")   # Godot 판 전용 콘텐츠 표
 
 
 class Player:
@@ -50,6 +51,11 @@ class Player:
 	var aux_shield_time := 0.0
 	var dash_speed_boost := 0.0
 	var cascade_ready := false
+	# ── Godot 판 ──
+	var equip := {"helm": null, "armor": null, "boots": null, "ring": null}
+	var gear := {}                  # 장비 옵션 합산 (stat → 값)
+	var meta := {}                  # 영혼석 영구 강화 (stat → 값)
+	var slow := 0.0                 # 냉기 정예 오라로 느려지는 비율 (매 프레임 다시 계산)
 
 
 class Enemy:
@@ -104,6 +110,25 @@ class Enemy:
 	var last_hit_by := ""
 	var grav_last_stack := -1.0
 	var grav_stacks := 0
+	# ── Godot 판: 몬스터 종류·정예 특성 ──
+	var type := "ghoul"
+	var affixes: Array = []         # 정예 특성 id
+	var stun := 0.0                 # 기절 (뇌우) — 빙결과 같이 이동·공격을 멈춘다
+	var slow := 0.0                 # 서리 왕관 4세트 오라 감속 비율
+	var phase_t := 0.0              # 망령: 실체/반투명 주기
+	var ethereal := false
+	var fuse := -1.0                # 폭탄 임프: 0 이상이면 점화 중
+	var charge_state := 0           # 돌격 멧돼지: 0 추적 / 1 예고 / 2 돌진
+	var charge_t := 0.0
+	var charge_dir := Vector2.ZERO
+	var charge_cd := 2.0
+	var slam_cd := 3.0              # 룬 골렘 내려찍기
+	var slam_t := -1.0
+	var summon_cd := 6.0
+	var blink_cd := 4.0
+	var revived := false            # 해골: 한 번 일어났으면 다시는 안 일어난다
+	var no_split := false           # 분열로 생긴 개체는 다시 분열하지 않는다
+	var regen := 0.0                # 흡혈 정예: 초당 회복 비율
 
 
 class Proj:
@@ -136,6 +161,8 @@ class Proj:
 	var aoe := 0.0
 	var trail_t := 0.0
 	var delay := 0.0                # meteor
+	var grav := 0.0                 # axe: 중력 가속도
+	var spin := 0.0                 # axe: 그림용 회전각
 
 
 var rng := RandomNumberGenerator.new()
@@ -209,12 +236,25 @@ var choice_kind := ""             # levelup | itembox — 리롤이 어떤 빌�
 var low_hp_alert_cooldown := 0.0
 var low_hp_pulse := 0.0
 
+# ── Godot 판 ──
+var events: Array = []            # 화면·소리용 사건 {t, ...} — main.gd 가 매 프레임 비운다
+var gear_drops: Array = []        # 땅에 떨어진 장비 {x, y, item, life, pulse_t}
+var hazards: Array = []           # 적이 남기는 예고 폭발 {x, y, r, t, max_t, dmg, color}
+var revives: Array = []           # 다시 일어날 해골 {x, y, t, tier, hp}
+var fire_trails: Array = []       # 잿불 군주 4세트 불길 {x, y, r, life, max_life, dmg, tick}
+var storm_set_timer := 5.0
+var bosses_killed := 0
+var legendaries_found := 0
+var loot_found := 0
+var meta_levels := {}             # 영혼석 강화 레벨 (id → 레벨)
+
 var _enemy_grid := {}             # Vector2i → Array[Enemy]
 var _next_enemy_id := 1
 var _active_synergies := {}       # 시너지 id → true (apply_passive 때만 갱신)
 
 
-func _init(character_id: String = "knight", difficulty_id: String = "normal", map_id: String = "meadow", seed_value: int = -1) -> void:
+func _init(character_id: String = "knight", difficulty_id: String = "normal", map_id: String = "meadow", seed_value: int = -1, meta: Dictionary = {}) -> void:
+	meta_levels = meta
 	if seed_value >= 0:
 		rng.seed = seed_value
 	else:
@@ -258,7 +298,169 @@ static func _dist_to_segment(px: float, py: float, ax: float, ay: float, bx: flo
 
 
 func _rb() -> float:
-	return player.range_bonus
+	return player.range_bonus * (1.0 + _gear("range"))
+
+
+# ── Godot 판: 장비·영구 강화·세트 효과 헬퍼 ───────────────────────────
+
+## 장비 옵션 + 영혼석 강화 합 (상한 적용)
+func _gear(k: String) -> float:
+	var v := float(player.gear.get(k, 0.0)) + float(player.meta.get(k, 0.0))
+	if C.STAT_CAPS.has(k):
+		v = minf(v, float(C.STAT_CAPS[k]))
+	return v
+
+
+func _emit(t: String, data: Dictionary = {}) -> void:
+	if events.size() >= 600:
+		return
+	data["t"] = t
+	events.append(data)
+
+
+func set_count(set_id: String) -> int:
+	var n := 0
+	for slot in C.GEAR_SLOTS:
+		var it = player.equip[slot]
+		if it != null and it["set"] == set_id:
+			n += 1
+	return n
+
+
+func has_legendary(id: String) -> bool:
+	for slot in C.GEAR_SLOTS:
+		var it = player.equip[slot]
+		if it != null and it["legendary"] == id:
+			return true
+	return false
+
+
+## 무기 피해에 곱하는 추가 배율 — 장비 공격력, 광전사의 투구, 피의 서약 4세트
+func _dmg_bonus() -> float:
+	var m := 1.0 + _gear("dmg")
+	if has_legendary("berserker"):
+		m *= 1.0 + minf(floorf(combo_count / 20.0) * 0.10, 0.60)
+	if set_count("blood") >= 4 and get_player_hp_ratio() < 0.5:
+		m *= 1.4
+	return m
+
+
+func _cd_bonus() -> float:
+	var m := 1.0 - _gear("cd")
+	if set_count("blood") >= 4 and get_player_hp_ratio() < 0.5:
+		m *= 0.8
+	return m
+
+
+func _xp_range() -> float:
+	return player.xp_range * (1.0 + _gear("pickup"))
+
+
+func _luck() -> float:
+	return 1.0 + _gear("luck") + (0.5 if has_legendary("greed") else 0.0)
+
+
+## 장비 옵션 합산을 다시 계산한다 — 최대 체력은 차이만큼 바로 반영
+func _refresh_gear() -> void:
+	var old_hp := float(player.gear.get("max_hp", 0.0))
+	var g := {}
+	for slot in C.GEAR_SLOTS:
+		var it = player.equip[slot]
+		if it == null:
+			continue
+		for a in it["affixes"]:
+			g[a["stat"]] = float(g.get(a["stat"], 0.0)) + float(a["val"])
+	if has_legendary("greed"):
+		g["xp"] = float(g.get("xp", 0.0)) + 0.25
+	if set_count("blood") >= 2:
+		g["lifesteal"] = float(g.get("lifesteal", 0.0)) + 0.03
+	player.gear = g
+	var diff := float(g.get("max_hp", 0.0)) - old_hp
+	player.max_hp += diff
+	if diff > 0.0:
+		player.hp += diff
+	player.hp = minf(player.hp, player.max_hp)
+
+
+## 장비를 주웠을 때: 더 좋으면 장착, 아니면 분해해서 경험치로
+func pick_up_gear(item: Dictionary) -> void:
+	var slot: String = item["slot"]
+	var cur = player.equip[slot]
+	var new_p := C.item_power(item) + _set_keep_bonus(item)
+	var cur_p := -1.0 if cur == null else C.item_power(cur) + _set_keep_bonus(cur)
+	loot_found += 1
+	if item["rarity"] == "legendary":
+		legendaries_found += 1
+	if new_p > cur_p:
+		var before := {}
+		for sid in C.SET_ORDER:
+			before[sid] = set_count(sid)
+		player.equip[slot] = item
+		_refresh_gear()
+		_emit("equip", {"item": item})
+		var rdef: Dictionary = C.RARITIES[item["rarity"]]
+		_screen_text("%s %s 장착!" % ["★" if item["rarity"] == "legendary" else "▲", item["name"]], 2.4, rdef["color"], 19)
+		for sid in C.SET_ORDER:
+			var n := set_count(sid)
+			if (n >= 2 and int(before[sid]) < 2) or (n >= 4 and int(before[sid]) < 4):
+				var sd: Dictionary = C.SETS[sid]
+				_screen_text("%s %s %d세트 효과 발동!" % [sd["icon"], sd["name"], 4 if n >= 4 else 2], 3.0, sd["color"], 21)
+				_emit("set", {"set": sid, "count": n})
+	else:
+		var xp := 6.0 + C.item_power(item) * 2.0 * (1.0 + elapsed / 300.0)
+		gain_xp(xp)
+		_emit("salvage", {"item": item})
+		_screen_text("⚗ %s 분해 +%d XP" % [item["name"], roundi(xp)], 1.6, "#a78bfa", 14)
+
+
+## 세트 조각은 이미 같은 세트를 차고 있을수록 가치가 크다 (세트를 깨지 않도록)
+func _set_keep_bonus(item: Dictionary) -> float:
+	if item["set"] == "":
+		return 0.0
+	var same := 0
+	for slot in C.GEAR_SLOTS:
+		var it = player.equip[slot]
+		if it != null and it["set"] == item["set"] and slot != item["slot"]:
+			same += 1
+	return same * 4.0
+
+
+## 장비 드롭 굴림 — source: normal / elite / boss / goblin / mini_goblin
+func _maybe_drop_gear(x: float, y: float, source: String) -> void:
+	if _rand() >= float(C.LOOT_CHANCE[source]) * _luck():
+		return
+	var minute := elapsed / 60.0
+	var rarity := C.roll_rarity(rng, String(C.LOOT_MIN_RARITY.get(source, "")), minute)
+	var slot: String = C.GEAR_SLOTS[_pick(C.GEAR_SLOTS.size())]
+	var item := C.roll_item(rng, slot, rarity, floori(minute) + 1)
+	gear_drops.append({"x": x, "y": y, "item": item, "life": 40.0, "pulse_t": 0.0})
+	_emit("loot", {"x": x, "y": y, "rarity": rarity})
+
+
+## 플레이어 피격 — 받는 피해 감소·가시 갑옷·피의 서약 4세트. 죽으면 true
+func _hurt_player(amount: float, inv: float, contact: bool) -> bool:
+	amount *= 1.0 - _gear("armor")
+	player.hp -= amount
+	player.invincible = inv
+	hurt_screen_flash = 0.28
+	_emit("hurt", {"amount": amount})
+	if contact and has_legendary("thornmail"):
+		var r := 100.0 * _rb()
+		for e in enemies.duplicate():
+			if not e.dying and _dist(e.x, e.y, player.x, player.y) < r:
+				deal_damage(e, player.max_hp * 0.4, true)
+		_ring(player.x, player.y, 10, r, 0.3, "#b2bec3")
+	if set_count("blood") >= 4:
+		var br := 110.0 * _rb()
+		for e in enemies.duplicate():
+			if not e.dying and _dist(e.x, e.y, player.x, player.y) < br:
+				deal_damage(e, player.max_hp * 0.3, true)
+		_ring(player.x, player.y, 8, br, 0.35, "#e74c3c")
+		_emit("explosion", {"x": player.x, "y": player.y, "r": br, "color": "#e74c3c"})
+	if player.hp <= 0.0:
+		end_game("dead")
+		return true
+	return false
 
 
 func _shake(add: float, cap: float) -> void:
@@ -382,6 +584,17 @@ func _init_game() -> void:
 	player.cd_mult = float(character["cdMult"])
 	player.xp_range = 80.0 * float(character["xpRangeMult"])
 	next_boss_time = float(difficulty["bossInterval"])
+	# 영혼석 영구 강화
+	for id in C.SOUL_UPGRADE_ORDER:
+		var lv := int(meta_levels.get(id, 0))
+		if lv <= 0:
+			continue
+		var u: Dictionary = C.SOUL_UPGRADES[id]
+		var st: String = u["stat"]
+		player.meta[st] = float(player.meta.get(st, 0.0)) + float(u["per"]) * lv
+	var meta_hp := float(player.meta.get("max_hp", 0.0))
+	player.max_hp += meta_hp
+	player.hp += meta_hp
 	for id in character["startWeapons"]:
 		add_weapon(id)
 	spawn_wave()
@@ -428,6 +641,7 @@ func show_evolution_celebration(evo: Dictionary) -> void:
 	_shake(0.65, 0.9)
 	hit_stop = maxf(hit_stop, 0.16)
 	evolve_flash = 0.55
+	_emit("evolve", {"id": evo["id"]})
 	_screen_text("EVOLVED: %s %s" % [evolved["icon"], evolved["name"]], 3.0, "#f1c40f", 25)
 
 
@@ -668,6 +882,12 @@ func trigger_aux_effects(target: Enemy, base_dmg: float) -> void:
 				spawn_meteor_strike(tx, ty, base_dmg * 0.60, 80.0 * rng_mul, false, "meteor", 0.0)
 			"toxic":
 				toxic_fields.append({"x": tx, "y": ty, "range": 55.0 * rng_mul, "dmg": base_dmg * 0.25, "life": 2.2, "max_life": 2.2, "tick_timer": 0.0, "evolved": false, "spread_cd": 1.2, "spawned": false})
+			"whip":
+				_whip_strike(base_dmg * 0.45, 120.0 * rng_mul, 0, false, 0.7)
+			"axe":
+				_throw_axe(base_dmg * 0.5, 300.0 * rng_mul, 0.0, false, 3)
+			"storm":
+				_strike_at(target.x, target.y, base_dmg * 0.6, 40.0 * rng_mul, 0.25, false)
 
 
 ## 시너지 조건 충족 여부 — 피해 한 번마다 여러 번 불리므로, 패시브가 바뀔 때만 다시 계산해 둔다
@@ -759,6 +979,10 @@ func spawn_wave() -> void:
 		# 원거리 공격형(archer): tier1 40%, tier2 100%
 		var b_roll := _rand()
 		var behavior := "archer" if (tier == 2 or (tier == 1 and b_roll < 0.4)) else "chase"
+		# Godot 판: 몬스터 종류. 상급(tier2)은 궁수만이 아니라 룬 골렘·돌격 멧돼지도 나온다
+		var etype := _pick_enemy_type(tier, behavior)
+		if etype == "golem" or etype == "charger":
+			behavior = "chase"
 		var attack_base := (4.0 if tier == 2 else 3.2) if behavior == "archer" else 0.0
 		var e := _new_enemy()
 		e.x = player.x + cos(angle) * spawn_dist
@@ -792,6 +1016,9 @@ func spawn_wave() -> void:
 			if elite_type == 2 or difficulty["id"] == "nightmare":
 				e.shield = roundf(e.max_hp * (0.55 if infinite_mode else 0.4))
 				e.max_shield = e.shield
+		_apply_enemy_type(e, etype)
+		if e.elite:
+			_roll_elite_affixes(e, 3 if infinite_mode else (2 if elapsed >= 300.0 else 1))
 		# 혈월 중 스폰된 적: 강화된 위협 + XP 1.6배
 		if blood_moon_active > 0:
 			e.speed *= 1.4
@@ -801,6 +1028,143 @@ func spawn_wave() -> void:
 			e.xp_val = roundi(e.xp_val * 1.6)
 			e.blood_moon = true
 		enemies.append(e)
+
+
+# ── Godot 판: 몬스터 종류·정예 특성 ─────────────────────────────────
+
+func _pick_enemy_type(tier: int, behavior: String) -> String:
+	if behavior == "archer":
+		if tier == 2:
+			var r2 := _rand()
+			if r2 < 0.3:
+				return "golem"
+			if r2 < 0.5:
+				return "charger"
+		return "archer"
+	if tier == 0:
+		return "bat" if _rand() < 0.35 else "ghoul"
+	var r1 := _rand()
+	if r1 < 0.4:
+		return "skeleton"
+	if r1 < 0.65:
+		return "slime"
+	if r1 < 0.83 and elapsed > 60.0:
+		return "bomber"
+	if elapsed > 90.0:
+		return "wraith"
+	return "skeleton"
+
+
+func _apply_enemy_type(e: Enemy, etype: String) -> void:
+	var t: Dictionary = C.ENEMY_TYPES[etype]
+	e.type = etype
+	e.hp *= float(t["hp"])
+	e.max_hp = e.hp
+	e.speed *= float(t["speed"])
+	e.size *= float(t["size"])
+	e.xp_val = maxi(1, roundi(e.xp_val * float(t["xp"])))
+	e.color = Color(String(t["color"]))
+	e.phase_t = _rand() * 4.0
+
+
+func _roll_elite_affixes(e: Enemy, n: int) -> void:
+	var pool: Array = C.ELITE_AFFIX_ORDER.duplicate()
+	for i in range(n):
+		if pool.is_empty():
+			break
+		var a: String = pool[_pick(pool.size())]
+		pool.erase(a)
+		e.affixes.append(a)
+		match a:
+			"haste":
+				e.speed *= 1.6
+			"giant":
+				e.size *= 1.5
+				e.hp *= 2.0
+				e.max_hp = e.hp
+			"shielded":
+				e.shield = maxf(e.shield, roundf(e.max_hp * 0.4))
+				e.max_shield = e.shield
+			"vampiric":
+				e.regen = 0.02
+	if not e.affixes.is_empty():
+		e.elite_hue = Color(String(C.ELITE_AFFIXES[e.affixes[0]]["color"]))
+
+
+## 분열·소환·부활로 생기는 하수인
+func _spawn_minion(etype: String, x: float, y: float, tier: int, hp: float, size: float, speed: float, xp: int) -> Enemy:
+	var e := _new_enemy()
+	e.x = x
+	e.y = y
+	e.tier = tier
+	e.hp = hp
+	e.max_hp = hp
+	e.size = size
+	e.speed = speed
+	e.xp_val = xp
+	e.behavior = "chase"
+	e.type = etype
+	e.color = Color(String(C.ENEMY_TYPES[etype]["color"]))
+	e.attack_dmg = roundf([10, 20, 38][mini(tier, 2)] * (1.0 + elapsed / 500.0) * float(difficulty["enemyDmgMult"]))
+	e.spawn_t = 0.25
+	enemies.append(e)
+	return e
+
+
+## 정해진 자리에서 터지는 적의 폭발 — 플레이어와 (enemies_too 면) 주변 적에게 피해. 죽으면 true
+func _enemy_blast(x: float, y: float, r: float, dmg: float, enemies_too: bool, color: String) -> bool:
+	_ring(x, y, 8, r, 0.35, color)
+	_emit("explosion", {"x": x, "y": y, "r": r, "color": color})
+	if enemies_too:
+		for e in enemies_near(x, y, r):
+			if not e.dying and _dist(e.x, e.y, x, y) < r + e.size:
+				deal_damage(e, dmg * 2.0, true, true)
+	if player.invincible <= 0.0 and _dist(x, y, player.x, player.y) < r + 12.0:
+		_shake(0.3, 0.6)
+		return _hurt_player(dmg, 0.25, false)
+	return false
+
+
+## 예고 폭발(정예 폭발·골렘 내려찍기)·해골 부활·불길 장판. 죽으면 false
+func _update_godot_hazards(dt: float) -> bool:
+	for hz in hazards.duplicate():
+		hz["t"] -= dt
+		if hz["t"] <= 0.0:
+			hazards.erase(hz)
+			if _enemy_blast(hz["x"], hz["y"], hz["r"], hz["dmg"], false, hz["color"]):
+				return false
+	for rv in revives.duplicate():
+		rv["t"] -= dt
+		if rv["t"] <= 0.0:
+			revives.erase(rv)
+			var sk := _spawn_minion("skeleton", rv["x"], rv["y"], rv["tier"], rv["hp"], rv["size"], rv["speed"], rv["xp"])
+			sk.revived = true
+			_world_text(rv["x"], rv["y"] - 24.0, "💀 다시 일어났다!", 1.0, "#e8e2d0", 12)
+	for ft in fire_trails.duplicate():
+		ft["life"] -= dt
+		if ft["life"] <= 0.0:
+			fire_trails.erase(ft)
+			continue
+		ft["tick"] -= dt
+		if ft["tick"] > 0.0:
+			continue
+		ft["tick"] = 0.2
+		dmg_source = "dot"
+		for e in enemies_near(ft["x"], ft["y"], ft["r"]):
+			if e.dying or _dist(e.x, e.y, ft["x"], ft["y"]) > ft["r"] + e.size:
+				continue
+			deal_damage(e, ft["dmg"] * 0.2, true, true)
+			if not e.dying:
+				e.burn_stacks = mini(e.burn_stacks + 1, 3)
+				e.burn_timer = 3.0
+				e.burn_dmg = maxf(e.burn_dmg, ft["dmg"] * 0.15)
+	# 폭풍 사냥꾼 4세트 — 5초마다 낙뢰 6발
+	if set_count("storm") >= 4:
+		storm_set_timer -= dt
+		if storm_set_timer <= 0.0:
+			storm_set_timer = 5.0
+			_thunder_strikes(120.0 * player.dmg_mult * _dmg_bonus(), 450.0, 6, false, 0.4)
+	return true
 
 
 func drop_powerup(x: float, y: float) -> void:
@@ -833,6 +1197,7 @@ func spawn_treasure_goblin() -> void:
 	var hp := (450.0 + elapsed * 1.6) * float(difficulty["enemyHpMult"])
 	_spawn_goblin_at(player.x + cos(ang) * 280.0, player.y + sin(ang) * 280.0, hp, 130.0 * float(difficulty["enemySpeedMult"]), 16, "#f1c40f", 40, 17.0, false)
 	_screen_text("💰 보물 고블린 출현! 잡아라!", 2.4, "#f1c40f", 20)
+	_emit("goblin")
 
 
 func drop_goblin_jackpot(x: float, y: float) -> void:
@@ -840,8 +1205,8 @@ func drop_goblin_jackpot(x: float, y: float) -> void:
 		var a := _rand() * TAU
 		var d := 10.0 + _rand() * 60.0
 		xp_gems.append({"x": x + cos(a) * d, "y": y + sin(a) * d, "val": 18, "attracting": false})
-	for k in range(2):
-		var a := (k / 2.0) * TAU
+	for k in range(R.GOBLIN_ITEM_BOXES):
+		var a := (float(k) / R.GOBLIN_ITEM_BOXES) * TAU
 		item_boxes.append({"x": x + cos(a) * 45.0, "y": y + sin(a) * 45.0, "life": R.ITEM_BOX_LIFETIME, "pulse_t": 0.0})
 	drop_powerup(x + 30.0, y)
 	drop_powerup(x - 30.0, y)
@@ -894,6 +1259,7 @@ func activate_overdrive() -> void:
 	_ring(player.x, player.y, 12, od_range * 0.73, 0.38, "#ffffff")
 	_shake(0.45, 0.7)
 	_screen_text("⚡ OVERDRIVE!", 2.2, "#f1c40f", 28)
+	_emit("overdrive", {"x": player.x, "y": player.y, "r": od_range})
 
 
 func spawn_boss() -> void:
@@ -923,6 +1289,7 @@ func spawn_boss() -> void:
 	e.attack_dmg = roundf((40.0 + boss_num * 15) * float(difficulty["enemyDmgMult"]))
 	enemies.append(e)
 	_screen_text("⚠ BOSS APPROACHING ⚠", 2.5, "#e74c3c", 22)
+	_emit("boss")
 
 
 # ── 투사체 발사 ─────────────────────────────────────────────────────
@@ -941,8 +1308,8 @@ func fire_weapon(id: String, dt: float) -> void:
 	var lvl_mul := 1.0 + 0.22 * (lvl - 1)           # 레벨당 데미지 +22%
 	var lvl_range_mul := 1.0 + 0.05 * (lvl - 1)     # 레벨당 사거리·범위 +5%
 	var lvl_extra := lvl - 1
-	var cd := float(def["cd"]) * player.cd_mult
-	var dmg := float(def["dmg"]) * player.dmg_mult * player.temp_dmg_mult * lvl_mul
+	var cd := float(def["cd"]) * player.cd_mult * _cd_bonus()
+	var dmg := float(def["dmg"]) * player.dmg_mult * player.temp_dmg_mult * lvl_mul * _dmg_bonus()
 	var range_ := float(def["range"]) * _rb() * lvl_range_mul
 	player.weapon_cds[id] = cd
 
@@ -1167,6 +1534,20 @@ func fire_weapon(id: String, dt: float) -> void:
 		var t_life := (5.0 if evolved else 3.5) + lvl_extra * 0.4
 		toxic_fields.append({"x": tx, "y": ty, "range": t_range, "dmg": dmg, "life": t_life, "max_life": t_life, "tick_timer": 0.0, "evolved": evolved, "spread_cd": 1.2, "spawned": false})
 		_ring(tx, ty, 6, t_range, 0.4, "#6ab04c" if evolved else "#badc58")
+	elif id == "whip" or id == "bloodtear":
+		_whip_strike(dmg, range_, lvl_extra, id == "bloodtear", 1.0)
+	elif id == "axe" or id == "deathspiral":
+		if id == "deathspiral":
+			for s in range(8):
+				_throw_axe(dmg, range_, (float(s) / 8.0) * TAU, true, 999)
+		else:
+			var shots := 1 + floori(lvl_extra / 2.0)
+			for s in range(shots):
+				_throw_axe(dmg, range_, 0.0, false, 3 + lvl)
+	elif id == "storm" or id == "judgment":
+		var evolved := id == "judgment"
+		var strikes := 6 if evolved else 2 + floori(lvl_extra / 2.0)
+		_thunder_strikes(dmg, range_, strikes, evolved, 0.3 + 0.05 * lvl_extra)
 	# 보조 무기 오버레이 — 메인 무기 발사마다
 	if id == get_main_weapon():
 		var aux_target := nearest_enemy()
@@ -1175,6 +1556,109 @@ func fire_weapon(id: String, dt: float) -> void:
 	# 블리츠 시너지: 15% 확률로 즉시 재발동
 	if has_synergy("blitz") and _rand() < 0.15:
 		player.weapon_cds[id] = 0.0
+
+
+# ── Godot 판 무기: 채찍·도끼·뇌우 ───────────────────────────────────
+
+## 채찍 — 바라보는 쪽 직사각형을 후려친다. 3레벨(또는 진화)부터 뒤쪽도
+func _whip_strike(dmg: float, reach: float, lvl_extra: int, evolved: bool, scale: float) -> void:
+	dmg_source = "whip"
+	var face := 1.0 if last_move_dir.x >= 0.0 else -1.0
+	var height := (46.0 + lvl_extra * 6.0) * scale * (1.3 if evolved else 1.0)
+	var sides: Array = [face]
+	if evolved or lvl_extra >= 2:
+		sides.append(-face)
+	var healed := 0.0
+	for side in sides:
+		var hits := 0
+		for e in enemies.duplicate():
+			if e.dying:
+				continue
+			var dx: float = (e.x - player.x) * side
+			var dy: float = e.y - player.y
+			if dx > -e.size and dx < reach + e.size and absf(dy) < height / 2.0 + e.size:
+				deal_damage(e, dmg)
+				hits += 1
+				if evolved and healed < player.max_hp * 0.03:
+					var h := player.max_hp * 0.006
+					player.hp = minf(player.hp + h, player.max_hp)
+					healed += h
+		_emit("slash", {"x": player.x, "y": player.y, "dir": side, "reach": reach, "height": height, "evolved": evolved, "hits": hits})
+
+
+## 도끼 — 일반은 위로 던져 중력으로 떨어지고, 진화(죽음의 나선)는 나선으로 퍼진다
+func _throw_axe(dmg: float, reach: float, angle: float, evolved: bool, pierce: int) -> void:
+	var ax := _new_proj("axe", player.x, player.y)
+	ax.r = 14.0 if evolved else 12.0
+	ax.dmg = dmg
+	ax.pierce = pierce
+	ax.src = "axe"
+	ax.evolved = evolved
+	if evolved:
+		ax.vx = cos(angle) * 240.0
+		ax.vy = sin(angle) * 240.0
+		ax.turn = 2.4
+		ax.life = reach / 220.0
+	else:
+		var face := 1.0 if last_move_dir.x >= 0.0 else -1.0
+		if _rand() < 0.25:
+			face = -face
+		ax.vx = (50.0 + _rand() * 150.0) * face
+		ax.vy = -(reach * 1.45 + _rand() * 110.0)
+		ax.grav = 980.0
+		ax.life = 1.7
+
+
+## 뇌우 — 범위 안 무작위 적 n 명에게 낙뢰
+func _thunder_strikes(dmg: float, reach: float, n: int, evolved: bool, stun: float) -> void:
+	var cands: Array = []
+	for e in enemies_near(player.x, player.y, reach):
+		if not e.dying and _dist(e.x, e.y, player.x, player.y) < reach:
+			cands.append(e)
+	if cands.is_empty():
+		return
+	_shuffle(cands)
+	for i in range(mini(n, cands.size())):
+		var t: Enemy = cands[i]
+		_strike_at(t.x, t.y, dmg, (90.0 if evolved else 42.0) * _rb(), stun * (2.0 if evolved else 1.0), evolved)
+
+
+func _strike_at(x: float, y: float, dmg: float, r: float, stun: float, evolved: bool) -> void:
+	dmg_source = "storm"
+	for e in enemies_near(x, y, r):
+		if e.dying:
+			continue
+		if _dist(e.x, e.y, x, y) < r + e.size:
+			deal_damage(e, dmg)
+			if not e.dying and not e.is_boss:
+				e.stun = maxf(e.stun, stun)
+	# 천벌: 맞은 자리에서 가까운 적 2명에게 번개가 이어진다
+	if evolved:
+		var cx := x
+		var cy := y
+		var hit := {}
+		for b in range(2):
+			var best: Enemy = null
+			var bd := 170.0
+			for e in enemies_near(cx, cy, 170.0):
+				if e.dying or hit.has(e.id):
+					continue
+				var d := _dist(cx, cy, e.x, e.y)
+				if d < bd and d > r * 0.5:
+					bd = d
+					best = e
+			if best == null:
+				break
+			hit[best.id] = true
+			var arc := _new_proj("arc", cx, cy)
+			arc.tx = best.x
+			arc.ty = best.y
+			arc.life = 0.22
+			deal_damage(best, dmg * 0.5)
+			cx = best.x
+			cy = best.y
+	_ring(x, y, 6, r, 0.25, "#8fd3ff")
+	_emit("thunder", {"x": x, "y": y, "r": r, "evolved": evolved})
 
 
 func spawn_explosion(x: float, y: float, range_: float, dmg: float, evolved: bool, src: String) -> void:
@@ -1191,6 +1675,8 @@ func spawn_explosion(x: float, y: float, range_: float, dmg: float, evolved: boo
 		var dy: float = e.y - y
 		if dx * dx + dy * dy < r2:
 			deal_damage(e, dmg)
+	if range_ >= 60.0:
+		_emit("explosion", {"x": x, "y": y, "r": range_, "color": col})
 	var ex := _new_proj("explosion", x, y)
 	ex.r = 0
 	ex.max_r = range_
@@ -1368,8 +1854,14 @@ func fire_enemy_projectile(enemy: Enemy, spread: float) -> void:
 func deal_damage(enemy: Enemy, dmg: float, skip_chain: bool = false, is_dot: bool = false) -> void:
 	if dmg <= 0.0:
 		return
+	# Godot 판: 망령 반투명 70% 감소, 서리 왕관 4세트 — 빙결된 적 +50%
+	if enemy.ethereal:
+		dmg *= 0.3
+	if enemy.frozen > 0.0 and set_count("frost") >= 4:
+		dmg *= 1.5
 	var is_crit_roll := false
-	if not is_dot and player.crit_chance > 0.0 and _rand() < player.crit_chance:
+	var crit_chance := player.crit_chance + _gear("crit")
+	if not is_dot and crit_chance > 0.0 and _rand() < crit_chance:
 		dmg *= 3.0 if has_synergy("executioner") else 2.0
 		is_crit_roll = true
 		if has_synergy("bloodlust"):
@@ -1388,8 +1880,13 @@ func deal_damage(enemy: Enemy, dmg: float, skip_chain: bool = false, is_dot: boo
 	enemy.hp -= dmg
 	enemy.hurt_flash = 0.12
 	if not is_dot:
-		if player.lifesteal > 0.0 and player.hp < player.max_hp:
-			player.hp = minf(player.hp + dmg * player.lifesteal, player.max_hp)
+		var ls := player.lifesteal + _gear("lifesteal")
+		if ls > 0.0 and player.hp < player.max_hp:
+			player.hp = minf(player.hp + dmg * ls, player.max_hp)
+		# 서리 왕관 2세트: 직접 타격 10% 확률로 1초 빙결
+		if not skip_chain and enemy.hp > 0.0 and not enemy.is_boss and set_count("frost") >= 2 and _rand() < 0.10:
+			enemy.frozen = maxf(enemy.frozen, 1.0)
+		_emit("hit", {"x": enemy.x, "y": enemy.y, "crit": is_crit_roll})
 		if player.ignite_chance > 0.0 and enemy.hp > 0.0 and _rand() < player.ignite_chance:
 			enemy.burn_stacks = mini(enemy.burn_stacks + 1, 3)
 			enemy.burn_timer = 3.0
@@ -1400,6 +1897,8 @@ func deal_damage(enemy: Enemy, dmg: float, skip_chain: bool = false, is_dot: boo
 	# 넉백: 플레이어 반대 방향 (보스는 10%)
 	var kb_ang := atan2(enemy.y - player.y, enemy.x - player.x)
 	var kb_str := minf(dmg * 1.5, 20.0 if enemy.is_boss else 200.0) * (0.1 if enemy.is_boss else 1.0)
+	if enemy.type == "golem" or enemy.charge_state == 2:
+		kb_str = 0.0
 	enemy.knock_vx += cos(kb_ang) * kb_str
 	enemy.knock_vy += sin(kb_ang) * kb_str
 	if dmg >= 8.0:
@@ -1454,8 +1953,72 @@ func deal_damage(enemy: Enemy, dmg: float, skip_chain: bool = false, is_dot: boo
 				ms.aoe = 55.0 * _rb()
 				ms.life = 2.6
 				ms.src = "missile"
+	# 폭풍 사냥꾼 2세트: 치명타가 주변 적 2명에게 번개로 튄다
+	if is_crit_roll and not skip_chain and set_count("storm") >= 2:
+		var hit := {enemy.id: true}
+		for b in range(2):
+			var best: Enemy = null
+			var bd := 150.0
+			for e in enemies_near(enemy.x, enemy.y, 150.0):
+				if e.dying or hit.has(e.id):
+					continue
+				var dd := _dist(enemy.x, enemy.y, e.x, e.y)
+				if dd < bd:
+					bd = dd
+					best = e
+			if best == null:
+				break
+			hit[best.id] = true
+			var arc := _new_proj("arc", enemy.x, enemy.y)
+			arc.tx = best.x
+			arc.ty = best.y
+			arc.life = 0.2
+			deal_damage(best, dmg * 0.5, true)
 	if enemy.hp <= 0.0:
 		kill_enemy(enemy)
+
+
+## Godot 판 처치 효과 — 종류 특성(부활·분열), 정예 특성(분열·폭발), 세트, 장비 드롭, 사건
+func _on_kill_godot(enemy: Enemy) -> void:
+	_emit("kill", {"x": enemy.x, "y": enemy.y, "tier": enemy.tier, "color": enemy.color, "size": enemy.size,
+		"elite": enemy.elite, "boss": enemy.is_boss, "type": enemy.type})
+	if enemy.type == "skeleton" and not enemy.revived and not enemy.elite and _rand() < float(C.ENEMY_TYPES["skeleton"]["reassemble"]):
+		revives.append({"x": enemy.x, "y": enemy.y, "t": 2.0, "tier": enemy.tier, "hp": enemy.max_hp * 0.5,
+			"size": enemy.size, "speed": enemy.speed, "xp": maxi(1, roundi(enemy.xp_val * 0.5))})
+	if enemy.type == "slime" and not enemy.no_split:
+		for k in range(int(C.ENEMY_TYPES["slime"]["split"])):
+			var a := _rand() * TAU
+			var m := _spawn_minion("slime", enemy.x + cos(a) * 14.0, enemy.y + sin(a) * 14.0, enemy.tier,
+				enemy.max_hp * 0.35, enemy.size * 0.65, enemy.speed * 1.25, maxi(1, roundi(enemy.xp_val * 0.4)))
+			m.no_split = true
+			m.knock_vx = cos(a) * 160.0
+			m.knock_vy = sin(a) * 160.0
+	if enemy.affixes.has("split"):
+		for k in range(3):
+			var a := (k / 3.0) * TAU
+			var m := _spawn_minion(enemy.type if enemy.type != "archer" else "skeleton", enemy.x + cos(a) * 20.0, enemy.y + sin(a) * 20.0,
+				enemy.tier, enemy.max_hp * 0.2, enemy.size * 0.6, enemy.speed * 1.2, maxi(1, roundi(enemy.xp_val * 0.2)))
+			m.no_split = true
+	if enemy.affixes.has("volatile"):
+		hazards.append({"x": enemy.x, "y": enemy.y, "r": 110.0, "t": 0.9, "max_t": 0.9, "dmg": enemy.attack_dmg * 1.0 + 8.0, "color": "#e67e22"})
+	if enemy.type == "bomber" and enemy.fuse < 0.0:
+		# 점화 전에 잡힌 임프는 주변 적만 휩쓴다 (보상)
+		_chain_explosion(enemy.x, enemy.y, 80.0, 40.0 * player.dmg_mult, 0.05, "etc")
+	# 피의 서약 2세트 — 처치마다 체력 +1
+	if set_count("blood") >= 2:
+		player.hp = minf(player.hp + 1.0, player.max_hp)
+	# 잿불 군주 2세트 — 처치 시 30% 불씨 폭발 (지연 폭발로 줄줄이 터진다)
+	if set_count("ember") >= 2 and _rand() < 0.3:
+		_chain_explosion(enemy.x, enemy.y, 70.0 * _rb(), 30.0 * player.dmg_mult * _dmg_bonus(), 0.08, "etc")
+	# 장비
+	if enemy.is_boss:
+		_maybe_drop_gear(enemy.x, enemy.y, "boss")
+	elif enemy.goblin:
+		_maybe_drop_gear(enemy.x, enemy.y, "mini_goblin" if enemy.is_mini else "goblin")
+	elif enemy.elite:
+		_maybe_drop_gear(enemy.x, enemy.y, "elite")
+	else:
+		_maybe_drop_gear(enemy.x, enemy.y, "normal")
 
 
 ## 콤보 마일스톤 — XP 다발 지급 (웨이브판은 코인도 주지만 코인은 메타 진행이라 옮기지 않았다)
@@ -1537,7 +2100,8 @@ func kill_enemy(enemy: Enemy) -> void:
 		_ring(enemy.x, enemy.y, 6, sf_range, 0.8, "#9b59b6")
 
 	if enemy.elite:
-		drop_powerup(enemy.x, enemy.y)
+		if _rand() < R.ELITE_POWERUP_CHANCE:
+			drop_powerup(enemy.x, enemy.y)
 		_world_text(enemy.x, enemy.y - 30.0, "👑 정예 처치!", 1.6, enemy.elite_hue, 15)
 		_ring(enemy.x, enemy.y, enemy.size, enemy.size * 7.0, 0.45, enemy.elite_hue)
 		_ring(enemy.x, enemy.y, 4, enemy.size * 4.0, 0.28, "#ffffff")
@@ -1571,8 +2135,9 @@ func kill_enemy(enemy: Enemy) -> void:
 			(0.5 + _rand() * 0.55) if big else (0.25 + _rand() * 0.4))
 	if enemy.is_boss:
 		boss_active = false
-		for k in range(4):
-			var ba := (k / 4.0) * TAU
+		bosses_killed += 1
+		for k in range(R.BOSS_ITEM_BOXES):
+			var ba := (float(k) / R.BOSS_ITEM_BOXES) * TAU
 			item_boxes.append({"x": enemy.x + cos(ba) * 55.0, "y": enemy.y + sin(ba) * 55.0, "life": R.ITEM_BOX_LIFETIME, "pulse_t": 0.0})
 		spawn_explosion(enemy.x, enemy.y, 200, 0, true, "")
 		_shake(0.5, 0.7)
@@ -1580,9 +2145,10 @@ func kill_enemy(enemy: Enemy) -> void:
 		_screen_text("🏆 BOSS SLAIN!", 3.5, "#f1c40f", 26)
 	xp_gems.append({"x": enemy.x, "y": enemy.y, "val": enemy.xp_val, "attracting": false})
 	# 일반 몬스터 5% 확률로 리롤권 (최대 9개)
-	if not enemy.is_boss and _rand() < 0.05 and player.rerolls < 9:
+	if not enemy.is_boss and _rand() < R.REROLL_DROP_CHANCE and player.rerolls < 9:
 		player.rerolls += 1
 		_world_text(enemy.x, enemy.y - 20.0, "🎲 리롤권 획득!", 1.8, "#a29bfe", 13)
+	_on_kill_godot(enemy)
 	enemies.erase(enemy)
 	if rupture_burst > 0.0:
 		spawn_explosion(enemy.x, enemy.y, 46.0 + slash_mod_level("rupture") * 12, rupture_burst, false, "")
@@ -1601,6 +2167,7 @@ func gain_xp(val: float) -> void:
 
 func show_level_up() -> void:
 	state = "levelup"
+	_emit("levelup")
 	_show_choices("levelup", build_choices())
 
 
@@ -1924,6 +2491,9 @@ func apply_item_box(item_id: String) -> void:
 			for box in item_boxes:
 				box["x"] = p.x
 				box["y"] = p.y
+			for gd in gear_drops:
+				gd["x"] = p.x
+				gd["y"] = p.y
 			var absorbed := item_boxes.size()
 			_screen_text("🌀 전체 흡수! (+%d 드랍)" % absorbed if absorbed > 0 else "🌀 전체 흡수!", 2.0, "#9b59b6", 22)
 			for k in range(20):
@@ -1985,8 +2555,9 @@ func update(dt: float, move: Vector2, dash_held: bool) -> void:
 	if dx != 0.0 or dy != 0.0:
 		last_move_dir = Vector2(dx, dy)
 	var dash_boost := 1.35 if player.dash_speed_boost > 0.0 else 1.0
-	player.x += dx * player.speed * player.temp_speed_mult * dash_boost * dt
-	player.y += dy * player.speed * player.temp_speed_mult * dash_boost * dt
+	var spd := player.speed * player.temp_speed_mult * dash_boost * (1.0 + _gear("speed")) * (1.0 - player.slow)
+	player.x += dx * spd * dt
+	player.y += dy * spd * dt
 
 	# 이동 잔상 (최대 10개)
 	if dx != 0.0 or dy != 0.0:
@@ -2063,6 +2634,7 @@ func update(dt: float, move: Vector2, dash_held: bool) -> void:
 			if blood_moon_timer <= 0.0:
 				blood_moon_timer = 180.0
 				blood_moon_active = 15.0
+				_emit("bloodmoon")
 				_screen_text("🌑 혈월 강림! 적 대폭 강화 — 버텨라!", 3.5, "#c0392b", 22)
 				_shake(0.4, 0.8)
 
@@ -2105,8 +2677,20 @@ func update(dt: float, move: Vector2, dash_held: bool) -> void:
 			for k in range(10):
 				spawn_particle(box["x"], box["y"], "#f1c40f", 5.0 + _rand() * 5.0, 0.5)
 			item_boxes.erase(box)
+			_emit("chest", {"x": box["x"], "y": box["y"]})
 			show_item_box_choices()
 			break
+
+	# Godot 판: 땅에 떨어진 장비 — 밟으면 자동으로 장착하거나 분해
+	for gd in gear_drops.duplicate():
+		gd["life"] -= dt
+		gd["pulse_t"] += dt
+		if gd["life"] <= 0.0:
+			gear_drops.erase(gd)
+			continue
+		if _dist(gd["x"], gd["y"], player.x, player.y) < 30.0:
+			gear_drops.erase(gd)
+			pick_up_gear(gd["item"])
 
 	# 파워업 수집 (즉시 적용)
 	for pu in powerups.duplicate():
@@ -2115,13 +2699,14 @@ func update(dt: float, move: Vector2, dash_held: bool) -> void:
 		if pu["life"] <= 0.0:
 			powerups.erase(pu)
 			continue
-		if _dist(pu["x"], pu["y"], player.x, player.y) < player.xp_range * 0.9:
+		if _dist(pu["x"], pu["y"], player.x, player.y) < _xp_range() * 0.9:
 			var a := atan2(player.y - pu["y"], player.x - pu["x"])
 			pu["x"] += cos(a) * 280.0 * dt
 			pu["y"] += sin(a) * 280.0 * dt
 		if _dist(pu["x"], pu["y"], player.x, player.y) < 22.0:
 			var def: Dictionary = pu["def"]
 			apply_powerup(def)
+			_emit("powerup", {"x": pu["x"], "y": pu["y"], "color": def["color"]})
 			_screen_text("%s %s!" % [def["icon"], def["name"]], 1.5, def["color"], 18)
 			for k in range(12):
 				spawn_particle(pu["x"], pu["y"], def["color"], 4.0 + _rand() * 4.0, 0.4)
@@ -2144,8 +2729,9 @@ func update(dt: float, move: Vector2, dash_held: bool) -> void:
 		overdrive_active = maxf(0.0, overdrive_active - dt)
 	if overdrive_flash > 0.0:
 		overdrive_flash = maxf(0.0, overdrive_flash - dt)
-	if player.regen_rate > 0.0 and player.hp < player.max_hp:
-		player.hp = minf(player.hp + player.max_hp * player.regen_rate * dt, player.max_hp)
+	var regen := player.regen_rate + _gear("regen")
+	if regen > 0.0 and player.hp < player.max_hp:
+		player.hp = minf(player.hp + player.max_hp * regen * dt, player.max_hp)
 
 	# 무기 발사 (진화로 배열이 바뀌어도 안전하게 복사본을 돈다)
 	for id in player.weapons.duplicate():
@@ -2163,6 +2749,8 @@ func update(dt: float, move: Vector2, dash_held: bool) -> void:
 	if not _update_enemies(dt):
 		return    # 사망
 	if not _update_enemy_projectiles(dt):
+		return
+	if not _update_godot_hazards(dt):
 		return
 
 	update_low_hp_feedback(dt)
@@ -2197,9 +2785,10 @@ func update(dt: float, move: Vector2, dash_held: bool) -> void:
 
 	# XP 수집 — 끌어당김 + 가속 (안 먹힌 젬만 남긴다)
 	var gems_left: Array = []
+	var gems_taken := 0
 	for g in xp_gems:
 		var d := _dist(g["x"], g["y"], player.x, player.y)
-		var attract_range := player.xp_range * 2.2
+		var attract_range := _xp_range() * 2.2
 		if d < attract_range:
 			var pull := minf(1.0, 1.0 - d / attract_range)
 			var speed := 180.0 + pull * pull * 520.0
@@ -2207,8 +2796,9 @@ func update(dt: float, move: Vector2, dash_held: bool) -> void:
 			g["x"] += cos(ang) * speed * dt
 			g["y"] += sin(ang) * speed * dt
 			g["attracting"] = true
-		if _dist(g["x"], g["y"], player.x, player.y) < maxf(player.xp_range, 20.0):
-			gain_xp(float(g["val"]))
+		if _dist(g["x"], g["y"], player.x, player.y) < maxf(_xp_range(), 20.0):
+			gain_xp(float(g["val"]) * (1.0 + _gear("xp")))
+			gems_taken += 1
 			var v: float = g["val"]
 			var gc := "#ffd700" if v >= 80 else ("#f39c12" if v >= 30 else ("#f1c40f" if v >= 10 else "#ffe082"))
 			spawn_particle(g["x"], g["y"], gc, 3.0 + (2.0 if v >= 30 else 0.0), 0.22)
@@ -2216,6 +2806,8 @@ func update(dt: float, move: Vector2, dash_held: bool) -> void:
 		else:
 			gems_left.append(g)
 	xp_gems = gems_left
+	if gems_taken > 0:
+		_emit("gem", {"n": gems_taken})
 
 	particles = _tick_life(particles, dt)
 	for p in particles:
@@ -2260,7 +2852,7 @@ func _update_dash(dt: float, dash_held: bool) -> void:
 		dash_chain_window = 0.9 if dash_chain_count < 2 else 0.0
 		dash_cd = maxf(dash_cd, 0.2)
 	else:
-		dash_cd = R.DASH_COOLDOWN
+		dash_cd = R.DASH_COOLDOWN * (0.6 if has_legendary("shadow") else 1.0)
 		dash_chain_count = 0
 		dash_chain_window = 0.0
 	var trail_color = null
@@ -2278,6 +2870,15 @@ func _update_dash(dt: float, dash_held: bool) -> void:
 	var hit_stats := stats.duplicate()
 	hit_stats["damage_mult"] = float(stats["damage_mult"]) * chain_mult
 	var hit_count := perform_dash_slash(sx, sy, ex, ey, hit_stats)
+	_emit("dash", {"x": sx, "y": sy, "ex": ex, "ey": ey, "hits": hit_count, "chain": is_chain})
+	if has_legendary("shadow"):
+		player.invincible = maxf(player.invincible, 1.0)
+	# 잿불 군주 4세트: 대쉬 경로에 3초 불길
+	if set_count("ember") >= 4:
+		for k in range(4):
+			var f := (k + 0.5) / 4.0
+			fire_trails.append({"x": lerpf(sx, ex, f), "y": lerpf(sy, ey, f), "r": 34.0 * _rb(), "life": 3.0, "max_life": 3.0,
+				"dmg": 40.0 * player.dmg_mult * _dmg_bonus(), "tick": 0.0})
 	queue_slash_echoes(sx, sy, ex, ey, da, stats)
 	# 잔상 폭발 필드: 도착점에 0.8초 DoT 영역
 	dash_afterimages.append({"x": ex, "y": ey, "life": 0.8, "max_life": 0.8, "tick_timer": 0.0,
@@ -2390,6 +2991,29 @@ func _update_projectiles(dt: float) -> void:
 						_ring(p.x, p.y, 4, p.aoe, 0.2, "#ff9ff3" if p.evolved else "#e056fd")
 						projectiles.erase(p)
 						break
+			"axe":
+				if p.evolved:
+					# 나선: 진행 방향이 계속 돌고 점점 빨라진다
+					var a: float = atan2(p.vy, p.vx) + p.turn * dt
+					var sp := Vector2(p.vx, p.vy).length() * (1.0 + 0.7 * dt)
+					p.vx = cos(a) * sp
+					p.vy = sin(a) * sp
+				else:
+					p.vy += p.grav * dt
+				p.x += p.vx * dt
+				p.y += p.vy * dt
+				p.spin += dt * (16.0 if p.evolved else 12.0)
+				for e in enemies_near(p.x, p.y, p.r):
+					if e.dying or p.hit_out.has(e.id):
+						continue
+					if _dist(p.x, p.y, e.x, e.y) < p.r + e.size:
+						p.hit_out[e.id] = true
+						deal_damage(e, p.dmg)
+						p.pierce -= 1
+						if p.pierce <= 0:
+							break
+				if p.pierce <= 0:
+					projectiles.erase(p)
 			"meteor":
 				if p.delay > 0.0:
 					p.delay -= dt
@@ -2467,6 +3091,10 @@ func _update_orb(p: Proj, dt: float) -> void:
 
 ## 적 이동·행동·접촉 피해. 플레이어가 죽으면 false
 func _update_enemies(dt: float) -> bool:
+	player.slow = 0.0
+	var frost4 := set_count("frost") >= 4
+	var frost_r := 140.0 * _rb()
+	var burn_mult := 2.0 if set_count("ember") >= 4 else 1.0
 	for e in enemies.duplicate():
 		if e.hurt_flash > 0.0:
 			e.hurt_flash -= dt
@@ -2476,7 +3104,7 @@ func _update_enemies(dt: float) -> bool:
 		if e.burn_timer > 0.0:
 			e.burn_timer -= dt
 			dmg_source = "dot"
-			deal_damage(e, (e.burn_dmg if e.burn_dmg > 0.0 else 4.0) * maxi(e.burn_stacks, 1) * dt, true, true)
+			deal_damage(e, (e.burn_dmg if e.burn_dmg > 0.0 else 4.0) * maxi(e.burn_stacks, 1) * burn_mult * dt, true, true)
 			if e.burn_timer <= 0.0:
 				e.burn_stacks = 0
 			if _rand() < 0.25:
@@ -2492,6 +3120,36 @@ func _update_enemies(dt: float) -> bool:
 		var ang := atan2(player.y - e.y, player.x - e.x)
 		var d := _dist(e.x, e.y, player.x, player.y)
 		e.face_angle = ang
+		# ── Godot 판: 종류·정예 특성의 지속 효과 ──
+		if e.regen > 0.0:
+			e.hp = minf(e.hp + e.max_hp * e.regen * dt, e.max_hp)
+		e.slow = 0.4 if frost4 and d < frost_r and not e.is_boss else 0.0
+		if e.type == "wraith":
+			e.phase_t += dt
+			e.ethereal = fmod(e.phase_t, 4.0) > 2.6
+		if not e.affixes.is_empty():
+			if e.affixes.has("frost") and d < 130.0:
+				player.slow = maxf(player.slow, 0.35)
+			if e.affixes.has("summoner"):
+				e.summon_cd -= dt
+				if e.summon_cd <= 0.0 and enemies.size() < R.MAX_ENEMIES:
+					e.summon_cd = 6.0
+					for k in range(3):
+						var sa := _rand() * TAU
+						var mhp := 30.0 * (1.0 + elapsed / 120.0) * float(difficulty["enemyHpMult"])
+						_spawn_minion("bat" if k % 2 == 0 else "ghoul", e.x + cos(sa) * 40.0, e.y + sin(sa) * 40.0, 0, mhp, 9.0, 95.0, 3)
+					_ring(e.x, e.y, 6, 60, 0.35, "#9b59b6")
+			if e.affixes.has("blink"):
+				e.blink_cd -= dt
+				if e.blink_cd <= 0.0 and d > 170.0:
+					e.blink_cd = 4.0
+					var ba := _rand() * TAU
+					_ring(e.x, e.y, 4, 40, 0.3, "#d7a3f5")
+					e.x = player.x + cos(ba) * 150.0
+					e.y = player.y + sin(ba) * 150.0
+					_ring(e.x, e.y, 40, 4, 0.3, "#d7a3f5")
+					_emit("blink", {"x": e.x, "y": e.y})
+		var sm: float = 1.0 - e.slow
 
 		# 뒤처진 적 재배치 — 적은 전부 플레이어보다 느려서 한 방향으로 달리기만 하면 아무도 못 따라온다.
 		# 너무 멀어진 적은 체력을 유지한 채 진행 방향 앞쪽 링으로 순간이동한다.
@@ -2519,8 +3177,11 @@ func _update_enemies(dt: float) -> bool:
 		var rage_active: bool = not e.is_boss and e.hp < e.max_hp * 0.3
 		var rage_mult := 1.5 if rage_active else 1.0
 
-		if e.frozen > 0.0:
-			e.frozen -= dt
+		if e.frozen > 0.0 or e.stun > 0.0:
+			if e.frozen > 0.0:
+				e.frozen -= dt
+			if e.stun > 0.0:
+				e.stun -= dt
 		elif e.behavior == "goblin":
 			# 보물 고블린: 반대 방향 지그재그 도주
 			var flee := ang + PI + sin(elapsed * 4.0) * 0.5
@@ -2556,8 +3217,8 @@ func _update_enemies(dt: float) -> bool:
 		elif e.behavior == "archer":
 			var pref_dist := 200.0 if e.tier == 2 else 170.0
 			if d > pref_dist * 1.3:
-				e.x += cos(ang) * e.speed * rage_mult * dt
-				e.y += sin(ang) * e.speed * rage_mult * dt
+				e.x += cos(ang) * e.speed * rage_mult * sm * dt
+				e.y += sin(ang) * e.speed * rage_mult * sm * dt
 			elif d < pref_dist * 0.7:
 				e.x -= cos(ang) * e.speed * 0.55 * dt
 				e.y -= sin(ang) * e.speed * 0.55 * dt
@@ -2568,9 +3229,61 @@ func _update_enemies(dt: float) -> bool:
 				for s in range(shots):
 					fire_enemy_projectile(e, (s - (shots - 1) / 2.0) * 0.22 if shots > 1 else 0.0)
 				e.attack_cd = e.attack_base * (0.55 if rage_active else 1.0)
+		elif e.type == "bomber":
+			# 폭탄 임프: 붙으면 멈춰서 0.8초 점화 → 자폭 (주변 적도 휘말린다)
+			if e.fuse >= 0.0:
+				e.fuse -= dt
+				if e.fuse < 0.0:
+					e.dying = true
+					enemies.erase(e)
+					if _enemy_blast(e.x, e.y, 95.0, e.attack_dmg * 0.9 + 4.0, true, "#e74c3c"):
+						return false
+					continue
+			elif d < 70.0:
+				e.fuse = 0.8
+				_emit("fuse", {"x": e.x, "y": e.y})
+			else:
+				e.x += cos(ang) * e.speed * rage_mult * sm * dt
+				e.y += sin(ang) * e.speed * rage_mult * sm * dt
+		elif e.type == "golem":
+			# 룬 골렘: 가까우면 멈춰 0.75초 예고 → 광역 내려찍기
+			e.slam_cd -= dt
+			if e.slam_t >= 0.0:
+				e.slam_t -= dt
+			elif e.slam_cd <= 0.0 and d < 120.0:
+				e.slam_t = 0.75
+				e.slam_cd = 4.0
+				hazards.append({"x": e.x, "y": e.y, "r": 125.0, "t": 0.75, "max_t": 0.75, "dmg": e.attack_dmg * 0.8 + 4.0, "color": "#e67e22"})
+			else:
+				e.x += cos(ang) * e.speed * sm * dt
+				e.y += sin(ang) * e.speed * sm * dt
+		elif e.type == "charger":
+			# 돌격 멧돼지: 예고선 0.6초 → 0.7초 돌진 → 3.5초 쉼
+			e.charge_cd -= dt
+			if e.charge_state == 1:
+				e.charge_t -= dt
+				if e.charge_t <= 0.0:
+					e.charge_state = 2
+					e.charge_t = 0.7
+			elif e.charge_state == 2:
+				e.x += e.charge_dir.x * 520.0 * sm * dt
+				e.y += e.charge_dir.y * 520.0 * sm * dt
+				e.charge_t -= dt
+				if e.charge_t <= 0.0:
+					e.charge_state = 0
+					e.charge_cd = 3.5
+			elif e.charge_cd <= 0.0 and d > 140.0 and d < 420.0:
+				e.charge_state = 1
+				e.charge_t = 0.6
+				e.charge_dir = Vector2(cos(ang), sin(ang))
+			else:
+				e.x += cos(ang) * e.speed * rage_mult * sm * dt
+				e.y += sin(ang) * e.speed * rage_mult * sm * dt
 		else:
-			e.x += cos(ang) * e.speed * rage_mult * dt
-			e.y += sin(ang) * e.speed * rage_mult * dt
+			# 박쥐는 지그재그로 날아든다
+			var mv: float = ang + (sin(elapsed * 5.0 + e.id) * 0.9 if e.type == "bat" else 0.0)
+			e.x += cos(mv) * e.speed * rage_mult * sm * dt
+			e.y += sin(mv) * e.speed * rage_mult * sm * dt
 
 		# 넉백 감속 (빙결 중 제외). 웹판은 `!e.frozen` 이라 빙결이 풀리며 frozen 이 음수(-0.01 따위)로
 		# 남으면 그 적은 다시는 넉백되지 않는다 — 여기선 의도대로 '빙결 중일 때만' 막는다.
@@ -2590,12 +3303,13 @@ func _update_enemies(dt: float) -> bool:
 			var time_scale := minf(1.0 + elapsed / 480.0, 3.0)
 			var contact_dmg := contact_base * 0.10 * time_scale
 			var aux_shield_mult := 0.70 if player.aux_shield_time > 0.0 else 1.0
-			player.hp -= contact_dmg * (0.70 if has_synergy("iron_fortress") else aux_shield_mult)
+			var dmg_in := contact_dmg * (0.70 if has_synergy("iron_fortress") else aux_shield_mult)
+			if e.charge_state == 2:
+				dmg_in *= 2.5
+			if e.affixes.has("vampiric"):
+				e.hp = minf(e.hp + e.max_hp * 0.2, e.max_hp)
 			_shake(0.15, 0.35)
-			hurt_screen_flash = 0.28
-			player.invincible = 0.15
-			if player.hp <= 0.0:
-				end_game("dead")
+			if _hurt_player(dmg_in, 0.15, true):
 				return false
 	return true
 
@@ -2606,13 +3320,9 @@ func _update_enemy_projectiles(dt: float) -> bool:
 		ep["x"] += ep["vx"] * dt
 		ep["y"] += ep["vy"] * dt
 		if player.invincible <= 0.0 and _dist(ep["x"], ep["y"], player.x, player.y) < ep["r"] + 12.0:
-			player.hp -= ep["dmg"] * (0.70 if has_synergy("iron_fortress") else 1.0)
 			_shake(0.22, 0.45)
-			hurt_screen_flash = 0.28
-			player.invincible = 0.1
-			if player.hp <= 0.0:
+			if _hurt_player(ep["dmg"] * (0.70 if has_synergy("iron_fortress") else 1.0), 0.1, false):
 				enemy_projectiles = left
-				end_game("dead")
 				return false
 		else:
 			left.append(ep)

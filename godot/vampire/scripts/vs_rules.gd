@@ -15,7 +15,7 @@ const DASH_DMG := 50.0
 const DASH_RANGE := 75.0
 const SURVIVE_GOAL := 600
 const BOSS_INTERVAL := 300
-const ITEM_BOX_INTERVAL := 40.0
+const ITEM_BOX_INTERVAL := 75.0     # Godot 판: 웹판 40초 — 드롭이 너무 잦아 흐름이 끊긴다는 피드백으로 늘렸다
 const ITEM_BOX_LIFETIME := 28.0
 const HORDE_WAVE_EVERY := 2
 const MAX_WEAPON_LEVEL := 5
@@ -26,6 +26,12 @@ const LOW_HP_THRESHOLD := 0.25
 const CRITICAL_HP_THRESHOLD := 0.15
 const LOW_HP_ALERT_COOLDOWN := 7.5
 const COMBO_MILESTONES := [10, 25, 50, 100, 200]
+
+# Godot 판 드롭률 — 웹판엔 숫자로만 박혀 있던 값들(보스 상자 4, 고블린 상자 2, 정예 파워업 100%, 리롤권 5%)
+const BOSS_ITEM_BOXES := 1
+const GOBLIN_ITEM_BOXES := 1
+const ELITE_POWERUP_CHANCE := 0.3
+const REROLL_DROP_CHANCE := 0.01
 
 # 무기 정의 (기본 무기 + 진화 무기). evolved 는 진화 무기에만 있다.
 const WEAPON_DEFS := {
@@ -52,7 +58,13 @@ const WEAPON_DEFS := {
 	"inferno": {"name": "인페르노", "icon": "🔥", "desc": "5발 분열 화염 폭탄", "dmg": 70, "cd": 1.2, "range": 175, "evolved": true},
 	"swarm": {"name": "군집 미사일", "icon": "🛰", "desc": "5연발 유도 미사일, 강화 폭발", "dmg": 36, "cd": 0.55, "range": 380, "evolved": true},
 	"meteorshower": {"name": "유성우", "icon": "🌠", "desc": "3연속 운석 낙하, 초광역 폭발", "dmg": 96, "cd": 1.7, "range": 320, "evolved": true},
-	"plague": {"name": "역병 지대", "icon": "🦠", "desc": "확산되는 맹독 지대, 강력한 중독", "dmg": 30, "cd": 2.0, "range": 270, "evolved": true}
+	"plague": {"name": "역병 지대", "icon": "🦠", "desc": "확산되는 맹독 지대, 강력한 중독", "dmg": 30, "cd": 2.0, "range": 270, "evolved": true},
+	"whip": {"name": "채찍", "icon": "🪢", "desc": "바라보는 쪽을 넓게 후려친다, 3레벨부터 양쪽", "dmg": 36, "cd": 1.05, "range": 170},
+	"axe": {"name": "도끼", "icon": "🪓", "desc": "높이 던져 떨어지며 관통하는 도끼", "dmg": 58, "cd": 1.3, "range": 300},
+	"storm": {"name": "뇌우", "icon": "🌧", "desc": "범위 안 무작위 적에게 낙뢰, 짧은 기절", "dmg": 70, "cd": 1.6, "range": 320},
+	"bloodtear": {"name": "피의 채찍", "icon": "🥀", "desc": "양쪽 동시 베기, 적중마다 체력 흡수", "dmg": 54, "cd": 0.8, "range": 215, "evolved": true},
+	"deathspiral": {"name": "죽음의 나선", "icon": "⚜", "desc": "8방향 나선으로 퍼지는 무한 관통 도끼", "dmg": 72, "cd": 1.1, "range": 360, "evolved": true},
+	"judgment": {"name": "천벌", "icon": "🌟", "desc": "광역 낙뢰 6발, 긴 기절과 번개 연쇄", "dmg": 96, "cd": 1.4, "range": 420, "evolved": true}
 }
 
 # 무기 레벨업 시 강화되는 부가 효과 설명 (계열 기준) — 레벨업 선택지 표시용
@@ -68,7 +80,10 @@ const WEAPON_LVUP_DESC := {
 	"bomb": "폭발 범위 확대·분열 수 증가",
 	"missile": "발사 수 +1(2레벨)·유도 성능 향상",
 	"meteor": "운석 수 +1·폭발 범위 확대",
-	"toxic": "장판 범위·지속시간 증가"
+	"toxic": "장판 범위·지속시간 증가",
+	"whip": "베기 폭·길이 증가, 3레벨부터 양쪽",
+	"axe": "도끼 수 +1(2레벨)·관통 +1",
+	"storm": "낙뢰 수 +1(2레벨)·기절 시간 증가"
 }
 
 # 진화 규칙: base 무기가 최대 레벨 + req 패시브 보유 시 id 무기로 진화
@@ -84,7 +99,10 @@ const EVOLUTION_DEFS := [
 	{"id": "inferno", "base": "bomb", "req": "ignite", "reqName": "🔥 화염 부착"},
 	{"id": "swarm", "base": "missile", "req": "crit", "reqName": "⚡ 치명타"},
 	{"id": "meteorshower", "base": "meteor", "req": "range_up", "reqName": "🎯 사거리 확장"},
-	{"id": "plague", "base": "toxic", "req": "venom", "reqName": "☠ 맹독"}
+	{"id": "plague", "base": "toxic", "req": "venom", "reqName": "☠ 맹독"},
+	{"id": "bloodtear", "base": "whip", "req": "regen", "reqName": "💚 체력 재생"},
+	{"id": "deathspiral", "base": "axe", "req": "spd_up", "reqName": "👟 이동 속도"},
+	{"id": "judgment", "base": "storm", "req": "magnet", "reqName": "🧲 경험치 자석"}
 ]
 
 # 방패/이지스(방어 무기)는 메인/보조와 무관하게 항상 독립 발사
@@ -103,7 +121,10 @@ const WEAPON_FAMILY := {
 	"bomb": "bomb", "inferno": "bomb",
 	"missile": "missile", "swarm": "missile",
 	"meteor": "meteor", "meteorshower": "meteor",
-	"toxic": "toxic", "plague": "toxic"
+	"toxic": "toxic", "plague": "toxic",
+	"whip": "whip", "bloodtear": "whip",
+	"axe": "axe", "deathspiral": "axe",
+	"storm": "storm", "judgment": "storm"
 }
 
 # 투사체 type → 무기 계열 (데미지 출처 — src 미지정 시 fallback)
@@ -111,7 +132,8 @@ const PROJ_TYPE_FAMILY := {
 	"orb": "orb", "blackhole": "orb",
 	"arrow": "arrow", "boomerang": "boomerang",
 	"laser": "laser", "deathray": "laser",
-	"missile": "missile", "meteor": "meteor"
+	"missile": "missile", "meteor": "meteor",
+	"axe": "axe"
 }
 
 # 보조 무기 계열별 오버레이 효과 — 메인 무기 발사마다 각 보조 계열 효과가 proc 확률로 발동
@@ -127,7 +149,10 @@ const AUX_EFFECT_DEFS := {
 	"shield": {"icon": "🛡", "name": "방어 증폭", "desc": "주 공격마다 0.5초 피해 30% 감소", "proc": 1.0},
 	"missile": {"icon": "🚀", "name": "유도 탄두", "desc": "주 공격 60% 확률 유도 미사일 1발 (55% 피해)", "proc": 0.6},
 	"meteor": {"icon": "☄", "name": "운석 강타", "desc": "주 공격 45% 확률 소형 운석 낙하 (60% 피해)", "proc": 0.45},
-	"toxic": {"icon": "☣", "name": "독성 분출", "desc": "주 공격마다 독성 장판 생성", "proc": 1.0}
+	"toxic": {"icon": "☣", "name": "독성 분출", "desc": "주 공격마다 독성 장판 생성", "proc": 1.0},
+	"whip": {"icon": "🪢", "name": "베기 잔상", "desc": "주 공격 50% 확률 대상 주변 베기 (45% 피해)", "proc": 0.5},
+	"axe": {"icon": "🪓", "name": "도끼 투척", "desc": "주 공격 40% 확률 도끼 1개 (50% 피해)", "proc": 0.4},
+	"storm": {"icon": "🌧", "name": "정전기", "desc": "주 공격 35% 확률 대상에 낙뢰 (60% 피해)", "proc": 0.35}
 }
 
 # 패시브 — 효과(JS 의 apply 함수)는 vs_run.gd 의 apply_passive() 에 있다. max: null = 무제한
@@ -170,7 +195,7 @@ const SLASH_SUPPORT_DEFS := [
 ]
 
 # 신규 획득 가능한 기본 무기 목록 — 순서는 선택지 풀 순서다
-const WEAPON_POOL := ["orb", "arrow", "nova", "shield", "laser", "boomerang", "chain", "scythe", "bomb", "missile", "meteor", "toxic"]
+const WEAPON_POOL := ["orb", "arrow", "nova", "shield", "laser", "boomerang", "chain", "scythe", "bomb", "missile", "meteor", "toxic", "whip", "axe", "storm"]
 
 # 캐릭터 — 웹판의 해금 조건(unlock)과 코인 배율은 메타 진행이라 옮기지 않았다 (README 참고)
 const CHARACTER_DEFS := [

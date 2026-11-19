@@ -1,7 +1,10 @@
 // 뱀파이어 서바이버 Godot 이식 드리프트 검사 — 실행: node prototypes/godot-vampire-port-test.js
 //
 // godot/vampire 의 GDScript 가 웹판(public/arcade/vampire/game.js) 규칙에서 벗어나지 않았는지, Godot 없이 CI 에서 본다.
-//  1) vs_rules.gd 의 데이터 표는 JSON 으로도 읽히게 써 두었다 — 그대로 뽑아 game.js 의 같은 표와 비교
+//  1) vs_rules.gd 의 데이터 표는 JSON 으로도 읽히게 써 두었다 — 그대로 뽑아 game.js 의 같은 표와 비교.
+//     Godot 판은 웹판에서 갈라져 나왔다 (새 무기·드롭률 등). 그래서 '웹판에 있는 것'은 그대로 같아야 하고,
+//     달라진 값은 GODOT_OVERRIDES, Godot 에만 있는 항목은 GODOT_ONLY 에 사유와 함께 적혀 있어야 통과한다 —
+//     목록에 없는 차이는 실수로 본다.
 //  2) 패시브·파워업·아이템 효과(JS 에선 apply 함수)는 vs_run.gd 의 match 분기에 있다 — 그 GDScript 줄을
 //     '그 텍스트 그대로' JS 식으로 바꿔 가짜 플레이어에 실행하고, JS 의 apply 결과와 비교
 //  3) XP 곡선 식도 같은 방식으로 실행해 비교
@@ -82,20 +85,52 @@ function firstDiff(a, b, p = '') {
   return null;
 }
 
+// Godot 판에서 일부러 바꾼 값 — { 이름: [GD 값, JS 값, 사유] }
+const GODOT_OVERRIDES = {
+  ITEM_BOX_INTERVAL: [75, 40, '아이템 상자가 너무 자주 나와 흐름이 끊긴다는 피드백 (보스 상자 4→1, 고블린 2→1 과 함께)'],
+};
+// Godot 판에만 있는 무기 — 표마다 이 항목들은 GD 에만 있어도 된다
+const GODOT_ONLY = {
+  weapons: ['whip', 'axe', 'storm', 'bloodtear', 'deathspiral', 'judgment'],
+  families: ['whip', 'axe', 'storm'],
+  projTypes: ['axe'],
+};
+
 console.log('\n[수치 상수 — vs_rules.gd 와 game.js 가 같다]');
 for (const name of ['PLAYER_SPEED', 'BASE_HP', 'WAVE_INTERVAL', 'MAX_ENEMIES', 'DASH_COOLDOWN', 'DASH_DMG', 'DASH_RANGE',
   'SURVIVE_GOAL', 'BOSS_INTERVAL', 'ITEM_BOX_INTERVAL', 'ITEM_BOX_LIFETIME', 'HORDE_WAVE_EVERY', 'MAX_WEAPON_LEVEL',
   'MAX_WEAPONS', 'GOBLIN_INTERVAL', 'GRID_CELL', 'LOW_HP_THRESHOLD', 'CRITICAL_HP_THRESHOLD', 'LOW_HP_ALERT_COOLDOWN',
   'COMBO_MILESTONES']) {
   const gd = gdConst(name), js = jsConst(name);
+  if (GODOT_OVERRIDES[name]) {
+    const [gdWant, jsWant, why] = GODOT_OVERRIDES[name];
+    ok(gd === gdWant && js === jsWant, `${name} = ${gd} (웹판 ${js}) — 의도적 변경: ${why}`,
+      `GD ${gd} / JS ${js} — 목록의 값(${gdWant}/${jsWant})과 다르다`);
+    continue;
+  }
   ok(JSON.stringify(gd) === JSON.stringify(js), `${name} = ${JSON.stringify(js)}`, `GD ${JSON.stringify(gd)}`);
 }
 
-console.log('\n[데이터 표 — 통째로 같다]');
-for (const name of ['WEAPON_DEFS', 'WEAPON_LVUP_DESC', 'EVOLUTION_DEFS', 'NON_ATTACK_WEAPONS', 'WEAPON_FAMILY',
-  'PROJ_TYPE_FAMILY', 'AUX_EFFECT_DEFS', 'SYNERGY_DEFS', 'SLASH_SUPPORT_DEFS', 'WEAPON_POOL']) {
+console.log('\n[데이터 표 — 웹판 항목은 통째로 같다, Godot 전용 추가분만 허용]');
+for (const name of ['NON_ATTACK_WEAPONS', 'SYNERGY_DEFS', 'SLASH_SUPPORT_DEFS']) {
   const d = firstDiff(gdConst(name), plain(jsConst(name)));
   ok(!d, name, d);
+}
+// 객체 표: 웹판 키는 같은 순서·같은 값, 나머지 키는 GODOT_ONLY 에 있어야 한다
+for (const [name, extra] of [['WEAPON_DEFS', GODOT_ONLY.weapons], ['WEAPON_LVUP_DESC', GODOT_ONLY.families],
+  ['WEAPON_FAMILY', GODOT_ONLY.weapons], ['PROJ_TYPE_FAMILY', GODOT_ONLY.projTypes], ['AUX_EFFECT_DEFS', GODOT_ONLY.families]]) {
+  const gd = gdConst(name), js = plain(jsConst(name));
+  const shared = Object.fromEntries(Object.keys(gd).filter((k) => k in js).map((k) => [k, gd[k]]));
+  const d = firstDiff(shared, js);
+  const unknown = Object.keys(gd).filter((k) => !(k in js) && !extra.includes(k));
+  ok(!d && !unknown.length, `${name} (Godot 전용 ${Object.keys(gd).length - Object.keys(shared).length}개)`, d || `목록에 없는 추가 키: ${unknown}`);
+}
+// 배열 표: 웹판 배열이 앞부분과 같고, 뒤에 붙은 것은 Godot 전용
+for (const [name, extra, key] of [['EVOLUTION_DEFS', GODOT_ONLY.weapons, (x) => x.id], ['WEAPON_POOL', GODOT_ONLY.weapons, (x) => x]]) {
+  const gd = gdConst(name), js = plain(jsConst(name));
+  const d = firstDiff(gd.slice(0, js.length), js);
+  const unknown = gd.slice(js.length).map(key).filter((k) => !extra.includes(k));
+  ok(!d && !unknown.length, `${name} — 웹판 ${js.length}개가 앞에 그대로, Godot 전용 ${gd.length - js.length}개`, d || `목록에 없는 추가: ${unknown}`);
 }
 
 console.log('\n[데이터 표 — 옮기지 않은 메타 진행 필드(해금·코인)만 빼고 같다]');

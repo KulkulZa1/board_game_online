@@ -2,6 +2,24 @@
 
 ## [Unreleased] - Vampire Survivors director-loop readiness
 
+### Added — Godot vampire: hack-and-slash rework (`godot/vampire/`)
+- The Godot game now grows past the web version. Shared tables still have to match `game.js`; intentional
+  differences are allowed only when listed with a reason in the port test (`GODOT_OVERRIDES`/`GODOT_ONLY`).
+- **Lower drop rates**: item boxes every 75 s (was 40), bosses drop 1 box (was 4), goblins 1 (was 2), elite
+  power-ups 30% (was 100%), reroll tokens 1% per kill (was 5%).
+- **Loot**: 4 gear slots, 5 rarities, 12 affixes, auto-equip-or-salvage on pickup (no modal), rarity light
+  pillars, 4 sets with 2- and 4-piece effects (Ember Lord, Storm Hunter, Blood Oath, Frost Crown) and 4
+  legendaries (Berserker's Helm, Thornmail, Shadow Treads, Ring of Greed).
+- **Monsters**: 9 types with their own behaviour (zig-zag bats, reassembling skeletons, splitting slimes,
+  phasing wraiths, telegraphed golem slams, self-destructing imps, charging boars) and 9 elite affixes.
+- **Weapons**: whip, axe and thunderstorm, each with an evolution.
+- **Soul shards**: earned per run, spent on 5 permanent upgrades; best records saved to `user://`.
+- **Presentation**: SVG sprites, 2D HDR glow with an additive FX layer, a post-process shader (shockwave
+  refraction, chromatic aberration, vignette, low-HP pulse, tints), a world-space ground shader, silhouette
+  hit flashes, blood decals, bouncing gibs, camera punch, and 20 synthesized sound effects.
+- `tests/sim_test.gd` covers the new systems (168/168 under Godot 4.4.1); `draw_string_outline` drew no
+  outline in this project, so text outlines are faked with four offset shadows.
+
 ### Added — Godot port of the vampire-survivors game (`godot/vampire/`)
 - A standalone Godot 4 project with one run's full rules from `public/arcade/vampire/game.js`: 12 weapons
   and 12 evolutions, main/aux weapon overlays, 12 passives and 13 synergies, dash slash with chain dashes and

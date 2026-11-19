@@ -112,7 +112,7 @@ node scripts/record-golden-runs.js
 |---|---|---|
 | 첨탑 대란 (`tower-defense`) | `godot/tower-defense/` | 규칙 전체(`td_run.gd`) + 최소 플레이 화면. 메타 상점 UI·연출·Android 내보내기는 아직 |
 | NEON CASCADE | — | 아직 없음 (계약 파일은 준비됨) |
-| 뱀파이어 서바이버 (`vampire`) | `godot/vampire/` | 한 판의 규칙 전체(`vs_run.gd`) + 플레이 화면. 장비·메타 진행·협동·사운드는 아직. 웹판에 `sim.js` 가 없어 골든 계약 대신 표·효과식 대조로 지킨다 |
+| 뱀파이어 서바이버 (`vampire`) | `godot/vampire/` | 웹판 규칙 전체 + Godot 판 전용 확장(장비·세트·몬스터 9종·정예 특성·새 무기·셰이더·효과음·영혼석). 웹판에 `sim.js` 가 없어 골든 계약 대신 공유 표·효과식 대조로 지키고, 일부러 갈라진 부분은 대조 검사의 목록에 사유와 함께 둔다 |
 
 검사는 두 겹이다:
 

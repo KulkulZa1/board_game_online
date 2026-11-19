@@ -8,6 +8,7 @@ extends SceneTree
 ## 수치 표가 웹판과 같은지는 Godot 없이 node prototypes/godot-vampire-port-test.js 가 본다.
 
 const R := preload("res://scripts/vs_rules.gd")
+const C := preload("res://scripts/vs_content.gd")
 const Run := preload("res://scripts/vs_run.gd")
 const DT := 1.0 / 30.0
 
@@ -22,6 +23,9 @@ func _initialize() -> void:
 	_check_passives_and_synergies()
 	_check_choices()
 	_check_victory_and_death()
+	_check_loot_and_sets()
+	_check_monsters_and_affixes()
+	_check_new_weapons_and_drops()
 	_check_bot_runs()
 	print("\n결과: %d/%d 통과" % [_pass, _pass + _fail])
 	quit(1 if _fail > 0 else 0)
@@ -77,7 +81,7 @@ func _check_rules() -> void:
 	for evo in R.EVOLUTION_DEFS:
 		if not R.WEAPON_DEFS.has(evo["id"]) or not R.WEAPON_DEFS.has(evo["base"]) or R.find_def(R.PASSIVE_POOL, evo["req"]).is_empty():
 			bad.append(evo["id"])
-	_ok(bad.is_empty() and R.EVOLUTION_DEFS.size() == 12, "진화 12종의 기본 무기·결과·재료 패시브가 모두 있다", str(bad))
+	_ok(bad.is_empty() and R.EVOLUTION_DEFS.size() == 15, "진화 15종(웹판 12 + Godot 3)의 기본 무기·결과·재료 패시브가 모두 있다", str(bad))
 	bad = []
 	for id in R.WEAPON_DEFS:
 		if not R.WEAPON_FAMILY.has(id):
@@ -255,3 +259,271 @@ func _check_bot_runs() -> void:
 		if run.elapsed > float(R.find_def(R.DIFFICULTY_DEFS, c[1])["bossInterval"]) + 1.0 and run.next_boss_time <= run.elapsed - 1.0 and not run.boss_active:
 			bad.append("보스가 안 나옴")
 		_ok(bad.is_empty(), "%s / %s / %s — %s, Lv%d, 처치 %d, %s" % [c[0], c[1], c[2], R.fmt_time(run.elapsed), p.level, run.kills, run.state], ", ".join(PackedStringArray(bad)))
+
+
+## 장비를 직접 만들어 쥐여 준다 (드롭 운에 기대지 않는다)
+func _give(run, slot: String, rarity: String, set_id: String = "", legendary: String = "") -> Dictionary:
+	var it: Dictionary = C.roll_item(run.rng, slot, rarity, 5)
+	if set_id != "":
+		it["set"] = set_id
+		it["rarity"] = "set"
+	if legendary != "":
+		it["legendary"] = legendary
+		it["rarity"] = "legendary"
+	run.player.equip[slot] = it
+	run._refresh_gear()
+	return it
+
+
+func _check_loot_and_sets() -> void:
+	print("\n[Godot 판 장비 — 희귀도·자동 장착·분해·세트·전설]")
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 5
+	var bad: Array = []
+	for rar in C.RARITY_ORDER:
+		for slot in C.GEAR_SLOTS:
+			var it: Dictionary = C.roll_item(rng, slot, rar, 3)
+			if it["affixes"].size() != int(C.RARITIES[rar]["affixes"]) or String(it["name"]) == "":
+				bad.append("%s/%s" % [rar, slot])
+			if rar == "set" and it["set"] == "":
+				bad.append("세트 없음")
+			if rar == "legendary" and String(C.LEGENDARIES[it["legendary"]]["slot"]) != slot:
+				bad.append("전설 부위")
+	_ok(bad.is_empty(), "희귀도·부위마다 옵션 개수·이름·세트/전설 정보가 맞다", str(bad))
+	var minr := {}
+	for i in range(300):
+		minr[C.roll_rarity(rng, "rare", 3.0)] = true
+	_ok(not minr.has("common") and not minr.has("magic"), "보스 드롭(최소 희귀)은 일반·마법이 안 나온다", str(minr.keys()))
+
+	var run = Run.new("knight", "normal", "meadow", 31)
+	var hp0: float = run.player.max_hp
+	var good := {"slot": "helm", "rarity": "rare", "name": "t", "set": "", "legendary": "", "ilvl": 3,
+		"affixes": [{"stat": "max_hp", "val": 30.0}, {"stat": "dmg", "val": 0.2}]}
+	run.pick_up_gear(good)
+	_ok(run.player.equip["helm"] == good and is_equal_approx(run.player.max_hp, hp0 + 30.0), "빈 칸 장비는 장착, 최대 체력 옵션이 바로 반영")
+	var lv0: int = run.player.level
+	var xp0: float = run.player.xp
+	var junk := {"slot": "helm", "rarity": "common", "name": "j", "set": "", "legendary": "", "ilvl": 1, "affixes": [{"stat": "luck", "val": 0.01}]}
+	run.pick_up_gear(junk)
+	_ok(run.player.equip["helm"] == good and (run.player.xp > xp0 or run.player.level > lv0), "더 나쁜 장비는 분해해서 경험치로")
+	run.player.equip["helm"] = null
+	run._refresh_gear()
+	_ok(is_equal_approx(run.player.max_hp, hp0), "장비를 빼면 최대 체력도 돌아온다")
+
+	for slot in C.GEAR_SLOTS:
+		_give(run, slot, "set", "ember")
+	_ok(run.set_count("ember") == 4, "잿불 군주 4부위 → 세트 4")
+	run.last_move_dir = Vector2(1, 0)
+	run.tick(1.0 / 30.0, Vector2.ZERO, true)
+	_ok(run.fire_trails.size() >= 4, "잿불 4세트: 대쉬 경로에 불길", str(run.fire_trails.size()))
+
+	run = Run.new("knight", "normal", "meadow", 32)
+	for slot in C.GEAR_SLOTS:
+		_give(run, slot, "set", "storm")
+	run.player.invincible = 1e9
+	var thunders := 0
+	for i in range(int(6.0 * 30)):
+		run.tick(1.0 / 30.0, Vector2.ZERO, false)
+		if run.state != "playing":
+			run.choose(0)
+		for ev in run.events:
+			if ev["t"] == "thunder":
+				thunders += 1
+		run.events.clear()
+	_ok(thunders >= 6, "폭풍 4세트: 5초마다 낙뢰 6발 (6초 동안 %d발)" % thunders)
+
+	run = Run.new("knight", "normal", "meadow", 33)
+	for slot in ["helm", "armor"]:
+		_give(run, slot, "set", "blood")
+	_ok(is_equal_approx(float(run.player.gear.get("lifesteal", 0.0)) - _affix_sum(run, "lifesteal"), 0.03), "피의 서약 2세트: 흡혈 +3%")
+	run = Run.new("knight", "normal", "meadow", 34)
+	for slot in C.GEAR_SLOTS:
+		_give(run, slot, "set", "frost")
+	run.player.invincible = 1e9
+	for i in range(20):
+		run.tick(1.0 / 30.0, Vector2.ZERO, false)
+	var slowed := 0
+	for e in run.enemies:
+		if e.slow > 0.0:
+			slowed += 1
+	var e0 = run.enemies[0]
+	e0.x = run.player.x + 40.0
+	e0.y = run.player.y
+	run.tick(1.0 / 30.0, Vector2.ZERO, false)
+	_ok(e0.slow >= 0.4, "서리 4세트: 오라 안의 적 40% 감속", str(e0.slow))
+
+	run = Run.new("knight", "normal", "meadow", 35)
+	_give(run, "boots", "legendary", "", "shadow")
+	run.last_move_dir = Vector2(1, 0)
+	run.tick(1.0 / 30.0, Vector2.ZERO, true)
+	_ok(is_equal_approx(run.dash_cd, R.DASH_COOLDOWN * 0.6) and run.player.invincible >= 0.9, "그림자 장화: 대쉬 쿨다운 -40%, 대쉬 후 1초 무적", "%.2f / %.2f" % [run.dash_cd, run.player.invincible])
+	_give(run, "ring", "legendary", "", "greed")
+	_ok(run._gear("xp") >= 0.25 and run._luck() >= 1.5, "탐욕의 반지: 경험치 +25%, 행운 +50%")
+	_give(run, "helm", "legendary", "", "berserker")
+	run.combo_count = 40
+	var base_bonus: float = 1.0 + run._gear("dmg")
+	_ok(is_equal_approx(run._dmg_bonus(), base_bonus * 1.2), "광전사의 투구: 콤보 40 → 피해 +20%")
+
+	var meta_run = Run.new("knight", "normal", "meadow", 36, {"might": 2, "vitality": 3, "fortune": 1})
+	_ok(is_equal_approx(meta_run._gear("dmg"), 0.10) and is_equal_approx(meta_run.player.max_hp, 130.0) and meta_run._luck() >= 1.15,
+		"영혼석 강화: 힘 2 → 피해 +10%, 활력 3 → 최대 체력 +30, 행운 1 → +15%")
+	_ok(C.shards_earned(400, 300.0, 1, 1, false) == 28 + 15 + 5 and C.soul_upgrade_cost("might", 2) == 60, "영혼석 정산식과 강화 비용")
+
+
+func _affix_sum(run, stat: String) -> float:
+	var v := 0.0
+	for slot in C.GEAR_SLOTS:
+		var it = run.player.equip[slot]
+		if it == null:
+			continue
+		for a in it["affixes"]:
+			if a["stat"] == stat:
+				v += float(a["val"])
+	return v
+
+
+func _check_monsters_and_affixes() -> void:
+	print("\n[Godot 판 몬스터 종류·정예 특성]")
+	var run = Run.new("knight", "normal", "meadow", 41)
+	run.player.weapon_cds.clear()
+	run.player.invincible = 1e9
+	var seen := {}
+	run.elapsed = 400.0
+	for i in range(30):
+		run.spawn_wave()
+	for e in run.enemies:
+		seen[e.type] = true
+	var missing: Array = []
+	for t in C.ENEMY_TYPES:
+		if not seen.has(t):
+			missing.append(t)
+	_ok(missing.is_empty(), "6분대 웨이브에서 9종이 모두 나온다", str(missing))
+
+	run = Run.new("knight", "normal", "meadow", 42)
+	run.player.weapon_cds.clear()
+	var sl = run._spawn_minion("slime", run.player.x + 200.0, run.player.y, 1, 50.0, 15.0, 50.0, 10)
+	var n0: int = run.enemies.size()
+	run.deal_damage(sl, 1000.0)
+	var babies := 0
+	for e in run.enemies:
+		if e.type == "slime" and e.no_split:
+			babies += 1
+	_ok(babies == 2 and run.enemies.size() == n0 - 1 + 2, "산성 슬라임은 죽으면 작은 슬라임 2마리로 갈라진다")
+
+	var revived := 0
+	for i in range(40):
+		var sk = run._spawn_minion("skeleton", run.player.x + 300.0, run.player.y + i, 1, 10.0, 15.0, 0.0, 5)
+		run.deal_damage(sk, 100.0)
+	_ok(run.revives.size() >= 5 and run.revives.size() <= 25, "해골 전사는 35%% 확률로 다시 일어날 준비 (%d/40)" % run.revives.size())
+	for i in range(80):
+		run.tick(1.0 / 30.0, Vector2.ZERO, false)
+	for e in run.enemies:
+		if e.type == "skeleton" and e.revived:
+			revived += 1
+	_ok(revived >= 5, "2초 뒤 해골이 다시 일어난다 (%d)" % revived)
+
+	run = Run.new("knight", "normal", "meadow", 43)
+	run.player.weapon_cds.clear()
+	var hp0: float = run.player.hp
+	var bm = run._spawn_minion("bomber", run.player.x + 50.0, run.player.y, 1, 40.0, 12.0, 0.0, 5)
+	bm.attack_dmg = 20.0
+	for i in range(40):
+		run.tick(1.0 / 30.0, Vector2.ZERO, false)
+	_ok(not run.enemies.has(bm) and run.player.hp < hp0, "폭탄 임프는 붙으면 점화 후 자폭해 플레이어를 다치게 한다", "%.1f → %.1f" % [hp0, run.player.hp])
+
+	run = Run.new("knight", "normal", "meadow", 44)
+	run.player.weapon_cds.clear()
+	run.player.invincible = 1e9
+	var gl = run._spawn_minion("golem", run.player.x + 80.0, run.player.y, 2, 500.0, 28.0, 20.0, 10)
+	gl.slam_cd = 0.0
+	run.tick(1.0 / 30.0, Vector2.ZERO, false)
+	_ok(run.hazards.size() == 1 and gl.slam_t > 0.0, "룬 골렘은 가까우면 내려찍기 예고 장판을 깐다")
+	var ch = run._spawn_minion("charger", run.player.x + 300.0, run.player.y, 2, 500.0, 25.0, 30.0, 10)
+	ch.charge_cd = 0.0
+	var states := {}
+	for i in range(60):
+		run.tick(1.0 / 30.0, Vector2.ZERO, false)
+		states[ch.charge_state] = true
+	_ok(states.has(1) and states.has(2), "돌격 멧돼지: 예고(1) → 돌진(2)", str(states.keys()))
+	var wr = run._spawn_minion("wraith", run.player.x + 500.0, run.player.y, 1, 1000.0, 15.0, 0.0, 5)
+	wr.ethereal = true
+	var hpw: float = wr.hp
+	run.player.crit_chance = 0.0
+	run.deal_damage(wr, 100.0)
+	_ok(is_equal_approx(hpw - wr.hp, 30.0), "망령이 반투명일 때 받는 피해 70% 감소", str(hpw - wr.hp))
+
+	run = Run.new("knight", "normal", "meadow", 45)
+	run.player.weapon_cds.clear()
+	var el = run._spawn_minion("ghoul", run.player.x + 400.0, run.player.y, 1, 100.0, 15.0, 0.0, 5)
+	el.elite = true
+	run._roll_elite_affixes(el, C.ELITE_AFFIX_ORDER.size())
+	_ok(el.affixes.size() == C.ELITE_AFFIX_ORDER.size() and is_equal_approx(el.max_hp, 200.0) and el.shield > 0.0, "정예 특성: 거대(체력 ×2)·보호막 적용")
+	run.player.crit_chance = 0.0
+	var before: int = run.enemies.size()
+	run.deal_damage(el, 1e6)
+	_ok(run.enemies.size() == before - 1 + 3 and run.hazards.size() == 1, "분열(하수인 3) + 폭발(예고 장판) 정예가 죽으면 둘 다 생긴다")
+
+
+func _check_new_weapons_and_drops() -> void:
+	print("\n[Godot 판 새 무기 · 드롭률]")
+	var run = Run.new("knight", "normal", "meadow", 51)
+	run.player.weapons.clear()
+	run.player.weapon_levels.clear()
+	run.player.weapon_cds.clear()
+	run.player.main_weapon = ""
+	run.add_weapon("whip")
+	run.last_move_dir = Vector2(1, 0)
+	var front = run._spawn_minion("ghoul", run.player.x + 80.0, run.player.y, 0, 1e6, 10.0, 0.0, 1)
+	var back = run._spawn_minion("ghoul", run.player.x - 80.0, run.player.y, 0, 1e6, 10.0, 0.0, 1)
+	run.fire_weapon("whip", 2.0)
+	_ok(front.hp < 1e6 and is_equal_approx(back.hp, 1e6), "채찍 Lv1: 앞만 벤다")
+	run.add_weapon("whip")
+	run.add_weapon("whip")
+	run.player.weapon_cds["whip"] = 0.0
+	run.fire_weapon("whip", 2.0)
+	_ok(back.hp < 1e6, "채찍 Lv3: 뒤쪽도 벤다")
+	run.add_weapon("axe")
+	run.player.weapon_cds["axe"] = 0.0
+	run.player.main_weapon = "axe"
+	run.build_enemy_grid()
+	run.fire_weapon("axe", 2.0)
+	var ax = null
+	for p in run.projectiles:
+		if p.type == "axe":
+			ax = p
+	var vy0: float = ax.vy
+	run._update_projectiles(0.1)
+	_ok(ax != null and ax.vy > vy0, "도끼는 위로 던져 중력으로 떨어진다")
+	run.add_weapon("storm")
+	run.player.main_weapon = "storm"
+	run.player.weapon_cds["storm"] = 0.0
+	var tgt = run._spawn_minion("ghoul", run.player.x + 120.0, run.player.y + 60.0, 0, 1e6, 10.0, 0.0, 1)
+	run.build_enemy_grid()
+	run.fire_weapon("storm", 2.0)
+	var stunned := 0
+	for e in run.enemies:
+		if e.stun > 0.0:
+			stunned += 1
+	_ok(stunned >= 1, "뇌우: 낙뢰 맞은 적은 기절")
+
+	_ok(is_equal_approx(R.ITEM_BOX_INTERVAL, 75.0) and R.BOSS_ITEM_BOXES == 1 and R.GOBLIN_ITEM_BOXES == 1, "아이템 상자 75초 · 보스 1개 · 고블린 1개")
+	run = Run.new("knight", "normal", "meadow", 52)
+	run.player.weapon_cds.clear()
+	var pu := 0
+	var n := 600
+	for i in range(n):
+		var e = run._spawn_minion("ghoul", run.player.x + 600.0, run.player.y, 1, 1.0, 15.0, 0.0, 1)
+		e.elite = true
+		run.deal_damage(e, 10.0)
+	pu = run.powerups.size()
+	_ok(pu > n * 0.22 and pu < n * 0.38, "정예 파워업 드롭 ≈ 30%% (%d/%d)" % [pu, n])
+	_ok(run.player.rerolls <= 9 and run.gear_drops.size() > n * 0.05 and run.gear_drops.size() < n * 0.16, "정예 장비 드롭 ≈ 10%% (%d/%d)" % [run.gear_drops.size(), n])
+	run = Run.new("knight", "normal", "meadow", 53)
+	run.spawn_boss()
+	var boss = null
+	for e in run.enemies:
+		if e.is_boss:
+			boss = e
+	run.deal_damage(boss, 1e9)
+	_ok(run.item_boxes.size() == 1 and run.gear_drops.size() == 1 and run.bosses_killed == 1, "보스 처치: 상자 1개 + 장비 1개(희귀 이상)")
+	_ok(C.RARITY_ORDER.find(run.gear_drops[0]["item"]["rarity"]) >= 2, "보스 장비는 희귀 이상")
